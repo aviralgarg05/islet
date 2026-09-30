@@ -116,6 +116,9 @@ public final class MediaKeyInterceptor {
 
     public static var hasAccessibility: Bool { AXIsProcessTrusted() }
 
+    /// Whether the keys are being intercepted (false without Accessibility).
+    public var isRunning: Bool { tap != nil }
+
     public static func requestAccessibility() {
         let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)

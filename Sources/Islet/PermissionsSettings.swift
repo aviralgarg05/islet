@@ -24,7 +24,7 @@ struct PermissionsSettings: View {
                     PermissionRow(kind: kind, uses: kind.uses(model.settings), status: statuses[kind]) { act(on: kind) }
                 }
             } footer: {
-                Text("None of these is needed to run Islet. macOS asks the first time you turn on a feature that uses one.")
+                Text("None of these is needed to run Islet. macOS asks the first time you turn on a feature that uses one, or press Allow here.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

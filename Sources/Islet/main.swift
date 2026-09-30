@@ -201,12 +201,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: HUD
 
-    private var replacedHUD = false
+    /// Whether replacing the system HUD was on at the last setup; nil until the first, at launch.
+    private var replacedHUD: Bool?
 
     private func setUpHUD() {
         if model.settings.brightnessHUDEnabled {
             brightness.onChange = { [weak self] v in
-                guard let self, self.model.settings.brightnessHUDEnabled, !self.model.settings.replaceSystemHUD else { return }
+                // Intercepted keys show the HUD themselves; otherwise macOS takes the keys and this shows it.
+                guard let self, self.model.settings.brightnessHUDEnabled, !self.keys.isRunning else { return }
                 Task { await self.model.showHUD(kind: .brightness, value: v, muted: false, label: nil) }
             }
             brightness.start()
@@ -215,8 +217,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if model.settings.replaceSystemHUD {
             keys.onKey = { [weak self] key, fine in self?.handleKey(key, fine: fine) }
-            // Ask for Accessibility only when the option is switched on, not on every change.
-            if !keys.start(), !replacedHUD { MediaKeyInterceptor.requestAccessibility() }
+            // Without Accessibility the keys are left to macOS. Ask for it only as the option is
+            // switched on; at launch a revoked permission shows in Settings instead of a prompt.
+            if !keys.start(), PermissionPrompt.shouldAsk(wasOn: replacedHUD, isOn: true) {
+                MediaKeyInterceptor.requestAccessibility()
+            }
         } else {
             keys.stop()
         }

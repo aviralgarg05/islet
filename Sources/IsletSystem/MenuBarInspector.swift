@@ -6,7 +6,8 @@ import IsletCore
 /// wings to fit or drop below the notch instead of covering menu bar icons.
 ///
 /// Reads frames only (no titles or values) through Accessibility, which the user grants in
-/// Settings. Without that permission `measure` returns nil and Islet uses the drop layout.
+/// Settings. Without that permission `measure` returns nil and Islet keeps to narrow wings
+/// (`MenuBarLayoutEngine.unmeasuredWing`).
 ///
 /// On macOS 27 one read of MenuBarAgent's menu bar window gives every item's frame, a few
 /// milliseconds with no calls into other apps. Elsewhere it falls back to asking the apps that own

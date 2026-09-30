@@ -245,7 +245,8 @@ final class AppModel {
     private func startMedia() {
         systemMedia.onUpdate = { [weak self] np in self?.mediaUpdate(np, source: .system) }
         systemMedia.onUnavailable = { [weak self] reason in
-            // Fall back to per-player integrations with AppleScript enrichment.
+            // Fall back to per-player enrichment. It uses AppleScript only where Automation is
+            // already allowed, so this never brings up the prompt; Settings → Permissions does.
             NSLog("Islet: %@", reason)
             self?.music.enrich = true
             self?.spotify.enrich = true
@@ -455,7 +456,8 @@ final class AppModel {
     var activities: [Activity] { center.ordered(now: Date()) }
 
     /// How the closed island lays out on a display: the user's choice, or the measured
-    /// automatic placement (drop below the notch until the menu bar has been measured).
+    /// automatic placement (narrow wings, at most `MenuBarLayoutEngine.unmeasuredWing`, until the
+    /// menu bar has been measured).
     func placement(for display: CGDirectDisplayID, metrics: IslandMetrics) -> ClosedPlacement {
         let preference = settings.closedLayout
         guard preference == .auto else { return .unmeasured(preference, wing: metrics.wingWidth, hasMenuBar: true) }

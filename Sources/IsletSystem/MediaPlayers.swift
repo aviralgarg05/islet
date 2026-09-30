@@ -23,27 +23,54 @@ public enum AppleScriptRunner {
 
 /// Common shape of the Music.app and Spotify integrations: both broadcast a distributed
 /// notification on every state change, so no polling and no permissions are needed to read.
-/// Controlling them uses AppleScript (one-time Automation consent).
+/// Controlling them uses AppleScript, which needs Automation for that app. Islet never raises
+/// that prompt itself: it sends Apple Events only once macOS says they are allowed, which the
+/// user grants with Allow in Settings → Permissions.
 public class ScriptablePlayerProvider {
     public let source: MediaSourceKind
     public let bundleID: String
     public let appName: String
+    /// The Automation permission Apple Events to this player need.
+    public let permission: PermissionKind
     let notificationName: String
     public var onUpdate: ((NowPlaying?) -> Void)?
     /// Fetch position/artwork with AppleScript or the network. Turned off while the system
     /// bridge is running, since it already delivers both without extra permissions.
-    public var enrich = true
+    public var enrich = true {
+        didSet { if enrich, !oldValue, observer != nil { beginEnriching() } }
+    }
+    /// Where scripts go once allowed; tests swap it so nothing reaches a real player.
+    var scriptRunner: (String, ((NSAppleEventDescriptor?) -> Void)?) -> Void = AppleScriptRunner.run
+    private var automation = AutomationGate()
     private var observer: NSObjectProtocol?
     private var quitObserver: NSObjectProtocol?
+    private var openObservers: [NSObjectProtocol] = []
+    private var permissionObserver: NSObjectProtocol?
 
-    init(source: MediaSourceKind, bundleID: String, appName: String, notificationName: String) {
+    init(source: MediaSourceKind, bundleID: String, appName: String, permission: PermissionKind, notificationName: String) {
         self.source = source
         self.bundleID = bundleID
         self.appName = appName
+        self.permission = permission
         self.notificationName = notificationName
+        // Posted on the main thread, so it is handled there too. Kept while stopped, so an
+        // Allow in Settings is known when the integration starts again.
+        permissionObserver = NotificationCenter.default.addObserver(
+            forName: .isletAutomationStatus, object: nil, queue: nil
+        ) { [weak self] note in
+            guard let self, note.object as? String == self.bundleID,
+                  let status = note.userInfo?["status"] as? PermissionStatus else { return }
+            self.automationAnswered(status)
+        }
     }
 
-    deinit { stop() }
+    deinit {
+        stop()
+        if let o = permissionObserver { NotificationCenter.default.removeObserver(o) }
+    }
+
+    /// Whether macOS allows Islet to send this player Apple Events.
+    public var canScript: Bool { automation.allowsEvents }
 
     public func start() {
         guard observer == nil else { return }
@@ -61,14 +88,56 @@ public class ScriptablePlayerProvider {
                   app.bundleIdentifier == self.bundleID else { return }
             self.onUpdate?(nil)
         }
-        if enrich, AppleScriptRunner.isRunning(bundleID) { refresh() }
+        // macOS can only say whether Automation is allowed while the player is open, so ask again
+        // when it opens (it may never come to the front) or comes to the front, as long as there's
+        // no lasting answer.
+        openObservers = [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didActivateApplicationNotification].map { name in
+            NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                guard let self, self.enrich, let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                      app.bundleIdentifier == self.bundleID else { return }
+                self.checkAutomation(.appActivated)
+            }
+        }
+        if enrich { beginEnriching() }
     }
 
     public func stop() {
         if let o = observer { DistributedNotificationCenter.default().removeObserver(o) }
         if let o = quitObserver { NSWorkspace.shared.notificationCenter.removeObserver(o) }
+        openObservers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
         observer = nil
         quitObserver = nil
+        openObservers = []
+    }
+
+    /// Catch up now if Automation is allowed; otherwise ask macOS (without a prompt) whether it is.
+    private func beginEnriching() {
+        if canScript {
+            if AppleScriptRunner.isRunning(bundleID) { refresh() }
+        } else {
+            checkAutomation(.firstUse)
+        }
+    }
+
+    /// Ask macOS, without a prompt, whether Apple Events may go to this player, when it's due.
+    private func checkAutomation(_ trigger: AutomationGate.Trigger) {
+        guard automation.shouldCheck(trigger) else { return }
+        PermissionProbe.status(of: permission, readDownloads: false) { [weak self] in self?.automationAnswered($0) }
+    }
+
+    /// An answer from macOS: one of our checks, or the user's in Settings → Permissions.
+    private func automationAnswered(_ status: PermissionStatus) {
+        // Just allowed: catch up on what's playing.
+        if automation.record(status), enrich, observer != nil, AppleScriptRunner.isRunning(bundleID) { refresh() }
+    }
+
+    /// Run AppleScript against this player, only once Automation for it is allowed.
+    /// - Returns: false when nothing was sent.
+    @discardableResult
+    func runScript(_ source: String, completion: ((NSAppleEventDescriptor?) -> Void)? = nil) -> Bool {
+        guard canScript else { return false }
+        scriptRunner(source, completion)
+        return true
     }
 
     /// Subclasses convert the notification payload.
@@ -80,11 +149,17 @@ public class ScriptablePlayerProvider {
     /// Ask the player for its current state (used at launch, before any notification).
     public func refresh() {}
 
-    /// Send a transport command. Never launches the player.
+    /// Send a transport command. Never launches the player, and sends nothing (returning false)
+    /// until Automation for it is allowed.
     public func send(_ command: PlaybackCommand, position: Double? = nil) -> Bool {
         guard AppleScriptRunner.isRunning(bundleID) else { return false }
         guard let verb = Self.verb(for: command, position: position, bundleID: bundleID) else { return false }
-        AppleScriptRunner.run("tell application id \"\(bundleID)\"\n\(verb)\nend tell")
+        guard runScript("tell application id \"\(bundleID)\"\n\(verb)\nend tell") else {
+            // macOS may not have been asked yet (the system bridge was doing the work), or not
+            // while the player was open: ask now (silently), so the next press can go through.
+            checkAutomation(.control)
+            return false
+        }
         return true
     }
 
@@ -126,7 +201,8 @@ public class ScriptablePlayerProvider {
 
 public final class AppleMusicProvider: ScriptablePlayerProvider {
     public init() {
-        super.init(source: .appleMusic, bundleID: "com.apple.Music", appName: "Music", notificationName: "com.apple.Music.playerInfo")
+        super.init(source: .appleMusic, bundleID: "com.apple.Music", appName: "Music", permission: .automationMusic,
+                   notificationName: "com.apple.Music.playerInfo")
     }
 
     /// `com.apple.Music.playerInfo` payload → NowPlaying. Pure, for tests.
@@ -158,7 +234,7 @@ public final class AppleMusicProvider: ScriptablePlayerProvider {
             return (name of t) & (ASCII character 31) & (artist of t) & (ASCII character 31) & (album of t) & (ASCII character 31) & (duration of t) & (ASCII character 31) & (player position) & (ASCII character 31) & (player state as string)
         end tell
         """
-        AppleScriptRunner.run(script) { [weak self] result in
+        runScript(script) { [weak self] result in
             guard let self, let s = result?.stringValue, !s.isEmpty else { return }
             let p = s.components(separatedBy: "\u{1F}")
             guard p.count == 6 else { return }
@@ -174,7 +250,7 @@ public final class AppleMusicProvider: ScriptablePlayerProvider {
     }
 
     private func fetchDetails(base: NowPlaying) {
-        AppleScriptRunner.run("tell application id \"com.apple.Music\" to return player position") { [weak self] result in
+        runScript("tell application id \"com.apple.Music\" to return player position") { [weak self] result in
             guard let self, let s = result?.stringValue, let pos = Double(s.replacingOccurrences(of: ",", with: ".")) else { return }
             var np = base
             np.elapsed = pos
@@ -186,7 +262,7 @@ public final class AppleMusicProvider: ScriptablePlayerProvider {
 
     private func fetchArtwork(base: NowPlaying) {
         let script = "tell application id \"com.apple.Music\" to if (count of artworks of current track) > 0 then return data of artwork 1 of current track"
-        AppleScriptRunner.run(script) { [weak self] result in
+        runScript(script) { [weak self] result in
             guard let self, let data = result?.data, !data.isEmpty, NSImage(data: data) != nil else { return }
             var np = base
             np.artworkData = data
@@ -199,7 +275,8 @@ public final class SpotifyProvider: ScriptablePlayerProvider {
     private var artworkCache: [String: URL] = [:]
 
     public init() {
-        super.init(source: .spotify, bundleID: "com.spotify.client", appName: "Spotify", notificationName: "com.spotify.client.PlaybackStateChanged")
+        super.init(source: .spotify, bundleID: "com.spotify.client", appName: "Spotify", permission: .automationSpotify,
+                   notificationName: "com.spotify.client.PlaybackStateChanged")
     }
 
     /// `com.spotify.client.PlaybackStateChanged` payload → NowPlaying. Pure, for tests.
@@ -262,7 +339,7 @@ public final class SpotifyProvider: ScriptablePlayerProvider {
             return (name of t) & (ASCII character 31) & (artist of t) & (ASCII character 31) & (album of t) & (ASCII character 31) & (duration of t) & (ASCII character 31) & (player position) & (ASCII character 31) & (player state as string) & (ASCII character 31) & (artwork url of t)
         end tell
         """
-        AppleScriptRunner.run(script) { [weak self] result in
+        runScript(script) { [weak self] result in
             guard let self, let s = result?.stringValue, !s.isEmpty else { return }
             let p = s.components(separatedBy: "\u{1F}")
             guard p.count == 7 else { return }
