@@ -160,7 +160,11 @@ import Testing
         a.update(np(.spotify, "s", playing: false, at: 10))
         a.update(np(.browser, "b", playing: false, at: 5))
         #expect(a.nextDeadline(now: t0.addingTimeInterval(10)) == t0.addingTimeInterval(65))
-        #expect(a.nextDeadline(now: t0.addingTimeInterval(65)) == t0.addingTimeInterval(70))
+        // The timer was replaced just before it fired: the overdue player is due at once, not skipped.
+        #expect(a.nextDeadline(now: t0.addingTimeInterval(66)) == t0.addingTimeInterval(66))
+        a.expire(now: t0.addingTimeInterval(66))
+        #expect(a.nextDeadline(now: t0.addingTimeInterval(66)) == t0.addingTimeInterval(70))
+        a.expire(now: t0.addingTimeInterval(70))
         #expect(a.nextDeadline(now: t0.addingTimeInterval(70)) == nil)
     }
 

@@ -129,12 +129,13 @@ public struct MediaArbiter: Sendable {
     }
 
     /// The next moment a paused player is forgotten. The app arms its one deadline timer for this,
-    /// so the track goes on time instead of at the next media update.
+    /// so the track goes on time instead of at the next media update. One already due and not yet
+    /// forgotten comes back as `now`: another input can replace the timer just before it fires,
+    /// and the track must still go.
     public func nextDeadline(now: Date) -> Date? {
         snapshots.values
             .filter { !$0.isPlaying }
-            .map { $0.timestamp.addingTimeInterval(pausedTimeout) }
-            .filter { $0 > now }
+            .map { max(now, $0.timestamp.addingTimeInterval(pausedTimeout)) }
             .min()
     }
 
