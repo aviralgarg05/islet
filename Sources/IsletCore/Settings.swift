@@ -174,7 +174,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// Also listen on the local network (token required) so iPhone Shortcuts can push events.
     public var lanBridgeEnabled = false
     public var lanPort = 47832
-    public var pluginsEnabled = true
+    /// Run scripts from the plugins folder. Off until the user turns it on: they run with
+    /// Islet's permissions.
+    public var pluginsEnabled = false
     /// Folder of script widgets; default `~/.config/islet/plugins`.
     public var pluginDirectory: String?
     /// Activity sources the user silenced (e.g. "github-actions").

@@ -207,6 +207,13 @@ func request(_ port: UInt16, _ method: String, _ path: String, token: String? = 
         let names = ScriptPluginRunner.discover(in: dir).map(\.lastPathComponent)
         #expect(names.contains("ok.1m.sh"))
         #expect(!names.contains("readme.txt"))
+        // A script anyone could have rewritten is skipped, and so is a folder others can write to.
+        let loose = script("loose.sh", "echo hi")
+        try FileManager.default.setAttributes([.posixPermissions: 0o777], ofItemAtPath: loose.path)
+        #expect(!ScriptPluginRunner.discover(in: dir).map(\.lastPathComponent).contains("loose.sh"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o777], ofItemAtPath: dir.path)
+        #expect(ScriptPluginRunner.discover(in: dir).isEmpty)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path)
     }
 
     @Test func partialDownloads() throws {

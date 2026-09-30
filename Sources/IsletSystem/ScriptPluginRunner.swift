@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import IsletCore
 
@@ -22,6 +23,10 @@ public struct PluginResult: Identifiable, Equatable {
 }
 
 /// Runs executable scripts from the plugins folder on their xbar-style schedule.
+///
+/// Scripts run as the user and are started by Islet, so only files the user owns in a folder the
+/// user owns, writable by nobody else, are run. Schedules pause while the screen is locked or
+/// the displays sleep and pick up with one run when they return.
 public final class ScriptPluginRunner {
     public var onResult: ((PluginResult) -> Void)?
     public var onRemoved: ((String) -> Void)?
@@ -31,6 +36,8 @@ public final class ScriptPluginRunner {
 
     private var timers: [String: DispatchSourceTimer] = [:]
     private var dirWatcher: DispatchSourceFileSystemObject?
+    private var paused = false
+    private var observers: [NSObjectProtocol] = []
     private let queue = DispatchQueue(label: "islet.plugins", qos: .utility)
 
     public init(directory: URL) {
@@ -40,25 +47,63 @@ public final class ScriptPluginRunner {
     deinit { stop() }
 
     public func start() {
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         rescan()
         watchDirectory()
+        guard observers.isEmpty else { return }
+        let dnc = DistributedNotificationCenter.default()
+        let wnc = NSWorkspace.shared.notificationCenter
+        observers = [
+            dnc.addObserver(forName: Notification.Name("com.apple.screenIsLocked"), object: nil, queue: .main) { [weak self] _ in self?.pause() },
+            dnc.addObserver(forName: Notification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main) { [weak self] _ in self?.resume() },
+            wnc.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in self?.pause() },
+            wnc.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in self?.resume() },
+        ]
     }
 
     public func stop() {
+        if paused { timers.values.forEach { $0.resume() } }
+        paused = false
         for t in timers.values { t.cancel() }
         timers.removeAll()
         dirWatcher?.cancel()
         dirWatcher = nil
+        for o in observers {
+            DistributedNotificationCenter.default().removeObserver(o)
+            NSWorkspace.shared.notificationCenter.removeObserver(o)
+        }
+        observers = []
     }
 
-    /// Scripts in the folder that are executable and not hidden.
+    private func pause() {
+        guard !paused else { return }
+        paused = true
+        timers.values.forEach { $0.suspend() }
+    }
+
+    private func resume() {
+        guard paused else { return }
+        paused = false
+        // A timer that came due while suspended fires once on resume.
+        timers.values.forEach { $0.resume() }
+    }
+
+    /// Owned by the user and writable by no one else: anything else could be swapped for code
+    /// that then runs with Islet's permissions.
+    public static func isTrusted(_ path: String) -> Bool {
+        var st = stat()
+        guard stat(path, &st) == 0 else { return false }
+        return st.st_uid == getuid() && st.st_mode & (S_IWGRP | S_IWOTH) == 0
+    }
+
+    /// Scripts in the folder that are executable, not hidden and trusted (see `isTrusted`).
     public static func discover(in dir: URL) -> [URL] {
         let fm = FileManager.default
+        guard isTrusted(dir.path) else { return [] }
         guard let items = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]) else { return [] }
         return items.filter { url in
             let isFile = (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false
-            return isFile && fm.isExecutableFile(atPath: url.path)
+            return isFile && fm.isExecutableFile(atPath: url.path) && isTrusted(url.path)
         }.sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
@@ -72,6 +117,7 @@ public final class ScriptPluginRunner {
         }
         for script in scripts where timers[script.path] == nil {
             schedule(script)
+            if paused { timers[script.path]?.suspend() }
         }
     }
 
