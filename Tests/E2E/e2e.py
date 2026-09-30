@@ -272,10 +272,20 @@ def run_suite(e, app, windows_bin):
     print("▸ iPhone bridge (LAN listener)")
     lan_ok = wait_for(lambda: http_to(LAN_PORT, "GET", "/v1/health")[0] == 200, timeout=5)
     check("LAN listener is up", lan_ok)
-    status, body = http_to(LAN_PORT, "POST", "/v1/notify", token, {"title": "From iPhone", "ttl": 30}, {"Host": "my-mac.local:%d" % LAN_PORT})
+    lan_file = os.path.join(e.support, "lan.json")
+    lan_token = None
+    if os.path.exists(lan_file):
+        with open(lan_file) as f:
+            lan_token = json.load(f).get("token")
+        check("lan.json is private (0600)", oct(os.stat(lan_file).st_mode & 0o777) == "0o600")
+    check("LAN has its own token", lan_token and lan_token != token)
+    status, body = http_to(LAN_PORT, "POST", "/v1/notify", lan_token, {"title": "From iPhone", "ttl": 30}, {"Host": "my-mac.local:%d" % LAN_PORT})
     check("iPhone-style request with .local host accepted", status == 201, f"{status} {body}")
     check("LAN still requires the token", http_to(LAN_PORT, "POST", "/v1/notify", None, {"title": "x"}, {"Host": "my-mac.local"})[0] == 401)
-    check("LAN refuses browser origins", http_to(LAN_PORT, "POST", "/v1/notify", token, {"title": "x"}, {"Origin": "https://evil.example"})[0] == 403)
+    check("LAN refuses the loopback token", http_to(LAN_PORT, "POST", "/v1/notify", token, {"title": "x"})[0] == 401)
+    check("loopback API refuses the LAN token", http("GET", "/v1/state", lan_token)[0] == 401)
+    check("LAN can't read state", http_to(LAN_PORT, "GET", "/v1/state", lan_token)[0] == 403)
+    check("LAN refuses browser origins", http_to(LAN_PORT, "POST", "/v1/notify", lan_token, {"title": "x"}, {"Origin": "https://evil.example"})[0] == 403)
     codes = [http_to(LAN_PORT, "GET", "/v1/health")[0] for _ in range(40)]
     check("LAN is rate limited", 429 in codes, str(sorted(set(codes))))
     check("loopback API is not rate limited", all(http("GET", "/v1/health")[0] == 200 for _ in range(40)))

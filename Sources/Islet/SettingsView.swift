@@ -425,14 +425,7 @@ struct IntegrationsSettings: View {
                     .font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
             }
             UsageLimitsSection(model: model)
-            Section("iPhone bridge (local network)") {
-                Toggle("Accept events from iPhone Shortcuts on this network", isOn: $model.settings.lanBridgeEnabled)
-                LabeledContent("Status") { Text(model.lanStatus).foregroundStyle(.secondary) }
-                Text("""
-                In Shortcuts on iPhone, create a Personal Automation (Alarm, Focus, Arrive, Battery Level…) →                 “Get Contents of URL” → POST http://\(ProcessInfo.processInfo.hostName):\(model.settings.lanPort)/v1/notify                 with header Authorization: Bearer <token> and JSON {"title": "…"}. Rate-limited, token required.
-                """)
-                .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-            }
+            LANBridgeSection(model: model)
             Section("Script widgets") {
                 Toggle("Run scripts from the plugins folder", isOn: $model.settings.pluginsEnabled)
                 HStack {
