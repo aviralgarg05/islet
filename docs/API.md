@@ -215,6 +215,8 @@ echo '{"title":"Lakers at Celtics","teams":[{"abbr":"LAL","score":3},{"abbr":"BO
 
 Errors are JSON: `{"error": "'progress' must be between 0 and 1 …"}` with `400`, `401`, `403`, `404`, `405`, `411`, `413`, `422`, `429` or `503`.
 
+Live Activities mirrored from the menu bar (ids starting with `live-`, source `live-activity`) belong to the mirror. Creating, changing or removing one, or sending that source, gets a `403` whether or not the id exists. `GET /v1/activities` and `/v1/state` leave them out, and `/v1/debug/menubar` leaves out their text, unless **Share mirrored activities with scripts** is on; see [LIVE-ACTIVITIES.md](LIVE-ACTIVITIES.md).
+
 ```bash
 TOKEN=$(isletctl token)
 curl -s -X POST http://127.0.0.1:47831/v1/activities \
@@ -262,7 +264,7 @@ curl -s -X POST http://127.0.0.1:47831/v1/timer -H "Authorization: Bearer $TOKEN
 
 | Field | Meaning |
 |---|---|
-| `id` | `timer-1`, `timer-2`, … (the lowest free number), your own `id`, or `pomodoro`. Commands also accept the number alone (`2`) or the title. |
+| `id` | `timer-1`, `timer-2`, … (the lowest free number), your own `id` (not one starting with `live-`), or `pomodoro`. Commands also accept the number alone (`2`) or the title. |
 | `status` | `running`, `paused` or `ringing` |
 | `duration` | Seconds it was started with; `restart` runs it again for this long. |
 | `endsAt` | Running: when it ends. Ringing: when it ended. Absent while paused. |
@@ -360,7 +362,7 @@ islet://open   islet://close   islet://toggle   islet://settings
 
 Any app or web page can open these URLs, and they carry no token, so they are limited:
 
-- Activities they create or dismiss get ids starting with `url-` (`id=deploy` becomes `url-deploy`), so a link can't replace or remove an activity made by Islet or the API.
+- Activities they create or dismiss get ids starting with `url-` (`id=deploy` becomes `url-deploy`), so a link can't replace or remove an activity made by Islet, the API or the Live Activity mirror. `source=live-activity` is refused.
 - `url` and `actionURL` must be `https`.
 - Icons are limited to `sf:`, `emoji:` and `app:`.
 - `priority=critical` is treated as `high`.

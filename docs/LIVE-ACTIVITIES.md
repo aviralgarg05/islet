@@ -27,7 +27,7 @@ There's no API for this. ActivityKit is unavailable on macOS, so Islet reads wha
 |---|---|---|
 | Show Live Activities from the menu bar | On (needs Accessibility) | Mirror them into the island. |
 | Only when hidden by the notch | Off | Mirror only the activities macOS has collapsed into the overflow, so nothing shows twice. |
-| Share mirrored activities with scripts | Off | Include them in `GET /v1/activities` and `/v1/state`. They often hold addresses, names and scores, so they're left out unless you allow it. |
+| Share mirrored activities with scripts | Off | Include them in `GET /v1/activities` and `/v1/state`, and their text in `isletctl debug menubar`. They often hold addresses, names and scores, so they're left out unless you allow it. Either way, scripts and links can't change or remove them. |
 
 The text Islet reads stays in memory. It isn't written to disk or logs.
 
@@ -45,6 +45,6 @@ isletctl debug menubar            # what Islet sees now, as JSON
 isletctl debug menubar --watch    # print each change until Ctrl-C
 ```
 
-Each item shows its position, whether it's hidden in the overflow, what Islet thinks it is (`liveActivity`, `systemItem`, `overflowButton`, `thirdParty`) and its text. Other apps' items are listed by position only.
+Each item shows its position, whether it's hidden in the overflow, what Islet thinks it is (`liveActivity`, `systemItem`, `overflowButton`, `thirdParty`) and its text. Other apps' items are listed by position only. The text of Live Activities, and of items Islet can't place, is only shown while **Share mirrored activities with scripts** is on, so turn it on while you capture output for an issue.
 
 To try it without an iPhone: make a shortcut with one action, *Wait* 30 seconds, and run it from the Shortcuts menu bar item; or start a timer in the Mac's Clock app. From the iPhone, a food delivery, a ride, a flight in Flighty or a live game in Apple Sports all show up. If one doesn't look right, run `--watch` while it's live and include the output in an issue.

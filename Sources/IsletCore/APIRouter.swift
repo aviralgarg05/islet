@@ -23,6 +23,13 @@ public protocol IsletBackend: Sendable {
     /// Coding-agent approvals: `.ask` shows a card and returns the user's answer (nil: no
     /// decision); it must return promptly once its task is cancelled. `.settle` returns nil.
     func handleApproval(_ event: ApprovalEvent) async -> ApprovalDecision?
+    /// Whether scripts may read Live Activities mirrored from the menu bar (the
+    /// `shareMirroredActivities` setting). The router leaves them out otherwise.
+    func sharesMirroredActivities() async -> Bool
+}
+
+extension IsletBackend {
+    public func sharesMirroredActivities() async -> Bool { false }
 }
 
 public struct StateSnapshot: Codable, Equatable, Sendable {
@@ -206,9 +213,33 @@ public struct APIRouter: Sendable {
         }
         do {
             return try await route(request, seg)
+        } catch ActivityError.mirrored {
+            return .error(403, ActivityError.mirrored.description)
         } catch {
             return .error(422, Self.describe(error))
         }
+    }
+
+    // MARK: Mirrored Live Activities
+
+    /// Every write to an activity goes through here or `remove(id:)`. Mirrored Live Activities
+    /// belong to the menu bar mirror, so they are refused, the same way whether or not one exists.
+    func apply(_ spec: ActivitySpec) async throws -> Activity {
+        if spec.source == MenuBarLiveActivities.source || spec.id.map(MenuBarLiveActivities.isMirrored(id:)) == true {
+            throw ActivityError.mirrored
+        }
+        return try await backend.applyActivity(spec)
+    }
+
+    func remove(id: String) async throws -> Bool {
+        guard !MenuBarLiveActivities.isMirrored(id: id) else { throw ActivityError.mirrored }
+        return await backend.removeActivity(id: id)
+    }
+
+    /// What scripts may read: mirrored Live Activities only when the user shares them.
+    func readable(_ activities: [Activity]) async -> [Activity] {
+        if await backend.sharesMirroredActivities() { return activities }
+        return activities.filter { !MenuBarLiveActivities.isMirrored($0) }
     }
 
     private func route(_ r: HTTPRequest, _ seg: [String]) async throws -> HTTPResponse {
@@ -218,29 +249,35 @@ public struct APIRouter: Sendable {
         let sub = rest.count == 2 ? rest[1] : ""
         switch (r.method, rest.count, head) {
         case ("GET", 1, "state"):
-            return .json(await backend.stateSnapshot())
+            var state = await backend.stateSnapshot()
+            state.activities = await readable(state.activities)
+            return .json(state)
 
         case ("GET", 1, "activities"):
-            return .json(await backend.listActivities())
+            return .json(await readable(await backend.listActivities()))
 
         case ("POST", 1, "activities"):
             let spec = try decode(ActivitySpec.self, from: r)
-            return .json(try await backend.applyActivity(spec), status: 201)
+            return .json(try await apply(spec), status: 201)
 
         case ("PUT", 2, "activities"), ("PATCH", 2, "activities"), ("POST", 2, "activities"):
             let id = sub
+            // Refused before the body is read, so the answer is the same for any body.
+            guard !MenuBarLiveActivities.isMirrored(id: id) else { throw ActivityError.mirrored }
             var spec = try decode(ActivitySpec.self, from: r)
             spec.id = id
-            return .json(try await backend.applyActivity(spec))
+            return .json(try await apply(spec))
 
         case ("DELETE", 2, "activities"):
             let id = sub
-            return await backend.removeActivity(id: id) ? .noContent : .error(404, ActivityError.notFound(id).description)
+            return try await remove(id: id) ? .noContent : .error(404, ActivityError.notFound(id).description)
 
         case ("DELETE", 1, "activities"):
             guard let source = r.query["source"], !source.isEmpty else {
                 return .error(400, "pass ?source=<name> to remove all activities from one source")
             }
+            // The count would also say how many are showing.
+            guard source != MenuBarLiveActivities.source else { throw ActivityError.mirrored }
             return .json(["removed": await backend.removeActivities(source: source)])
 
         case ("POST", 1, "notify"):
@@ -249,7 +286,7 @@ public struct APIRouter: Sendable {
                 source: n.source ?? "notify", title: n.title, subtitle: n.subtitle, icon: n.icon ?? .symbol("bell.fill"),
                 state: .info, tint: n.tint, priority: n.priority ?? .normal, ttl: n.ttl ?? 6, sneak: true
             )
-            return .json(try await backend.applyActivity(spec), status: 201)
+            return .json(try await apply(spec), status: 201)
 
         case ("POST", 1, "timer"), ("POST", 1, "timers"):
             let t = try decode(TimerPush.self, from: r)
@@ -330,19 +367,20 @@ public struct APIRouter: Sendable {
             }
 
         case ("GET", 2, "debug") where sub == "menubar":
-            return .json(await backend.menuBarItems())
+            let items = await backend.menuBarItems()
+            return .json(await backend.sharesMirroredActivities() ? items : MenuBarLiveActivities.withoutActivityText(items))
 
         case ("POST", 1, "focus"):
             let f = try decode(FocusPush.self, from: r)
-            return .json(try await backend.applyActivity(FocusPill.activity(name: f.name ?? "Focus", on: f.on ?? true)), status: 201)
+            return .json(try await apply(FocusPill.activity(name: f.name ?? "Focus", on: f.on ?? true)), status: 201)
 
         case ("POST", 2, "hooks"):
             let provider = sub
             if let held = await approvalHook(r, provider: provider) { return held }
             switch try AgentHooks.map(provider: provider, payload: r.body, now: clock()) {
-            case .upsert(let spec): return .json(try await backend.applyActivity(spec))
+            case .upsert(let spec): return .json(try await apply(spec))
             case .remove(let id):
-                _ = await backend.removeActivity(id: id)
+                _ = try await remove(id: id)
                 return .noContent
             case .ignore: return .noContent
             }

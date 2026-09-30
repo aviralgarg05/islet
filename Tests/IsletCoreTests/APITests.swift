@@ -28,7 +28,14 @@ actor FakeBackend: IsletBackend {
     func stateSnapshot() async -> StateSnapshot {
         StateSnapshot(version: "test", presentation: "idle", activities: center.ordered(now: now), nowPlaying: nil, battery: nil)
     }
-    func menuBarItems() async -> [MenuBarItemInfo] { [] }
+    var menuBar: [MenuBarItemInfo] = []
+    func menuBarItems() async -> [MenuBarItemInfo] { menuBar }
+    var sharesMirrored = false
+    func sharesMirroredActivities() async -> Bool { sharesMirrored }
+    func share(_ on: Bool, menuBar items: [MenuBarItemInfo] = []) {
+        sharesMirrored = on
+        menuBar = items
+    }
     func keepAwake(_ change: KeepAwakeChange?) async -> KeepAwakeStatus {
         switch change {
         case .start(let minutes)?: awake = KeepAwakeSession(since: now, until: minutes.map { now.addingTimeInterval($0 * 60) })
@@ -257,5 +264,114 @@ actor FakeBackend: IsletBackend {
         #expect(APIRouter.tokensMatch("abc", "abc"))
         #expect(!APIRouter.tokensMatch("abc", "abd"))
         #expect(!APIRouter.tokensMatch("abc", "abcd"))
+    }
+}
+
+/// Live Activities mirrored from the menu bar belong to the mirror: scripts can't change them,
+/// and only read them when the user shares them.
+extension APIRouterTests {
+    static let mirroredID = "live-abc123"
+
+    /// A mirrored activity, added the way the app's mirror adds it rather than through the API,
+    /// next to a script's own.
+    func addMirrored(to b: FakeBackend) async throws {
+        var spec = MenuBarLiveActivities.activity(for: MirroredLiveActivity(key: "pill", appName: "Uber", detail: "4 min · 12 Acacia Avenue"),
+                                                  look: nil, isNew: true)
+        spec.id = Self.mirroredID
+        _ = try await b.applyActivity(spec)
+        _ = try await b.applyActivity(ActivitySpec(id: "build", source: "ci", title: "Build"))
+    }
+
+    func leaks(_ r: HTTPResponse) -> Bool {
+        let text = String(decoding: r.body, as: UTF8.self)
+        return text.contains("Uber") || text.contains("Acacia")
+    }
+
+    @Test func mirroredActivitiesCantBeWritten() async throws {
+        for sharing in [false, true] {
+            let b = FakeBackend(now: t0)
+            try await addMirrored(to: b)
+            await b.share(sharing)
+            let rt = router(b)
+            // The answer is the same whether or not the id exists, whatever the body.
+            let writes: [(String, String?)] = [("PATCH", #"{"subtitle":"x"}"#), ("PUT", #"{"title":"x"}"#), ("POST", #"{"title":"x"}"#),
+                                               ("PATCH", "{nope"), ("PATCH", nil), ("DELETE", nil)]
+            for (method, body) in writes {
+                let hit = await rt.handle(request(method, "/v1/activities/\(Self.mirroredID)", body: body))
+                let miss = await rt.handle(request(method, "/v1/activities/live-nothing", body: body))
+                #expect(hit.status == 403, "\(method) \(body ?? "")")
+                #expect(hit.status == miss.status && hit.body == miss.body, "\(method) \(body ?? "")")
+                #expect(!leaks(hit))
+            }
+            let refused = [
+                await rt.handle(request("POST", "/v1/activities", body: #"{"id":"live-abc123","title":"x"}"#)),
+                await rt.handle(request("POST", "/v1/activities", body: #"{"id":"mine","source":"live-activity","title":"x"}"#)),
+                await rt.handle(request("POST", "/v1/notify", body: #"{"title":"x","source":"live-activity"}"#)),
+                // The count would say how many are showing.
+                await rt.handle(request("DELETE", "/v1/activities?source=live-activity")),
+                // A generic hook for an agent called "live" maps to live-<session>.
+                await rt.handle(request("POST", "/v1/hooks/live", body: #"{"agent":"live","session":"abc123","event":"running"}"#)),
+                await rt.handle(request("POST", "/v1/hooks/live", body: #"{"agent":"live","session":"abc123","event":"end"}"#)),
+            ]
+            for r in refused {
+                #expect(r.status == 403)
+                #expect(String(decoding: r.body, as: UTF8.self).contains("mirrored from the menu bar"))
+                #expect(!leaks(r))
+            }
+            // The approvals path answers as usual but leaves the activity alone.
+            let held = await rt.handle(request("POST", "/v1/hooks/live?wait=1", body: #"{"agent":"live","session":"abc123","event":"end"}"#))
+            #expect(held.status == 204)
+            // A timer shows as the activity with its id.
+            let timer = await rt.handle(request("POST", "/v1/timer", body: #"{"seconds":60,"id":"live-abc123"}"#))
+            #expect(timer.status == 422)
+            #expect(!leaks(timer))
+            #expect(await b.timers.timers.isEmpty)
+
+            let a = await b.center.activities[Self.mirroredID]
+            #expect(a?.title == "Uber")
+            #expect(a?.subtitle == "4 min · 12 Acacia Avenue")
+            #expect(await b.center.activities.count == 2)
+            // The script's own activities still work.
+            #expect(await rt.handle(request("PATCH", "/v1/activities/build", body: #"{"progress":0.5}"#)).status == 200)
+            #expect(await rt.handle(request("DELETE", "/v1/activities?source=ci")).status == 200)
+        }
+    }
+
+    @Test func mirroredActivitiesAreReadOnlyWhenShared() async throws {
+        #expect(MenuBarLiveActivities.isMirrored(id: MenuBarLiveActivities.activityID("pill")))
+        let b = FakeBackend(now: t0)
+        try await addMirrored(to: b)
+        var pill = MenuBarItemInfo(identifier: "live-activity-pill-9", description: "Live Activity", texts: ["4 min", "12 Acacia Avenue"])
+        pill.kind = .liveActivity
+        var unknown = MenuBarItemInfo(role: "AXMenuBarItem", texts: ["Uber"])
+        unknown.kind = .unknown
+        var battery = MenuBarItemInfo(identifier: "com.apple.menuextra.battery", description: "Battery 76%")
+        battery.kind = .systemItem
+        let rt = router(b)
+
+        await b.share(false, menuBar: [pill, unknown, battery])
+        let list = await rt.handle(request("GET", "/v1/activities"))
+        #expect(try APIJSON.decoder.decode([Activity].self, from: list.body).map(\.id) == ["build"])
+        let state = await rt.handle(request("GET", "/v1/state"))
+        #expect(try APIJSON.decoder.decode(StateSnapshot.self, from: state.body).activities.map(\.id) == ["build"])
+        // There's no read by id; asking for one says nothing about it.
+        let byID = await rt.handle(request("GET", "/v1/activities/\(Self.mirroredID)"))
+        #expect(byID.status == 405)
+        // Diagnostics keep what each item is and where, without the text.
+        let debug = await rt.handle(request("GET", "/v1/debug/menubar"))
+        let items = try APIJSON.decoder.decode([MenuBarItemInfo].self, from: debug.body)
+        #expect(items.map(\.identifier) == ["live-activity-pill-9", nil, "com.apple.menuextra.battery"])
+        #expect(items.map(\.kind) == [.liveActivity, .unknown, .systemItem])
+        #expect(items.map(\.allText) == [[], [], ["Battery 76%"]])
+        for r in [list, state, byID, debug] { #expect(!leaks(r)) }
+
+        await b.share(true, menuBar: [pill, unknown, battery])
+        let shared = await rt.handle(request("GET", "/v1/activities"))
+        #expect(Set(try APIJSON.decoder.decode([Activity].self, from: shared.body).map(\.id)) == [Self.mirroredID, "build"])
+        let sharedState = await rt.handle(request("GET", "/v1/state"))
+        #expect(try APIJSON.decoder.decode(StateSnapshot.self, from: sharedState.body).activities.count == 2)
+        let sharedDebug = await rt.handle(request("GET", "/v1/debug/menubar"))
+        #expect(try APIJSON.decoder.decode([MenuBarItemInfo].self, from: sharedDebug.body).map(\.allText)
+                == [["Live Activity", "4 min", "12 Acacia Avenue"], ["Uber"], ["Battery 76%"]])
     }
 }

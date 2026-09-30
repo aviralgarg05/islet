@@ -19,9 +19,9 @@ import Foundation
 ///     islet://open  islet://close  islet://toggle  islet://settings
 ///
 /// Any app or web page can open these URLs, and no token is involved, so what they can do is
-/// limited: activities they create get ids starting with `url-` (they can't replace Islet's own
-/// or the API's), links must be https, icons are symbols, emoji or app icons, and priority tops
-/// out at high. Scripts that need more use the local API.
+/// limited: activities they create get ids starting with `url-` (they can't replace Islet's own,
+/// the API's or a mirrored Live Activity), links must be https, icons are symbols, emoji or app
+/// icons, and priority tops out at high. Scripts that need more use the local API.
 public enum URLCommand: Equatable, Sendable {
     case activity(ActivitySpec)
     case dismiss(id: String)
@@ -40,6 +40,13 @@ public enum URLCommand: Equatable, Sendable {
     public static let idPrefix = "url-"
 
     static func namespaced(_ id: String) -> String { id.hasPrefix(idPrefix) ? id : idPrefix + id }
+
+    /// Any source but the one kept for Live Activities mirrored from the menu bar.
+    static func source(_ raw: String?) throws -> String {
+        guard let raw else { return "url" }
+        guard raw != MenuBarLiveActivities.source else { throw ParseError.invalid("source", raw) }
+        return raw
+    }
 
     /// Only https links: a click on the notch opens them, so no files or app-launching schemes.
     static func link(_ raw: String, _ param: String) throws -> URL {
@@ -94,12 +101,12 @@ public enum URLCommand: Equatable, Sendable {
         case "notify":
             guard let title = q["title"], !title.isEmpty else { throw ParseError.missing("title") }
             return .activity(ActivitySpec(
-                source: q["source"] ?? "url", title: title, subtitle: q["subtitle"],
+                source: try source(q["source"]), title: title, subtitle: q["subtitle"],
                 icon: icon(q["icon"]) ?? .symbol("bell.fill"),
                 state: .info, tint: q["tint"], ttl: try double("ttl") ?? 6, sneak: true
             ))
         case "activity":
-            var spec = ActivitySpec(id: q["id"].map(namespaced), source: q["source"] ?? "url", title: q["title"], subtitle: q["subtitle"])
+            var spec = ActivitySpec(id: q["id"].map(namespaced), source: try source(q["source"]), title: q["title"], subtitle: q["subtitle"])
             spec.icon = icon(q["icon"])
             spec.trailing = q["trailing"]
             spec.progress = try double("progress")

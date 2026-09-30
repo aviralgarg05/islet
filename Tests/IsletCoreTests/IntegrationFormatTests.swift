@@ -170,6 +170,19 @@ import Testing
         #expect(n.icon == .symbol("bell.fill"))
     }
 
+    @Test func urlSchemeCantReachMirroredLiveActivities() throws {
+        // A mirrored activity's id gets the url- prefix like any other, so it's never touched.
+        guard case .activity(let s) = try parse("islet://activity?id=live-abc123&title=x") else {
+            Issue.record("expected activity"); return
+        }
+        #expect(s.id == "url-live-abc123")
+        #expect(try parse("islet://dismiss?id=live-abc123") == .dismiss(id: "url-live-abc123"))
+        #expect(try parse("islet://remove?id=live-abc123") == .dismiss(id: "url-live-abc123"))
+        // Nor can a link pass itself off as one.
+        #expect(throws: URLCommand.ParseError.invalid("source", "live-activity")) { try parse("islet://activity?id=x&title=x&source=live-activity") }
+        #expect(throws: URLCommand.ParseError.invalid("source", "live-activity")) { try parse("islet://notify?title=x&source=live-activity") }
+    }
+
     @Test func misc() throws {
         #expect(try parse("islet://dismiss?id=deploy") == .dismiss(id: "url-deploy"))
         #expect(try parse("islet://timer?minutes=5&title=Tea") == .timer(seconds: 300, title: "Tea"))

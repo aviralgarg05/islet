@@ -24,6 +24,8 @@ import Testing
         #expect(throws: TimerError.self) { try e.start(seconds: .nan, now: t0) }
         #expect(throws: TimerError.invalidID("pomodoro")) { try e.start(seconds: 60, id: "pomodoro", now: t0) }
         #expect(throws: TimerError.invalidID("a b")) { try e.start(seconds: 60, id: "a b", now: t0) }
+        // Its activity would take over a Live Activity mirrored from the menu bar.
+        #expect(throws: TimerError.invalidID("live-3k9x")) { try e.start(seconds: 60, id: "live-3k9x", now: t0) }
         #expect(e.timers.isEmpty)
     }
 

@@ -153,7 +153,7 @@ public enum TimerError: Error, Equatable, Sendable, CustomStringConvertible {
     public var description: String {
         switch self {
         case .invalidDuration(let s): return "a timer must run for more than 0 seconds and at most 24 hours, got \(s)"
-        case .invalidID(let id): return "invalid timer id '\(id)': use 1-128 characters from [A-Za-z0-9._:-]; 'pomodoro' is reserved"
+        case .invalidID(let id): return "invalid timer id '\(id)': use 1-128 characters from [A-Za-z0-9._:-]; 'pomodoro' and ids starting with '\(MenuBarLiveActivities.idPrefix)' are reserved"
         case .notFound(let id): return "no timer '\(id)'"
         case .noTimers: return "no timers are running"
         case .tooMany: return "too many timers (\(TimerEngine.maxTimers)); stop one first"
@@ -231,7 +231,10 @@ public struct TimerEngine: Codable, Equatable, Sendable {
     public mutating func start(seconds: TimeInterval, title: String? = nil, id: String? = nil, now: Date) throws -> TimerItem {
         try Self.validate(seconds)
         if let id {
-            guard ActivityCenter.isValidID(id), id != Self.pomodoroID else { throw TimerError.invalidID(id) }
+            // A timer shows as the activity with its id, so it mustn't take a mirrored one's.
+            guard ActivityCenter.isValidID(id), id != Self.pomodoroID, !MenuBarLiveActivities.isMirrored(id: id) else {
+                throw TimerError.invalidID(id)
+            }
             timers.removeAll { $0.id == id }
         }
         guard timers.count < Self.maxTimers else { throw TimerError.tooMany }
