@@ -126,7 +126,9 @@ func timerCommand(_ a: Args) async throws -> Int32 {
     let words = a.positional
     let sub = words.first?.lowercased() ?? ""
     func control(_ body: [String: Any], id: String?) async throws {
-        let path = id.map { "/v1/timers/\($0.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? $0)" } ?? "/v1/timers"
+        // The id can be a title, so a '/' in it must stay inside the one path segment.
+        let segment = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))
+        let path = id.map { "/v1/timers/\($0.addingPercentEncoding(withAllowedCharacters: segment) ?? $0)" } ?? "/v1/timers"
         try expectOK(try await Client.discover().send("PATCH", path, json: try JSONSerialization.data(withJSONObject: body)))
     }
     switch sub {

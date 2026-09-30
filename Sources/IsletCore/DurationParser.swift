@@ -65,7 +65,8 @@ public enum DurationParser {
     }
 
     /// Splits words into number and letter runs: "1h30m" → 1 h 30 m, "6:15pm" → 6:15 pm,
-    /// "forty-five" → forty five. Punctuation separates tokens and is dropped.
+    /// "forty-five" → forty five. Punctuation separates tokens and is dropped, except a minus
+    /// sign in front of a number ("-5m"), which is kept so the length can be refused.
     static func tokenize(_ words: [String]) -> [Token] {
         var out: [Token] = []
         for (w, raw) in words.enumerated() {
@@ -79,8 +80,14 @@ public enum DurationParser {
             while i < chars.count {
                 let c = chars[i]
                 var run = ""
-                if c.isNumber, c.isASCII {
-                    // Digits, with '.' or ':' only between digits (1.5, 18:30).
+                let minus = c == "-" && i + 1 < chars.count && chars[i + 1].isNumber && chars[i + 1].isASCII
+                    && (i == 0 || !(chars[i - 1].isLetter || chars[i - 1].isNumber))
+                if c.isNumber && c.isASCII || minus {
+                    if minus {
+                        run = "-"
+                        i += 1
+                    }
+                    // Digits, with '.' or ':' only between digits (1.5, 18:30, 18.30).
                     while i < chars.count {
                         let d = chars[i]
                         if d.isNumber, d.isASCII {
@@ -132,7 +139,7 @@ public enum DurationParser {
         func find() -> Match? {
             for i in tokens.indices {
                 let t = tokens[i].text
-                if ["at", "until", "till", "by"].contains(t), let (s, end) = clock(at: i + 1, needsMeridiem: false) {
+                if Self.clockWords.contains(t), let (s, end) = clock(at: i + 1, needsMeridiem: false) {
                     return Match(seconds: s, range: i..<end)
                 }
                 if ["in", "for", "after"].contains(t), let (s, end) = duration(at: i + 1) {
@@ -144,10 +151,12 @@ public enum DurationParser {
             return nil
         }
 
-        /// A number with no unit, accepted only as the last word ("25", "tea 4", "in 5").
+        /// A number with no unit, accepted only as the last word ("25", "tea 4", "in 5"), and
+        /// not after "at": "at 18.75" is a clock time that doesn't exist, not 18.75 minutes.
         func bareNumber(unit: TimeInterval) -> Match? {
-            guard let last = tokens.last, !last.attached, let n = Double(last.text), !last.text.contains(":") else { return nil }
+            guard let last = tokens.last, !last.attached, let n = number(last.text) else { return nil }
             let i = tokens.count - 1
+            if i > 0, Self.clockWords.contains(tokens[i - 1].text) { return nil }
             // The number must be a whole word, not the tail of "4x".
             guard tokens.filter({ $0.word == last.word }).count == 1 else { return nil }
             let start = i > 0 && ["in", "for", "after"].contains(tokens[i - 1].text) ? i - 1 : i
@@ -247,15 +256,18 @@ public enum DurationParser {
             }
         }
 
-        /// A time of day: "18:30", "6pm", "6:15 am", "6", "noon", "midnight". Returns the seconds
-        /// until its next occurrence. A bare "6" means whichever of 6:00 and 18:00 comes first.
+        /// Words that introduce a time of day.
+        static let clockWords: Set<String> = ["at", "until", "till", "by"]
+
+        /// A time of day: "18:30", "18.30", "6pm", "6:15 am", "6", "noon", "midnight". Returns the
+        /// seconds until its next occurrence. A bare "6" means whichever of 6:00 and 18:00 comes first.
         func clock(at i: Int, needsMeridiem: Bool) -> (TimeInterval, Int)? {
             guard let t = text(i) else { return nil }
             var j = i + 1
             if !needsMeridiem, t == "noon" || t == "midnight" {
                 return next(hour: t == "noon" ? 12 : 0, minute: 0).map { ($0, j) }
             }
-            let parts = t.split(separator: ":", omittingEmptySubsequences: false)
+            let parts = t.split(omittingEmptySubsequences: false, whereSeparator: { $0 == ":" || $0 == "." })
             guard (1...2).contains(parts.count), parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isNumber) }),
                   let h = Int(parts[0]), parts[0].count <= 2 else { return nil }
             var hour = h

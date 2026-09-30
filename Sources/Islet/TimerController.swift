@@ -73,8 +73,8 @@ final class TimerController {
         _ = try? perform(.control(action, id: timer.id, seconds: seconds), announce: false)
     }
 
+    /// The Timer card's chip, which gives its own haptic.
     func togglePomodoro() {
-        Haptics.play(.tap)
         _ = try? perform(.pomodoro(.toggle), announce: false)
     }
 
@@ -97,9 +97,10 @@ final class TimerController {
 
     // MARK: Time
 
-    /// Moves on whatever has ended, then rings: a sound, the island opened on Home (unless a
-    /// fullscreen app hides it), and the ringing activity itself, which is critical so it
-    /// shows even over fullscreen and taps the trackpad in the "all" haptics mode.
+    /// Moves on whatever has ended, then rings: a sound, the island opened on Home (unless the
+    /// island is hidden for a fullscreen app or the app in front), and the ringing activity
+    /// itself, which is critical so it shows even over fullscreen and taps the trackpad in the
+    /// "all" haptics mode.
     private func fire() {
         let events = engine.advance(now: Date(), schedule: schedule)
         var fresh: Set<String> = []
@@ -163,12 +164,30 @@ final class TimerController {
     // MARK: Alarm
 
     private func openForAlarm() {
-        guard model.expandedScreen == nil, let display = NSScreen.main?.displayID else { return }
-        if model.settings.hideInFullscreen, model.fullscreenDisplays.contains(display) { return }
+        guard model.expandedScreen == nil, let display = alarmDisplay, !islandHidden(on: display) else { return }
         model.select(tab: .home)
         model.pinned = true
         model.setExpanded(display)
         openedForAlarm = true
+    }
+
+    /// The main screen when it has an island, else a display that does (with "Show island on:
+    /// the notched screen", the main screen can be an external display with no island).
+    private var alarmDisplay: CGDirectDisplayID? {
+        let islands = NSApp.windows.filter { $0 is IslandPanel && $0.isVisible }.compactMap { $0.screen?.displayID }
+        if let main = NSScreen.main?.displayID, islands.isEmpty || islands.contains(main) { return main }
+        return islands.first
+    }
+
+    /// The same rules as the presentation: hidden for the app in front, or over a fullscreen
+    /// app that isn't on the allow list.
+    private func islandHidden(on display: CGDirectDisplayID) -> Bool {
+        let s = model.settings
+        let front = model.frontBundleID
+        let rule = s.rule(for: front)
+        if let front, s.hideForApps.contains(front) || rule?.hideIsland == true { return true }
+        guard s.hideInFullscreen, model.fullscreenDisplays.contains(display) else { return false }
+        return !((front.map(s.fullscreenAllowList.contains) ?? false) || rule?.showInFullscreen == true)
     }
 
     /// Nothing rings any more: let the island close normally when the pointer leaves.

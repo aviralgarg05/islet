@@ -76,6 +76,14 @@ import Testing
         #expect(await b.timers.timers.isEmpty)
     }
 
+    @Test func titleWithASlashIsOneSegment() async throws {
+        let rt = router(FakeBackend(now: t0))
+        _ = await rt.handle(request("POST", "/v1/timer", body: #"{"seconds":300,"title":"Wash/dry"}"#))
+        let paused = await rt.handle(request("PATCH", "/v1/timers/Wash%2Fdry", body: #"{"action":"pause"}"#))
+        #expect(paused.status == 200)
+        #expect(try timer(paused).status == .paused)
+    }
+
     @Test func controlErrors() async {
         let rt = router(FakeBackend(now: t0))
         _ = await rt.handle(request("POST", "/v1/timer", body: #"{"seconds":300}"#))

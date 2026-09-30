@@ -31,6 +31,12 @@ struct TimerCard: View {
         .islandCard(model.settings.theme)
     }
 
+    /// About how tall the card is in HomeTab, with the 6 pt gap under it: the chips or the
+    /// custom field, then a 22 pt row per timer (43 pt while ringing). HomeTab fits the rest below.
+    static func height(_ timers: [TimerItem]) -> CGFloat {
+        timers.reduce(40) { $0 + 6 + ($1.status == .ringing ? 43 : 22) }
+    }
+
     private func presets(minutes unit: String, labels: Bool, icon: Bool) -> some View {
         let pomodoro = model.timers.isPomodoroRunning
         let focus = Int(model.settings.pomodoro.sanitized().focusMinutes)

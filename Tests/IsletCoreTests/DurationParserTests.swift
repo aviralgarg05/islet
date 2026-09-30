@@ -95,6 +95,19 @@ import Testing
         #expect(try parse("call mum at 6pm") == .init(seconds: 14 * 60 + 50, title: "Call mum"))
     }
 
+    @Test func britishClockTimesWithAFullStop() throws {
+        // 17:45:10 now. "18.30" is a time, never 18.3 minutes.
+        #expect(try seconds("at 18.30") == 44 * 60 + 50)
+        #expect(try seconds("at 6.30pm") == 44 * 60 + 50)
+        #expect(try seconds("6.30 pm") == 44 * 60 + 50)
+        #expect(try parse("leave at 18.30") == .init(seconds: 44 * 60 + 50, title: "Leave"))
+        #expect(throws: DurationParser.Failure.noDuration("at 18.75")) { try parse("at 18.75") }
+        #expect(throws: DurationParser.Failure.noDuration("at 25")) { try parse("at 25") }
+        // Decimal lengths still work.
+        #expect(try seconds("1.5h") == 5400)
+        #expect(try seconds("2.5") == 150)
+    }
+
     @Test func clockTimesJustPastRollToTomorrow() throws {
         let later = now.addingTimeInterval(30 * 60) // 18:15:10
         let r = try DurationParser.parse("at 6pm", now: later, calendar: Self.utc)
@@ -121,6 +134,11 @@ import Testing
         #expect(throws: DurationParser.Failure.noDuration("at 18:75")) { try parse("at 18:75") }
         #expect(throws: DurationParser.Failure.noDuration("13pm")) { try parse("13pm") }
         #expect(throws: DurationParser.Failure.tooShort) { try parse("0m") }
+        #expect(throws: DurationParser.Failure.tooShort) { try parse("-5m") }
+        #expect(throws: DurationParser.Failure.tooShort) { try parse("tea -4") }
+        #expect(throws: DurationParser.Failure.noDuration("nan")) { try parse("nan") }
+        #expect(throws: DurationParser.Failure.noDuration("tea inf")) { try parse("tea inf") }
+        #expect(throws: DurationParser.Failure.noDuration("infinity")) { try parse("infinity") }
         #expect(throws: DurationParser.Failure.tooLong) { try parse("25 hours") }
         #expect(throws: DurationParser.Failure.tooLong) { try parse("24h 1m") }
         #expect(throws: DurationParser.Failure.tooLong) { try parse("99999999999999h") }
@@ -133,7 +151,7 @@ import Testing
     }
 
     @Test func tokenizerSplitsNumbersAndLetters() {
-        let t = DurationParser.tokenize(["1h30m", "6:15pm", "forty-five", "1.5h"]).map(\.text)
-        #expect(t == ["1", "h", "30", "m", "6:15", "pm", "forty", "five", "1.5", "h"])
+        let t = DurationParser.tokenize(["1h30m", "6:15pm", "forty-five", "1.5h", "-5m", "5-10m"]).map(\.text)
+        #expect(t == ["1", "h", "30", "m", "6:15", "pm", "forty", "five", "1.5", "h", "-5", "m", "5", "10", "m"])
     }
 }

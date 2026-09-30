@@ -119,11 +119,11 @@ curl -s -X POST http://127.0.0.1:47831/v1/timer -H "Authorization: Bearer $TOKEN
 | `remaining` | Paused only: seconds left. |
 | `phase` | Pomodoro only: `focus`, `shortBreak` or `longBreak`. |
 
-**`in`** takes what you'd type or say: `20m`, `90s`, `1h 30m`, `1h30`, `25 min`, `half an hour`, `an hour and a half`, `tea 4m`, `for 10 min`, `in 20 minutes to take the pizza out`, `at 18:30`, `at 6pm`. Words that aren't part of the length become the title (`title` wins if you send both). Clock times roll forward to their next occurrence, and a number on its own means minutes. Anything unreadable, zero or longer than 24 hours is a `422` with a hint.
+**`in`** takes what you'd type or say: `20m`, `90s`, `1h 30m`, `1h30`, `25 min`, `half an hour`, `an hour and a half`, `tea 4m`, `for 10 min`, `in 20 minutes to take the pizza out`, `at 18:30` (or `18.30`), `at 6pm`. Words that aren't part of the length become the title (`title` wins if you send both). Clock times roll forward to their next occurrence, and a number on its own means minutes. Anything unreadable, zero or longer than 24 hours is a `422` with a hint.
 
 **Actions.** `pause` keeps the time left; `resume` counts down from there; `add` adds `seconds` or `in` (default 60), and restarts a ringing timer for just that long; `snooze` rings again in 5 minutes (or `seconds`); `restart` runs the full length again; `stop` removes it. `PATCH /v1/timers` without an id acts on the ringing timer, or else the newest one.
 
-**When a timer ends** it rings: the island opens on Home with Stop, Snooze 5 and Restart (unless a fullscreen app hides the island), the chosen sound plays, and the activity turns critical, so it pops up over fullscreen apps too. A timer that ended more than an hour before Islet could ring it (the Mac was asleep or Islet wasn't running) is dropped instead.
+**When a timer ends** it rings: the island opens on Home with Stop, Snooze 5 and Restart (unless you've hidden the island for the app in front or for fullscreen apps), the chosen sound plays, and the activity turns critical, so it pops up over fullscreen apps too. A timer that ended more than an hour before Islet could ring it (the Mac was asleep or Islet wasn't running) is dropped instead.
 
 **Pomodoro.** 25 minutes of focus, a 5-minute break, and a 15-minute break after every 4th round, moving on by itself. Change the lengths in Settings → Modules → Timers, or with the `pomodoro` key in the settings file.
 
