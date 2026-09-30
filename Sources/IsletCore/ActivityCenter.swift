@@ -169,6 +169,16 @@ public struct ActivityCenter: Sendable {
         return activities.removeValue(forKey: id)
     }
 
+    /// Stop an activity's live countdown or count-up. A spec can't do this, since omitted fields
+    /// keep their value and a date has no empty form.
+    public mutating func clearClock(id: String) {
+        guard var a = activities[id], a.endsAt != nil || a.startedAt != nil else { return }
+        a.endsAt = nil
+        a.startedAt = nil
+        a.trackSpan = nil
+        activities[id] = a
+    }
+
     /// Remove every activity posted by `source`; returns how many were removed.
     @discardableResult
     public mutating func removeAll(source: String) -> Int {

@@ -223,7 +223,11 @@ final class AppModel {
             let look = LiveActivityCatalog.look(for: m.appName).map { ($0.symbol, $0.tint) }
             let clock = mirrorClock.update(key: m.key, detail: m.detail, now: now)
             let spec = MenuBarLiveActivities.activity(for: m, look: look, isNew: !mirroredKeys.contains(m.key), clock: clock)
-            mirroredActivityKeys[MenuBarLiveActivities.activityID(m.key)] = m.key
+            let id = MenuBarLiveActivities.activityID(m.key)
+            mirroredActivityKeys[id] = m.key
+            // A spec can't clear a date: once the item shows no time at all, stop the clock Islet
+            // animated, or the wing would keep counting.
+            if m.detail.flatMap(MenuBarLiveActivities.clockSeconds(in:)) == nil { center.clearClock(id: id) }
             _ = try? applyLocal(spec)
         }
         mirroredKeys = keys

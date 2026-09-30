@@ -234,6 +234,54 @@ import Testing
         var fresh = ActivityCenter()
         #expect(try fresh.apply(spec("Your order is on the way"), now: t0).trailing == nil)
     }
+
+    @Test func mirroredClockStopsOnceTheItemShowsNoTime() throws {
+        var clock = LiveActivityClock()
+        var c = ActivityCenter()
+        // Each reading of the item, handled as the app does.
+        func read(_ detail: String, at s: Double) throws -> Activity {
+            let now = t0.addingTimeInterval(s)
+            let m = MirroredLiveActivity(key: "k", appName: "Some App", detail: detail)
+            let spec = MenuBarLiveActivities.activity(for: m, look: nil, isNew: false,
+                                                      clock: clock.update(key: m.key, detail: detail, now: now))
+            if MenuBarLiveActivities.clockSeconds(in: detail) == nil { c.clearClock(id: spec.id!) }
+            return try c.apply(spec, now: now)
+        }
+        _ = try read("Closes in 4:59", at: 0)
+        let running = try read("Closes in 4:58", at: 1)
+        #expect(running.endsAt == t0.addingTimeInterval(299))
+        #expect(running.resolvedTemplate == .timer)
+        // A reading that doesn't settle the clock keeps it while the item still shows a time.
+        #expect(try read("Closes in 4:58", at: 1.9).endsAt == t0.addingTimeInterval(299))
+        // The text moves on with no time in it: no countdown is left running in the wing.
+        let later = t0.addingTimeInterval(400)
+        let closed = try read("Gate closed for boarding", at: 400)
+        #expect(closed.endsAt == nil)
+        #expect(closed.trackSpan == nil)
+        #expect(closed.resolvedTemplate != .timer)
+        #expect(closed.templateTrailing(now: later) == nil)
+        #expect(!c.needsClockTick(now: later))
+        // A count-up stops the same way, instead of ticking every second for good.
+        _ = try read("On call 0:10", at: 500)
+        #expect(try read("On call 0:11", at: 501).startedAt == t0.addingTimeInterval(490))
+        #expect(try read("Call ended", at: 510).startedAt == nil)
+        #expect(!c.needsClockTick(now: t0.addingTimeInterval(510)))
+    }
+
+    @Test func clearClockOnlyTouchesTheClock() throws {
+        var c = ActivityCenter()
+        let a = try c.apply(ActivitySpec(id: "a", title: "Tea", trailing: "Hot", endsAt: t0.addingTimeInterval(60),
+                                         startedAt: t0), now: t0)
+        #expect(a.trackSpan == 60)
+        c.clearClock(id: "a")
+        let cleared = try #require(c.activities["a"])
+        #expect(cleared.endsAt == nil && cleared.startedAt == nil && cleared.trackSpan == nil)
+        #expect(cleared.title == "Tea" && cleared.trailing == "Hot" && cleared.updatedAt == a.updatedAt)
+        // Nothing to clear, or no such activity: no change.
+        c.clearClock(id: "a")
+        c.clearClock(id: "missing")
+        #expect(c.activities.count == 1)
+    }
 }
 
 @Suite struct LiveActivityCatalogTests {
