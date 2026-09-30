@@ -12,7 +12,9 @@ public final class CalendarService {
     public var onReminders: (([ReminderItem]) -> Void)?
     /// Also fetch reminders (requires separate Reminders access).
     public var includeReminders = false
-    private let store = EKEventStore()
+    /// Made on first use: creating a store contacts the calendar daemon, which runs a privacy
+    /// check even while the module is off.
+    private lazy var store = EKEventStore()
     private var observer: NSObjectProtocol?
 
     public init() {}
