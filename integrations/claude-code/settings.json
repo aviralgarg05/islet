@@ -7,5 +7,6 @@
     "PreCompact":       [{ "hooks": [{ "type": "command", "command": "isletctl hook claude" }] }],
     "Stop":             [{ "hooks": [{ "type": "command", "command": "isletctl hook claude" }] }],
     "SessionEnd":       [{ "hooks": [{ "type": "command", "command": "isletctl hook claude" }] }]
-  }
+  },
+  "statusLine": { "type": "command", "command": "isletctl statusline" }
 }

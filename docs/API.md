@@ -122,10 +122,13 @@ isletctl media <play|pause|playpause|next|previous>
 isletctl focus <name> [on|off]
 isletctl open | close                  (or press ⌃⌥I; change it in Settings → General)
 isletctl hook <claude|codex|AGENT> [JSON]   forward an agent hook payload (stdin or last argument)
+isletctl statusline [-- <command…>]    Claude Code status line: record plan usage, run your own line
 isletctl state | health | token
 ```
 
 `isletctl hook` never fails the calling agent: it exits 0 within ~1.5 s even when Islet isn't running.
+
+`isletctl statusline` is a Claude Code status line command. It reads the JSON Claude passes on stdin and saves the plan limits, model and context use to `~/Library/Application Support/Islet/usage/claude.json` (mode 0600, written only when a figure changes). Then it runs `<command…>` with the same stdin and passes its output and exit code through. A single argument runs with `/bin/sh -c`, which is how Claude stores a command line; several arguments run directly, without a shell. With no command it prints a short line such as `Opus 5.5 · 42% context · 5h 62%`. It never contacts the app or the network, and its own work takes a few milliseconds. See [Usage limits](INTEGRATIONS.md#usage-limits).
 
 ---
 

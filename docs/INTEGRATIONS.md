@@ -51,6 +51,49 @@ isletctl set plan --title "Migrate DB" --steps 5 --step 2 --subtitle "Backfillin
 
 ---
 
+## Usage limits
+
+The Home tab shows the 5-hour and weekly plan limits of Claude Code and Codex, one card per agent: a bar for each window, the share used and the time until it resets. For Claude it also shows the model and how full the context window is while a session is active.
+
+The closed island shows nothing about usage until a window reaches 90%, and again at 100%. Each crossing posts one normal activity ("Claude 5-hour limit at 90%", "Resets 16:40") that leaves on its own. Alerts are armed again when the window resets.
+
+Islet reads only what the two tools already write on this Mac. It doesn't read their login tokens, doesn't call their usage endpoints and sends nothing over the network. Switch either source off in Settings → Integrations → Usage limits (`claudeUsageEnabled` and `codexUsageEnabled` in `config.json`).
+
+### Claude Code
+
+Claude Code passes plan usage to its status line command on stdin (`rate_limits.five_hour` and `rate_limits.seven_day`, for Pro and Max plans, after a session's first reply). `isletctl statusline` records it.
+
+In Settings → Integrations → Usage limits, click **Install status line for Claude Code…**. A sheet shows the `statusLine` command before and after, and nothing is written until you click Install.
+
+- Without a status line, Islet sets one:
+  ```json
+  "statusLine": { "type": "command", "command": "/Applications/Islet.app/Contents/MacOS/isletctl statusline" }
+  ```
+  Claude Code then shows a short line such as `Opus 5.5 · 42% context · 5h 62%`.
+- With your own status line, Islet wraps it instead of replacing it:
+  ```json
+  "command": "/Applications/Islet.app/Contents/MacOS/isletctl statusline -- '~/.claude/statusline.sh'"
+  ```
+  Your command gets the same input, and its output and exit code pass through unchanged.
+
+Installing twice changes nothing. Only the `statusLine` value changes: the rest of `~/.claude/settings.json` keeps its order and spacing, and the previous file is kept as `settings.json.bak`. **Remove…** in the same place puts your own command back. By hand, use `isletctl statusline` as the command, or put `isletctl statusline -- ` in front of yours with your command quoted as one argument.
+
+Claude Code runs the command from the app bundle, so remove the status line (or restore `settings.json.bak`) before you move or delete Islet.
+
+Each run writes `~/Library/Application Support/Islet/usage/claude.json` (mode 0600), and only when a figure changed. Islet watches the file rather than polling it. Other tools can read it too:
+
+```json
+{"provider":"claude","model":"Opus 5.5","contextPercent":42.4,"costUSD":1.23,"project":"islet","sessionID":"…","updatedAt":1790786093,
+ "windows":[{"id":"five_hour","usedPercent":62,"windowMinutes":300,"resetsAt":1790771457},
+            {"id":"seven_day","usedPercent":31,"windowMinutes":10080,"resetsAt":1791200000}]}
+```
+
+### Codex
+
+Codex CLI writes its limits into its session logs (`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`) after each reply, so there is nothing to install. While the setting is on, Islet watches that folder with FSEvents and, after a change, reads only the last 64 KB of the newest log. If Codex hasn't run on this Mac yet, switch the setting off and on again after its first session.
+
+---
+
 ## Terminal
 
 **Wrap a command:** it shows while running, then success or failure, and passes the exit code through:
