@@ -216,6 +216,24 @@ import Testing
         var c = ActivityCenter()
         #expect(try c.apply(spec, now: t0).title == "Uber")
     }
+
+    @Test func mirroredUpdateClearsTextTheItemNoLongerShows() throws {
+        func spec(_ detail: String?) -> ActivitySpec {
+            MenuBarLiveActivities.activity(for: MirroredLiveActivity(key: "k", appName: "Uber", detail: detail), look: nil, isNew: false)
+        }
+        var c = ActivityCenter()
+        #expect(try c.apply(spec("Arriving · 4 min"), now: t0).trailingText(now: t0) == "4 min")
+        // The last part is now too long for the wing, so the old "4 min" must not stay there.
+        let longer = try c.apply(spec("Arriving · Driver is nearby"), now: t0)
+        #expect(longer.trailing == nil)
+        #expect(longer.trailingText(now: t0) == nil)
+        #expect(longer.subtitle == "Arriving · Driver is nearby")
+        // No text at all: the subtitle goes too.
+        #expect(try c.apply(spec(nil), now: t0).subtitle == nil)
+        // A fresh activity with no short value simply has none.
+        var fresh = ActivityCenter()
+        #expect(try fresh.apply(spec("Your order is on the way"), now: t0).trailing == nil)
+    }
 }
 
 @Suite struct LiveActivityCatalogTests {

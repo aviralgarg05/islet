@@ -194,9 +194,11 @@ public enum MenuBarLiveActivities {
                                 clock: LiveActivityClock.Reading? = nil) -> ActivitySpec {
         let suggestion = look ?? SmartIcon.suggest(title: m.appName, subtitle: m.detail).map { ($0.symbol, $0.tint) }
         let tint = suggestion.flatMap { RGBA.parse($0.1) }.map { $0.readableOnBlack().hex }
+        // Updates merge, so text the item no longer shows is sent as "" to clear it: otherwise an
+        // old "4 min" would stay in the wing after the item moved on to longer text.
         var spec = ActivitySpec(
-            id: activityID(m.key), source: source, title: m.appName, subtitle: m.detail,
-            icon: .symbol(suggestion?.0 ?? "dot.radiowaves.left.and.right"), trailing: shortTrailing(m.detail),
+            id: activityID(m.key), source: source, title: m.appName, subtitle: m.detail ?? "",
+            icon: .symbol(suggestion?.0 ?? "dot.radiowaves.left.and.right"), trailing: shortTrailing(m.detail) ?? "",
             state: .running, tint: tint ?? suggestion?.1 ?? "white", priority: .normal, ttl: 0, sneak: isNew
         )
         spec.template = LiveActivityCatalog.look(for: m.appName)?.template.rawValue
