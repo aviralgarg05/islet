@@ -17,6 +17,7 @@ enum Snapshots {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var settings = IsletSettings()
         settings.clipboardEnabled = true
+        settings.remindersEnabled = true
         // Static renders: no transitions, so nothing is captured mid-animation.
         settings.animationStyle = .off
         let model = AppModel(settings: settings)
@@ -63,6 +64,7 @@ enum Snapshots {
             ("09-sneak-done", .sneak(done), .home),
             ("10-expanded-home", .expanded, .home),
             ("11-expanded-shelf", .expanded, .shelf),
+            ("11b-expanded-today", .expanded, .today),
             ("12-expanded-widgets", .expanded, .widgets),
             ("13-expanded-clipboard", .expanded, .clipboard),
             ("14-expanded-stats", .expanded, .stats),

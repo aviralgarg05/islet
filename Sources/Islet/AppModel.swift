@@ -5,12 +5,13 @@ import IsletSystem
 import Observation
 
 enum IslandTab: String, CaseIterable, Identifiable {
-    case home, shelf, widgets, clipboard, stats
+    case home, today, shelf, widgets, clipboard, stats
     var id: String { rawValue }
 
     var symbol: String {
         switch self {
         case .home: return "house.fill"
+        case .today: return "calendar"
         case .shelf: return "tray.full.fill"
         case .widgets: return "square.grid.2x2.fill"
         case .clipboard: return "doc.on.clipboard.fill"
@@ -21,6 +22,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .home: return "Home"
+        case .today: return "Today"
         case .shelf: return "Shelf"
         case .widgets: return "Widgets"
         case .clipboard: return "Clipboard"
@@ -43,6 +45,7 @@ final class AppModel {
     private(set) var battery: BatteryState?
     private(set) var batteryEvent: BatteryEvent?
     private(set) var agenda: [AgendaItem] = []
+    private(set) var reminders: [ReminderItem] = []
     private(set) var shelf = Shelf()
     private(set) var clipboard = ClipboardHistory()
     private(set) var stats: SystemStats?
@@ -139,7 +142,8 @@ final class AppModel {
             self?.frontBundleID = bundle
         }
         fullscreen.start()
-        if settings.calendarEnabled, CalendarService.eventAccess == .granted { startCalendar() }
+        if settings.calendarEnabled && CalendarService.eventAccess == .granted
+            || settings.remindersEnabled && CalendarService.reminderAccess == .granted { startCalendar() }
         if settings.clipboardEnabled { startClipboard() }
         if settings.pluginsEnabled { startPlugins() }
         if settings.apiEnabled { startAPI() }
@@ -210,8 +214,13 @@ final class AppModel {
     }
 
     func startCalendar() {
+        calendar.includeReminders = settings.remindersEnabled
         calendar.onAgenda = { [weak self] items in
             self?.agenda = items
+            self?.checkCalendarAlerts()
+        }
+        calendar.onReminders = { [weak self] items in
+            self?.reminders = items
             self?.checkCalendarAlerts()
         }
         calendar.start()
@@ -224,6 +233,25 @@ final class AppModel {
         RunLoop.main.add(t, forMode: .common)
         calendarTimer = t
     }
+
+    func requestReminderAccess() {
+        calendar.requestReminderAccess { [weak self] granted in
+            guard let self, granted else { return }
+            self.settings.remindersEnabled = true
+            self.saveSettings()
+            self.startCalendar()
+        }
+    }
+
+    /// Events from calendars the user hasn't hidden.
+    var visibleAgenda: [AgendaItem] { Agenda.visible(agenda, hiding: Set(settings.hiddenCalendars)) }
+
+    func completeReminder(_ id: String) {
+        Haptics.play(.tap)
+        if calendar.complete(reminderID: id) { reminders.removeAll { $0.id == id } }
+    }
+
+    var dueReminders: [ReminderItem] { settings.remindersEnabled ? Reminders.dueSoon(reminders, now: Date()) : [] }
 
     func requestCalendarAccess() {
         calendar.requestAccess { [weak self] granted in
@@ -370,7 +398,7 @@ final class AppModel {
         return closedPlacements[display] ?? .unmeasured(.auto, wing: metrics.wingWidth, hasMenuBar: true)
     }
 
-    var upcomingEvent: AgendaItem? { Agenda.upcoming(agenda, now: Date()) }
+    var upcomingEvent: AgendaItem? { settings.calendarEnabled ? Agenda.upcoming(visibleAgenda, now: Date()) : nil }
 
     func setExpanded(_ display: CGDirectDisplayID?) {
         guard expandedScreen != display else { return }
@@ -511,9 +539,17 @@ final class AppModel {
 
     private func checkCalendarAlerts() {
         let now = Date()
-        for item in agenda where Agenda.shouldAlert(item, now: now) && !alertedEvents.contains(item.id) {
-            alertedEvents.insert(item.id)
-            _ = try? applyLocal(Agenda.activity(for: item, now: now))
+        if settings.calendarEnabled {
+            for item in visibleAgenda where Agenda.shouldAlert(item, now: now) && !alertedEvents.contains(item.id) {
+                alertedEvents.insert(item.id)
+                _ = try? applyLocal(Agenda.activity(for: item, now: now))
+            }
+        }
+        if settings.remindersEnabled {
+            for r in reminders where Reminders.shouldAlert(r, now: now) && !alertedEvents.contains("r:" + r.id) {
+                alertedEvents.insert("r:" + r.id)
+                _ = try? applyLocal(Reminders.activity(for: r))
+            }
         }
         tick &+= 1
     }
@@ -712,8 +748,17 @@ final class AppModel {
             artist: "M83", album: "Hurry Up, We're Dreaming", isPlaying: true, duration: 243, elapsed: 71, timestamp: now
         )
         battery = BatteryState(level: 76, isCharging: true, isPluggedIn: true, minutesRemaining: 48)
+        reminders = [
+            ReminderItem(id: "r1", title: "Send the invoice", due: now.addingTimeInterval(-1800), listColor: "#FF9F0A", listTitle: "Work", priority: 1),
+            ReminderItem(id: "r2", title: "Book dentist", due: now.addingTimeInterval(5400), listColor: "#0A84FF", listTitle: "Personal"),
+            ReminderItem(id: "r3", title: "Water the plants", due: Calendar.current.startOfDay(for: now), isAllDay: true, listColor: "#30D158", listTitle: "Home"),
+        ]
         agenda = [AgendaItem(id: "demo", title: "Design review", start: now.addingTimeInterval(22 * 60), end: now.addingTimeInterval(52 * 60),
-                             calendarColor: "#FF9F0A", meetingURL: URL(string: "https://meet.google.com/abc-defg-hij"))]
+                             calendarColor: "#FF9F0A", meetingURL: URL(string: "https://meet.google.com/abc-defg-hij")),
+                  AgendaItem(id: "demo2", title: "1:1 with Sam", start: now.addingTimeInterval(3 * 3600), end: now.addingTimeInterval(3.5 * 3600),
+                             calendarColor: "#BF5AF2"),
+                  AgendaItem(id: "demo3", title: "Deadline: proposal", start: Calendar.current.startOfDay(for: now),
+                             end: Calendar.current.startOfDay(for: now).addingTimeInterval(86400), isAllDay: true, calendarColor: "#FF453A")]
         if includeActivities {
         _ = try? center.apply(ActivitySpec(id: "build", source: "ci", title: "Release build", subtitle: "Compiling 142/310",
                                            icon: .symbol("hammer.fill"), progress: 0.46, state: .running, tint: "orange", sneak: false), now: now)

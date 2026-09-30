@@ -9,6 +9,9 @@ public final class CalendarService {
     public enum Access: Equatable { case notDetermined, granted, denied }
 
     public var onAgenda: (([AgendaItem]) -> Void)?
+    public var onReminders: (([ReminderItem]) -> Void)?
+    /// Also fetch reminders (requires separate Reminders access).
+    public var includeReminders = false
     private let store = EKEventStore()
     private var observer: NSObjectProtocol?
 
@@ -23,6 +26,33 @@ public final class CalendarService {
         }
     }
 
+    public static var reminderAccess: Access {
+        switch EKEventStore.authorizationStatus(for: .reminder) {
+        case .fullAccess, .authorized: return .granted
+        case .notDetermined: return .notDetermined
+        default: return .denied
+        }
+    }
+
+    public func requestReminderAccess(completion: @escaping (Bool) -> Void) {
+        store.requestFullAccessToReminders { granted, _ in
+            DispatchQueue.main.async { completion(granted) }
+        }
+    }
+
+    /// Event calendars, for choosing which ones to show: (identifier, title, colour hex).
+    public func calendars() -> [(id: String, title: String, color: String?)] {
+        guard Self.eventAccess == .granted else { return [] }
+        return store.calendars(for: .event).map { ($0.calendarIdentifier, $0.title, Self.hex($0.color)) }
+            .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
+
+    static func hex(_ color: NSColor?) -> String? {
+        color?.usingColorSpace(.sRGB).map { c in
+            String(format: "#%02X%02X%02X", Int(c.redComponent * 255), Int(c.greenComponent * 255), Int(c.blueComponent * 255))
+        }
+    }
+
     public func requestAccess(completion: @escaping (Bool) -> Void) {
         store.requestFullAccessToEvents { granted, _ in
             DispatchQueue.main.async { completion(granted) }
@@ -30,7 +60,7 @@ public final class CalendarService {
     }
 
     public func start() {
-        guard Self.eventAccess == .granted else { return }
+        guard Self.eventAccess == .granted || includeReminders && Self.reminderAccess == .granted else { return }
         if observer == nil {
             observer = NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: store, queue: .main) { [weak self] _ in
                 self?.refresh()
@@ -44,8 +74,9 @@ public final class CalendarService {
         observer = nil
     }
 
-    /// Events from now until the end of tomorrow.
+    /// Events from an hour ago until the end of tomorrow, and incomplete reminders due by then.
     public func refresh() {
+        refreshReminders()
         guard Self.eventAccess == .granted else { return }
         let now = Date()
         let end = Calendar.current.date(byAdding: .day, value: 2, to: Calendar.current.startOfDay(for: now)) ?? now.addingTimeInterval(86400)
@@ -54,10 +85,46 @@ public final class CalendarService {
         onAgenda?(items)
     }
 
-    static func item(from e: EKEvent) -> AgendaItem {
-        let color = e.calendar?.color.usingColorSpace(.sRGB).map { c in
-            String(format: "#%02X%02X%02X", Int(c.redComponent * 255), Int(c.greenComponent * 255), Int(c.blueComponent * 255))
+    private func refreshReminders() {
+        guard includeReminders, Self.reminderAccess == .granted else { return }
+        let end = Calendar.current.date(byAdding: .day, value: 2, to: Calendar.current.startOfDay(for: Date())) ?? Date()
+        let predicate = store.predicateForIncompleteReminders(withDueDateStarting: nil, ending: end, calendars: nil)
+        store.fetchReminders(matching: predicate) { [weak self] reminders in
+            let items = (reminders ?? []).map(Self.reminder(from:))
+            DispatchQueue.main.async { self?.onReminders?(items) }
         }
+    }
+
+    /// Mark a reminder done (the user ticked it in the island).
+    @discardableResult
+    public func complete(reminderID: String) -> Bool {
+        guard Self.reminderAccess == .granted,
+              let r = store.calendarItem(withIdentifier: reminderID) as? EKReminder else { return false }
+        r.isCompleted = true
+        do {
+            try store.save(r, commit: true)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    static func reminder(from r: EKReminder) -> ReminderItem {
+        let comps = r.dueDateComponents
+        let due = comps.flatMap { Calendar.current.date(from: $0) }
+        return ReminderItem(
+            id: r.calendarItemIdentifier,
+            title: r.title ?? "Untitled",
+            due: due,
+            isAllDay: comps != nil && comps?.hour == nil,
+            listColor: hex(r.calendar?.color),
+            listTitle: r.calendar?.title,
+            priority: r.priority
+        )
+    }
+
+    static func item(from e: EKEvent) -> AgendaItem {
+        let color = hex(e.calendar?.color)
         return AgendaItem(
             id: e.eventIdentifier ?? UUID().uuidString,
             title: e.title ?? "Untitled",
@@ -66,7 +133,9 @@ public final class CalendarService {
             isAllDay: e.isAllDay,
             calendarColor: color,
             location: e.location,
-            meetingURL: Agenda.meetingLink(in: [e.url?.absoluteString, e.location, e.notes])
+            meetingURL: Agenda.meetingLink(in: [e.url?.absoluteString, e.location, e.notes]),
+            calendarID: e.calendar?.calendarIdentifier,
+            calendarTitle: e.calendar?.title
         )
     }
 }

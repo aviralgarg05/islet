@@ -251,3 +251,55 @@ import Testing
         #expect(Hotkey.parse("") == nil)
     }
 }
+
+@Suite struct CalendarAndRemindersTests {
+    var cal: Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "UTC")!
+        return c
+    }
+    let now = Date(timeIntervalSince1970: 1_800_000_000) // 2027-01-15 08:00 UTC
+
+    @Test func restOfTodaySkipsEndedAndTomorrow() {
+        let items = [
+            AgendaItem(id: "done", title: "Done", start: now.addingTimeInterval(-7200), end: now.addingTimeInterval(-3600)),
+            AgendaItem(id: "now", title: "Now", start: now.addingTimeInterval(-600), end: now.addingTimeInterval(1200)),
+            AgendaItem(id: "later", title: "Later", start: now.addingTimeInterval(3600), end: now.addingTimeInterval(5400)),
+            AgendaItem(id: "tomorrow", title: "Tomorrow", start: now.addingTimeInterval(86400), end: now.addingTimeInterval(90000)),
+            AgendaItem(id: "holiday", title: "Holiday", start: cal.startOfDay(for: now), end: cal.startOfDay(for: now).addingTimeInterval(86400), isAllDay: true),
+        ]
+        let r = Agenda.restOfToday(items, now: now, calendar: cal)
+        #expect(r.timed.map(\.id) == ["now", "later"])
+        #expect(r.allDay.map(\.id) == ["holiday"])
+    }
+
+    @Test func hiddenCalendars() {
+        let items = [AgendaItem(id: "a", title: "a", start: now, end: now, calendarID: "work"),
+                     AgendaItem(id: "b", title: "b", start: now, end: now, calendarID: "home")]
+        #expect(Agenda.visible(items, hiding: ["work"]).map(\.id) == ["b"])
+        #expect(Agenda.visible(items, hiding: []).count == 2)
+    }
+
+    @Test func remindersOrderAndOverdue() {
+        let items = [
+            ReminderItem(id: "later", title: "Later", due: now.addingTimeInterval(3600)),
+            ReminderItem(id: "overdue", title: "Overdue", due: now.addingTimeInterval(-3600)),
+            ReminderItem(id: "today", title: "Today", due: cal.startOfDay(for: now), isAllDay: true),
+            ReminderItem(id: "nodate", title: "No date", due: nil),
+            ReminderItem(id: "tomorrow", title: "Tomorrow", due: now.addingTimeInterval(86400 + 3600)),
+        ]
+        #expect(Reminders.dueSoon(items, now: now, calendar: cal).map(\.id) == ["overdue", "later", "today"])
+        #expect(items[1].isOverdue(at: now, calendar: cal))
+        #expect(!items[2].isOverdue(at: now, calendar: cal))
+    }
+
+    @Test func reminderAlertsOnlyForTimedDueNow() {
+        #expect(Reminders.shouldAlert(ReminderItem(id: "a", title: "a", due: now.addingTimeInterval(-30)), now: now))
+        #expect(!Reminders.shouldAlert(ReminderItem(id: "b", title: "b", due: now.addingTimeInterval(-300)), now: now))
+        #expect(!Reminders.shouldAlert(ReminderItem(id: "c", title: "c", due: now, isAllDay: true), now: now))
+        let spec = Reminders.activity(for: ReminderItem(id: "x-1", title: "Pay rent", due: now, listTitle: "Home", priority: 1))
+        #expect(spec.priority == .high)
+        #expect(spec.subtitle == "Reminder · Home")
+        #expect(ActivityCenter.isValidID(spec.id!))
+    }
+}

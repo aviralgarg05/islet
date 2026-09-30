@@ -273,6 +273,7 @@ struct AppRuleRow: View {
 struct ModulesSettings: View {
     @Bindable var model: AppModel
     @ViewState private var calendarAccess = CalendarService.eventAccess
+    @ViewState private var reminderAccess = CalendarService.reminderAccess
     @ViewState private var axTrusted = MediaKeyInterceptor.hasAccessibility
 
     var body: some View {
@@ -332,6 +333,37 @@ struct ModulesSettings: View {
                             } else {
                                 model.requestCalendarAccess()
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) { calendarAccess = CalendarService.eventAccess }
+                            }
+                        }
+                    }
+                }
+                if calendarAccess == .granted && model.settings.calendarEnabled {
+                    DisclosureGroup("Calendars shown") {
+                        ForEach(model.calendar.calendars(), id: \.id) { c in
+                            Toggle(isOn: Binding(
+                                get: { !model.settings.hiddenCalendars.contains(c.id) },
+                                set: { show in
+                                    if show { model.settings.hiddenCalendars.removeAll { $0 == c.id } }
+                                    else if !model.settings.hiddenCalendars.contains(c.id) { model.settings.hiddenCalendars.append(c.id) }
+                                })) {
+                                HStack(spacing: 6) {
+                                    Circle().fill(Color(tint: c.color, fallback: .blue)).frame(width: 8, height: 8)
+                                    Text(c.title)
+                                }
+                            }
+                        }
+                    }
+                }
+                HStack {
+                    Toggle("Reminders due today", isOn: $model.settings.remindersEnabled)
+                    Spacer()
+                    if reminderAccess != .granted {
+                        Button(reminderAccess == .denied ? "Open Privacy Settings" : "Grant Access") {
+                            if reminderAccess == .denied {
+                                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders")!)
+                            } else {
+                                model.requestReminderAccess()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { reminderAccess = CalendarService.reminderAccess }
                             }
                         }
                     }

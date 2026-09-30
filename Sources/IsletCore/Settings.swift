@@ -149,6 +149,10 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var replaceSystemHUD = false
     public var batteryEnabled = true
     public var calendarEnabled = true
+    /// Reminders due today, with an alert at their due time. Asks for Reminders access.
+    public var remindersEnabled = false
+    /// Calendar identifiers the user hid.
+    public var hiddenCalendars: [String] = []
     public var shelfEnabled = true
     /// Off by default: clipboard history is sensitive.
     public var clipboardEnabled = false

@@ -14,6 +14,7 @@ struct ExpandedView: View {
             Group {
                 switch model.tab {
                 case .home: HomeTab(model: model, width: metrics.expanded.width - 36, height: metrics.expanded.height - max(metrics.notch.height, 28) - 20)
+                case .today: TodayTab(model: model)
                 case .shelf: ShelfTab(model: model, dropTargeted: dropTargeted)
                 case .widgets: WidgetsTab(model: model)
                 case .clipboard: ClipboardTab(model: model)
@@ -89,6 +90,7 @@ struct ExpandedView: View {
     private var visibleTabs: [IslandTab] {
         IslandTab.allCases.filter { tab in
             switch tab {
+            case .today: return model.settings.calendarEnabled || model.settings.remindersEnabled
             case .shelf: return model.settings.shelfEnabled
             case .widgets: return model.settings.pluginsEnabled
             case .stats: return model.settings.systemStatsEnabled
@@ -303,6 +305,120 @@ struct EmptyHint: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Today
+
+struct TodayTab: View {
+    let model: AppModel
+    @Environment(\.snapshotMode) private var snapshotMode
+
+    var body: some View {
+        let now = Date()
+        let rest = Agenda.restOfToday(model.visibleAgenda, now: now)
+        let reminders = model.dueReminders
+        HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                header("Calendar", count: rest.timed.count)
+                if !model.settings.calendarEnabled || CalendarService.eventAccess != .granted && !snapshotMode {
+                    accessHint("Show today's events and a Join button for calls.", action: "Allow Calendar") { model.requestCalendarAccess() }
+                } else if rest.timed.isEmpty && rest.allDay.isEmpty {
+                    Text("Nothing else today").font(.system(size: 11)).foregroundStyle(Color.islandTertiary)
+                } else {
+                    AdaptiveScroll(scrolls: rest.timed.count > 3) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            ForEach(rest.allDay) { e in
+                                Text(e.title).font(.system(size: 10.5, weight: .medium)).lineLimit(1)
+                                    .padding(.horizontal, 6).padding(.vertical, 1.5)
+                                    .background(Capsule().fill(Color(tint: e.calendarColor, fallback: .blue).opacity(0.3)))
+                            }
+                            ForEach(rest.timed.prefix(snapshotMode ? 3 : 20)) { e in AgendaLine(item: e, now: now) }
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            VStack(alignment: .leading, spacing: 4) {
+                header("Reminders", count: reminders.count)
+                if !model.settings.remindersEnabled || CalendarService.reminderAccess != .granted && !snapshotMode {
+                    accessHint("Reminders due today, with an alert when they're due.", action: "Allow Reminders") { model.requestReminderAccess() }
+                } else if reminders.isEmpty {
+                    Text("All done").font(.system(size: 11)).foregroundStyle(Color.islandTertiary)
+                } else {
+                    AdaptiveScroll(scrolls: reminders.count > 4) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            ForEach(reminders.prefix(snapshotMode ? 4 : 30)) { r in ReminderLine(item: r, now: now) { model.completeReminder(r.id) } }
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+    }
+
+    private func header(_ title: String, count: Int) -> some View {
+        HStack(spacing: 4) {
+            Text(title.uppercased()).font(.system(size: 9.5, weight: .bold)).foregroundStyle(Color.islandTertiary)
+            if count > 0 { Text("\(count)").font(.system(size: 9.5, weight: .bold)).foregroundStyle(Color.islandSecondary) }
+        }
+    }
+
+    private func accessHint(_ text: String, action: String, _ perform: @escaping () -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(text).font(.system(size: 11)).foregroundStyle(Color.islandSecondary).fixedSize(horizontal: false, vertical: true)
+            Button(action, action: perform).buttonStyle(CapsuleButtonStyle(tint: .blue))
+        }
+    }
+}
+
+struct AgendaLine: View {
+    let item: AgendaItem
+    let now: Date
+
+    var body: some View {
+        HStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 1.5).fill(Color(tint: item.calendarColor, fallback: .blue)).frame(width: 3, height: 22)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(item.title).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+                Text(item.isOngoing(at: now) ? "Now · until \(item.end.formatted(date: .omitted, time: .shortened))"
+                     : item.start.formatted(date: .omitted, time: .shortened))
+                    .font(.system(size: 10)).foregroundStyle(item.isOngoing(at: now) ? Color.green : Color.islandTertiary)
+            }
+            Spacer(minLength: 0)
+            if let url = item.meetingURL {
+                Button("Join") { NSWorkspace.shared.open(url) }.buttonStyle(CapsuleButtonStyle(tint: .green))
+            }
+        }
+    }
+}
+
+struct ReminderLine: View {
+    let item: ReminderItem
+    let now: Date
+    var onComplete: () -> Void
+    @ViewState private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button(action: onComplete) {
+                Image(systemName: hovering ? "checkmark.circle" : "circle")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Color(tint: item.listColor, fallback: .orange))
+            }
+            .buttonStyle(.plain)
+            .help("Mark as done")
+            VStack(alignment: .leading, spacing: 0) {
+                Text(item.title).font(.system(size: 11.5, weight: .medium)).foregroundStyle(.white).lineLimit(1)
+                if let due = item.due {
+                    Text(item.isAllDay ? "Today" : due.formatted(date: .omitted, time: .shortened))
+                        .font(.system(size: 10))
+                        .foregroundStyle(item.isOverdue(at: now) ? Color.red : Color.islandTertiary)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .onHover { hovering = $0 }
     }
 }
 
