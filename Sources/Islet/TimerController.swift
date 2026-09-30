@@ -141,17 +141,18 @@ final class TimerController {
     }
 
     /// Mirrors the engine into activities. A spec can't clear a countdown once set, so a
-    /// changed timer is removed and shown again rather than updated in place.
+    /// changed timer is removed and shown again rather than updated in place (this also
+    /// replaces any other activity that happened to use the same id).
     private func sync(announce: Set<String>) {
         let ordered = engine.ordered
-        let wanted = Dictionary(uniqueKeysWithValues: ordered.map { ($0.id, engine.spec(for: $0, schedule: schedule)) })
+        let wanted = Dictionary(ordered.map { ($0.id, engine.spec(for: $0, schedule: schedule)) }, uniquingKeysWith: { a, _ in a })
         syncing = true
         defer { syncing = false }
         for id in shown.keys where wanted[id] == nil { model.remove(activityID: id) }
         // Soonest last, so it is the most recent and leads among equal priorities.
         for t in ordered.reversed() {
             guard let spec = wanted[t.id], spec != shown[t.id] || announce.contains(t.id) else { continue }
-            if shown[t.id] != nil { model.remove(activityID: t.id) }
+            model.remove(activityID: t.id)
             var s = spec
             s.sneak = announce.contains(t.id)
             _ = try? model.applyLocal(s)
