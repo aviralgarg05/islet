@@ -37,12 +37,14 @@ public class ScriptablePlayerProvider {
     /// Fetch position/artwork with AppleScript or the network. Turned off while the system
     /// bridge is running, since it already delivers both without extra permissions.
     public var enrich = true {
-        didSet { if enrich, !oldValue, observer != nil { checkAutomation(.firstUse) } }
+        didSet { if enrich, !oldValue, observer != nil { beginEnriching() } }
     }
+    /// Where scripts go once allowed; tests swap it so nothing reaches a real player.
+    var scriptRunner: (String, ((NSAppleEventDescriptor?) -> Void)?) -> Void = AppleScriptRunner.run
     private var automation = AutomationGate()
     private var observer: NSObjectProtocol?
     private var quitObserver: NSObjectProtocol?
-    private var activateObserver: NSObjectProtocol?
+    private var openObservers: [NSObjectProtocol] = []
     private var permissionObserver: NSObjectProtocol?
 
     init(source: MediaSourceKind, bundleID: String, appName: String, permission: PermissionKind, notificationName: String) {
@@ -87,29 +89,34 @@ public class ScriptablePlayerProvider {
             self.onUpdate?(nil)
         }
         // macOS can only say whether Automation is allowed while the player is open, so ask again
-        // when it comes to the front, as long as there's no lasting answer.
-        activateObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
-        ) { [weak self] note in
-            guard let self, self.enrich, let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  app.bundleIdentifier == self.bundleID else { return }
-            self.checkAutomation(.appActivated)
+        // when it opens (it may never come to the front) or comes to the front, as long as there's
+        // no lasting answer.
+        openObservers = [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didActivateApplicationNotification].map { name in
+            NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                guard let self, self.enrich, let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                      app.bundleIdentifier == self.bundleID else { return }
+                self.checkAutomation(.appActivated)
+            }
         }
-        guard enrich else { return }
-        if canScript {
-            if AppleScriptRunner.isRunning(bundleID) { refresh() }
-        } else {
-            checkAutomation(.firstUse)
-        }
+        if enrich { beginEnriching() }
     }
 
     public func stop() {
         if let o = observer { DistributedNotificationCenter.default().removeObserver(o) }
         if let o = quitObserver { NSWorkspace.shared.notificationCenter.removeObserver(o) }
-        if let o = activateObserver { NSWorkspace.shared.notificationCenter.removeObserver(o) }
+        openObservers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
         observer = nil
         quitObserver = nil
-        activateObserver = nil
+        openObservers = []
+    }
+
+    /// Catch up now if Automation is allowed; otherwise ask macOS (without a prompt) whether it is.
+    private func beginEnriching() {
+        if canScript {
+            if AppleScriptRunner.isRunning(bundleID) { refresh() }
+        } else {
+            checkAutomation(.firstUse)
+        }
     }
 
     /// Ask macOS, without a prompt, whether Apple Events may go to this player, when it's due.
@@ -129,7 +136,7 @@ public class ScriptablePlayerProvider {
     @discardableResult
     func runScript(_ source: String, completion: ((NSAppleEventDescriptor?) -> Void)? = nil) -> Bool {
         guard canScript else { return false }
-        AppleScriptRunner.run(source, completion: completion)
+        scriptRunner(source, completion)
         return true
     }
 
@@ -148,9 +155,9 @@ public class ScriptablePlayerProvider {
         guard AppleScriptRunner.isRunning(bundleID) else { return false }
         guard let verb = Self.verb(for: command, position: position, bundleID: bundleID) else { return false }
         guard runScript("tell application id \"\(bundleID)\"\n\(verb)\nend tell") else {
-            // If the system bridge has been doing the work, macOS hasn't been asked yet: ask now
-            // (silently), so the next press can go through once Automation is allowed.
-            checkAutomation(.firstUse)
+            // macOS may not have been asked yet (the system bridge was doing the work), or not
+            // while the player was open: ask now (silently), so the next press can go through.
+            checkAutomation(.control)
             return false
         }
         return true

@@ -56,6 +56,29 @@ import Testing
         #expect(!music.canScript)
         #expect(!music.runScript("return 1"))
     }
+
+    /// The scripts a player would be sent go to a list instead; nothing reaches Music or Spotify.
+    @MainActor @Test func playerRefreshWaitsForAutomation() {
+        let music = AppleMusicProvider(), spotify = SpotifyProvider()
+        var sent: [String] = []
+        for p in [music, spotify] as [ScriptablePlayerProvider] { p.scriptRunner = { script, _ in sent.append(script) } }
+        func answer(_ bundleID: String, _ status: PermissionStatus) {
+            NotificationCenter.default.post(name: .isletAutomationStatus, object: bundleID, userInfo: ["status": status])
+        }
+        music.refresh()
+        spotify.refresh()
+        #expect(sent.isEmpty)
+        answer("com.spotify.client", .granted)
+        music.refresh()
+        spotify.refresh()
+        #expect(sent.count == 1)
+        #expect(sent.first?.contains("tell application id \"com.spotify.client\"") == true)
+        // Settings → Permissions checking while Spotify is closed doesn't take the permission away.
+        answer("com.spotify.client", .appNotRunning)
+        #expect(spotify.canScript)
+        spotify.refresh()
+        #expect(sent.count == 2)
+    }
 }
 
 @Suite struct BatteryAdapterTests {

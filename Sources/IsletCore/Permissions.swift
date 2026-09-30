@@ -117,15 +117,18 @@ public enum PermissionAction: Equatable, Sendable {
 /// Whether Islet may send Apple Events to one app, and when to ask macOS about it again.
 /// Asking never prompts, so nothing is sent until macOS reports Automation as granted: allowed
 /// earlier, or by the user pressing Allow in Settings → Permissions. macOS is asked once per
-/// launch, then again each time the app becomes active while it has given no lasting answer
-/// (not asked yet, or the app wasn't open to check).
+/// launch, then again each time the app opens or comes to the front, or the user presses one of
+/// its controls, while it has given no lasting answer (not asked yet, or the app wasn't open to
+/// check).
 public struct AutomationGate: Equatable, Sendable {
     public enum Trigger: Sendable {
         /// Islet is about to want Apple Events for the app (its integration started, or the
         /// system bridge went away).
         case firstUse
-        /// The app came to the front.
+        /// The app launched or came to the front.
         case appActivated
+        /// The user pressed one of the app's controls in the island.
+        case control
     }
 
     /// The last answer from macOS; nil until one arrives.
@@ -142,7 +145,7 @@ public struct AutomationGate: Equatable, Sendable {
         guard !checking else { return false }
         switch trigger {
         case .firstUse: guard status == nil else { return false }
-        case .appActivated: guard !isSettled else { return false }
+        case .appActivated, .control: guard !isSettled else { return false }
         }
         checking = true
         return true
@@ -153,13 +156,19 @@ public struct AutomationGate: Equatable, Sendable {
     @discardableResult
     public mutating func record(_ status: PermissionStatus) -> Bool {
         let was = allowsEvents
-        self.status = status
         checking = false
+        // "Not running" and the like say nothing about the permission, so they don't replace an
+        // answer that does (the Permissions pane checks while the app may be closed).
+        if Self.isAnswer(status) || !Self.isAnswer(self.status) { self.status = status }
         return allowsEvents && !was
     }
 
     /// Allowed or refused: only the user changes that, in System Settings.
     private var isSettled: Bool { status == .granted || status == .denied }
+
+    private static func isAnswer(_ status: PermissionStatus?) -> Bool {
+        status == .granted || status == .denied || status == .notDetermined
+    }
 }
 
 /// When a feature that is switched on may ask macOS for its permission.

@@ -74,6 +74,44 @@ import Testing
         #expect(gate.allowsEvents)
     }
 
+    @Test func automationGateAsksAgainWhenTheUserPressesAControl() {
+        var gate = AutomationGate()
+        func check(_ t: AutomationGate.Trigger) -> Bool { gate.shouldCheck(t) }
+        // Never asked (the system bridge was doing the work): a press asks.
+        #expect(check(.control))
+        gate.record(.appNotRunning)
+        // Asked while the player was closed: a press once it's open asks again, as does it opening.
+        #expect(!check(.firstUse))
+        #expect(check(.control))
+        gate.record(.notDetermined)
+        #expect(check(.appActivated))
+        gate.record(.denied)
+        // A refusal is only changed by the user, so presses don't ask again.
+        #expect(!check(.control))
+    }
+
+    @Test func automationGateKeepsAnAnswerWhenThePlayerIsClosed() {
+        var gate = AutomationGate()
+        func answer(_ s: PermissionStatus) -> Bool { gate.record(s) }
+        #expect(answer(.granted))
+        // The Permissions pane checks while the player may be closed: that says nothing about
+        // the permission, so scripting stays allowed once the player is back.
+        for status in [PermissionStatus.appNotRunning, .appNotInstalled, .unknown] {
+            #expect(!answer(status))
+            #expect(gate.allowsEvents)
+            #expect(gate.status == .granted)
+        }
+        // A real answer still replaces it (taken away, or reset with tccutil).
+        #expect(!answer(.notDetermined))
+        #expect(!gate.allowsEvents)
+        #expect(!answer(.appNotRunning))
+        #expect(gate.status == .notDetermined)
+        // With no answer yet, "not running" is kept, so the next open or press asks again.
+        var fresh = AutomationGate()
+        fresh.record(.appNotRunning)
+        #expect(fresh.status == .appNotRunning)
+    }
+
     @Test func automationGateTakesAnAnswerWithoutAskingItself() {
         var gate = AutomationGate()
         let allowed = gate.record(.granted)
