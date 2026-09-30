@@ -20,6 +20,7 @@ USAGE
   isletctl focus <name> [on|off]       show a Focus change (for Shortcuts automations)
   isletctl open | close                expand or collapse the island
   isletctl hook <claude|codex|AGENT> [JSON]   forward an agent hook payload (stdin or last arg)
+  isletctl statusline [-- <command…>]  Claude Code status line: record plan usage, run your own line
   isletctl state | health | token
   isletctl debug menubar                what macOS shows in the menu bar (for Live Activity mirroring)
 
@@ -287,6 +288,9 @@ func run(_ argv: [String]) async throws -> Int32 {
     case "run":
         guard !a.trailing.isEmpty else { throw CLIError("usage: isletctl run [--title T] -- <command…>") }
         return try await runWrapped(a)
+
+    case "statusline":
+        return runStatusLine(a.trailing)
 
     default:
         throw CLIError("unknown command '\(command)'. Run `isletctl help`.")
