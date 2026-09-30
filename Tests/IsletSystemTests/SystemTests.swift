@@ -22,6 +22,7 @@ actor MemoryBackend: IsletBackend {
         StateSnapshot(version: "t", presentation: "idle", activities: [], nowPlaying: nil, battery: nil)
     }
     func menuBarItems() async -> [MenuBarItemInfo] { [] }
+    func handleApproval(_ event: ApprovalEvent) async -> ApprovalDecision? { nil }
 }
 
 func startServer(lan: Bool = false, limit: Int? = nil) async throws -> (LocalAPIServer, UInt16) {

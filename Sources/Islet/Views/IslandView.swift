@@ -319,7 +319,7 @@ struct IslandView: View {
                 .contentShape(Rectangle())
                 .onTapGesture { activate(p) }
         case .expanded:
-            ExpandedView(model: model, metrics: metrics, dropTargeted: dropTargeted)
+            ApprovalGate(model: model, metrics: metrics) { ExpandedView(model: model, metrics: metrics, dropTargeted: dropTargeted) }
         }
     }
 }

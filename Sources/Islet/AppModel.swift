@@ -89,6 +89,8 @@ final class AppModel {
     let downloads = DownloadsWatcher()
     let unlock = UnlockMonitor()
     let menuBarActivities = MenuBarLiveActivityMonitor()
+    /// Coding-agent approval cards (ApprovalController.swift).
+    @ObservationIgnored lazy var approvals = ApprovalController(model: self)
     private var mirroredKeys: Set<String> = []
     private var calls = CallDetector()
     private var lastMicUsers: Set<String> = []

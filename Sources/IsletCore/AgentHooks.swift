@@ -101,6 +101,15 @@ public enum AgentHooks {
             spec.ttl = 0
         case "PostToolUse":
             return .ignore
+        case "PermissionRequest":
+            // The approval card (or, later, the Notification event) gets attention; this only marks the wait.
+            spec.state = .waiting
+            spec.subtitle = "Needs approval: " + describeTool(o["tool_name"] as? String ?? "tool", input: o["tool_input"] as? [String: Any])
+            spec.progress = 0
+            spec.trailing = "Waiting"
+            spec.priority = .high
+            spec.sneak = false
+            spec.ttl = 0
         case "PreCompact":
             spec.state = .running
             spec.subtitle = "Compacting context…"

@@ -416,6 +416,7 @@ struct IntegrationsSettings: View {
                     .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
             }
             Section("Coding agents") {
+                ApprovalSettingsRows(model: model)
                 Text("Add to ~/.claude/settings.json to see agent status in the notch:").font(.caption)
                 Text(hookSnippet).font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
                 Text("Codex: add  notify = [\"\(AppActions.cliPath)\", \"hook\", \"codex\"]  to ~/.codex/config.toml")

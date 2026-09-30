@@ -174,6 +174,10 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// Also listen on the local network (token required) so iPhone Shortcuts can push events.
     public var lanBridgeEnabled = false
     public var lanPort = 47832
+    /// Show coding-agent permission requests, questions and plans as cards to answer in the notch.
+    public var approvalsEnabled = true
+    /// Seconds a card waits for an answer before the agent asks in the terminal instead.
+    public var approvalWait: Double = 300
     public var pluginsEnabled = true
     /// Folder of script widgets; default `~/.config/islet/plugins`.
     public var pluginDirectory: String?
@@ -217,6 +221,7 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         s.maxConcurrent = min(3, max(1, s.maxConcurrent))
         s.alertDuration = min(10, max(0.5, s.alertDuration))
         s.hudDuration = min(5, max(0.5, s.hudDuration))
+        s.approvalWait = min(3600, max(30, s.approvalWait))
         let d = IsletSettings()
         if !(1024...65535).contains(s.apiPort) { s.apiPort = d.apiPort }
         if !(1024...65535).contains(s.lanPort) || s.lanPort == s.apiPort { s.lanPort = d.lanPort }

@@ -20,6 +20,7 @@ USAGE
   isletctl focus <name> [on|off]       show a Focus change (for Shortcuts automations)
   isletctl open | close                expand or collapse the island
   isletctl hook <claude|codex|AGENT> [JSON]   forward an agent hook payload (stdin or last arg)
+               [--wait SECONDS]              for approvals: wait for an answer in the notch, print it
   isletctl state | health | token
   isletctl debug menubar                what macOS shows in the menu bar (for Live Activity mirroring)
 
@@ -274,14 +275,7 @@ func run(_ argv: [String]) async throws -> Int32 {
         } else {
             payload = FileHandle.standardInput.readDataToEndOfFile()
         }
-        do {
-            let c = try Client.discover()
-            _ = try await c.send("POST", "/v1/hooks/\(provider)", json: payload, timeout: 1.5)
-        } catch {
-            if ProcessInfo.processInfo.environment["ISLET_DEBUG"] != nil {
-                FileHandle.standardError.write(Data("isletctl hook: \(error)\n".utf8))
-            }
-        }
+        await forwardHook(provider: provider, payload: payload, wait: a.flags["wait"].flatMap { Int($0) })
         return 0
 
     case "run":

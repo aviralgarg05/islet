@@ -127,6 +127,7 @@ enum Snapshots {
         // Home without media shows the Today card.
         model.clearNowPlayingForSnapshot()
         shoot("15-expanded-today")
+        renderApprovals(model: model, shoot: shoot)
         print("Rendered snapshots to \(dir.path)")
     }
 
