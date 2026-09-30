@@ -94,7 +94,8 @@ enum AppActions {
             case .settings: openSettings()
             }
         } catch {
-            NSLog("Islet: bad URL %@: %@", url.absoluteString, String(describing: error))
+            // The command only, not the query: islet://ask carries the user's question.
+            NSLog("Islet: bad URL %@://%@%@: %@", url.scheme ?? "", url.host ?? "", url.path, String(describing: error))
         }
     }
 }

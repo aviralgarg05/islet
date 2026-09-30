@@ -395,7 +395,9 @@ public enum AskProviderStatus: Equatable, Sendable {
         case .needsKey:
             return "Add \(kind == .openai ? "an OpenAI" : "an Anthropic") API key in Settings → AI to ask \(kind.title)."
         case .notInstalled:
-            return "\(kind.title) wasn't found in ~/.local/bin, /opt/homebrew/bin or /usr/local/bin."
+            let dirs = kind == .claudeCode ? "~/.local/bin, /opt/homebrew/bin, /usr/local/bin or ~/.claude/local"
+                                           : "~/.local/bin, /opt/homebrew/bin or /usr/local/bin"
+            return "\(kind.title) wasn't found in \(dirs)."
         case .unavailable(let reason):
             return reason + " Pick another provider from the menu."
         }
@@ -481,9 +483,9 @@ public enum AskErrorText {
         }
     }
 
-    /// Whole seconds from a `retry-after` header (seconds form only).
+    /// Whole seconds from a `retry-after` header (seconds form only, up to a day).
     public static func retrySeconds(_ header: String?) -> Int? {
-        guard let h = header?.trimmingCharacters(in: .whitespaces), let v = Double(h), v.isFinite, v >= 0 else { return nil }
+        guard let h = header?.trimmingCharacters(in: .whitespaces), let v = Double(h), v.isFinite, (0...86_400).contains(v) else { return nil }
         return Int(v.rounded(.up))
     }
 
@@ -516,9 +518,10 @@ enum AskJSON {
         return object(Data(text.utf8))
     }
 
+    /// A whole number from JSON. Out-of-range values give nil rather than trapping.
     static func int(_ v: Any?) -> Int? {
         if let i = v as? Int { return i }
-        if let d = v as? Double, d.isFinite { return Int(d) }
+        if let d = v as? Double { return Int(exactly: d.rounded(.towardZero)) }
         return nil
     }
 

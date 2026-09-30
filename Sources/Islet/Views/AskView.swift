@@ -46,7 +46,8 @@ struct AskView: View {
     }
 
     private func placeholder(_ kind: AskProviderKind) -> String {
-        model.settings.ask.followUps && !model.ask.history.isEmpty ? "Ask a follow-up" : "Ask \(kind.title)"
+        if model.settings.ask.followUps && !model.ask.history.isEmpty { return "Ask a follow-up" }
+        return kind == .onDevice ? "Ask the on-device model" : "Ask \(kind.title)"
     }
 
     private func field(kind: AskProviderKind, ready: Bool) -> some View {
@@ -217,9 +218,18 @@ struct AskAnswerView: View {
         return "Claude \(family.capitalized)" + (version.isEmpty ? "" : " \(version)")
     }
 
-    /// Inline Markdown (bold, italics, code, links) as models tend to write it.
+    /// Inline Markdown (bold, italics, code, links) as models tend to write it. Links may only
+    /// open web pages: a link in an answer must not open a file, launch an app or run islet://.
     static func render(_ text: String) -> AttributedString {
-        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+        guard var s = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) else {
+            return AttributedString(text)
+        }
+        let unsafe = s.runs.compactMap { run -> Range<AttributedString.Index>? in
+            guard let url = run.link else { return nil }
+            return ["http", "https"].contains(url.scheme?.lowercased() ?? "") ? nil : run.range
+        }
+        for range in unsafe { s[range].link = nil }
+        return s
     }
 }
 

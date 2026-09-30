@@ -18,7 +18,7 @@ Open the island and click the **sparkles** button in the top row, next to the pi
 | Type a question | Click the field. The island takes the keyboard only while you use it |
 | Send | Return, or the arrow button |
 | Stop an answer | Esc, or the stop button |
-| Close and hand the keyboard back | Esc (when nothing is streaming), or click anywhere outside the island |
+| Hand the keyboard back | Esc, which also closes the island when nothing is streaming, or click in another app |
 | Copy the answer | The copy button next to the field |
 | Change provider for this session | The chip on the left. The default is set in Settings → AI |
 | Start a new conversation | The pencil button (shown when follow-ups are on) |

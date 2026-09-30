@@ -61,9 +61,14 @@ struct ExpandedView: View {
                 if model.cameraInUse { Circle().fill(.green).frame(width: 6, height: 6).help("Camera in use") }
                 if model.micInUse { Circle().fill(.orange).frame(width: 6, height: 6).help("Microphone in use") }
                 if let b = model.battery {
-                    HStack(spacing: 3) {
-                        Text("\(b.level)%").font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit()
-                            .lineLimit(1).fixedSize()
+                    // Short of room (compact size), the percentage goes first so the camera and
+                    // microphone dots never slide under the notch.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 3) {
+                            Text("\(b.level)%").font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit()
+                                .lineLimit(1).fixedSize()
+                            Image(systemName: BatteryGlyph.symbol(b)).font(.system(size: 12))
+                        }
                         Image(systemName: BatteryGlyph.symbol(b)).font(.system(size: 12))
                     }
                     .foregroundStyle(b.level <= 20 && !b.isPluggedIn ? Color.red : Color.islandSecondary)

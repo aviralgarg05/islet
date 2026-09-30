@@ -52,8 +52,19 @@ public final class AskService: NSObject, @unchecked Sendable {
         self.config = configuration
     }
 
-    /// Created on first use: an idle Islet never makes one.
-    private lazy var session: URLSession = URLSession(configuration: sessionConfiguration, delegate: self, delegateQueue: nil)
+    private let sessionLock = NSLock()
+    private var madeSession: URLSession?
+
+    /// Created on first use: an idle Islet never makes one. Locked, because a key check in
+    /// Settings and a streaming answer can reach it from different threads at once.
+    private var session: URLSession {
+        sessionLock.withLock {
+            if let s = madeSession { return s }
+            let s = URLSession(configuration: sessionConfiguration, delegate: self, delegateQueue: nil)
+            madeSession = s
+            return s
+        }
+    }
 
     var sessionConfiguration: URLSessionConfiguration {
         let c = URLSessionConfiguration.ephemeral
@@ -445,6 +456,8 @@ final class CLIChild: @unchecked Sendable {
             linesContinuation.finish()
             throw error
         }
+        // A stop() between the check above and run() found nothing to stop, so stop it now.
+        if lock.withLock({ cancelled }) { stop() }
     }
 
     private func emit(_ data: Data) {

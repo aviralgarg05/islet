@@ -235,6 +235,33 @@ func joinedText(_ events: [AskEvent]) -> String {
         #expect(AskErrorText.isOverloaded(status: 500, body: overloaded))
         #expect(!AskErrorText.isOverloaded(status: 500, body: empty))
     }
+
+    /// Numbers come from the network: absurd ones must be ignored, not crash the app.
+    @Test func outOfRangeNumbersAreIgnored() {
+        #expect(AskErrorText.retrySeconds("1e300") == nil)
+        #expect(AskErrorText.retrySeconds("9223372036854775807") == nil)
+        #expect(AskErrorText.retrySeconds("-3") == nil)
+        #expect(AskErrorText.retrySeconds("2.5") == 3)
+        #expect(AskErrorText.http(status: 429, body: Data(), retryAfter: "1e300", provider: .anthropic) == "Rate limited. Try again shortly.")
+        #expect(AskJSON.int(1e300) == nil)
+        #expect(AskJSON.int(Double.nan) == nil)
+        #expect(AskJSON.int(42.0) == 42)
+        #expect(AskJSON.int(7) == 7)
+        let huge = """
+        event: message_start
+        data: {"type":"message_start","message":{"model":"claude-opus-5-5","usage":{"input_tokens":1e300,"output_tokens":1}}}
+
+        event: message_delta
+        data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1e308}}
+
+        event: message_stop
+        data: {"type":"message_stop"}
+
+
+        """
+        let events = decodeSSE(huge, AnthropicStreamDecoder())
+        #expect(events == [.done(AskUsage(model: "claude-opus-5-5", inputTokens: nil, outputTokens: 1, stopReason: "end_turn"))])
+    }
 }
 
 @Suite struct AskCLITests {
@@ -447,6 +474,7 @@ func joinedText(_ events: [AskEvent]) -> String {
         #expect(AskProviderKind(alias: "claude_code") == .claudeCode)
         #expect(AskProviderKind(alias: "") == nil)
         #expect(AskProviderStatus.needsKey.message(for: .openai) == "Add an OpenAI API key in Settings → AI to ask ChatGPT.")
+        #expect(AskProviderStatus.notInstalled.message(for: .claudeCode).hasSuffix("/usr/local/bin or ~/.claude/local."))
         #expect(AskProviderStatus.unavailable(AskProviderStatus.onDeviceReason("modelNotReady")).message(for: .onDevice)
                 == "Apple Intelligence is still downloading. Pick another provider from the menu.")
     }

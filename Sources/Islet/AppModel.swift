@@ -222,6 +222,7 @@ final class AppModel {
     }
 
     func stop() {
+        ask.stop()  // Quitting stops a running claude/codex rather than leaving it behind.
         guard server != nil else { return }
         server?.stop()
         APIDiscoveryStore.remove()
