@@ -184,6 +184,10 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// Show the Live Activities macOS puts in the menu bar (from your iPhone) in the island.
     /// Needs Accessibility.
     public var mirrorMenuBarActivities = true
+    /// Mirror only the activities the notch hides (collapsed into the menu bar's overflow).
+    public var mirrorOnlyHiddenActivities = false
+    /// Include mirrored Live Activities, which often hold addresses, names and scores, in API responses.
+    public var shareMirroredActivities = false
     public var appRules: [AppRule] = []
 
     public var launchAtLogin = false

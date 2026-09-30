@@ -90,6 +90,7 @@ final class AppModel {
     let unlock = UnlockMonitor()
     let menuBarActivities = MenuBarLiveActivityMonitor()
     private var mirroredKeys: Set<String> = []
+    private var mirrorClock = LiveActivityClock()
     private var calls = CallDetector()
     private var lastMicUsers: Set<String> = []
     private var lanServer: LocalAPIServer?
@@ -188,6 +189,7 @@ final class AppModel {
         if settings.apiEnabled && settings.lanBridgeEnabled { startLAN() } else { stopLAN() }
         if settings.mirrorMenuBarActivities && MenuBarLiveActivityMonitor.isAvailable {
             menuBarActivities.onChange = { [weak self] list in self?.syncMenuBarActivities(list) }
+            menuBarActivities.knownApp = { $0.count <= 24 && LiveActivityCatalog.look(for: $0) != nil }
             menuBarActivities.onStructureChange = { NotificationCenter.default.post(name: .isletMenuBarChanged, object: nil) }
             menuBarActivities.start()
         } else {
@@ -196,13 +198,19 @@ final class AppModel {
         }
     }
 
-    /// Show the menu bar's Live Activities (iPhone and system) as island activities.
-    private func syncMenuBarActivities(_ list: [MirroredLiveActivity]) {
+    /// Show the menu bar's Live Activities (iPhone and Mac) as island activities.
+    private func syncMenuBarActivities(_ all: [MirroredLiveActivity]) {
+        let list = settings.mirrorOnlyHiddenActivities ? all.filter(\.hidden) : all
         let keys = Set(list.map(\.key))
-        for key in mirroredKeys.subtracting(keys) { remove(activityID: MenuBarLiveActivities.activityID(key)) }
+        for key in mirroredKeys.subtracting(keys) {
+            remove(activityID: MenuBarLiveActivities.activityID(key))
+            mirrorClock.forget(key)
+        }
+        let now = Date()
         for m in list {
             let look = LiveActivityCatalog.look(for: m.appName).map { ($0.symbol, $0.tint) }
-            var spec = MenuBarLiveActivities.activity(for: m, look: look, isNew: !mirroredKeys.contains(m.key))
+            let clock = mirrorClock.update(key: m.key, detail: m.detail, now: now)
+            var spec = MenuBarLiveActivities.activity(for: m, look: look, isNew: !mirroredKeys.contains(m.key), clock: clock)
             var c = URLComponents()
             c.scheme = "islet"
             c.host = "menubar-activity"
@@ -809,7 +817,12 @@ extension Notification.Name {
 
 extension AppModel: IsletBackend {
     nonisolated func listActivities() async -> [Activity] {
-        await MainActor.run { self.activities }
+        await MainActor.run { self.sharedActivities }
+    }
+
+    /// Activities as the API reports them: mirrored Live Activities only when the user allows it.
+    private var sharedActivities: [Activity] {
+        settings.shareMirroredActivities ? activities : activities.filter { $0.source != "iphone" }
     }
 
     nonisolated func applyActivity(_ spec: ActivitySpec) async throws -> Activity {
@@ -863,10 +876,7 @@ extension AppModel: IsletBackend {
     }
 
     nonisolated func menuBarItems() async -> [MenuBarItemInfo] {
-        await MainActor.run {
-            if !self.menuBarActivities.isStarted { self.menuBarActivities.start() }
-            return self.menuBarActivities.dump()
-        }
+        MenuBarLiveActivityMonitor.dump()
     }
 
     nonisolated func stateSnapshot() async -> StateSnapshot {
@@ -875,7 +885,7 @@ extension AppModel: IsletBackend {
             return StateSnapshot(
                 version: Self.version,
                 presentation: String(describing: self.presentation(for: display)).components(separatedBy: "(").first ?? "",
-                activities: self.activities,
+                activities: self.sharedActivities,
                 nowPlaying: self.nowPlaying.map { NowPlayingSummary($0, now: Date()) },
                 battery: self.battery
             )

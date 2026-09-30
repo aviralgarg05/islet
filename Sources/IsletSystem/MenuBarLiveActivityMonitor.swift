@@ -1,220 +1,269 @@
 import AppKit
 import ApplicationServices
+import notify
 import IsletCore
 
-/// Mirrors the Live Activities macOS shows in the menu bar (from the iPhone, and system ones such
-/// as Shortcuts) into Islet. macOS 26/27 hosts them, like the system menu extras, in MenuBarAgent;
-/// this watches that process through Accessibility and reads each item's text.
+/// Mirrors the Live Activities macOS shows in the menu bar (from the iPhone, and Mac ones such as
+/// Shortcuts) into Islet. On macOS 27 MenuBarAgent draws them; this reads its menu bar window
+/// through Accessibility, including activities collapsed into the overflow behind the notch.
 ///
-/// Needs Accessibility. Reads only MenuBarAgent's items, and only acts (presses an item) when the
-/// user clicks the mirrored activity in Islet.
+/// Needs Accessibility. Reads only MenuBarAgent's items and the Live Activity renderer's content,
+/// keeps what it reads in memory, and only acts (presses an item) when the user clicks the
+/// mirrored activity in Islet.
+///
+/// Cost: nothing polls while no activity exists. It wakes on the Darwin notifications that
+/// `liveactivitiesd` posts when an activity changes, on items appearing or disappearing, and on
+/// changes to the mirrored items themselves; a scan takes a few milliseconds.
 public final class MenuBarLiveActivityMonitor {
-    public static let agentBundleID = "com.apple.MenuBarAgent"
+    public static let agentBundleID = MenuBarAgentScanner.agentBundleID
 
-    /// Current Live Activities, left to right, each paired with its item for pressing.
+    /// Current Live Activities, left to right.
     public var onChange: (([MirroredLiveActivity]) -> Void)?
     /// Items appeared, went away or moved (the menu bar layout changed).
     public var onStructureChange: (() -> Void)?
+    /// Recognises an app name among an activity's text (the Live Activity catalogue).
+    public var knownApp: (String) -> Bool = { _ in false }
 
     private var observer: AXObserver?
-    private var app: AXUIElement?
-    private var launchObserver: NSObjectProtocol?
-    private var items: [String: AXUIElement] = [:]
+    private var agent: pid_t = 0
+    private var slots: [String: MenuBarAgentScanner.Slot] = [:]
+    private var chevron: AXUIElement?
+    private var watched: [String: AXUIElement] = [:]
     private var last: [MirroredLiveActivity] = []
-    private var pending = false
+    private var notifyTokens: [Int32] = []
+    private var workspaceObservers: [NSObjectProtocol] = []
+    private var safetyTimer: Timer?
+    private var scanWork: DispatchWorkItem?
+    private var structureWork: DispatchWorkItem?
+    private let queue = DispatchQueue(label: "islet.liveactivities", qos: .utility)
+
+    /// Darwin notifications posted when Live Activity records or their rendered views change.
+    static let triggers = [
+        "com.apple.liveactivitiesd.replicatorParticipant.record",
+        "com.apple.chronod.replicator.record",
+        "com.apple.activitykit.daemonstartup",
+    ]
 
     public init() {}
     deinit { stop() }
 
     public static var isAvailable: Bool { AXIsProcessTrusted() }
 
+    /// Whether macOS is set to show iPhone Live Activities on this Mac (Control Center's setting).
+    public static var iPhoneActivitiesEnabled: Bool? {
+        CFPreferencesCopyAppValue("RemoteLiveActivitiesEnabled" as CFString, "com.apple.controlcenter" as CFString) as? Bool
+    }
+
     public var isStarted: Bool { observer != nil }
 
     @discardableResult
     public func start() -> Bool {
         guard Self.isAvailable else { return false }
-        attach()
-        if launchObserver == nil {
-            launchObserver = NSWorkspace.shared.notificationCenter.addObserver(
-                forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main
-            ) { [weak self] note in
-                let launched = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-                if launched?.bundleIdentifier == Self.agentBundleID { self?.attach() }
+        if observer == nil { attach() }
+        if notifyTokens.isEmpty {
+            for name in Self.triggers {
+                var token: Int32 = 0
+                let status = notify_register_dispatch(name, &token, DispatchQueue.main) { [weak self] _ in
+                    // The pill is rendered out of process, so look again a moment later too.
+                    self?.scheduleScan(after: 1)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { self?.scheduleScan(after: 0) }
+                }
+                if status == UInt32(NOTIFY_STATUS_OK) { notifyTokens.append(token) }
             }
         }
-        scan()
+        if workspaceObservers.isEmpty {
+            let wnc = NSWorkspace.shared.notificationCenter
+            workspaceObservers.append(wnc.addObserver(forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] note in
+                let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+                if app?.bundleIdentifier == Self.agentBundleID {
+                    self?.attach()
+                    self?.scheduleScan(after: 1)
+                }
+            })
+            for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
+                workspaceObservers.append(wnc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                    self?.scheduleScan(after: 0.5)
+                })
+            }
+            appObservers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.scheduleScan(after: 0.5)
+            })
+        }
+        scheduleScan(after: 0)
         return observer != nil
     }
 
+    private var appObservers: [NSObjectProtocol] = []
+
     public func stop() {
-        if let observer { CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .defaultMode) }
-        observer = nil
-        app = nil
-        if let o = launchObserver { NSWorkspace.shared.notificationCenter.removeObserver(o) }
-        launchObserver = nil
+        detach()
+        notifyTokens.forEach { notify_cancel($0) }
+        notifyTokens = []
+        workspaceObservers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
+        workspaceObservers = []
+        appObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        appObservers = []
+        scanWork?.cancel()
+        structureWork?.cancel()
+        safetyTimer?.invalidate()
+        safetyTimer = nil
+        slots = [:]
         if !last.isEmpty {
             last = []
             onChange?([])
         }
     }
 
-    /// Open the original item (Apple's expanded view, or the app in iPhone Mirroring).
+    /// Open the original item: Apple's expanded view, or the app in iPhone Mirroring.
+    /// An activity hidden in the overflow is revealed first so macOS has somewhere to show it.
     @discardableResult
     public func press(key: String) -> Bool {
-        guard let element = items[key] else { return false }
-        return AXUIElementPerformAction(element, kAXPressAction as CFString) == .success
+        guard let slot = slots[key] else { return false }
+        if slot.info.hidden, let chevron {
+            guard AXUIElementPerformAction(chevron, kAXPressAction as CFString) == .success else { return false }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                _ = AXUIElementPerformAction(slot.element, kAXPressAction as CFString)
+            }
+            return true
+        }
+        return AXUIElementPerformAction(slot.element, kAXPressAction as CFString) == .success
     }
 
+    /// A read-only description of MenuBarAgent's items, for diagnostics. Other apps' items are
+    /// listed by bundle ID and position only.
+    public static func dump() -> [MenuBarItemInfo] {
+        guard isAvailable, let agent = MenuBarAgentScanner.agentPID else { return [] }
+        return MenuBarAgentScanner.slots(agent: agent, readContent: true).map { slot in
+            var info = slot.info
+            info.kind = slot.kind
+            return info
+        }
+    }
+
+    // MARK: Observing
+
     private func attach() {
-        if let observer { CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .defaultMode) }
-        observer = nil
-        guard let agent = NSRunningApplication.runningApplications(withBundleIdentifier: Self.agentBundleID).first else { return }
-        let pid = agent.processIdentifier
-        let element = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(element, 0.3)
+        detach()
+        guard let pid = MenuBarAgentScanner.agentPID else { return }
+        agent = pid
         var obs: AXObserver?
         let callback: AXObserverCallback = { _, element, name, refcon in
             guard let refcon else { return }
             Unmanaged<MenuBarLiveActivityMonitor>.fromOpaque(refcon).takeUnretainedValue().received(name as String, element: element)
         }
         guard AXObserverCreate(pid, callback, &obs) == .success, let obs else { return }
-        let refcon = Unmanaged.passUnretained(self).toOpaque()
-        for name in [kAXCreatedNotification, kAXUIElementDestroyedNotification, kAXValueChangedNotification,
-                     kAXTitleChangedNotification, kAXLayoutChangedNotification, kAXMovedNotification, kAXResizedNotification] {
-            AXObserverAddNotification(obs, element, name as CFString, refcon)
+        let app = AXUIElementCreateApplication(pid)
+        // Structure only: value and title changes on the whole app arrive every second from
+        // other apps' status items and the clock, so those are watched per element instead.
+        for name in [kAXCreatedNotification, kAXUIElementDestroyedNotification, kAXLayoutChangedNotification] {
+            AXObserverAddNotification(obs, app, name as CFString, Unmanaged.passUnretained(self).toOpaque())
         }
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), .defaultMode)
         observer = obs
-        app = element
     }
 
-    /// Title and value changes arrive about once a second (the clock, tickers and meters from
-    /// other apps), so they only lead to a scan when they come from a mirrored activity.
+    private func detach() {
+        if let observer {
+            for (_, element) in watched { unwatch(element, observer) }
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .defaultMode)
+        }
+        watched = [:]
+        observer = nil
+    }
+
+    private static let elementNotifications = [kAXValueChangedNotification, kAXTitleChangedNotification,
+                                                kAXUIElementDestroyedNotification, kAXResizedNotification, "AXDescriptionChanged"]
+
+    private func watch(_ element: AXUIElement, _ observer: AXObserver) {
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        for name in Self.elementNotifications { AXObserverAddNotification(observer, element, name as CFString, refcon) }
+    }
+
+    private func unwatch(_ element: AXUIElement, _ observer: AXObserver) {
+        for name in Self.elementNotifications { AXObserverRemoveNotification(observer, element, name as CFString) }
+    }
+
     private func received(_ name: String, element: AXUIElement) {
         switch name {
-        case kAXTitleChangedNotification, kAXValueChangedNotification:
-            if belongsToActivity(element) { scheduleScan() }
-        default:
-            scheduleScan()
+        case kAXCreatedNotification, kAXUIElementDestroyedNotification, kAXLayoutChangedNotification:
+            // Ignore the other apps' UI that MenuBarAgent hosts; telling needs no IPC.
+            var p: pid_t = 0
+            AXUIElementGetPid(element, &p)
+            guard p == agent || isRenderer(p) else { return }
+            scheduleScan(after: 0.3)
             scheduleStructureChange()
+        default:
+            // A mirrored activity changed.
+            scheduleScan(after: 0.3)
         }
     }
 
-    private func belongsToActivity(_ element: AXUIElement) -> Bool {
-        guard !items.isEmpty else { return false }
-        var e: AXUIElement? = element
-        for _ in 0..<5 {
-            guard let current = e else { return false }
-            if items.values.contains(where: { CFEqual($0, current) }) { return true }
-            e = Self.element(current, kAXParentAttribute)
-        }
-        return false
+    private func isRenderer(_ pid: pid_t) -> Bool {
+        guard let bundle = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier else { return false }
+        return MenuBarLiveActivities.rendererBundleIDs.contains(bundle)
     }
-
-    private var structurePending = false
 
     private func scheduleStructureChange() {
-        guard !structurePending, onStructureChange != nil else { return }
-        structurePending = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-            self?.structurePending = false
-            self?.onStructureChange?()
-        }
+        guard onStructureChange != nil else { return }
+        structureWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.onStructureChange?() }
+        structureWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
     }
 
-    private func scheduleScan() {
-        guard !pending else { return }
-        pending = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-            self?.pending = false
-            self?.scan()
-        }
+    private func scheduleScan(after delay: TimeInterval) {
+        scanWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.scan() }
+        scanWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
-    /// Read MenuBarAgent's items and publish the Live Activities among them.
+    /// Read MenuBarAgent's items off the main thread and publish the Live Activities among them.
     public func scan() {
-        guard let app, let bar = Self.element(app, kAXExtrasMenuBarAttribute) else { return }
-        var found: [(MirroredLiveActivity, AXUIElement, CGFloat)] = []
-        for host in Self.children(bar) {
-            // Items are AXGroup(AXHostingView) > AXMenuBarItem, or a bare item/button. Judge the
-            // menu bar item itself when there is one: the group around it has no identifier
-            // but repeats its text, so it would look like an unknown item.
-            let inner = Self.children(host).filter { Self.string($0, kAXRoleAttribute) == kAXMenuBarItemRole }
-            let candidates = Self.string(host, kAXRoleAttribute) == kAXMenuBarItemRole || inner.isEmpty ? [host] : inner
-            for element in candidates {
-                let info = Self.info(element)
-                if let m = MenuBarLiveActivities.mirror(info) {
-                    found.append((m, element, info.x))
-                    break
-                }
+        guard observer != nil, agent != 0 else { return }
+        let agent = agent
+        queue.async { [weak self] in
+            let slots = MenuBarAgentScanner.slots(agent: agent, readContent: true)
+            DispatchQueue.main.async { self?.apply(slots) }
+        }
+    }
+
+    private func apply(_ all: [MenuBarAgentScanner.Slot]) {
+        guard let observer else { return }
+        chevron = all.first { $0.kind == .overflowButton }?.element
+        let labels = MenuBarAgentScanner.labels
+        var found: [(MirroredLiveActivity, MenuBarAgentScanner.Slot)] = []
+        for slot in all where slot.kind == .liveActivity {
+            if let m = MenuBarLiveActivities.mirror(slot.info, key: slot.key, labels: labels, knownApp: knownApp) {
+                found.append((m, slot))
             }
         }
-        found.sort { $0.2 < $1.2 }
-        items = Dictionary(found.map { ($0.0.key, $0.1) }, uniquingKeysWith: { a, _ in a })
+        slots = Dictionary(found.map { ($0.0.key, $0.1) }, uniquingKeysWith: { a, _ in a })
+
+        // Watch each mirrored activity's own element for changes; stop watching ones that went.
+        let current = slots.mapValues(\.element)
+        for (key, element) in watched where current[key].map({ !CFEqual($0, element) }) ?? true {
+            unwatch(element, observer)
+            watched[key] = nil
+        }
+        for (key, element) in current where watched[key] == nil {
+            watch(element, observer)
+            watched[key] = element
+        }
+        // A slow safety net, only while something is mirrored, in case a change isn't announced.
+        if found.isEmpty {
+            safetyTimer?.invalidate()
+            safetyTimer = nil
+        } else if safetyTimer == nil {
+            let t = Timer(timeInterval: 15, repeats: true) { [weak self] _ in self?.scan() }
+            t.tolerance = 3
+            RunLoop.main.add(t, forMode: .common)
+            safetyTimer = t
+        }
+
         let list = found.map(\.0)
         guard list != last else { return }
         last = list
         onChange?(list)
-    }
-
-    /// A read-only description of every MenuBarAgent item, for diagnostics.
-    public func dump() -> [MenuBarItemInfo] {
-        guard let app, let bar = Self.element(app, kAXExtrasMenuBarAttribute) else { return [] }
-        return Self.children(bar).flatMap { host in [host] + Self.children(host) }.map(Self.info)
-    }
-
-    // MARK: AX helpers
-
-    static func info(_ e: AXUIElement) -> MenuBarItemInfo {
-        var texts: [String] = []
-        collectTexts(e, depth: 0, into: &texts)
-        var x: CGFloat = 0
-        var v: CFTypeRef?
-        if AXUIElementCopyAttributeValue(e, kAXPositionAttribute as CFString, &v) == .success, let v, CFGetTypeID(v) == AXValueGetTypeID() {
-            var p = CGPoint.zero
-            AXValueGetValue(v as! AXValue, .cgPoint, &p)
-            x = p.x
-        }
-        return MenuBarItemInfo(
-            identifier: string(e, kAXIdentifierAttribute), subrole: string(e, kAXSubroleAttribute),
-            title: string(e, kAXTitleAttribute), description: string(e, kAXDescriptionAttribute),
-            value: value(e), help: string(e, kAXHelpAttribute), texts: texts, x: x
-        )
-    }
-
-    static func collectTexts(_ e: AXUIElement, depth: Int, into out: inout [String]) {
-        guard depth < 5 else { return }
-        for c in children(e) {
-            if let s = string(c, kAXValueAttribute) ?? string(c, kAXDescriptionAttribute) ?? string(c, kAXTitleAttribute), !s.isEmpty {
-                out.append(s)
-            }
-            collectTexts(c, depth: depth + 1, into: &out)
-        }
-    }
-
-    static func value(_ e: AXUIElement) -> String? {
-        var v: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(e, kAXValueAttribute as CFString, &v) == .success, let v else { return nil }
-        if let s = v as? String { return s }
-        if let n = v as? NSNumber { return n.stringValue }
-        return nil
-    }
-
-    static func string(_ e: AXUIElement, _ name: String) -> String? {
-        var v: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(e, name as CFString, &v) == .success else { return nil }
-        return v as? String
-    }
-
-    static func element(_ e: AXUIElement, _ name: String) -> AXUIElement? {
-        var v: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(e, name as CFString, &v) == .success, let v, CFGetTypeID(v) == AXUIElementGetTypeID() else { return nil }
-        return (v as! AXUIElement)
-    }
-
-    static func children(_ e: AXUIElement) -> [AXUIElement] {
-        var v: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(e, kAXChildrenAttribute as CFString, &v) == .success else { return [] }
-        return (v as? [AXUIElement]) ?? []
     }
 }

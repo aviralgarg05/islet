@@ -8,10 +8,10 @@ import IsletCore
 /// Reads frames only (no titles or values) through Accessibility, which the user grants in
 /// Settings. Without that permission `measure` returns nil and Islet uses the drop layout.
 ///
-/// Cost: asking an app with no status items for its extras bar runs into the timeout (20–50 ms
-/// each, and it wakes the app), so only a handful of processes are asked. The list of apps that
-/// own status items is built once, then kept current from launch and quit events; a measurement
-/// reads the frontmost app's menus, MenuBarAgent and those owners, about 5–10 ms in all.
+/// On macOS 27 one read of MenuBarAgent's menu bar window gives every item's frame, a few
+/// milliseconds with no calls into other apps. Elsewhere it falls back to asking the apps that own
+/// status items: asking one without any runs into the timeout (20–50 ms, and wakes it), so that
+/// list is built once and kept current from launch and quit events.
 public enum MenuBarInspector {
     public static var isAvailable: Bool { AXIsProcessTrusted() }
 
@@ -37,6 +37,20 @@ public enum MenuBarInspector {
         let front = NSWorkspace.shared.frontmostApplication?.processIdentifier
         let primaryHeight = NSScreen.screens.first?.frame.height ?? screenFrame.maxY
         queue.async {
+            // macOS 27: MenuBarAgent's menu bar window lists every item with its frame, so no
+            // other app needs to be asked.
+            if let agent {
+                let row = CGRect(x: screenFrame.minX, y: primaryHeight - screenFrame.maxY, width: screenFrame.width, height: notch.height)
+                let slots = MenuBarAgentScanner.slots(agent: agent, display: row, readContent: false)
+                if !slots.isEmpty {
+                    let menus = frontMenus(front, notch: notch, screenFrame: screenFrame, primaryHeight: primaryHeight)
+                    let chevron = slots.first { $0.kind == .overflowButton }?.frame
+                    let extras = slots.filter { $0.kind != .overflowButton }.map(\.frame)
+                    let result = MenuBarOccupancy.from(menuFrames: menus, statusFrames: extras, chevron: chevron, notch: notch)
+                    DispatchQueue.main.async { completion(result) }
+                    return
+                }
+            }
             if ownersBuiltAt.map({ Date().timeIntervalSince($0) > ownersMaxAge }) ?? true {
                 owners = Set(candidates.filter { $0 != agent && hasExtras($0) })
                 ownersBuiltAt = Date()
@@ -75,15 +89,7 @@ public enum MenuBarInspector {
         let rowBottom = rowTop + max(notch.height, 24)
         func inRow(_ r: CGRect) -> Bool { r.midY >= rowTop && r.midY <= rowBottom && r.maxX > screenFrame.minX && r.minX < screenFrame.maxX }
 
-        var menus: [CGRect] = []
-        if let front {
-            let app = AXUIElementCreateApplication(front)
-            AXUIElementSetMessagingTimeout(app, 0.25)
-            if let bar = element(app, kAXMenuBarAttribute) {
-                // The Apple menu and app menus; skip empty placeholders.
-                menus = children(bar).map(frame).filter { inRow($0) && $0.width > 0 }
-            }
-        }
+        let menus = frontMenus(front, notch: notch, screenFrame: screenFrame, primaryHeight: primaryHeight)
         var extras: [CGRect] = []
         var chevron: CGRect?
         if let agent {
@@ -112,6 +118,20 @@ public enum MenuBarInspector {
             }
         }
         return MenuBarOccupancy.from(menuFrames: menus, statusFrames: extras, chevron: chevron, notch: notch)
+    }
+
+    /// The frontmost app's menus in this screen's menu bar row (AX coordinates; x matches AppKit).
+    static func frontMenus(_ front: pid_t?, notch: CGRect, screenFrame: CGRect, primaryHeight: CGFloat) -> [CGRect] {
+        guard let front else { return [] }
+        let rowTop = primaryHeight - screenFrame.maxY
+        let rowBottom = rowTop + max(notch.height, 24)
+        let app = AXUIElementCreateApplication(front)
+        AXUIElementSetMessagingTimeout(app, 0.25)
+        guard let bar = element(app, kAXMenuBarAttribute) else { return [] }
+        // The Apple menu and app menus; skip empty placeholders.
+        return children(bar).map(frame).filter {
+            $0.width > 0 && $0.midY >= rowTop && $0.midY <= rowBottom && $0.maxX > screenFrame.minX && $0.minX < screenFrame.maxX
+        }
     }
 
     static func element(_ e: AXUIElement, _ name: String) -> AXUIElement? {

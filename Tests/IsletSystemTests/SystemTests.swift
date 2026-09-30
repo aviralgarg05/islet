@@ -263,17 +263,24 @@ func request(_ port: UInt16, _ method: String, _ path: String, token: String? = 
 
 @Suite struct MenuBarHostTests {
     /// Runs against this Mac's real menu bar when Accessibility is available (read-only).
-    @Test func systemExtrasAreNotMirrored() throws {
-        guard MenuBarLiveActivityMonitor.isAvailable else { return }
-        let monitor = MenuBarLiveActivityMonitor()
-        var published: [MirroredLiveActivity] = []
-        monitor.onChange = { published = $0 }
-        monitor.start()
-        monitor.scan()
-        let systemNames: Set<String> = ["Battery", "Wi‑Fi, connected, 2 bars", "Bluetooth", "Screen Mirroring", "Control Center", "Clock"]
-        #expect(published.allSatisfy { !systemNames.contains($0.appName) }, "\(published)")
-        #expect(!monitor.dump().isEmpty)
-        monitor.stop()
+    @Test func systemItemsAreNeverLiveActivities() throws {
+        guard MenuBarLiveActivityMonitor.isAvailable, let agent = MenuBarAgentScanner.agentPID else { return }
+        let slots = MenuBarAgentScanner.slots(agent: agent, readContent: true)
+        #expect(!slots.isEmpty)
+        for slot in slots where slot.info.identifier?.hasPrefix("com.apple.menuextra.") == true {
+            #expect(slot.kind == .systemItem, "\(slot.info)")
+        }
+        // Items collapsed into the overflow are stacked on the chevron and flagged.
+        if let chevron = slots.first(where: { $0.kind == .overflowButton })?.frame {
+            for slot in slots where slot.kind != .overflowButton && slot.frame.intersects(chevron) {
+                #expect(slot.info.hidden, "\(slot.info)")
+            }
+        }
+        // Other apps' items are recorded by frame only.
+        for slot in slots where slot.kind == .thirdParty {
+            #expect(slot.info.texts.isEmpty && slot.info.description == nil)
+        }
+        #expect(!MenuBarLiveActivityMonitor.dump().isEmpty)
     }
 
     @Test func inspectorMeasuresTheMenuBar() async {

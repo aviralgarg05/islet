@@ -93,30 +93,110 @@ import Testing
 }
 
 @Suite struct MenuBarLiveActivityTests {
-    // The items MenuBarAgent exposed on this Mac (macOS 27.0.1) with no Live Activity running.
+    // MenuBarAgent's items on this Mac (macOS 27.0.1) with no Live Activity running, including
+    // Now Playing collapsed into the overflow.
     let observed = [
-        MenuBarItemInfo(identifier: "com.apple.menuextra.battery", subrole: "AXMenuExtra", description: "Battery", value: "80%, charging"),
-        MenuBarItemInfo(identifier: "com.apple.menuextra.wifi", subrole: "AXMenuExtra", description: "Wi‑Fi, connected, 2 bars"),
-        MenuBarItemInfo(identifier: "com.apple.menuextra.bluetooth", subrole: "AXMenuExtra", description: "Bluetooth"),
-        MenuBarItemInfo(identifier: "com.apple.menuextra.screen-mirroring", subrole: "AXMenuExtra", description: "Screen Mirroring"),
-        MenuBarItemInfo(identifier: "com.apple.menuextra.controlcenter", subrole: "AXMenuExtra", description: "Control Center"),
-        MenuBarItemInfo(identifier: "com.apple.menuextra.clock", subrole: "AXMenuExtra", description: "Clock", value: "Wed 30 Sep  20:57"),
-        MenuBarItemInfo(description: "Show Hidden Menu Bar Items"),
-        MenuBarItemInfo(subrole: "AXHostingView"),
+        MenuBarItemInfo(identifier: "com.apple.menuextra.battery", role: "AXMenuBarItem", subrole: "AXMenuExtra", description: "Battery", value: "80%, charging"),
+        MenuBarItemInfo(identifier: "com.apple.menuextra.wifi", role: "AXMenuBarItem", subrole: "AXMenuExtra", description: "Wi‑Fi, connected, 2 bars"),
+        MenuBarItemInfo(identifier: "com.apple.menuextra.bluetooth", role: "AXMenuBarItem", subrole: "AXMenuExtra", description: "Bluetooth"),
+        MenuBarItemInfo(identifier: "com.apple.menuextra.screen-mirroring", role: "AXMenuBarItem", subrole: "AXMenuExtra", description: "Screen Mirroring"),
+        MenuBarItemInfo(identifier: "com.apple.menuextra.controlcenter", role: "AXMenuBarItem", subrole: "AXMenuExtra", description: "Control Center"),
+        MenuBarItemInfo(identifier: "com.apple.menuextra.clock", role: "AXMenuBarItem", subrole: "AXMenuExtra", description: "Clock", value: "Wed 30 Sep  20:57"),
+        MenuBarItemInfo(identifier: "com.apple.menuextra.now-playing", role: "AXMenuBarItem", subrole: "AXMenuExtra", description: "Now Playing", hidden: true),
+        MenuBarItemInfo(identifier: "com.apple.menuextra.timer", role: "AXMenuBarItem", subrole: "AXMenuExtra", description: "Timer", value: "4:59"),
+        MenuBarItemInfo(identifier: "com.apple.menuextra.audiovideo", role: "AXMenuBarItem", subrole: "AXMenuExtra", description: "AV Controls"),
     ]
 
     @Test func systemItemsAreNotLiveActivities() {
-        for item in observed { #expect(!MenuBarLiveActivities.isLiveActivity(item), "\(item)") }
+        for item in observed {
+            #expect(MenuBarLiveActivities.classify(item) == .systemItem, "\(item)")
+            #expect(MenuBarLiveActivities.mirror(item, key: "k") == nil)
+        }
+        #expect(MenuBarLiveActivities.classify(MenuBarItemInfo(role: "AXButton")) == .overflowButton)
+        #expect(MenuBarLiveActivities.classify(MenuBarItemInfo(owner: "com.openai.codex")) == .thirdParty)
+        #expect(MenuBarLiveActivities.classify(MenuBarItemInfo(role: "AXMenuBarItem", description: "AV Controls")) == .avControls)
+        #expect(MenuBarLiveActivities.classify(MenuBarItemInfo(subrole: "AXHostingView")) == .unknown)
     }
 
-    @Test func unknownContentfulItemsAre() {
-        let uber = MenuBarItemInfo(identifier: "com.apple.menuextra.liveactivity.3F2A", description: "Uber", value: "4 min")
-        #expect(MenuBarLiveActivities.isLiveActivity(uber))
-        #expect(MenuBarLiveActivities.mirror(uber) == MirroredLiveActivity(key: "com.apple.menuextra.liveactivity.3F2A", appName: "Uber", detail: "4 min"))
-        let noID = MenuBarItemInfo(subrole: "AXMenuExtra", description: "Flighty, Boarding 12:40")
-        #expect(MenuBarLiveActivities.mirror(noID) == MirroredLiveActivity(key: "app:flighty", appName: "Flighty", detail: "Boarding 12:40"))
-        let texts = MenuBarItemInfo(identifier: "x.unknown", texts: ["ESPN", "IND 245/3", "AUS 198"])
-        #expect(MenuBarLiveActivities.mirror(texts)?.detail == "IND 245/3 · AUS 198")
+    @Test func recognisedByLabelIdentifierMenuOrRenderer() {
+        let label = MenuBarItemInfo(role: "AXMenuBarItem", description: "Live Activity", texts: ["Uber", "4 min"])
+        #expect(MenuBarLiveActivities.classify(label) == .liveActivity)
+        let pill = MenuBarItemInfo(identifier: "live-activity-pill-3F2A", texts: ["12:40"])
+        #expect(MenuBarLiveActivities.classify(pill) == .liveActivity)
+        let menu = MenuBarItemInfo(identifier: "x.unknown", role: "AXGroup", customActions: ["End Live Activity"])
+        #expect(MenuBarLiveActivities.classify(menu) == .liveActivity)
+        let rendered = MenuBarItemInfo(texts: ["IND 245/3"], owner: "renderer")
+        #expect(MenuBarLiveActivities.classify(rendered) == .liveActivity)
+        // No identifier is something only an activity lacks, but it needs content to count.
+        #expect(MenuBarLiveActivities.classify(MenuBarItemInfo(role: "AXMenuBarItem", texts: ["Flighty", "Boarding"])) == .liveActivity)
+        #expect(MenuBarLiveActivities.classify(MenuBarItemInfo(role: "AXMenuBarItem")) == .unknown)
+    }
+
+    @Test func labelsInEveryLanguage() {
+        let labels = MenuBarLabels.from(loctable: [
+            "hi": ["liveActivity.accessibilityLabel": "लाइव ऐक्टिविटी", "liveActivity.endLiveActivityMenuItem": "लाइव ऐक्टिविटी समाप्त करें"],
+            "de": ["avModule.accessibilityLabel": "AV-Steuerung"],
+        ])
+        let hindi = MenuBarItemInfo(identifier: "x.unknown", role: "AXGroup", description: "लाइव ऐक्टिविटी", texts: ["Swiggy", "12 min"])
+        #expect(MenuBarLiveActivities.classify(hindi, labels: labels) == .liveActivity)
+        #expect(MenuBarLiveActivities.classify(hindi) == .unknown)
+        #expect(MenuBarLiveActivities.mirror(hindi, key: "k", labels: labels)?.appName == "Swiggy")
+        #expect(MenuBarLiveActivities.classify(MenuBarItemInfo(role: "AXMenuBarItem", description: "AV-Steuerung"), labels: labels) == .avControls)
+    }
+
+    @Test func mirroredTextDropsTheGenericLabel() {
+        let a = MenuBarItemInfo(role: "AXMenuBarItem", description: "Live Activity", texts: ["Uber", "Arriving", "4 min"])
+        #expect(MenuBarLiveActivities.mirror(a, key: "el:1") == MirroredLiveActivity(key: "el:1", appName: "Uber", detail: "Arriving · 4 min"))
+        // Two activities with the same generic label keep separate keys.
+        let b = MenuBarItemInfo(role: "AXMenuBarItem", description: "Live Activity", texts: ["Flighty", "Boards 0:42"])
+        #expect(MenuBarLiveActivities.mirror(b, key: "el:2")?.key == "el:2")
+        // "App, detail" in one string.
+        let c = MenuBarItemInfo(role: "AXMenuBarItem", description: "Flighty, Boarding 12:40")
+        #expect(MenuBarLiveActivities.mirror(c, key: "el:3") == MirroredLiveActivity(key: "el:3", appName: "Flighty", detail: "Boarding 12:40"))
+        // The catalogue recognises the app even when it isn't first.
+        let d = MenuBarItemInfo(identifier: "live-activity-pill-9", texts: ["4 min", "Uber"])
+        #expect(MenuBarLiveActivities.mirror(d, knownApp: { $0 == "Uber" }) == MirroredLiveActivity(key: "live-activity-pill-9", appName: "Uber", detail: "4 min"))
+        // Values alone: say where it came from.
+        let e = MenuBarItemInfo(identifier: "live-activity-pill-10", texts: ["2 – 1"])
+        #expect(MenuBarLiveActivities.mirror(e)?.appName == "iPhone")
+        // Hidden in the overflow is carried through.
+        let f = MenuBarItemInfo(role: "AXMenuBarItem", description: "Live Activity", texts: ["Timer", "4:59"], hidden: true)
+        #expect(MenuBarLiveActivities.mirror(f, key: "el:4")?.hidden == true)
+        // Without a key or identifier there's nothing stable to follow.
+        #expect(MenuBarLiveActivities.mirror(a) == nil)
+    }
+
+    @Test func clockValues() {
+        #expect(MenuBarLiveActivities.clockSeconds(in: "4:59") == 299)
+        #expect(MenuBarLiveActivities.clockSeconds(in: "Boards 1:02:03") == 3723)
+        #expect(MenuBarLiveActivities.clockSeconds(in: "4 min") == nil)
+        #expect(MenuBarLiveActivities.clockSeconds(in: "2:75") == nil)
+        #expect(MenuBarLiveActivities.clockSeconds(in: "IND 245/3") == nil)
+    }
+
+    @Test func clockDirectionFromTwoReadings() {
+        var clock = LiveActivityClock()
+        let t = Date(timeIntervalSince1970: 1_000_000)
+        #expect(clock.update(key: "a", detail: "4:59", now: t) == nil)
+        #expect(clock.update(key: "a", detail: "4:58", now: t.addingTimeInterval(1)) == .countdown(endsAt: t.addingTimeInterval(1 + 298)))
+        // Consistent readings keep the same end, so the island isn't redrawn every second.
+        #expect(clock.update(key: "a", detail: "4:57", now: t.addingTimeInterval(2)) == .countdown(endsAt: t.addingTimeInterval(299)))
+        // A jump (paused, new phase) starts over.
+        #expect(clock.update(key: "a", detail: "9:00", now: t.addingTimeInterval(3)) == nil)
+
+        #expect(clock.update(key: "b", detail: "0:10", now: t) == nil)
+        #expect(clock.update(key: "b", detail: "0:11", now: t.addingTimeInterval(1)) == .countUp(startedAt: t.addingTimeInterval(-10)))
+        // A time of day doesn't tick, so it stays text.
+        #expect(clock.update(key: "c", detail: "Boarding 12:40", now: t) == nil)
+        #expect(clock.update(key: "c", detail: "Boarding 12:40", now: t.addingTimeInterval(5)) == nil)
+    }
+
+    @Test func mirroredClockAnimatesLocally() {
+        let m = MirroredLiveActivity(key: "k", appName: "Timer", detail: "4:58")
+        let end = Date(timeIntervalSince1970: 2_000_000)
+        let spec = MenuBarLiveActivities.activity(for: m, look: ("timer", "#FF9F0A"), isNew: false, clock: .countdown(endsAt: end))
+        #expect(spec.endsAt == end)
+        #expect(spec.trailing == "")
     }
 
     @Test func activitySpecForMirroredItem() throws {
