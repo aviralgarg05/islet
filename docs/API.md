@@ -82,6 +82,7 @@ An activity is identified by `id`. Sending the same `id` again **updates** it (f
 | `POST /v1/media/command` | `{command: play\|pause\|togglePlayPause\|next\|previous\|seek, position?}` | controls whatever is playing |
 | `POST /v1/island/open`, `/v1/island/close` | — | expand / collapse |
 | `POST /v1/hooks/{provider}` | the agent's own hook payload | see [Coding agents](INTEGRATIONS.md#coding-agents) |
+| `POST /v1/hooks/{provider}?wait=N` | a hook payload that asks for a decision | held until answered in the notch: `200` + the JSON the hook prints, or `204` (see [Approvals](#approvals-long-poll)) |
 
 Errors are JSON: `{"error": "'progress' must be between 0 and 1 …"}` with `400`, `401`, `403`, `404`, `405`, `411`, `413`, `422` or `429`.
 
@@ -91,6 +92,17 @@ curl -s -X POST http://127.0.0.1:47831/v1/activities \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"id":"backup","title":"Backing up","progress":0.3}'
 ```
+
+### Approvals (long-poll)
+
+`POST /v1/hooks/{provider}?wait=N` is for blocking agent hooks (`provider` is `claude`, `codex` or `cursor`; `N` is 1 to 3600 seconds). It maps the agent's status like the plain hook endpoint. If the payload asks for a decision (Claude Code `PermissionRequest`, `PreToolUse` for `AskUserQuestion` or `ExitPlanMode`, Codex `PermissionRequest`, Cursor `beforeShellExecution` or `beforeMCPExecution`) and approvals are on, Islet shows a card and holds the request until:
+
+- you answer: `200` with exactly the JSON the hook must print, for example `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}` for Claude Code and Codex, or `{"permission":"allow"}` for Cursor;
+- there is no decision (N seconds or the wait in Settings pass, **Terminal** is chosen, a later event settles it, or approvals are off): `204` with no body. For Cursor, **Terminal** is `200` with `{"permission":"ask"}`.
+
+The reply never contains the activity JSON, because hooks print whatever comes back. Events that don't ask for a decision return `204` at once. If the client disconnects, the card is withdrawn. At most 16 requests wait at once; more get `503`. `wait` outside 1 to 3600 is a `400`. The local-network bridge never shows cards.
+
+No endpoint accepts a decision. Answers come only from clicks on the card, so a script holding the token can show a card but can't approve anything. `isletctl hook <agent> --wait N` is the client for this; see [Approvals from the notch](INTEGRATIONS.md#approvals-from-the-notch).
 
 ### Local-network bridge (iPhone Shortcuts)
 
@@ -122,10 +134,13 @@ isletctl media <play|pause|playpause|next|previous>
 isletctl focus <name> [on|off]
 isletctl open | close                  (or press ⌃⌥I; change it in Settings → General)
 isletctl hook <claude|codex|AGENT> [JSON]   forward an agent hook payload (stdin or last argument)
+isletctl hook <claude|codex|cursor> --wait N   wait up to N s for an answer in the notch, print it
 isletctl state | health | token
 ```
 
 `isletctl hook` never fails the calling agent: it exits 0 within ~1.5 s even when Islet isn't running.
+
+With `--wait N`, events that ask for a decision wait up to N seconds for an answer in the notch, and the answer is printed on stdout for the agent. Every failure (Islet not running, API off, no answer) still exits 0 and prints nothing, so the agent asks in the terminal instead. Other events are sent and forgotten as before.
 
 ---
 

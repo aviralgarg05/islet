@@ -1,2 +1,8 @@
 # Add to ~/.codex/config.toml — Codex runs this program with a JSON argument after each turn.
 notify = ["isletctl", "hook", "codex"]
+
+# Approvals in the notch: turn hooks on (add the key to your existing [features] table if you
+# have one), copy hooks.json from this folder to ~/.codex/hooks.json, then run /hooks in Codex
+# once to trust the new hooks.
+[features]
+hooks = true
