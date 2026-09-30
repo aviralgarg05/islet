@@ -45,10 +45,13 @@ if [ -n "${SIGN_IDENTITY:-}" ]; then
     codesign --force --options runtime --timestamp --entitlements Resources/Islet.entitlements --sign "$SIGN_IDENTITY" "$APP"
 else
     # Local build: ad-hoc, with an identifier-based requirement so macOS privacy grants
-    # (Calendar, Accessibility, Automation) survive rebuilds.
+    # (Calendar, Accessibility, Automation) survive rebuilds. The hardened runtime is on here
+    # too. An ad-hoc signature isn't tied to a certificate, so another ad-hoc binary could claim
+    # the same identifier; builds you share should use SIGN_IDENTITY.
     codesign --force --sign - "$APP/Contents/Resources/IsletMediaRemote.dylib"
-    codesign --force --sign - --identifier "$BUNDLE_ID.isletctl" "$APP/Contents/MacOS/isletctl"
-    codesign --force --sign - --identifier "$BUNDLE_ID" -r="designated => identifier \"$BUNDLE_ID\"" "$APP"
+    codesign --force --options runtime --sign - --identifier "$BUNDLE_ID.isletctl" "$APP/Contents/MacOS/isletctl"
+    codesign --force --options runtime --entitlements Resources/Islet.entitlements --sign - --identifier "$BUNDLE_ID" \
+        -r="designated => identifier \"$BUNDLE_ID\"" "$APP"
 fi
 codesign --verify --strict "$APP"
 echo "✓ $APP ($(du -sh "$APP" | cut -f1))"
