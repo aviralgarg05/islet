@@ -124,13 +124,13 @@ final class IslandWindowController {
     var notchRect: CGRect { NotchGeometry.visibleRect(for: descriptor, size: metrics.notch) }
 
     /// Regions the island actually occupies right now, in global coordinates: the part in the
-    /// menu bar row, the body (below the row when dropped) and any bubbles. Everything else
-    /// on the panel is transparent and passes clicks through.
+    /// menu bar row, the body below it (a sneak peek or the open island) and any bubbles.
+    /// Everything else on the panel is transparent and passes clicks through.
     var hitRects: [CGRect] {
         let p = model.presentation(for: display)
         guard IslandLayout.isVisible(p) else { return [] }
         let placement = model.placement(for: display, metrics: metrics)
-        let g = IslandLayout.geometry(for: p, metrics: metrics, layout: placement.layout)
+        let g = IslandLayout.geometry(for: p, metrics: metrics, wing: placement.wing)
         let top = descriptor.frame.maxY
         let midX = descriptor.frame.midX
         var rects: [CGRect] = []
@@ -144,7 +144,7 @@ final class IslandWindowController {
         let bubbles = model.bubbles(for: p)
         if !bubbles.items.isEmpty {
             let left = model.settings.bubblePlacement == .left
-            let bp = IslandLayout.bubblePlacement(geometry: g, metrics: metrics, placement: placement, count: bubbles.items.count, left: left)
+            let bp = IslandLayout.bubblePlacement(metrics: metrics, placement: placement, count: bubbles.items.count, left: left)
             let span = CGFloat(bubbles.items.count) * (bp.diameter + IslandLayout.bubbleGap)
             let x = left ? midX - g.outerWidth / 2 - span : midX + g.outerWidth / 2
             rects.append(CGRect(x: x, y: top - bp.top - bp.diameter, width: span, height: bp.diameter))
@@ -157,47 +157,35 @@ final class IslandWindowController {
 
     /// Something in the menu bar may have changed since the last measurement.
     private var menuBarStale = true
-    private var lastLayoutSwitch: Date?
-    private var deferredMeasure: DispatchWorkItem?
 
-    /// Measure the menu bar beside the notch and store the automatic placement.
+    /// Measure the menu bar beside the notch and fit the wings to it (the automatic layout).
     /// While nothing is drawn on this display it only notes that a measurement is due, so an
     /// idle island never reads the menu bar; `measureIfStale` catches up when it appears.
-    func measureMenuBar(force: Bool = false) {
+    func measureMenuBar() {
         guard model.settings.closedLayout == .auto else { return }
-        guard force || IslandLayout.isVisible(model.presentation(for: display)) else {
+        guard IslandLayout.isVisible(model.presentation(for: display)) else {
             menuBarStale = true
             return
         }
         menuBarStale = false
-        let wing = metrics.wingWidth
+        let preferred = metrics.wingWidth
         let notch = notchRect
         let display = display
         guard descriptor.menuBarHeight > 0 else {
-            model.closedPlacements[display] = .unmeasured(.auto, wing: wing, hasMenuBar: false)
+            model.closedPlacements[display] = .unmeasured(.auto, wing: preferred, hasMenuBar: false)
             return
         }
         MenuBarInspector.measure(notch: notch, screenFrame: descriptor.frame) { [weak self] occupancy in
             guard let self else { return }
-            let layout = MenuBarLayoutEngine.decide(preference: .auto, notch: notch, preferredWing: wing, occupancy: occupancy, hasMenuBar: true)
+            let wing = MenuBarLayoutEngine.wingWidth(preference: .auto, notch: notch, preferredWing: preferred, occupancy: occupancy, hasMenuBar: true)
             let current = self.model.closedPlacements[display]
-            switch MenuBarLayoutEngine.stabilise(current: current?.layout, next: layout, lastSwitch: self.lastLayoutSwitch, now: Date()) {
-            case .keep: return
-            case .defer:
-                self.deferredMeasure?.cancel()
-                let work = DispatchWorkItem { [weak self] in self?.measureMenuBar(force: true) }
-                self.deferredMeasure = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + MenuBarLayoutEngine.minimumSwitchInterval, execute: work)
-                return
-            case .apply: break
-            }
-            var placement = ClosedPlacement(layout: layout, leftSlack: 0, rightSlack: 0)
-            if case .wings(let l, _) = layout, let occupancy {
-                let slack = MenuBarLayoutEngine.slack(notch: notch, occupancy: occupancy, wing: l)
+            guard MenuBarLayoutEngine.shouldReplace(current?.wing, with: wing) else { return }
+            var placement = ClosedPlacement(wing: wing, slack: 0)
+            if let occupancy {
+                let slack = MenuBarLayoutEngine.slack(notch: notch, occupancy: occupancy, wing: wing)
                 placement.leftSlack = slack.left
                 placement.rightSlack = slack.right
             }
-            if current?.layout != layout { self.lastLayoutSwitch = Date() }
             if current != placement { self.model.closedPlacements[display] = placement }
         }
     }

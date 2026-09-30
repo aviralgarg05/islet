@@ -2,9 +2,9 @@ import AppKit
 import IsletCore
 import SwiftUI
 
-/// One snapshot sheet per Live Activity template and size preset: the closed island in the
-/// wings and dropped layouts, the sneak peek in both, the bubble at each diameter and the
-/// expanded row. Rendered by `Islet --snapshot <dir>` into `<dir>/templates/`.
+/// One snapshot sheet per Live Activity template and size preset: the closed island with full,
+/// narrow and icon-only wings, the sneak peek with full and icon-only wings, the bubble at each
+/// diameter and the expanded row. Rendered by `Islet --snapshot <dir>` into `<dir>/templates/`.
 @MainActor
 enum TemplateSnapshots {
     /// A realistic activity per template, with the moment it was first sent.
@@ -105,23 +105,27 @@ enum TemplateSnapshots {
             model.settings.sizePreset = preset
             let size = CGSize(width: model.settings.expandedSize.width, height: model.settings.expandedSize.height)
             let metrics = NotchGeometry.metrics(for: Snapshots.screen, expandedSize: size, wingWidth: model.settings.effectiveWingWidth)
-            let wings = ClosedPlacement(layout: .wings(left: metrics.wingWidth, right: metrics.wingWidth), leftSlack: .infinity, rightSlack: .infinity)
+            let full = ClosedPlacement(wing: metrics.wingWidth, slack: .infinity)
+            let narrow = ClosedPlacement.unmeasured(.auto, wing: metrics.wingWidth, hasMenuBar: true)
+            let iconOnly = ClosedPlacement(wing: MenuBarLayoutEngine.iconOnlyWing, slack: 0)
             let rowWidth = min(260, (metrics.expanded.width - 36 - 16) * 0.5)
 
             for (name, a) in activities {
                 var parts: [(String, NSImage)] = []
-                func island(_ label: String, _ p: IslandPresentation, dropped: Bool, height: CGFloat) {
+                func island(_ label: String, _ p: IslandPresentation, _ placement: ClosedPlacement, height: CGFloat) {
                     model.forcedPresentation = p
-                    model.closedPlacements[1] = dropped ? nil : wings
+                    model.closedPlacements[1] = placement
                     let view = IslandView(model: model, display: 1, metrics: metrics)
                         .frame(width: 760, height: height)
                         .background(Snapshots.backdrop(metrics: metrics))
                     if let img = image(view) { parts.append((label, img)) }
                 }
-                island("wings", .compact(.activity(a, others: 0)), dropped: false, height: 44)
-                island("dropped", .compact(.activity(a, others: 0)), dropped: true, height: 66)
-                island("sneak, wings", .sneak(a), dropped: false, height: 84)
-                island("sneak, dropped", .sneak(a), dropped: true, height: 92)
+                let closed = IslandPresentation.compact(.activity(a, others: 0))
+                island("wings, \(Int(full.wing)) pt", closed, full, height: 44)
+                island("wings, \(Int(narrow.wing)) pt (menu bar not measured)", closed, narrow, height: 44)
+                island("wings, \(Int(iconOnly.wing)) pt (crowded menu bar)", closed, iconOnly, height: 44)
+                island("sneak peek", .sneak(a), full, height: 84)
+                island("sneak peek, \(Int(iconOnly.wing)) pt wings", .sneak(a), iconOnly, height: 84)
                 let extras = HStack(alignment: .center, spacing: 14) {
                     ForEach([32, 28, 24] as [CGFloat], id: \.self) { d in
                         BubbleView(bubble: .activity(a), model: model, diameter: d)

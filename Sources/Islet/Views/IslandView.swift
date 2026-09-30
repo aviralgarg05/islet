@@ -2,20 +2,27 @@ import AppKit
 import IsletCore
 import SwiftUI
 
-/// Where the closed island may draw on one display: its layout, and how much free menu bar
-/// room is left beyond the wings (for bubbles). Infinity means "don't care" (explicit wings,
-/// or a display without a menu bar).
+/// How the closed island sits on one display: the width of each wing beside the notch, and how
+/// much free menu bar room is left beyond the wings (for bubbles). Infinity means "don't care"
+/// (always full width, or a display without a menu bar).
 struct ClosedPlacement: Equatable {
-    var layout: ClosedLayout
+    var wing: CGFloat
     var leftSlack: CGFloat
     var rightSlack: CGFloat
+}
+
+extension ClosedPlacement {
+    /// The same free room on both sides.
+    init(wing: CGFloat, slack: CGFloat) {
+        self.init(wing: wing, leftSlack: slack, rightSlack: slack)
+    }
 
     static func unmeasured(_ preference: ClosedLayoutPreference, wing: CGFloat, hasMenuBar: Bool) -> ClosedPlacement {
-        let layout = MenuBarLayoutEngine.decide(preference: preference, notch: .zero, preferredWing: wing, occupancy: nil, hasMenuBar: hasMenuBar)
+        let width = MenuBarLayoutEngine.wingWidth(preference: preference, notch: .zero, preferredWing: wing, occupancy: nil, hasMenuBar: hasMenuBar)
         // Without a measurement nobody knows what's beside the wings, so bubbles go just below
-        // the row; with the explicit "beside the notch" choice they sit in it.
+        // the row; with "Always full width" they sit in it.
         let slack: CGFloat = preference == .auto && hasMenuBar ? 0 : .infinity
-        return ClosedPlacement(layout: layout, leftSlack: slack, rightSlack: slack)
+        return ClosedPlacement(wing: width, slack: slack)
     }
 }
 
@@ -29,8 +36,6 @@ struct IslandGeometry: Equatable {
     var stemHeight: CGFloat = 0
     /// Wing width inside the menu bar row (content beside the notch).
     var wing: CGFloat = 0
-    /// Content sits below the notch rather than beside it.
-    var dropped = false
 
     var shape: IslandShape { IslandShape(topRadius: top, bottomRadius: bottom, stemWidth: stemWidth, stemHeight: stemHeight) }
     var outerWidth: CGFloat { size.width + 2 * top }
@@ -38,32 +43,23 @@ struct IslandGeometry: Equatable {
 
 /// Layout of the island for each presentation. Shared by the view and the panel's hit-testing.
 enum IslandLayout {
-    /// Extra width either side of the notch for the dropped pill.
-    static let dropSide: CGFloat = 38
-
-    static func geometry(for p: IslandPresentation, metrics m: IslandMetrics, layout: ClosedLayout) -> IslandGeometry {
+    /// - Parameter wing: width of each wing beside the notch, from the closed placement.
+    static func geometry(for p: IslandPresentation, metrics m: IslandMetrics, wing: CGFloat) -> IslandGeometry {
         let n = m.notch
         let small = min(12, n.height / 2.4)
-        switch (p, layout) {
-        case (.hidden, _), (.idle, _):
+        let row = n.width + 2 * wing
+        switch p {
+        case .hidden, .idle:
             return IslandGeometry(size: n, top: 6, bottom: small)
-        case (.expanded, _):
+        case .expanded:
             return IslandGeometry(size: m.expanded, top: 10, bottom: 24)
-        case (.compact, .wings(let l, let r)), (.hud, .wings(let l, let r)):
-            let w = min(l, r)
-            return IslandGeometry(size: CGSize(width: n.width + 2 * w, height: n.height), top: 6, bottom: small, wing: w)
-        case (.compact, .drop), (.hud, .drop):
-            return IslandGeometry(size: CGSize(width: n.width + 2 * dropSide, height: n.height + MenuBarLayoutEngine.dropHeight),
-                                  top: 6, bottom: 13, stemWidth: n.width, stemHeight: n.height, dropped: true)
-        case (.sneak, .wings(let l, let r)):
-            let w = min(l, r)
-            let row = n.width + 2 * w
+        case .compact, .hud:
+            return IslandGeometry(size: CGSize(width: row, height: n.height), top: 6, bottom: small, wing: wing)
+        case .sneak:
+            // The wings stay in the menu bar row; the body opens out below it for a moment.
             let width = max(row + 32, 276)
             return IslandGeometry(size: CGSize(width: width, height: n.height + 42), top: 8, bottom: 18,
-                                  stemWidth: width > row ? row : 0, stemHeight: n.height, wing: w)
-        case (.sneak, .drop):
-            return IslandGeometry(size: CGSize(width: 276, height: n.height + 50), top: 8, bottom: 18,
-                                  stemWidth: n.width, stemHeight: n.height, dropped: true)
+                                  stemWidth: width > row ? row : 0, stemHeight: n.height, wing: wing)
         }
     }
 
@@ -94,13 +90,9 @@ enum IslandLayout {
 
     /// Where bubbles go: beside the island in the menu bar row when there's room, otherwise
     /// just below the row (never on top of menu bar icons). Returns diameter and top offset.
-    static func bubblePlacement(geometry g: IslandGeometry, metrics m: IslandMetrics, placement: ClosedPlacement,
+    static func bubblePlacement(metrics m: IslandMetrics, placement: ClosedPlacement,
                                 count: Int, left: Bool) -> (diameter: CGFloat, top: CGFloat) {
         guard count > 0 else { return (m.notch.height, 0) }
-        if g.dropped {
-            let d = MenuBarLayoutEngine.dropHeight - 2
-            return (d, m.notch.height + 1)
-        }
         let d = m.notch.height
         let needed = CGFloat(count) * (d + bubbleGap)
         let slack = left ? placement.leftSlack : placement.rightSlack
@@ -175,13 +167,13 @@ struct IslandView: View {
     var body: some View {
         let p = model.presentation(for: display)
         let placement = model.placement(for: display, metrics: metrics)
-        let g = IslandLayout.geometry(for: p, metrics: metrics, layout: placement.layout)
+        let g = IslandLayout.geometry(for: p, metrics: metrics, wing: placement.wing)
         let visible = IslandLayout.isVisible(p) || dropTargeted
         let shape = g.shape
         let glow = model.urgentGlow(for: p)
         let bubbles = model.bubbles(for: p)
         let left = model.settings.bubblePlacement == .left
-        let bp = IslandLayout.bubblePlacement(geometry: g, metrics: metrics, placement: placement, count: bubbles.items.count, left: left)
+        let bp = IslandLayout.bubblePlacement(metrics: metrics, placement: placement, count: bubbles.items.count, left: left)
         let stale = model.focusedActivity(for: p)?.isStale(at: Date()) ?? false
 
         HStack(alignment: .top, spacing: IslandLayout.bubbleGap) {
@@ -423,28 +415,6 @@ struct Wings<Leading: View, Trailing: View>: View {
     }
 }
 
-/// One row hanging below the notch: leading, centre and trailing slots.
-struct DropRow<Leading: View, Center: View, Trailing: View>: View {
-    let metrics: IslandMetrics
-    var height: CGFloat = MenuBarLayoutEngine.dropHeight
-    @ViewBuilder var leading: Leading
-    @ViewBuilder var center: Center
-    @ViewBuilder var trailing: Trailing
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Color.clear.frame(height: metrics.notch.height)
-            HStack(spacing: 7) {
-                leading
-                center.frame(maxWidth: .infinity, alignment: .leading)
-                trailing
-            }
-            .padding(.horizontal, 13)
-            .frame(height: height)
-        }
-    }
-}
-
 struct CompactContentView: View {
     let content: CompactContent
     let metrics: IslandMetrics
@@ -452,11 +422,6 @@ struct CompactContentView: View {
     let model: AppModel
 
     var body: some View {
-        if geometry.dropped { dropped } else { wings }
-    }
-
-    @ViewBuilder
-    private var wings: some View {
         switch content {
         case .nowPlaying(let np):
             Wings(metrics: metrics, wing: geometry.wing) {
@@ -488,45 +453,9 @@ struct CompactContentView: View {
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(tint)
                     .monospacedDigit()
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var dropped: some View {
-        switch content {
-        case .nowPlaying(let np):
-            DropRow(metrics: metrics) {
-                ArtworkView(media: np, size: 17, corner: 4.5)
-            } center: {
-                HStack(spacing: 4) {
-                    Text(np.title).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(.white)
-                    if let artist = np.artist {
-                        Text(artist).font(.system(size: 11)).foregroundStyle(Color.islandTertiary)
-                    }
-                }
-                .lineLimit(1)
-            } trailing: {
-                PlayingIndicator(tint: model.mediaAccent(np), playing: np.isPlaying)
-                    .scaleEffect(0.85)
-            }
-        case .activity(let a, _):
-            let tint = model.tint(for: a)
-            DropRow(metrics: metrics) {
-                TemplateLeading(activity: a, model: model, tint: tint, size: 14, compact: true)
-            } center: {
-                TemplateDropCenter(activity: a, model: model)
-            } trailing: {
-                TemplateTrailing(activity: a, model: model, tint: tint, compact: true)
-            }
-        case .battery(let ev):
-            let tint = BatteryGlyph.tint(ev)
-            DropRow(metrics: metrics) {
-                Image(systemName: BatteryGlyph.symbol(ev.state)).font(.system(size: 13, weight: .semibold)).foregroundStyle(tint)
-            } center: {
-                Text(BatteryGlyph.label(ev)).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
-            } trailing: {
-                Text("\(ev.state.level)%").font(.system(size: 11.5, weight: .semibold, design: .rounded)).foregroundStyle(tint).monospacedDigit()
+                    // Icon-only wings are too narrow for "100%" at full size; never wrap it.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
             }
         }
     }
@@ -535,7 +464,7 @@ struct CompactContentView: View {
 struct ActivityTrailing: View {
     let activity: Activity
     let tint: Color
-    /// Slightly smaller type for the dropped pill and sneak peeks.
+    /// Slightly smaller type for sneak peeks.
     var compact = false
     @Environment(\.wingRoom) private var room
 
@@ -582,20 +511,6 @@ enum BatteryGlyph {
         }
     }
 
-    static func label(_ ev: BatteryEvent) -> String {
-        switch ev.kind {
-        case .pluggedIn:
-            let label = ev.state.isCharging ? "Charging" : "Connected"
-            return ev.state.adapterWatts.map { "\(label) · \($0) W" } ?? label
-        case .charged: return "Charged to \(ev.state.level)%"
-        case .unplugged: return "On battery"
-        case .full: return "Fully charged"
-        case .low, .critical: return "Low battery"
-        case .lowPowerOn: return "Low Power Mode on"
-        case .lowPowerOff: return "Low Power Mode off"
-        }
-    }
-
     static func symbol(_ s: BatteryState) -> String {
         if s.isCharging || s.isPluggedIn { return "battery.100percent.bolt" }
         switch s.level {
@@ -618,34 +533,20 @@ struct SneakView: View {
 
     var body: some View {
         let tint = model.tint(for: activity)
-        if geometry.dropped {
+        VStack(spacing: 0) {
+            Wings(metrics: metrics, wing: geometry.wing) {
+                TemplateLeading(activity: activity, model: model, tint: tint)
+            } trailing: {
+                TemplateTrailing(activity: activity, model: model, tint: tint, compact: true)
+            }
+            .frame(maxWidth: .infinity)
             VStack(alignment: .leading, spacing: 2) {
-                Color.clear.frame(height: metrics.notch.height - 2)
-                HStack(spacing: 8) {
-                    TemplateLeading(activity: activity, model: model, tint: tint, compact: true)
-                    Text(activity.title).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
-                    Spacer(minLength: 4)
-                    TemplateTrailing(activity: activity, model: model, tint: tint, compact: true)
-                }
-                TemplateDetail(activity: activity, model: model, roomy: true) { details(tint: tint) }.padding(.leading, 23)
+                Text(activity.title).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+                TemplateDetail(activity: activity, model: model) { details(tint: tint) }
             }
-            .padding(.horizontal, 14)
-        } else {
-            VStack(spacing: 0) {
-                Wings(metrics: metrics, wing: geometry.wing) {
-                    TemplateLeading(activity: activity, model: model, tint: tint)
-                } trailing: {
-                    TemplateTrailing(activity: activity, model: model, tint: tint, compact: true)
-                }
-                .frame(maxWidth: .infinity)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(activity.title).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
-                    TemplateDetail(activity: activity, model: model) { details(tint: tint) }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 15)
-                .padding(.top, 1)
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 15)
+            .padding(.top, 1)
         }
     }
 
@@ -679,25 +580,12 @@ struct HUDContent: View {
     }
 
     var body: some View {
-        if geometry.dropped {
-            DropRow(metrics: metrics) {
-                icon.frame(width: 16)
-            } center: {
-                LevelBar(value: hud.muted ? 0 : hud.value, tint: .white, height: 4)
-                    .animation(.snappy(duration: 0.18), value: hud.value)
-            } trailing: {
-                Text("\(Int((hud.muted ? 0 : hud.value) * 100))")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit()
-                    .foregroundStyle(Color.islandSecondary).frame(width: 22, alignment: .trailing)
-            }
-        } else {
-            Wings(metrics: metrics, wing: geometry.wing) {
-                icon
-            } trailing: {
-                LevelBar(value: hud.muted ? 0 : hud.value, tint: .white, height: 4)
-                    .frame(width: max(22, geometry.wing - 20))
-                    .animation(.snappy(duration: 0.18), value: hud.value)
-            }
+        Wings(metrics: metrics, wing: geometry.wing) {
+            icon
+        } trailing: {
+            LevelBar(value: hud.muted ? 0 : hud.value, tint: .white, height: 4)
+                .frame(width: max(22, geometry.wing - 20))
+                .animation(.snappy(duration: 0.18), value: hud.value)
         }
     }
 

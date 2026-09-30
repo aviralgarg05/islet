@@ -50,8 +50,7 @@ extension Snapshots {
             ("An agent's plan, step 3 of 5", .sneak(plan), 100),
             ("A usage limit alert", .sneak(usage), 98),
         ]
-        model.closedPlacements[1] = ClosedPlacement(layout: .wings(left: metrics.wingWidth, right: metrics.wingWidth),
-                                                    leftSlack: .infinity, rightSlack: .infinity)
+        model.closedPlacements[1] = ClosedPlacement(wing: metrics.wingWidth, slack: .infinity)
         var images: [(String, NSImage)] = []
         for (caption, presentation, height) in rows {
             model.forcedPresentation = presentation

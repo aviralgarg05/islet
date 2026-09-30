@@ -126,7 +126,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
 
     // Size
     public var sizePreset: SizePreset = .compact
-    /// Beside the notch, below it, or chosen automatically so menu bar icons stay uncovered.
+    /// Wings fitted to the free space in the menu bar, or always the full wing width. The closed
+    /// island always sits beside the notch. The old `drop` value (a pill below the notch) is
+    /// gone: it no longer decodes, so it loads as `auto` and isn't written back.
     public var closedLayout: ClosedLayoutPreference = .auto
     /// Used when `sizePreset` is `custom`.
     public var expandedWidth: Double = 468

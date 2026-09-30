@@ -83,19 +83,12 @@ enum Snapshots {
             shoot(name)
         }
 
-        // The same closed states beside the notch, as used when the menu bar has room.
-        model.closedPlacements[1] = ClosedPlacement(layout: .wings(left: metrics.wingWidth, right: metrics.wingWidth),
-                                                    leftSlack: .infinity, rightSlack: .infinity)
-        for (name, presentation, tab) in states where !name.contains("expanded") {
-            model.forcedPresentation = presentation
-            model.tab = tab
-            shoot("w" + name)
-        }
-        // Icon-only wings (a crowded menu bar) and the pill below the notch (no room at all).
-        for (prefix, layout) in [("i", ClosedLayout.wings(left: MenuBarLayoutEngine.iconOnlyWing, right: MenuBarLayoutEngine.iconOnlyWing)),
-                                 ("d", ClosedLayout.drop)] {
-            model.closedPlacements[1] = ClosedPlacement(layout: layout, leftSlack: 0, rightSlack: 0)
-            for (name, presentation, tab) in states where !name.contains("expanded") && !name.contains("sneak") {
+        // The states above use the narrow wings of an unmeasured menu bar. The same closed states
+        // at full width ("w", the menu bar has room) and icon-only ("i", a crowded menu bar).
+        for (prefix, placement) in [("w", ClosedPlacement(wing: metrics.wingWidth, slack: .infinity)),
+                                    ("i", ClosedPlacement(wing: MenuBarLayoutEngine.iconOnlyWing, slack: 0))] {
+            model.closedPlacements[1] = placement
+            for (name, presentation, tab) in states where !name.contains("expanded") {
                 model.forcedPresentation = presentation
                 model.tab = tab
                 shoot(prefix + name)
@@ -158,8 +151,7 @@ enum Snapshots {
         let awakeActivity = activity(KeepAwake.activity(for: awake, sneak: false) { _ in "18:30" })
         model.forcedPresentation = .compact(.activity(awakeActivity, others: 0))
         shoot("24-compact-keep-awake")
-        model.closedPlacements[1] = ClosedPlacement(layout: .wings(left: metrics.wingWidth, right: metrics.wingWidth),
-                                                    leftSlack: .infinity, rightSlack: .infinity)
+        model.closedPlacements[1] = ClosedPlacement(wing: metrics.wingWidth, slack: .infinity)
         shoot("w24-compact-keep-awake")
         model.closedPlacements[1] = nil
         model.forcedPresentation = .expanded

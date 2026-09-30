@@ -12,9 +12,9 @@ typealias ViewState<Value> = SwiftUICore.State<Value>
 ///
 /// Classic: a rectangle whose top corners flare outward like the hardware notch and whose
 /// bottom corners are rounded. With a `stemWidth` narrower than the body, the part in the menu
-/// bar row stays that narrow (the notch) and the body opens out below the menu bar, joined by
-/// soft shoulders. That keeps menu bar icons beside the notch uncovered. One shape covers both,
-/// so switching between them animates as a morph.
+/// bar row stays that narrow (the notch and its wings) and the body opens out below the menu
+/// bar, joined by soft shoulders. The sneak peek uses it so menu bar icons beside the wings stay
+/// uncovered. One shape covers both, so switching between them animates as a morph.
 struct IslandShape: Shape {
     var topRadius: CGFloat
     var bottomRadius: CGFloat
