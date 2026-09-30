@@ -50,10 +50,26 @@ public final class BatteryMonitor {
         guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
               let list = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [CFTypeRef] else { return nil }
         for ps in list {
-            guard let desc = IOPSGetPowerSourceDescription(info, ps)?.takeUnretainedValue() as? [String: Any] else { continue }
-            if let s = parse(desc, lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled) { return s }
+            guard let desc = IOPSGetPowerSourceDescription(info, ps)?.takeUnretainedValue() as? [String: Any],
+                  var s = parse(desc, lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled) else { continue }
+            if s.isPluggedIn {
+                s.adapterWatts = (IOPSCopyExternalPowerAdapterDetails()?.takeRetainedValue() as? [String: Any]).flatMap(adapterWatts)
+            } else if s.minutesRemaining == nil {
+                // The description sometimes lacks an estimate that the system-wide one has.
+                let estimate = IOPSGetTimeRemainingEstimate()
+                if estimate > 0 { s.minutesRemaining = Int((estimate / 60).rounded()) }
+            }
+            return s
         }
         return nil
+    }
+
+    /// Rated watts from `IOPSCopyExternalPowerAdapterDetails()`. Pure, for tests.
+    public static func adapterWatts(_ details: [String: Any]) -> Int? {
+        let raw = details[kIOPSPowerAdapterWattsKey]
+        let watts = (raw as? Int) ?? (raw as? NSNumber)?.intValue
+        guard let watts, watts > 0 else { return nil }
+        return watts
     }
 
     /// Convert an IOPS power-source description into `BatteryState`. Pure, for tests.

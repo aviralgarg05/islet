@@ -41,7 +41,7 @@ enum Snapshots {
                                           endsAt: now.addingTimeInterval(272)))
         let done = activity(ActivitySpec(id: "deploy", source: "ci", title: "Deploy to production", subtitle: "Finished in 3:12",
                                          icon: .symbol("checkmark.circle.fill"), trailing: "Done", progress: 1, state: .success))
-        let battery = BatteryEvent(kind: .pluggedIn, state: BatteryState(level: 76, isCharging: true, isPluggedIn: true), until: now.addingTimeInterval(3))
+        let battery = BatteryEvent(kind: .pluggedIn, state: BatteryState(level: 76, isCharging: true, isPluggedIn: true, adapterWatts: 96), until: now.addingTimeInterval(3))
 
         model.setPlugins([
             PluginResult(path: "/p/uptime.1m.sh", name: "uptime", interval: 60,
@@ -135,6 +135,34 @@ enum Snapshots {
         shoot("19-expanded-large")
         model.settings.sizePreset = .compact
         metrics = metricsFor(model.settings)
+
+        // Now Playing controls: the volume row on a short card, the roomy layout, and keep awake.
+        model.controls.outputs = [
+            AudioOutputDevice(id: 1, uid: "builtin", name: "MacBook Pro Speakers", transport: .builtIn),
+            AudioOutputDevice(id: 2, uid: "airpods", name: "AirPods Pro", transport: .bluetooth),
+        ]
+        model.controls.defaultOutputID = 2
+        model.controls.volume = 0.62
+        model.controls.soundRowShown = true
+        shoot("22-expanded-media-sound")
+        model.controls.soundRowShown = false
+        model.settings.sizePreset = .standard
+        metrics = metricsFor(model.settings)
+        shoot("23-expanded-media-standard")
+        model.settings.sizePreset = .compact
+        metrics = metricsFor(model.settings)
+        let awake = KeepAwakeSession(since: now, until: now.addingTimeInterval(2 * 3600))
+        model.controls.awake = awake
+        let awakeActivity = activity(KeepAwake.activity(for: awake, sneak: false) { _ in "18:30" })
+        model.forcedPresentation = .compact(.activity(awakeActivity, others: 0))
+        shoot("24-compact-keep-awake")
+        model.closedPlacements[1] = ClosedPlacement(layout: .wings(left: metrics.wingWidth, right: metrics.wingWidth),
+                                                    leftSlack: .infinity, rightSlack: .infinity)
+        shoot("w24-compact-keep-awake")
+        model.closedPlacements[1] = nil
+        model.forcedPresentation = .expanded
+        shoot("25-expanded-keep-awake-on")
+        model.controls.awake = nil
 
         // Home without media shows the Today card.
         model.clearNowPlayingForSnapshot()

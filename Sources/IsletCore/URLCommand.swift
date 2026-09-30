@@ -9,7 +9,8 @@ import Foundation
 ///     islet://dismiss?id=deploy
 ///     islet://timer?seconds=300&title=Tea
 ///     islet://hud?kind=volume&value=0.5
-///     islet://media/playpause   (also play, pause, next, previous)
+///     islet://media/playpause   (also play, pause, next, previous, forward, rewind, shuffle, repeat)
+///     islet://awake?for=1h      (also 15m, on, off; islet://awake/off)
 ///     islet://focus?name=Work&state=on   (from a Shortcuts Focus automation)
 ///     islet://open  islet://close  islet://toggle  islet://settings
 ///
@@ -24,6 +25,7 @@ public enum URLCommand: Equatable, Sendable {
     case hud(HUDKind, Double)
     case media(PlaybackCommand)
     case focus(name: String, on: Bool)
+    case awake(KeepAwakeChange)
     case open, close, toggle, settings
 
     /// Activities created or dismissed through the URL scheme live under this id prefix.
@@ -134,11 +136,19 @@ public enum URLCommand: Equatable, Sendable {
             case "playpause", "toggle", "toggleplaypause": return .media(.togglePlayPause)
             case "next", "skip": return .media(.next)
             case "previous", "prev", "back": return .media(.previous)
+            case "forward", "skipforward", "ff": return .media(.skipForward)
+            case "rewind", "skipback", "skipbackward": return .media(.skipBackward)
+            case "shuffle": return .media(.toggleShuffle)
+            case "repeat": return .media(.toggleRepeat)
             default: throw ParseError.unknownCommand("media/\(name)")
             }
         case "focus":
             let state = (q["state"] ?? q["on"] ?? "on").lowercased()
             return .focus(name: q["name"] ?? "Focus", on: !["off", "0", "false", "no"].contains(state))
+        case "awake", "keepawake", "caffeinate":
+            let raw = path.first ?? q["for"] ?? q["minutes"] ?? ""
+            guard let change = KeepAwake.parse(raw) else { throw ParseError.invalid("for", raw) }
+            return .awake(change)
         case "open", "expand": return .open
         case "close", "collapse": return .close
         case "toggle": return .toggle

@@ -90,6 +90,7 @@ final class AppModel {
     let unlock = UnlockMonitor()
     let menuBarActivities = MenuBarLiveActivityMonitor()
     let agentUsage = AgentUsageModel()
+    let controls = IslandControls()
     private var mirroredKeys: Set<String> = []
     private var mirrorClock = LiveActivityClock()
     /// Mirrored activity id → the menu bar item it came from. Clicking one presses that item;
@@ -134,7 +135,7 @@ final class AppModel {
     // MARK: Lifecycle
 
     func start() {
-        Haptics.mode = settings.hapticFeedback ? settings.hapticsMode : .off
+        Haptics.mode = settings.hapticsMode
         media.disabled = Set(settings.disabledMediaSources)
         shelfService.onChange = { [weak self] s in self?.shelf = s }
 
@@ -242,6 +243,7 @@ final class AppModel {
     }
 
     func stop() {
+        releaseKeepAwake()
         guard server != nil else { return }
         server?.stop()
         APIDiscoveryStore.remove()
@@ -407,7 +409,7 @@ final class AppModel {
         settings = fresh
         media.disabled = Set(fresh.disabledMediaSources)
         clipboard.limit = fresh.clipboardLimit
-        Haptics.mode = fresh.hapticFeedback ? fresh.hapticsMode : .off
+        Haptics.mode = fresh.hapticsMode
         applyTiming()
         startEventSources()
         NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
@@ -433,7 +435,8 @@ final class AppModel {
             batteryEvent: batteryEvent,
             isExpanded: expandedScreen == display || (isDraggingFile && expandedScreen == display),
             isSuppressed: suppressed && expandedScreen != display,
-            showPausedMedia: settings.showPausedMedia
+            showPausedMedia: settings.showPausedMedia,
+            focusedActivityID: controls.focusedActivityID
         )
         return Presenter.present(inputs)
     }
@@ -527,6 +530,8 @@ final class AppModel {
 
     private func ingestBattery(_ s: BatteryState) {
         battery = s
+        keepAwakeBatteryChanged(s)
+        batteryDetector.configure(with: settings)
         if let ev = batteryDetector.ingest(s, now: Date()) {
             if ev.kind != .lowPowerOn && ev.kind != .lowPowerOff { batteryEvent = ev }
             let batterySettings = URL(string: "x-apple.systempreferences:com.apple.Battery-Settings.extension")
@@ -548,6 +553,8 @@ final class AppModel {
                 ))
             case .pluggedIn:
                 remove(activityID: "battery-low")
+            case .charged:
+                announceCharged(s)
             default:
                 break
             }
@@ -751,7 +758,10 @@ final class AppModel {
     }
 
     func perform(_ action: ActivityAction, activityID: String) {
-        if let url = action.url { NSWorkspace.shared.open(url) }
+        if let url = action.url {
+            // Islet's own links (keep awake's Turn Off, for one) are handled here, not via Launch Services.
+            if url.scheme == "islet" { AppActions.handle(url: url, model: self) } else { NSWorkspace.shared.open(url) }
+        }
         if action.dismiss ?? true { remove(activityID: activityID) }
     }
 
@@ -759,6 +769,7 @@ final class AppModel {
 
     @discardableResult
     func send(_ command: PlaybackCommand, position: Double? = nil) -> Bool {
+        if let routed = sendControl(command, position: position) { return routed }
         // The bridge controls whatever macOS considers "now playing" without Automation prompts.
         if systemMedia.isRunning, systemMedia.send(command, position: position) { return true }
         guard let np = nowPlaying else { return false }
@@ -808,9 +819,10 @@ final class AppModel {
         let now = Date()
         nowPlaying = NowPlaying(
             source: .spotify, bundleID: "com.spotify.client", appName: "Spotify", title: "Midnight City",
-            artist: "M83", album: "Hurry Up, We're Dreaming", isPlaying: true, duration: 243, elapsed: 71, timestamp: now
+            artist: "M83", album: "Hurry Up, We're Dreaming", isPlaying: true, duration: 243, elapsed: 71, timestamp: now,
+            shuffle: true, repeatMode: .off
         )
-        battery = BatteryState(level: 76, isCharging: true, isPluggedIn: true, minutesRemaining: 48)
+        battery = BatteryState(level: 76, isCharging: true, isPluggedIn: true, minutesRemaining: 48, adapterWatts: 96)
         reminders = [
             ReminderItem(id: "r1", title: "Send the invoice", due: now.addingTimeInterval(-1800), listColor: "#FF9F0A", listTitle: "Work", priority: 1),
             ReminderItem(id: "r2", title: "Book dentist", due: now.addingTimeInterval(5400), listColor: "#0A84FF", listTitle: "Personal"),

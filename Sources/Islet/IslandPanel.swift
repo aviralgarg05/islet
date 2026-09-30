@@ -51,8 +51,10 @@ final class IslandWindowController {
         )
         panel = IslandPanel(frame: NotchGeometry.windowFrame(for: descriptor, metrics: metrics))
         panel.sharingType = model.settings.hideFromScreenCapture ? .none : .readOnly
-        let host = NSHostingView(rootView: IslandView(model: model, display: display, metrics: metrics))
+        let host = IslandHostingView(rootView: IslandView(model: model, display: display, metrics: metrics))
         host.sizingOptions = []
+        let id = display
+        host.onSwipe = { [weak model] direction in model?.handleSwipe(direction, display: id) }
         panel.contentView = host
         panel.orderFrontRegardless()
     }
@@ -240,7 +242,9 @@ final class TriggerView: NSView {
     var onDragEnter: (() -> Void)?
     var onDragExit: (() -> Void)?
     var onDrop: (([URL]) -> Void)?
+    var onSwipe: ((SwipeDirection) -> Void)?
     private var area: NSTrackingArea?
+    private var swipes = SwipeRecognizer()
 
     private let fill = CAShapeLayer()
 
@@ -277,6 +281,9 @@ final class TriggerView: NSView {
 
     override func mouseEntered(with event: NSEvent) { onEnter?() }
     override func mouseDown(with event: NSEvent) { onClick?() }
+    override func scrollWheel(with event: NSEvent) {
+        if let direction = swipes.feed(ScrollSample(event)) { onSwipe?(direction) }
+    }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         onDragEnter?()
@@ -338,6 +345,7 @@ final class PointerCoordinator {
             let display = c.display
             c.trigger.view.onEnter = { [weak self] in self?.activate(from: display) }
             c.trigger.view.onClick = { [weak self] in self?.clicked(display) }
+            c.trigger.view.onSwipe = { [weak self] direction in self?.model.handleSwipe(direction, display: display) }
             c.trigger.view.onDragEnter = { [weak self] in self?.dragEntered(display) }
             c.trigger.view.onDragExit = { [weak self] in self?.model.setDraggingFile(false) }
             c.trigger.view.onDrop = { [weak self] urls in
@@ -430,6 +438,7 @@ final class PointerCoordinator {
         for other in controllers where other !== c { other.setInteractive(model.isDraggingFile && model.expandedScreen == other.display) }
 
         let inTrigger = c.hoverZone.contains(p) || (inIsland && !expandedHere)
+        if !inTrigger { model.controls.hoverOpenBlocked = false }
         if model.settings.hoverToOpen || expandedHere {
             let decision = intent.sample(point: p, now: now, inTrigger: inTrigger,
                                          inExpanded: expandedHere && c.expandedRect.insetBy(dx: -6, dy: -6).contains(p), isOpen: expandedHere)
@@ -450,9 +459,9 @@ final class PointerCoordinator {
     private func apply(_ d: HoverIntent.Decision, display: CGDirectDisplayID) {
         switch d {
         case .open:
-            if model.settings.hoverToOpen { model.setExpanded(display) }
+            if model.settings.hoverToOpen, !model.controls.hoverOpenBlocked { model.setExpanded(display) }
         case .close:
-            if !model.pinned, !model.isDraggingFile { model.setExpanded(nil) }
+            if !model.pinned, !model.isDraggingFile, !model.controls.holdsOpen { model.setExpanded(nil) }
             intent.reset()
         case .none:
             break

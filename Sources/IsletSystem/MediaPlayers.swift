@@ -83,19 +83,32 @@ public class ScriptablePlayerProvider {
     /// Send a transport command. Never launches the player.
     public func send(_ command: PlaybackCommand, position: Double? = nil) -> Bool {
         guard AppleScriptRunner.isRunning(bundleID) else { return false }
-        let verb: String
-        switch command {
-        case .play: verb = "play"
-        case .pause: verb = "pause"
-        case .togglePlayPause: verb = "playpause"
-        case .next: verb = "next track"
-        case .previous: verb = "previous track"
-        case .seek:
-            guard let position else { return false }
-            verb = "set player position to \(max(0, position))"
-        }
-        AppleScriptRunner.run("tell application id \"\(bundleID)\" to \(verb)")
+        guard let verb = Self.verb(for: command, position: position, bundleID: bundleID) else { return false }
+        AppleScriptRunner.run("tell application id \"\(bundleID)\"\n\(verb)\nend tell")
         return true
+    }
+
+    /// The AppleScript statements for a command. Pure, for tests.
+    static func verb(for command: PlaybackCommand, position: Double?, bundleID: String) -> String? {
+        let music = bundleID == "com.apple.Music"
+        switch command {
+        case .play: return "play"
+        case .pause: return "pause"
+        case .togglePlayPause: return "playpause"
+        case .next: return "next track"
+        case .previous: return "previous track"
+        case .seek:
+            guard let position else { return nil }
+            return "set player position to \(max(0, position))"
+        case .skipForward: return "set player position to (player position + \(Int(MediaSeek.skipInterval)))"
+        case .skipBackward: return "set player position to (player position - \(Int(MediaSeek.skipInterval)))"
+        case .toggleShuffle:
+            return music ? "set shuffle enabled to not shuffle enabled" : "set shuffling to not shuffling"
+        case .toggleRepeat:
+            return music
+                ? "if song repeat is off then\nset song repeat to all\nelse if song repeat is all then\nset song repeat to one\nelse\nset song repeat to off\nend if"
+                : "set repeating to not repeating"
+        }
     }
 
     static func string(_ info: [String: Any], _ key: String) -> String? {

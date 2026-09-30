@@ -106,6 +106,7 @@ enum AppActions {
             case .media(let cmd): model.send(cmd)
             case .focus(let name, let on): try model.applyLocal(FocusPill.activity(name: name, on: on))
             case .open: model.setExpanded(model.targetDisplay())
+            case .awake(let change): model.setKeepAwake(change, announce: true)
             case .close: model.setExpanded(nil)
             case .toggle: model.setExpanded(model.expandedScreen == nil ? model.targetDisplay() : nil)
             case .settings: openSettings()

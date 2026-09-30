@@ -5,8 +5,11 @@
 // Now Playing state as JSON lines on stdout. Commands arrive as lines on stdin:
 //
 //   get                 emit the current state now
-//   cmd <n>             MRMediaRemoteSendCommand(n)  (0 play, 1 pause, 2 toggle, 4 next, 5 previous)
+//   cmd <n>             MRMediaRemoteSendCommand(n)  (0 play, 1 pause, 2 toggle, 4 next, 5 previous,
+//                       6 toggle shuffle, 7 toggle repeat, 12 back 15 s, 13 forward 15 s)
 //   seek <seconds>      MRMediaRemoteSetElapsedTime
+//   shuffle <mode>      MRMediaRemoteSetShuffleMode  (1 off, 3 songs)
+//   repeat <mode>       MRMediaRemoteSetRepeatMode   (1 off, 2 one, 3 all)
 //
 // The process exits when stdin closes, so it never outlives the app.
 //
@@ -14,7 +17,8 @@
 //   {"type":"ready"}
 //   {"type":"nowPlaying","empty":true}
 //   {"type":"nowPlaying","title":…,"artist":…,"album":…,"duration":…,"elapsed":…,"rate":…,
-//    "timestamp":<unix>,"playing":bool,"bundleID":…,"appName":…,"artworkHash":…,"artwork":<base64 when changed>}
+//    "timestamp":<unix>,"playing":bool,"bundleID":…,"appName":…,"artworkHash":…,"artwork":<base64 when changed>,
+//    "shuffleMode":<int, when the player reports it>,"repeatMode":<int, when the player reports it>}
 //   {"type":"error","message":…}
 
 #import <Foundation/Foundation.h>
@@ -27,6 +31,7 @@ typedef void (*MRGetIsPlayingFn)(dispatch_queue_t, void (^)(BOOL));
 typedef void (*MRGetClientFn)(dispatch_queue_t, void (^)(id));
 typedef Boolean (*MRSendCommandFn)(int, NSDictionary *);
 typedef void (*MRSetElapsedFn)(double);
+typedef void (*MRSetModeFn)(int);
 
 static void *gMR;
 static MRGetInfoFn gGetInfo;
@@ -35,6 +40,8 @@ static MRGetIsPlayingFn gIsPlaying;
 static MRGetClientFn gGetClient;
 static MRSendCommandFn gSend;
 static MRSetElapsedFn gSetElapsed;
+static MRSetModeFn gSetShuffle;
+static MRSetModeFn gSetRepeat;
 static dispatch_queue_t gQueue;
 static NSUInteger gLastArtworkHash;
 static BOOL gPending;
@@ -88,6 +95,10 @@ static void FetchAndEmit(void) {
                 if ([duration isKindOfClass:NSNumber.class]) out[@"duration"] = duration;
                 if ([elapsed isKindOfClass:NSNumber.class]) out[@"elapsed"] = elapsed;
                 if ([rate isKindOfClass:NSNumber.class]) out[@"rate"] = rate;
+                NSNumber *shuffle = info[MRConst("kMRMediaRemoteNowPlayingInfoShuffleMode", @"kMRMediaRemoteNowPlayingInfoShuffleMode")];
+                NSNumber *repeat = info[MRConst("kMRMediaRemoteNowPlayingInfoRepeatMode", @"kMRMediaRemoteNowPlayingInfoRepeatMode")];
+                if ([shuffle isKindOfClass:NSNumber.class]) out[@"shuffleMode"] = shuffle;
+                if ([repeat isKindOfClass:NSNumber.class]) out[@"repeatMode"] = repeat;
                 out[@"timestamp"] = @([stamp isKindOfClass:NSDate.class] ? stamp.timeIntervalSince1970 : NSDate.date.timeIntervalSince1970);
                 out[@"playing"] = @(playing);
 
@@ -136,8 +147,16 @@ static void ReadCommands(void) {
             int n = parts[1].intValue;
             Boolean ok = gSend(n, nil);
             Emit(@{@"type": @"ack", @"command": @(n), @"ok": @(ok)});
+            // Mode and skip commands don't always post a change notification.
+            if (n >= 6) ScheduleFetch();
         } else if ([parts[0] isEqualToString:@"seek"] && parts.count > 1 && gSetElapsed) {
             gSetElapsed(parts[1].doubleValue);
+            ScheduleFetch();
+        } else if ([parts[0] isEqualToString:@"shuffle"] && parts.count > 1) {
+            if (gSetShuffle) gSetShuffle(parts[1].intValue); else if (gSend) gSend(6, nil);
+            ScheduleFetch();
+        } else if ([parts[0] isEqualToString:@"repeat"] && parts.count > 1) {
+            if (gSetRepeat) gSetRepeat(parts[1].intValue); else if (gSend) gSend(7, nil);
             ScheduleFetch();
         }
     }
@@ -159,6 +178,8 @@ void islet_mediaremote_main(void *interp, void *cv) {
         gGetClient = (MRGetClientFn)dlsym(gMR, "MRMediaRemoteGetNowPlayingClient");
         gSend = (MRSendCommandFn)dlsym(gMR, "MRMediaRemoteSendCommand");
         gSetElapsed = (MRSetElapsedFn)dlsym(gMR, "MRMediaRemoteSetElapsedTime");
+        gSetShuffle = (MRSetModeFn)dlsym(gMR, "MRMediaRemoteSetShuffleMode");
+        gSetRepeat = (MRSetModeFn)dlsym(gMR, "MRMediaRemoteSetRepeatMode");
         if (!gGetInfo || !gRegister || !gIsPlaying || !gGetClient) {
             Emit(@{@"type": @"error", @"message": @"MediaRemote symbols missing"});
             exit(3);

@@ -540,6 +540,8 @@ struct ActivityTrailing: View {
                     .font(.system(size: size, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(tint)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                     .contentTransition(.numericText(countsDown: activity.endsAt != nil))
             }
         } else if let text = activity.trailingText(now: Date()), activity.trailing != nil || activity.progress == nil {
@@ -568,7 +570,10 @@ enum BatteryGlyph {
 
     static func label(_ ev: BatteryEvent) -> String {
         switch ev.kind {
-        case .pluggedIn: return ev.state.isCharging ? "Charging" : "Connected"
+        case .pluggedIn:
+            let label = ev.state.isCharging ? "Charging" : "Connected"
+            return ev.state.adapterWatts.map { "\(label) · \($0) W" } ?? label
+        case .charged: return "Charged to \(ev.state.level)%"
         case .unplugged: return "On battery"
         case .full: return "Fully charged"
         case .low, .critical: return "Low battery"

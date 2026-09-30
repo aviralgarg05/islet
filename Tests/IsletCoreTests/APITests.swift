@@ -9,6 +9,7 @@ actor FakeBackend: IsletBackend {
     var media: NowPlaying?
     var commands: [PlaybackCommand] = []
     var expanded = false
+    var awake: KeepAwakeSession?
     let now: Date
 
     init(now: Date) { self.now = now }
@@ -28,6 +29,14 @@ actor FakeBackend: IsletBackend {
         StateSnapshot(version: "test", presentation: "idle", activities: center.ordered(now: now), nowPlaying: nil, battery: nil)
     }
     func menuBarItems() async -> [MenuBarItemInfo] { [] }
+    func keepAwake(_ change: KeepAwakeChange?) async -> KeepAwakeStatus {
+        switch change {
+        case .start(let minutes)?: awake = KeepAwakeSession(since: now, until: minutes.map { now.addingTimeInterval($0 * 60) })
+        case .stop?: awake = nil
+        case nil: break
+        }
+        return KeepAwake.status(awake, now: now)
+    }
 }
 
 @Suite struct HTTPParserTests {

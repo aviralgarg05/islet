@@ -16,7 +16,9 @@ USAGE
   isletctl timer <5m|90s|1h> [--title T]
   isletctl run [--title T] -- <command…>   show a command's progress and result in the notch
   isletctl hud <volume|brightness|keyboardBrightness> <0-1>
-  isletctl media <play|pause|playpause|next|previous>
+  isletctl media <play|pause|playpause|next|previous|forward|rewind|shuffle|repeat>
+  isletctl media seek <90s|2m>          jump to a position in the track
+  isletctl awake [15m|1h|2h|on|off|status]   keep the Mac awake (default: until turned off)
   isletctl focus <name> [on|off]       show a Focus change (for Shortcuts automations)
   isletctl open | close                expand or collapse the island
   isletctl hook <claude|codex|AGENT> [JSON]   forward an agent hook payload (stdin or last arg)
@@ -253,11 +255,37 @@ func run(_ argv: [String]) async throws -> Int32 {
 
     case "media":
         let map = ["play": "play", "pause": "pause", "playpause": "togglePlayPause", "toggle": "togglePlayPause",
-                   "next": "next", "previous": "previous", "prev": "previous"]
+                   "next": "next", "previous": "previous", "prev": "previous",
+                   "forward": "skipForward", "rewind": "skipBackward", "shuffle": "toggleShuffle", "repeat": "toggleRepeat"]
+        if a.positional.first?.lowercased() == "seek" {
+            guard a.positional.count == 2 else { throw CLIError("usage: isletctl media seek <90s|2m>") }
+            let body: [String: Any] = ["command": "seek", "position": try parseDuration(a.positional[1])]
+            try expectOK(try await Client.discover().send("POST", "/v1/media/command", json: try JSONSerialization.data(withJSONObject: body)))
+            return 0
+        }
         guard let name = a.positional.first, let cmd = map[name.lowercased()] else {
-            throw CLIError("usage: isletctl media <play|pause|playpause|next|previous>")
+            throw CLIError("usage: isletctl media <play|pause|playpause|next|previous|forward|rewind|shuffle|repeat|seek>")
         }
         try expectOK(try await Client.discover().send("POST", "/v1/media/command", json: Data("{\"command\":\"\(cmd)\"}".utf8)))
+        return 0
+
+    case "awake":
+        let arg = a.positional.first ?? "on"
+        if arg.lowercased() == "status" {
+            try expectOK(try await Client.discover().send("GET", "/v1/awake"), print: true)
+            return 0
+        }
+        guard let change = KeepAwake.parse(arg) else {
+            throw CLIError("usage: isletctl awake [15m|1h|2h|on|off|status] (up to 24h)")
+        }
+        let client = try Client.discover()
+        switch change {
+        case .stop:
+            try expectOK(try await client.send("DELETE", "/v1/awake"), print: true)
+        case .start(let minutes):
+            let body: [String: Any] = ["minutes": minutes ?? 0]
+            try expectOK(try await client.send("POST", "/v1/awake", json: try JSONSerialization.data(withJSONObject: body)), print: true)
+        }
         return 0
 
     case "focus":

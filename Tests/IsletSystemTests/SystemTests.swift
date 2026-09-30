@@ -22,6 +22,7 @@ actor MemoryBackend: IsletBackend {
         StateSnapshot(version: "t", presentation: "idle", activities: [], nowPlaying: nil, battery: nil)
     }
     func menuBarItems() async -> [MenuBarItemInfo] { [] }
+    func keepAwake(_ change: KeepAwakeChange?) async -> KeepAwakeStatus { KeepAwakeStatus(active: false) }
 }
 
 func startServer(lan: Bool = false, limit: Int? = nil) async throws -> (LocalAPIServer, UInt16) {

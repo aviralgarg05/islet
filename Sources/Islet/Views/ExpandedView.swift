@@ -59,12 +59,16 @@ struct ExpandedView: View {
                 if model.micInUse { Circle().fill(.orange).frame(width: 6, height: 6).help("Microphone in use") }
                 if let b = model.battery {
                     HStack(spacing: 3) {
-                        Text("\(b.level)%").font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit()
-                            .lineLimit(1).fixedSize()
+                        // The narrowest island has no room for the number next to the keep-awake cup.
+                        if metrics.expanded.width >= 500 || b.level <= model.settings.batteryLowThreshold {
+                            Text("\(b.level)%").font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit()
+                                .lineLimit(1).fixedSize()
+                        }
                         Image(systemName: BatteryGlyph.symbol(b)).font(.system(size: 12))
                     }
-                    .foregroundStyle(b.level <= 20 && !b.isPluggedIn ? Color.red : Color.islandSecondary)
+                    .foregroundStyle(b.level <= model.settings.batteryLowThreshold && !b.isPluggedIn ? Color.red : Color.islandSecondary)
                 }
+                KeepAwakeButton(model: model)
                 Button {
                     Haptics.play(.snap)
                     model.pinned.toggle()
@@ -116,7 +120,7 @@ struct HomeTab: View {
         let rowsThatFit = max(1, Int((height - (event == nil ? 0 : 48)) / 48))
         HStack(alignment: .top, spacing: 16) {
             if let np = model.nowPlaying, model.settings.mediaEnabled {
-                NowPlayingCard(model: model, media: np)
+                NowPlayingCard(model: model, media: np, height: height)
                     .frame(width: cardWidth)
             } else {
                 TodayCard(model: model).frame(width: cardWidth)
@@ -143,47 +147,6 @@ struct HomeTab: View {
     }
 }
 
-struct NowPlayingCard: View {
-    let model: AppModel
-    let media: NowPlaying
-
-    var body: some View {
-        let accent = model.mediaAccent(media)
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                ArtworkView(media: media, size: 48, corner: 10)
-                    .onTapGesture { model.openPlayer() }
-                    .help("Open \(media.appName ?? "player")")
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(media.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
-                    Text(media.artist ?? media.appName ?? "").font(.system(size: 11.5)).foregroundStyle(Color.islandSecondary).lineLimit(1)
-                }
-                Spacer(minLength: 0)
-            }
-            if media.duration != nil {
-                TimelineView(.periodic(from: .now, by: media.isPlaying ? 1 : 3600)) { ctx in
-                    let pos = media.position(at: ctx.date) ?? 0
-                    HStack(spacing: 6) {
-                        Text(Format.clock(pos))
-                        LevelBar(value: media.fraction(at: ctx.date) ?? 0, tint: accent, height: 4)
-                        Text("-" + Format.clock(max(0, (media.duration ?? 0) - pos)))
-                    }
-                    .font(.system(size: 9.5, weight: .medium, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(Color.islandTertiary)
-                }
-            }
-            HStack(spacing: 14) {
-                Spacer()
-                PillButton(symbol: "backward.fill", size: 12) { model.send(.previous) }
-                PillButton(symbol: media.isPlaying ? "pause.fill" : "play.fill", size: 16) { model.send(.togglePlayPause) }
-                PillButton(symbol: "forward.fill", size: 12) { model.send(.next) }
-                Spacer()
-            }
-        }
-    }
-}
-
 struct TodayCard: View {
     let model: AppModel
 
@@ -201,8 +164,8 @@ struct TodayCard: View {
                     HStack(spacing: 6) {
                         Image(systemName: BatteryGlyph.symbol(b))
                         Text("\(b.level)%")
-                        if let t = Format.batteryTime(minutes: b.minutesRemaining) {
-                            Text(b.isCharging ? "· full in \(t)" : "· \(t) left").foregroundStyle(Color.islandTertiary)
+                        if let detail = b.detail {
+                            Text("· " + detail).foregroundStyle(Color.islandTertiary).lineLimit(1)
                         }
                     }
                     .font(.system(size: 12, weight: .medium))
@@ -669,8 +632,8 @@ struct StatsTab: View {
                   detail: model.stats.map { "\(Format.bytes(Int64($0.memoryUsed))) of \(Format.bytes(Int64($0.memoryTotal)))" } ?? "–", tint: .purple)
             if let b = model.battery {
                 Gauge(title: b.isCharging ? "Charging" : "Battery", value: Double(b.level) / 100,
-                      detail: Format.batteryTime(minutes: b.minutesRemaining).map { b.isCharging ? "full in \($0)" : "\($0) left" } ?? "\(b.level)%",
-                      tint: b.level <= 20 && !b.isPluggedIn ? .red : .green)
+                      detail: b.detail ?? "\(b.level)%",
+                      tint: b.level <= model.settings.batteryLowThreshold && !b.isPluggedIn ? .red : .green)
             }
             Spacer()
         }
