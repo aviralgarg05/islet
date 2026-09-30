@@ -120,7 +120,7 @@ struct HomeTab: View {
                 TodayCard(model: model).frame(width: cardWidth)
             }
             VStack(alignment: .leading, spacing: 6) {
-                if let event { EventRow(item: event) }
+                if let event { EventRow(item: event, theme: model.settings.theme) }
                 let acts = model.activities
                 if acts.isEmpty && event == nil {
                     EmptyHint(symbol: "sparkles", text: "Live activities from scripts, agents and CI appear here.",
@@ -212,6 +212,7 @@ struct TodayCard: View {
 
 struct EventRow: View {
     let item: AgendaItem
+    var theme: IslandTheme = .black
 
     var body: some View {
         TimelineView(.everyMinute) { ctx in
@@ -231,7 +232,7 @@ struct EventRow: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.islandFill))
+            .islandCard(theme)
         }
     }
 }
@@ -270,7 +271,7 @@ struct ActivityRow: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.islandFill))
+        .islandCard(model.settings.theme)
         .onHover { hovering = $0 }
     }
 }
@@ -453,7 +454,7 @@ struct PluginCard: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.islandFill))
+        .islandCard(model.settings.theme)
     }
 }
 

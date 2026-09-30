@@ -102,9 +102,44 @@ extension IslandTheme {
         case (.graphite, true):
             shape.fill(Color(white: 0.105)).overlay(shape.stroke(Color.white.opacity(0.08), lineWidth: 1))
         case (.glass, true):
-            shape.fill(.ultraThinMaterial).overlay(shape.fill(Color.black.opacity(0.42))).overlay(shape.stroke(Color.white.opacity(0.12), lineWidth: 1))
+            GlassSurface(shape: shape, tint: Color.black.opacity(0.5))
         default:
             shape.fill(Color.black)
+        }
+    }
+}
+
+/// Liquid Glass on macOS 26 and later, a blurred material before that, and a solid fill when
+/// Reduce Transparency is on or when rendering offline snapshots.
+struct GlassSurface<S: Shape>: View {
+    let shape: S
+    var tint: Color = .clear
+    var fallback: Color = Color(white: 0.09)
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.snapshotMode) private var snapshotMode
+
+    var body: some View {
+        if reduceTransparency || snapshotMode {
+            shape.fill(fallback)
+        } else if #available(macOS 26, *) {
+            Color.clear.glassEffect(.regular.tint(tint), in: shape)
+        } else {
+            shape.fill(.ultraThinMaterial).overlay(shape.fill(tint))
+        }
+    }
+}
+
+extension View {
+    /// Background for a card inside the expanded island: glass with the Glass theme,
+    /// a faint fill otherwise.
+    func islandCard(_ theme: IslandTheme, cornerRadius: CGFloat = 12) -> some View {
+        background {
+            let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            if theme == .glass {
+                GlassSurface(shape: shape, tint: Color.white.opacity(0.04), fallback: Color.islandFill)
+            } else {
+                shape.fill(Color.islandFill)
+            }
         }
     }
 }
