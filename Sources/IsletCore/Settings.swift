@@ -167,6 +167,10 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var smartIcons = true
     /// Use on-device Apple Intelligence (when available) for icons and one-line summaries.
     public var aiAssist = true
+    /// Sound when a timer ends: a system sound name ("Glass", "Ping", …) or "none".
+    public var timerSound = "Glass"
+    /// Pomodoro lengths in minutes and how often the long break comes.
+    public var pomodoro = PomodoroSchedule()
 
     // Integrations
     public var apiEnabled = true
