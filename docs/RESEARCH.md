@@ -102,7 +102,7 @@ Islet adopts the same contract so it feels familiar and could bridge to a Mac Ac
 | Focus | Shortcuts automation → `islet://focus` (no public read API) | none | B |
 | On-device AI | Foundation Models (`LanguageModelSession`), weak-linked; plain prompts (the `@Generable` macro needs Xcode) | Apple Intelligence | B (model reported `modelNotReady` on this Mac, so fallback rules are the default) |
 | Fullscreen | Window list: front app spans the display *and* no menu-bar window there (handles below-notch fullscreen) | none | B |
-| Packaging | SwiftPM + script-assembled bundle; works with Command Line Tools only. macOS 27 SDK turns `@State` into a macro whose plugin only ships with Xcode, so Islet uses the property wrapper type directly. | — | — |
+| Packaging | SwiftPM + script-assembled bundle; works with Command Line Tools only. macOS 27 SDK turns `@State` into a macro whose plugin only ships with Xcode, so Islet uses the property wrapper type directly. | n/a | n/a |
 
 ## 6. Connecting to every app (report 05)
 

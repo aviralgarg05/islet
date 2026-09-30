@@ -1,35 +1,35 @@
 # Islet as an MCP server
 
-`isletctl mcp` runs a small [Model Context Protocol](https://modelcontextprotocol.io) server over stdio. An agent or chat app that supports MCP can then put things in the notch by calling tools, with no hooks to install. Islet has to be running; the server forwards each call to its local API using the same token as `isletctl`.
+`isletctl mcp` runs a small [Model Context Protocol](https://modelcontextprotocol.io) server over stdio. An agent or chat app that supports MCP can then put things in the notch by calling tools, with no hooks to install. The server forwards each call to Islet's local API using the same token as `isletctl`, so Islet has to be running. If it isn't, the tool call fails and tells the model nothing was shown.
 
 ## Tools
 
 | Tool | What it does |
 |---|---|
-| `notify` | A short message for a few seconds (`title`, optional `subtitle`, `icon` as an SF Symbol name, `seconds`). |
-| `show_progress` | Creates or updates a live activity for a longer task (`id`, `title`, optional `subtitle`, `progress` 0–1, or `step` and `steps`). Without progress it shows a spinner. |
-| `finish` | Marks that task done or failed (`id`, `success`, optional `subtitle`). It stays briefly, then goes. |
-| `dismiss` | Removes an activity (`id`). |
-| `start_timer` | A countdown (`duration` like `90s`, `5m`, `1h`, optional `title`). |
-| `list_activities` | What the notch is showing now. |
+| `notify` | Shows a short message (`title`, optional `subtitle`, `icon` as an SF Symbol name, and `seconds` on screen: 6 by default, at most 60). |
+| `show_progress` | Creates or updates a live activity for a longer task (`id`, `title`, optional `subtitle`, and `progress` from 0 to 1 or `step` and `steps`). With neither `progress` nor `steps` it shows a spinner. Call it again with the same `id` to update it. |
+| `finish` | Marks that task done or failed (`id`, `success`, optional `subtitle`). A success stays for 12 seconds, a failure for a minute. |
+| `dismiss` | Removes an activity made through MCP (`id`). |
+| `start_timer` | Starts a countdown of up to 24 hours (`duration`, optional `title`). `duration` can be `90s`, `1h 30m`, `half an hour`, `tea 4m` or `at 18:30`; a bare number means minutes. Without a `title`, the words around the duration become the title. |
+| `list_activities` | Lists the activities in the notch (id, title and state), including ones Islet or other apps made. Live Activities mirrored from the menu bar are left out unless **Let scripts read them through the local API** is on (Settings → Modules). |
 
-Activities made this way get ids starting with `mcp-`, so a tool call can't replace one made by Islet itself or another app. A task that gets no update for 15 minutes is dimmed.
+The server adds `mcp-` to the front of every id, so a tool call can't replace an activity made by Islet itself or another app. `list_activities` shows the full id, but `finish` and `dismiss` take the one you gave `show_progress`, without the prefix. A task stays until it's finished or dismissed; one that gets no update for 15 minutes dims.
 
 ## Setting it up
 
-Use the full path to `isletctl` inside the app, since these apps don't read your shell's `PATH`:
+Use the full path to `isletctl` inside the app. It's only on your `PATH` if you linked it (see [API.md](API.md#isletctl)), and apps opened from the Dock may not see your shell's `PATH`. If Islet isn't in `/Applications`, change the path to match.
 
 ```text
 /Applications/Islet.app/Contents/MacOS/isletctl
 ```
 
-**Claude Code**
+**Claude Code** (`--scope user` makes it available in every project):
 
 ```bash
 claude mcp add --scope user islet -- /Applications/Islet.app/Contents/MacOS/isletctl mcp
 ```
 
-**Claude Desktop**: add this to `~/Library/Application Support/Claude/claude_desktop_config.json`, then restart it.
+**Claude Desktop**: add this to `~/Library/Application Support/Claude/claude_desktop_config.json`, then restart Claude Desktop.
 
 ```json
 {
@@ -47,7 +47,7 @@ command = "/Applications/Islet.app/Contents/MacOS/isletctl"
 args = ["mcp"]
 ```
 
-**Cursor**: in `~/.cursor/mcp.json`, the same `mcpServers` block as Claude Desktop.
+**Cursor**: in `~/.cursor/mcp.json` (or a project's `.cursor/mcp.json`), the same `mcpServers` block as Claude Desktop.
 
 Then ask for it in plain words, for example "show your progress in the notch as you go" or "start a 20 minute timer in the notch".
 

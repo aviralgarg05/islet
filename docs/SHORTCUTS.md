@@ -18,7 +18,7 @@ The fix is to run that one step on a build machine that has Xcode and ship the f
 
 - Islet must be running. The `islet://` links need no setup.
 - To talk to a shortcut, turn Siri on in System Settings.
-- For the recipes that use **Run Shell Script**, open Shortcuts → Settings → Advanced and tick **Allow Running Scripts**. Use the full path to the command, because shortcuts don't read your shell profile: `/Applications/Islet.app/Contents/MacOS/isletctl`.
+- For the recipes that use **Run Shell Script**, open Shortcuts → Settings → Advanced and tick **Allow Running Scripts**. Use the full path to the command, because shortcuts don't read your shell profile: `/Applications/Islet.app/Contents/MacOS/isletctl` (change the start if Islet isn't in Applications).
 
 To make a shortcut: open Shortcuts, choose File → New Shortcut, click the name at the top to rename it, then search for each action in the panel on the right and drag it in.
 
@@ -45,9 +45,10 @@ Say "Hey Siri, notch timer", then answer:
 | "half an hour" | 30:00 |
 | "an hour and a half" | 1:30:00 |
 | "at 6 pm" | until the next 18:00 |
+| "remind me to call mum at 6 pm" | Call mum, until the next 18:00 |
 | "25" | 25:00 (a number on its own means minutes) |
 
-The words that aren't part of the length become the timer's name. Clock times always mean the next time that clock shows, so "at 6 pm" at 19:00 means tomorrow. Timers run for up to 24 hours.
+The words that aren't part of the length become the timer's name, minus openers such as "set a timer" and "remind me to". Clock times always mean the next time that clock shows, so "at 6 pm" said at 19:00 means 18:00 tomorrow, and "at 6" means whichever of 6:00 and 18:00 comes first. Timers run for up to 24 hours. If Islet can't find a length in the answer, the link does nothing; the [`isletctl` version](#using-isletctl-instead-of-links) tells you why.
 
 ### A fixed timer
 
@@ -60,22 +61,25 @@ Say "Hey Siri, tea timer".
 
 ### Stop, snooze, pause
 
-Each of these is one **Open URLs** action. Without an `id`, the command goes to the timer that is ringing, or else the one started most recently.
+A timer that ends rings in the island with **Stop**, **Snooze 5 min** and **Restart** buttons. These shortcuts do the same by voice, and each is one **Open URLs** action. Without an `id`, the command goes to the timer that is ringing, or else the one started most recently (which can be the Pomodoro).
 
 | Shortcut name (suggestion) | URL |
 |---|---|
 | Stop Notch Timer | `islet://timer?action=stop` |
-| Snooze Notch Timer | `islet://timer?action=snooze` (5 more minutes) |
+| Snooze Notch Timer | `islet://timer?action=snooze` (5 more minutes; add `&in=10m` for another length) |
 | Pause Notch Timer | `islet://timer?action=pause` |
 | Resume Notch Timer | `islet://timer?action=resume` |
+| Restart Notch Timer | `islet://timer?action=restart` (from its full length) |
 | Add a Minute | `islet://timer?action=add&in=1m` |
+
+To aim at one timer, add `&id=` with its id (`timer-1`), its number (`1`) or its title (`Tea`), for example `islet://timer?action=stop&id=Tea`. A title only works while exactly one timer has it.
 
 ### Pomodoro
 
 1. New shortcut, named **Pomodoro**.
 2. Add **Open URLs** with `islet://pomodoro?action=toggle`.
 
-"Hey Siri, Pomodoro" starts 25 minutes of focus, and saying it again stops it. Islet moves on to a 5-minute break, then the next round, with a 15-minute break after every fourth. Change the lengths in Settings → Modules → Timers.
+"Hey Siri, Pomodoro" starts 25 minutes of focus, and saying it again stops it. When the focus ends, Islet moves on to a 5-minute break and then the next round; every fourth break is 15 minutes. Those are the defaults: change them in Settings → Modules → Timers. For separate start and stop shortcuts, use `action=start` and `action=stop`.
 
 ---
 
@@ -89,15 +93,17 @@ Shortcuts' **Use Model** action (macOS 26 and later) sends a prompt to the on-de
 4. Add **URL Encode**, set to Encode, with the model's *Response* as its input.
 5. Add **Open URLs** with `islet://notify?icon=sf:sparkles&ttl=20&title=` and then insert the *URL Encoded Text* variable after the last `=`.
 
-Say "Hey Siri, ask the notch". The answer pops out of the notch, then stays on the island's Home tab for 20 seconds. The island has room for about one short sentence, so for longer answers add **Show Result** as well.
+Say "Hey Siri, ask the notch". The answer pops out of the notch, then stays on the island's Home tab until 20 seconds after it arrived (`ttl=20`). The island has room for about one short sentence, so for longer answers add **Show Result** as well.
 
 **Use Model** needs Apple Intelligence turned on, and the on-device model needs to have finished downloading. If the model you picked isn't available, the shortcut stops at that step and nothing reaches Islet.
+
+To use Islet's own Ask box instead, skip **Use Model**, URL-encode *Provided Input*, and open `islet://ask?provider=on-device&q=` with the *URL Encoded Text* after the last `=`. The island opens on the Ask box with the question filled in, and you press Return to send it: a link never sends a question by itself. `provider` also takes `claude`, `chatgpt`, `claude-code` and `codex`; leave it out to keep the one the Ask box is using. See [AI.md](AI.md#islet-ask).
 
 ---
 
 ## Using `isletctl` instead of links
 
-**Run Shell Script** reports errors back to Shortcuts, which an `islet://` link can't do: if Islet can't read the length, Shortcuts shows the reason.
+**Run Shell Script** reports errors back to Shortcuts, which an `islet://` link can't do: if Islet can't read the length, or isn't running, Shortcuts shows the reason.
 
 1. New shortcut, named **Notch Timer**.
 2. Add **Ask for Input** as above.
@@ -115,7 +121,7 @@ Other commands work the same way:
 /Applications/Islet.app/Contents/MacOS/isletctl pomodoro toggle
 ```
 
-`isletctl timer` prints the new timer's id (`timer-1`, `timer-2`, …), which `pause`, `resume`, `stop` and `add` accept. A bare number means seconds here (`isletctl timer 300`), as it always has; write `5m` for minutes.
+`isletctl timer` prints the new timer's id (`timer-1`, `timer-2`, …). `pause`, `resume`, `stop`, `restart`, `snooze` and `add` take that id, its number or the timer's title, and without one they act on the ringing or newest timer. A bare number means seconds here (`isletctl timer 300`), not minutes as in links: write `5m`, or answer "25 minutes" rather than "25".
 
 ---
 
@@ -123,5 +129,5 @@ Other commands work the same way:
 
 - **Your own phrases.** The shortcut's name is the phrase. Rename it to whatever you like saying.
 - **A key instead of your voice.** In a shortcut's details, **Add Keyboard Shortcut** runs it from anywhere.
-- **From the iPhone.** Shortcuts sync, but `islet://` links only work on the Mac. On the iPhone, use **Get Contents of URL** against Islet's local-network bridge: POST to `/v1/timer` with `{"in": "20m", "title": "Pizza"}`. See [iPhone → Mac](INTEGRATIONS.md#iphone).
-- **What a link can do.** `islet://` links can start and stop timers, show notifications, open or close the island and control playback. They can't approve anything, spend money or read anything back.
+- **From the iPhone.** Shortcuts sync, but `islet://` links only work on the Mac. Turn on the iPhone bridge in Islet's Settings → Integrations on the Mac, then on the iPhone use **Get Contents of URL** to POST `{"in": "20m", "title": "Pizza"}` to `/v1/timer` with the API token. See [iPhone → Mac](INTEGRATIONS.md#iphone).
+- **What a link can do.** `islet://` links can start and control timers and the Pomodoro, show notifications and activities, open or close the island, control playback, keep the Mac awake and fill in the Ask box. They can't approve anything, send a question, spend money or read anything back. Activities made by links get ids starting with `url-` (the prefix is added for you), `islet://dismiss` only removes those, and any web address attached to an activity must be https. The full list is in [API.md](API.md#islet-url-scheme).
