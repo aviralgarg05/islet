@@ -99,16 +99,13 @@ struct AppearanceSettings: View {
             }
             Section("Menu bar") {
                 Picker("Closed island", selection: $model.settings.closedLayout) {
-                    Text("Automatic").tag(ClosedLayoutPreference.auto)
-                    Text("Beside the notch").tag(ClosedLayoutPreference.wings)
-                    Text("Below the notch").tag(ClosedLayoutPreference.drop)
+                    Text("Fit the menu bar").tag(ClosedLayoutPreference.auto)
+                    Text("Always full width").tag(ClosedLayoutPreference.wings)
                 }
                 .pickerStyle(.segmented)
                 Text(model.settings.closedLayout == .auto
-                     ? "Sits beside the notch and fits itself to the free space in the menu bar, down to just an icon. It hangs below the notch only when there's no room at all."
-                     : model.settings.closedLayout == .wings
-                        ? "Always full width beside the notch. May cover menu bar icons close to it."
-                        : "Hangs just below the notch. The menu bar row is never covered.")
+                     ? "Sits beside the notch and shrinks to the free space in the menu bar, down to just an icon each side. On a very crowded menu bar that icon may overlap the nearest menu bar item."
+                     : "Sits beside the notch at the full width for the island size above. May cover menu bar icons close to the notch.")
                     .font(.caption).foregroundStyle(.secondary)
                 if model.settings.closedLayout == .auto && !MenuBarInspector.isAvailable {
                     HStack {

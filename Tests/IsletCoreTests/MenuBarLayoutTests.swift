@@ -7,43 +7,53 @@ import Testing
     // Measured on a 14" MacBook Pro running macOS 27: notch 663.5–848.5, first status item at 877.
     let notch = CGRect(x: 663.5, y: 950, width: 185, height: 32)
 
-    func decide(_ occupancy: MenuBarOccupancy?, preference: ClosedLayoutPreference = .auto, hasMenuBar: Bool = true) -> ClosedLayout {
-        MenuBarLayoutEngine.decide(preference: preference, notch: notch, preferredWing: 58, occupancy: occupancy, hasMenuBar: hasMenuBar)
+    func wing(_ occupancy: MenuBarOccupancy?, preference: ClosedLayoutPreference = .auto, hasMenuBar: Bool = true) -> CGFloat {
+        MenuBarLayoutEngine.wingWidth(preference: preference, notch: notch, preferredWing: 58, occupancy: occupancy, hasMenuBar: hasMenuBar)
     }
 
-    @Test func dropsOnlyWhenNotEvenAnIconFits() {
-        // 877 - 848.5 - 6 = 22.5 pt of room on the right: not even an icon fits.
-        #expect(decide(MenuBarOccupancy(leftObstacleMaxX: 396, rightObstacleMinX: 877)) == .drop)
-        // 30 pt: icon-only wings, still in the top row.
-        #expect(decide(MenuBarOccupancy(leftObstacleMaxX: 396, rightObstacleMinX: 884.5)) == .wings(left: 26, right: 26))
+    @Test func iconOnlyWingsWhenAValueDoesntFit() {
+        // 884.5 - 848.5 - 6 = 30 pt of room on the right: an icon, but no value.
+        #expect(wing(MenuBarOccupancy(leftObstacleMaxX: 396, rightObstacleMinX: 884.5)) == 26)
+        // Exactly the minimum still shows a value.
+        #expect(wing(MenuBarOccupancy(leftObstacleMaxX: 396, rightObstacleMinX: 888.5)) == 34)
+    }
+
+    @Test func staysBesideTheNotchWhenNotEvenAnIconFits() {
+        // 877 - 848.5 - 6 = 22.5 pt: the icon-only wings cover the edge of the first status item.
+        #expect(wing(MenuBarOccupancy(leftObstacleMaxX: 396, rightObstacleMinX: 877)) == 26)
+        // An item touching the notch, or measured overlapping it, changes nothing.
+        #expect(wing(MenuBarOccupancy(leftObstacleMaxX: 396, rightObstacleMinX: 848.5)) == 26)
+        #expect(wing(MenuBarOccupancy(leftObstacleMaxX: 700, rightObstacleMinX: 800)) == 26)
     }
 
     @Test func narrowsWingsToTheTighterSide() {
         // Right: 900 - 848.5 - 6 = 45.5; left: 663.5 - 400 - 6 is plenty. Both wings use 45.5.
-        #expect(decide(MenuBarOccupancy(leftObstacleMaxX: 400, rightObstacleMinX: 900)) == .wings(left: 45.5, right: 45.5))
+        #expect(wing(MenuBarOccupancy(leftObstacleMaxX: 400, rightObstacleMinX: 900)) == 45.5)
     }
 
     @Test func fullWingsWhenThereIsRoom() {
-        #expect(decide(MenuBarOccupancy(leftObstacleMaxX: 300, rightObstacleMinX: 1100)) == .wings(left: 58, right: 58))
-        #expect(decide(MenuBarOccupancy()) == .wings(left: 58, right: 58))
+        #expect(wing(MenuBarOccupancy(leftObstacleMaxX: 300, rightObstacleMinX: 1100)) == 58)
+        #expect(wing(MenuBarOccupancy()) == 58)
     }
 
-    @Test func longAppMenusForceDrop() {
-        #expect(decide(MenuBarOccupancy(leftObstacleMaxX: 650, rightObstacleMinX: 1100)) == .drop)
+    @Test func longAppMenusGiveIconOnlyWings() {
+        // 663.5 - 650 - 6 = 7.5 pt on the left.
+        #expect(wing(MenuBarOccupancy(leftObstacleMaxX: 650, rightObstacleMinX: 1100)) == 26)
     }
 
     @Test func unmeasuredMenuBarGetsNarrowWings() {
         // Stays in the top row, narrow enough to clear most apps' menus and status items.
-        #expect(decide(nil) == .wings(left: 36, right: 36))
+        #expect(wing(nil) == 36)
     }
 
     @Test func noMenuBarMeansNothingToCover() {
-        #expect(decide(nil, hasMenuBar: false) == .wings(left: 58, right: 58))
+        #expect(wing(nil, hasMenuBar: false) == 58)
+        #expect(wing(MenuBarOccupancy(rightObstacleMinX: 850), hasMenuBar: false) == 58)
     }
 
-    @Test func explicitPreferencesWin() {
-        #expect(decide(MenuBarOccupancy(rightObstacleMinX: 850), preference: .wings) == .wings(left: 58, right: 58))
-        #expect(decide(MenuBarOccupancy(), preference: .drop) == .drop)
+    @Test func alwaysFullWidthIgnoresTheMenuBar() {
+        #expect(wing(MenuBarOccupancy(rightObstacleMinX: 850), preference: .wings) == 58)
+        #expect(wing(nil, preference: .wings) == 58)
     }
 
     @Test func occupancyFromItemFrames() {
@@ -64,34 +74,48 @@ import Testing
         let o = MenuBarOccupancy.from(menuFrames: [CGRect(x: 30, y: 0, width: 442, height: 24)], statusFrames: hidden + visible,
                                       chevron: chevron, notch: notch)
         #expect(o.rightObstacleMinX == 897)
-        // 897 - 848.5 - 6 = 42.5 pt wings instead of dropping.
-        #expect(decide(o) == .wings(left: 42.5, right: 42.5))
-        // Without the chevron filter the stacked frames would force the dropped layout.
-        #expect(decide(MenuBarOccupancy.from(menuFrames: [], statusFrames: hidden + visible, notch: notch)) == .drop)
+        // 897 - 848.5 - 6 = 42.5 pt wings with an icon and a value.
+        #expect(wing(o) == 42.5)
+        // Without the chevron filter the stacked frames would leave room for an icon only.
+        #expect(wing(MenuBarOccupancy.from(menuFrames: [], statusFrames: hidden + visible, notch: notch)) == 26)
     }
 
-    @Test func revealedItemsLeftOfTheNotchForceDrop() {
+    @Test func chevronRightBesideTheNotchGivesIconOnlyWings() {
+        // The overflow chevron a few points from the notch: the island stays in the menu bar row
+        // and its icon-only wing overlaps the chevron's edge.
+        let chevron = CGRect(x: 856, y: 0, width: 17.5, height: 24)
+        let o = MenuBarOccupancy.from(menuFrames: [CGRect(x: 30, y: 0, width: 442, height: 24)], statusFrames: [],
+                                      chevron: chevron, notch: notch)
+        #expect(o.rightObstacleMinX == 856)
+        #expect(wing(o) == 26)
+    }
+
+    @Test func revealedItemsLeftOfTheNotchGiveIconOnlyWings() {
         // Revealing hidden items moves them to the left of the notch (x 512–644).
         let revealed = [CGRect(x: 582, y: 0, width: 38, height: 24), CGRect(x: 627, y: 0, width: 17, height: 24)]
         let o = MenuBarOccupancy.from(menuFrames: [CGRect(x: 30, y: 0, width: 442, height: 24)], statusFrames: revealed,
                                       chevron: CGRect(x: 897, y: 0, width: 17.5, height: 24), notch: notch)
         #expect(o.leftObstacleMaxX == 644)
-        #expect(decide(o) == .drop)
+        #expect(wing(o) == 26)
+    }
+
+    @Test func slackIsTheRoomLeftBeyondEachWing() {
+        let o = MenuBarOccupancy(leftObstacleMaxX: 400, rightObstacleMinX: 900)
+        let slack = MenuBarLayoutEngine.slack(notch: notch, occupancy: o, wing: 45.5)
+        // Left: 663.5 - 400 - 6 - 45.5; right: 900 - 848.5 - 6 - 45.5.
+        #expect(slack.left == 212)
+        #expect(slack.right == 0)
+        // Icon-only wings that overlap an item leave no room, never a negative amount.
+        #expect(MenuBarLayoutEngine.slack(notch: notch, occupancy: MenuBarOccupancy(rightObstacleMinX: 877), wing: 26).right == 0)
+        #expect(MenuBarLayoutEngine.slack(notch: notch, occupancy: MenuBarOccupancy(), wing: 26).left == .infinity)
     }
 
     @Test func smallWidthChangesAreIgnored() {
-        let now = Date()
-        #expect(MenuBarLayoutEngine.stabilise(current: .wings(left: 42.5, right: 42.5), next: .wings(left: 45, right: 45), lastSwitch: nil, now: now) == .keep)
-        #expect(MenuBarLayoutEngine.stabilise(current: .wings(left: 42.5, right: 42.5), next: .wings(left: 50, right: 50), lastSwitch: nil, now: now) == .apply)
-        #expect(MenuBarLayoutEngine.stabilise(current: .drop, next: .drop, lastSwitch: nil, now: now) == .keep)
-        #expect(MenuBarLayoutEngine.stabilise(current: nil, next: .drop, lastSwitch: nil, now: now) == .apply)
-    }
-
-    @Test func switchingLayoutsIsRateLimited() {
-        let now = Date()
-        let recent = now.addingTimeInterval(-0.4)
-        #expect(MenuBarLayoutEngine.stabilise(current: .drop, next: .wings(left: 42.5, right: 42.5), lastSwitch: recent, now: now) == .defer)
-        #expect(MenuBarLayoutEngine.stabilise(current: .drop, next: .wings(left: 42.5, right: 42.5), lastSwitch: now.addingTimeInterval(-2), now: now) == .apply)
+        #expect(!MenuBarLayoutEngine.shouldReplace(42.5, with: 45))
+        #expect(MenuBarLayoutEngine.shouldReplace(42.5, with: 50))
+        #expect(MenuBarLayoutEngine.shouldReplace(34, with: 26))
+        #expect(!MenuBarLayoutEngine.shouldReplace(26, with: 26))
+        #expect(MenuBarLayoutEngine.shouldReplace(nil, with: 26))
     }
 }
 

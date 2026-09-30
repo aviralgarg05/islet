@@ -80,6 +80,30 @@ private func writtenKeys(_ s: IsletSettings) throws -> Set<String> {
     }
 }
 
+@Suite struct ClosedLayoutMigrationTests {
+    @Test func oldDropLayoutLoadsAsAutomatic() {
+        // "drop" hung a pill below the notch. The island now always sits beside it.
+        let s = decode(#"{"closedLayout": "drop", "wingWidth": 60, "hoverToOpen": false}"#)
+        #expect(s.closedLayout == .auto)
+        // The other keys still load.
+        #expect(s.wingWidth == 60)
+        #expect(s.hoverToOpen == false)
+    }
+
+    @Test func oldDropLayoutIsNotWrittenBack() throws {
+        let s = decode(#"{"closedLayout": "drop"}"#)
+        let object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(s)) as? [String: Any]
+        #expect(object?["closedLayout"] as? String == "auto")
+        #expect(IsletSettings.decodeLenient(try JSONEncoder().encode(s)) == s)
+    }
+
+    @Test func remainingChoicesStillLoad() {
+        #expect(decode(#"{"closedLayout": "wings"}"#).closedLayout == .wings)
+        #expect(decode(#"{"closedLayout": "auto"}"#).closedLayout == .auto)
+        #expect(ClosedLayoutPreference.allCases == [.auto, .wings])
+    }
+}
+
 @Suite struct SettingsRangeTests {
     typealias Ranged = (WritableKeyPath<IsletSettings, Double>, ClosedRange<Double>)
     static var ranged: [Ranged] { [

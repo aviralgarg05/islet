@@ -2,10 +2,10 @@ import AppKit
 import IsletCore
 import SwiftUI
 
-// Live Activity templates (research report 07, §5): per-kind looks for the wings, the dropped
-// pill, the sneak peek, the bubble and the expanded row. Identity sits on the left and the one
-// changing value on the right. The island stays black; the tint colours only glyphs, rings,
-// bars and keylines. `progress` and unknown templates fall back to the generic views.
+// Live Activity templates (research report 07, §5): per-kind looks for the wings, the sneak
+// peek, the bubble and the expanded row. Identity sits on the left and the one changing value
+// on the right. The island stays black; the tint colours only glyphs, rings, bars and
+// keylines. `progress` and unknown templates fall back to the generic views.
 
 extension AppModel {
     /// The template an activity is drawn with, or nil for the generic look.
@@ -500,7 +500,7 @@ private func timeLine(_ a: Activity) -> String? {
     return nil
 }
 
-// MARK: - Wings and the dropped pill
+// MARK: - Wings
 
 /// Left of the closed island: what the activity is.
 struct TemplateLeading: View {
@@ -508,10 +508,9 @@ struct TemplateLeading: View {
     let model: AppModel
     /// The caller's tint, used as is by the generic look and lifted for templates.
     var tint: Color
-    var size: CGFloat = 15
-    /// Dropped pill and sneak header: both score sides get the same width.
-    var compact = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var size: CGFloat { 15 }
 
     var body: some View {
         let a = activity
@@ -546,7 +545,7 @@ struct TemplateLeading: View {
         case .score?:
             if let teams = a.teams, teams.count == 2 {
                 TeamScore(team: teams[0], height: size, animation: motion.value)
-                    .frame(minWidth: 0, maxWidth: compact ? 58 : .infinity, alignment: .leading)
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             } else {
                 IconView(icon: model.icon(for: a), size: size, tint: tint)
             }
@@ -606,41 +605,6 @@ struct TemplateTrailing: View {
             TemplateValueText(activity: a, model: model, size: size, tint: tint)
         }
     }
-}
-
-/// Middle of the dropped pill: the title, or what matters more for the template.
-struct TemplateDropCenter: View {
-    let activity: Activity
-    let model: AppModel
-
-    var body: some View {
-        let a = activity
-        switch model.visualTemplate(for: a) {
-        case .score? where a.teams?.count == 2:
-            Text(a.period ?? a.title)
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color.islandSecondary)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity)
-        case .flight?:
-            title(flightTitle(a) ?? a.title)
-        case .route?:
-            title(a.route?.instruction ?? a.title)
-        case .stages?:
-            title(a.currentStageLabel ?? a.title)
-        default:
-            title(a.title)
-        }
-    }
-
-    private func title(_ text: String) -> some View {
-        Text(text).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
-    }
-}
-
-private func flightTitle(_ a: Activity) -> String? {
-    guard let f = a.flight, let from = f.from, let to = f.to else { return nil }
-    return "\(from) → \(to)"
 }
 
 // MARK: - Bubble
@@ -765,11 +729,10 @@ struct TemplateBubble: View {
 
 // MARK: - Sneak peek
 
-/// The detail under the title in a sneak peek. `roomy` is the taller dropped layout.
+/// The detail under the title in a sneak peek.
 struct TemplateDetail<Fallback: View>: View {
     let activity: Activity
     let model: AppModel
-    var roomy = false
     @ViewBuilder var fallback: Fallback
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -789,7 +752,7 @@ struct TemplateDetail<Fallback: View>: View {
             }
         case .stages? where a.stageCount != nil:
             VStack(alignment: .leading, spacing: 2) {
-                if roomy || a.stageLabels == nil, let sub = a.subtitle { secondary(sub) }
+                if a.stageLabels == nil, let sub = a.subtitle { secondary(sub) }
                 MilestoneBar(count: a.stageCount ?? 1, current: a.currentStage ?? 1, tint: tint, labels: a.stageLabels,
                              dot: 6, animate: motion.perpetual)
             }

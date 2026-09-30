@@ -1,23 +1,13 @@
 import CoreGraphics
 import Foundation
 
-/// How the closed island uses the space around the notch.
+/// How wide the closed island's wings are. The closed island always sits in the menu bar row,
+/// with a wing either side of the notch; this only decides their width.
 public enum ClosedLayoutPreference: String, Codable, Sendable, CaseIterable {
-    /// Beside the notch, sized to the free space in the menu bar; below it only when there's
-    /// no room at all.
+    /// Fit the wings to the free space in the menu bar, down to icon-only wings.
     case auto
-    /// Always beside the notch, in the menu bar row (may cover menu bar icons).
+    /// Always the wing width from Settings (may cover menu bar icons).
     case wings
-    /// Always below the notch, leaving the menu bar row untouched.
-    case drop
-}
-
-/// The layout the closed island actually uses right now.
-public enum ClosedLayout: Equatable, Sendable {
-    /// Content in the menu bar row, beside the notch, with a wing on each side.
-    case wings(left: CGFloat, right: CGFloat)
-    /// Content in a pill hanging below the notch; the menu bar row is left alone.
-    case drop
 }
 
 /// What is in the menu bar next to the notch, measured on one display.
@@ -35,7 +25,7 @@ public struct MenuBarOccupancy: Equatable, Sendable {
     /// Build from item frames in global coordinates: menu titles and status items, anywhere in the bar.
     /// - Parameter chevron: macOS 26+ "Show Hidden Menu Bar Items" button. Items it has collapsed
     ///   still report frames stacked on it; they aren't drawn, so they don't count. The chevron
-    ///   itself is always an obstacle: covering it would hide those items for good.
+    ///   itself is an obstacle, so the wings keep clear of it whenever there's room.
     public static func from(menuFrames: [CGRect], statusFrames: [CGRect], chevron: CGRect? = nil, notch: CGRect) -> MenuBarOccupancy {
         var status = statusFrames.filter { $0.width > 0 }
         if let chevron, chevron.width > 0 {
@@ -54,47 +44,36 @@ public enum MenuBarLayoutEngine {
     public static let clearance: CGFloat = 6
     /// Narrowest wing that can still show an icon and a short value.
     public static let minimumWing: CGFloat = 34
-    /// Narrowest wing at all: room for an icon only. Less than this and the island drops.
+    /// Narrowest wing at all: room for an icon only. Used whenever less than `minimumWing` is free,
+    /// even if it then covers the edge of the nearest menu bar item.
     public static let iconOnlyWing: CGFloat = 26
     /// Wing width when the menu bar can't be measured (no Accessibility). Narrow enough to clear
     /// the menus of most apps and the status items on a 14" MacBook Pro.
     public static let unmeasuredWing: CGFloat = 36
 
-    /// Pick the closed layout.
+    /// Width of each wing of the closed island. Both wings get the same width, so the island
+    /// stays centred on the notch.
     /// - Parameters:
     ///   - notch: the notch (or synthetic pill) rect in global coordinates.
     ///   - preferredWing: wing width from settings.
     ///   - occupancy: measured menu bar items; nil when they can't be measured (no Accessibility).
     ///   - hasMenuBar: false when the display has no menu bar row (auto-hidden, or a secondary
     ///     display without its own menu bar), in which case nothing can be covered.
-    public static func decide(
+    public static func wingWidth(
         preference: ClosedLayoutPreference,
         notch: CGRect,
         preferredWing: CGFloat,
         occupancy: MenuBarOccupancy?,
         hasMenuBar: Bool
-    ) -> ClosedLayout {
-        switch preference {
-        case .wings:
-            return .wings(left: preferredWing, right: preferredWing)
-        case .drop:
-            return .drop
-        case .auto:
-            // Like the iPhone (and other notch apps), the closed island stays in the top row.
-            guard hasMenuBar else { return .wings(left: preferredWing, right: preferredWing) }
-            guard let occupancy else {
-                let w = min(preferredWing, unmeasuredWing)
-                return .wings(left: w, right: w)
-            }
-            let leftRoom = occupancy.leftObstacleMaxX.map { notch.minX - $0 - clearance } ?? preferredWing
-            let rightRoom = occupancy.rightObstacleMinX.map { $0 - notch.maxX - clearance } ?? preferredWing
-            // Keep the island symmetric around the notch: both wings take the narrower width.
-            let width = min(preferredWing, leftRoom, rightRoom)
-            if width >= minimumWing { return .wings(left: width, right: width) }
-            if width >= iconOnlyWing { return .wings(left: iconOnlyWing, right: iconOnlyWing) }
-            // Not even an icon fits without covering something: hang below the notch instead.
-            return .drop
-        }
+    ) -> CGFloat {
+        guard preference == .auto, hasMenuBar else { return preferredWing }
+        guard let occupancy else { return min(preferredWing, unmeasuredWing) }
+        let leftRoom = occupancy.leftObstacleMaxX.map { notch.minX - $0 - clearance } ?? preferredWing
+        let rightRoom = occupancy.rightObstacleMinX.map { $0 - notch.maxX - clearance } ?? preferredWing
+        // The narrower side decides, so the island stays symmetric around the notch.
+        let room = min(preferredWing, leftRoom, rightRoom)
+        // Too little room for an icon and a value: icon-only wings, still in the menu bar row.
+        return room >= minimumWing ? room : iconOnlyWing
     }
 
     /// Free menu bar room left beyond each wing (for bubbles), given the chosen wing width.
@@ -105,30 +84,13 @@ public enum MenuBarLayoutEngine {
         return (max(0, left), max(0, right))
     }
 
-    /// Height of the dropped pill below the notch.
-    public static let dropHeight: CGFloat = 26
-
     /// Width changes smaller than this are ignored, so a status item that retitles every few
     /// seconds doesn't make the wings twitch.
     public static let widthHysteresis: CGFloat = 4
-    /// Switching between wings and the dropped pill happens at most this often.
-    public static let minimumSwitchInterval: TimeInterval = 1
 
-    /// Whether a new measurement should replace the layout in use.
-    /// - Returns: `.apply`, `.keep` (change too small), or `.defer` (a wings/drop switch came too
-    ///   soon after the last one; measure again later).
-    public static func stabilise(current: ClosedLayout?, next: ClosedLayout, lastSwitch: Date?, now: Date) -> Stabilised {
-        guard let current else { return .apply }
-        switch (current, next) {
-        case (.drop, .drop):
-            return .keep
-        case (.wings(let a, let b), .wings(let c, let d)):
-            return abs(a - c) < widthHysteresis && abs(b - d) < widthHysteresis ? .keep : .apply
-        default:
-            if let lastSwitch, now.timeIntervalSince(lastSwitch) < minimumSwitchInterval { return .defer }
-            return .apply
-        }
+    /// Whether a newly measured wing width should replace the one in use (always, when none is).
+    public static func shouldReplace(_ current: CGFloat?, with next: CGFloat) -> Bool {
+        guard let current else { return true }
+        return abs(current - next) >= widthHysteresis
     }
-
-    public enum Stabilised: Equatable, Sendable { case apply, keep, `defer` }
 }

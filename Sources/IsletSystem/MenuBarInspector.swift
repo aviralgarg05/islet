@@ -3,10 +3,10 @@ import ApplicationServices
 import IsletCore
 
 /// Measures what occupies the menu bar next to the notch, so the closed island can size its
-/// wings to fit or drop below the notch instead of covering menu bar icons.
+/// wings to fit the free space instead of covering menu bar icons.
 ///
 /// Reads frames only (no titles or values) through Accessibility, which the user grants in
-/// Settings. Without that permission `measure` returns nil and Islet uses the drop layout.
+/// Settings. Without that permission `measure` returns nil and Islet uses narrow wings.
 ///
 /// On macOS 27 one read of MenuBarAgent's menu bar window gives every item's frame, a few
 /// milliseconds with no calls into other apps. Elsewhere it falls back to asking the apps that own
