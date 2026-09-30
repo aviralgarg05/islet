@@ -35,6 +35,17 @@ import Testing
         #expect(PermissionKind.allCases.filter { $0.automationTarget != nil }.count == 2)
     }
 
+    @Test func promptOnlyAsTheUserSwitchesOn() {
+        // At launch a feature found switched on never asks, even without its permission.
+        #expect(!PermissionPrompt.shouldAsk(wasOn: nil, isOn: true))
+        #expect(!PermissionPrompt.shouldAsk(wasOn: nil, isOn: false))
+        #expect(PermissionPrompt.shouldAsk(wasOn: false, isOn: true))
+        // Other settings changes while it stays on don't ask again.
+        #expect(!PermissionPrompt.shouldAsk(wasOn: true, isOn: true))
+        #expect(!PermissionPrompt.shouldAsk(wasOn: true, isOn: false))
+        #expect(!PermissionPrompt.shouldAsk(wasOn: false, isOn: false))
+    }
+
     @Test func usesFollowTheSettings() {
         var s = IsletSettings()
         s.replaceSystemHUD = false

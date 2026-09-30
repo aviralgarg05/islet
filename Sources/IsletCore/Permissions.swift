@@ -113,3 +113,17 @@ public enum PermissionStatus: Equatable, Sendable {
 public enum PermissionAction: Equatable, Sendable {
     case request, openSettings, none
 }
+
+/// When a feature that is switched on may ask macOS for its permission.
+public enum PermissionPrompt {
+    /// Only as the user switches the feature on. Finding it already on (at launch, or on some other
+    /// settings change) never asks: a permission taken away since then shows as missing in
+    /// Settings, and the feature does without it until it is granted again.
+    /// - Parameters:
+    ///   - wasOn: the setting before this change; nil at launch.
+    ///   - isOn: the setting now.
+    public static func shouldAsk(wasOn: Bool?, isOn: Bool) -> Bool {
+        guard let wasOn else { return false }
+        return isOn && !wasOn
+    }
+}
