@@ -1,0 +1,2 @@
+# Add to ~/.codex/config.toml — Codex runs this program with a JSON argument after each turn.
+notify = ["isletctl", "hook", "codex"]

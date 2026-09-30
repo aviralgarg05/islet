@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleExecutable</key><string>Islet</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
+    <key>CFBundleIdentifier</key><string>__BUNDLE_ID__</string>
+    <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+    <key>CFBundleName</key><string>Islet</string>
+    <key>CFBundleDisplayName</key><string>Islet</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>__VERSION__</string>
+    <key>CFBundleVersion</key><string>__BUILD__</string>
+    <key>LSMinimumSystemVersion</key><string>14.0</string>
+    <key>LSUIElement</key><true/>
+    <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>NSHumanReadableCopyright</key><string>MIT License</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key><string>Islet URL</string>
+            <key>CFBundleURLSchemes</key><array><string>islet</string></array>
+        </dict>
+    </array>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Islet shows your next event in the notch and a Join button for video calls. Events never leave your Mac.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>Islet shows your next event in the notch. Events never leave your Mac.</string>
+    <key>NSRemindersFullAccessUsageDescription</key>
+    <string>Islet can show reminders that are due soon. Reminders never leave your Mac.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Islet controls Music or Spotify (play, pause, skip) when you use the media controls in the notch.</string>
+</dict>
+</plist>

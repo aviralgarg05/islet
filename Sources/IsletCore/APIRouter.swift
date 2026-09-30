@@ -1,0 +1,284 @@
+import Foundation
+
+/// What the app exposes to the local API. The app implements this on the main actor;
+/// tests implement it with an in-memory fake.
+public protocol IsletBackend: Sendable {
+    func listActivities() async -> [Activity]
+    func applyActivity(_ spec: ActivitySpec) async throws -> Activity
+    func removeActivity(id: String) async -> Bool
+    func removeActivities(source: String) async -> Int
+    func showHUD(kind: HUDKind, value: Double, muted: Bool, label: String?) async
+    func pushMedia(_ media: NowPlaying?) async
+    func mediaCommand(_ command: PlaybackCommand, position: Double?) async -> Bool
+    func setExpanded(_ expanded: Bool) async
+    func stateSnapshot() async -> StateSnapshot
+}
+
+public struct StateSnapshot: Codable, Equatable, Sendable {
+    public var version: String
+    public var presentation: String
+    public var activities: [Activity]
+    public var nowPlaying: NowPlayingSummary?
+    public var battery: BatteryState?
+
+    public init(version: String, presentation: String, activities: [Activity], nowPlaying: NowPlayingSummary?, battery: BatteryState?) {
+        self.version = version; self.presentation = presentation; self.activities = activities
+        self.nowPlaying = nowPlaying; self.battery = battery
+    }
+}
+
+/// Now playing without the artwork bytes (keeps API responses small).
+public struct NowPlayingSummary: Codable, Equatable, Sendable {
+    public var source: MediaSourceKind
+    public var bundleID: String?
+    public var title: String
+    public var artist: String?
+    public var album: String?
+    public var isPlaying: Bool
+    public var duration: Double?
+    public var position: Double?
+
+    public init(_ np: NowPlaying, now: Date) {
+        source = np.source; bundleID = np.bundleID; title = np.title; artist = np.artist
+        album = np.album; isPlaying = np.isPlaying; duration = np.duration; position = np.position(at: now)
+    }
+}
+
+/// Body of `POST /v1/media`: lets browser extensions, players and scripts report playback.
+public struct MediaPush: Codable, Sendable {
+    public var title: String
+    public var artist: String?
+    public var album: String?
+    public var isPlaying: Bool?
+    public var duration: Double?
+    public var elapsed: Double?
+    public var bundleID: String?
+    public var appName: String?
+    public var artworkURL: URL?
+}
+
+struct HUDPush: Codable {
+    var kind: HUDKind
+    var value: Double
+    var muted: Bool?
+    var label: String?
+}
+
+struct NotifyPush: Codable {
+    var title: String
+    var subtitle: String?
+    var icon: ActivityIcon?
+    var tint: String?
+    var ttl: Double?
+    var priority: ActivityPriority?
+    var source: String?
+}
+
+struct TimerPush: Codable {
+    var seconds: Double
+    var title: String?
+    var id: String?
+}
+
+struct FocusPush: Codable {
+    var name: String?
+    var on: Bool?
+}
+
+struct CommandPush: Codable {
+    var command: PlaybackCommand
+    var position: Double?
+}
+
+/// Authenticates and routes local API requests.
+public struct APIRouter: Sendable {
+    public let token: String
+    public let version: String
+    public let backend: any IsletBackend
+    public let clock: @Sendable () -> Date
+    /// Serving the local network (iPhone Shortcuts): any Host header is accepted, but the
+    /// token is still required and browser origins are still refused.
+    public let allowRemoteHosts: Bool
+
+    public init(token: String, version: String, backend: any IsletBackend, allowRemoteHosts: Bool = false,
+                clock: @escaping @Sendable () -> Date = { Date() }) {
+        self.token = token
+        self.version = version
+        self.backend = backend
+        self.allowRemoteHosts = allowRemoteHosts
+        self.clock = clock
+    }
+
+    /// Constant-time comparison so the token can't be guessed byte by byte from timing.
+    static func tokensMatch(_ a: String, _ b: String) -> Bool {
+        let x = Array(a.utf8), y = Array(b.utf8)
+        guard x.count == y.count else { return false }
+        var diff: UInt8 = 0
+        for i in 0..<x.count { diff |= x[i] ^ y[i] }
+        return diff == 0
+    }
+
+    /// Reject requests that come from a web page (CSRF) or through DNS rebinding.
+    static func isAllowedOrigin(_ request: HTTPRequest, remote: Bool = false) -> Bool {
+        if !remote, let host = request.headers["host"] {
+            let name = host.split(separator: ":").first.map(String.init)?.lowercased() ?? ""
+            guard ["127.0.0.1", "localhost", "[::1]", "::1"].contains(name) || host.hasPrefix("[::1]") else { return false }
+        }
+        guard let origin = request.headers["origin"]?.lowercased() else { return true }
+        // Browser extensions are allowed (they still need the token); web pages are not.
+        return origin.hasPrefix("chrome-extension://") || origin.hasPrefix("moz-extension://")
+            || origin.hasPrefix("safari-web-extension://") || origin == "null"
+    }
+
+    func authorized(_ request: HTTPRequest) -> Bool {
+        if let auth = request.headers["authorization"], auth.lowercased().hasPrefix("bearer ") {
+            return Self.tokensMatch(String(auth.dropFirst(7)).trimmingCharacters(in: .whitespaces), token)
+        }
+        if let t = request.headers["x-islet-token"] { return Self.tokensMatch(t, token) }
+        return false
+    }
+
+    func decode<T: Decodable>(_ type: T.Type, from request: HTTPRequest) throws -> T {
+        guard !request.body.isEmpty else {
+            throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "request body is empty"))
+        }
+        return try APIJSON.decoder.decode(T.self, from: request.body)
+    }
+
+    static func describe(_ error: Error) -> String {
+        if let e = error as? ActivityError { return e.description }
+        if let e = error as? DecodingError {
+            switch e {
+            case .dataCorrupted(let c): return "invalid JSON: \(c.debugDescription)"
+            case .keyNotFound(let k, _): return "missing field '\(k.stringValue)'"
+            case .typeMismatch(_, let c), .valueNotFound(_, let c):
+                return "wrong type for '\(c.codingPath.map(\.stringValue).joined(separator: "."))': \(c.debugDescription)"
+            @unknown default: return "invalid JSON"
+            }
+        }
+        return String(describing: error)
+    }
+
+    public func handle(_ request: HTTPRequest) async -> HTTPResponse {
+        guard Self.isAllowedOrigin(request, remote: allowRemoteHosts) else { return .error(403, "requests from web pages are not allowed") }
+        let seg = request.segments
+        if request.method == "GET", seg == ["v1", "health"] || seg == ["health"] {
+            return .json(["ok": "true", "version": version])
+        }
+        guard authorized(request) else {
+            return .error(401, "missing or wrong token; send 'Authorization: Bearer <token>' (see `isletctl token`)")
+        }
+        do {
+            return try await route(request, seg)
+        } catch {
+            return .error(422, Self.describe(error))
+        }
+    }
+
+    private func route(_ r: HTTPRequest, _ seg: [String]) async throws -> HTTPResponse {
+        guard seg.first == "v1" else { return .error(404, "unknown endpoint; all endpoints live under /v1") }
+        let rest = Array(seg.dropFirst())
+        let head = rest.first ?? ""
+        let sub = rest.count == 2 ? rest[1] : ""
+        switch (r.method, rest.count, head) {
+        case ("GET", 1, "state"):
+            return .json(await backend.stateSnapshot())
+
+        case ("GET", 1, "activities"):
+            return .json(await backend.listActivities())
+
+        case ("POST", 1, "activities"):
+            let spec = try decode(ActivitySpec.self, from: r)
+            return .json(try await backend.applyActivity(spec), status: 201)
+
+        case ("PUT", 2, "activities"), ("PATCH", 2, "activities"), ("POST", 2, "activities"):
+            let id = sub
+            var spec = try decode(ActivitySpec.self, from: r)
+            spec.id = id
+            return .json(try await backend.applyActivity(spec))
+
+        case ("DELETE", 2, "activities"):
+            let id = sub
+            return await backend.removeActivity(id: id) ? .noContent : .error(404, ActivityError.notFound(id).description)
+
+        case ("DELETE", 1, "activities"):
+            guard let source = r.query["source"], !source.isEmpty else {
+                return .error(400, "pass ?source=<name> to remove all activities from one source")
+            }
+            return .json(["removed": await backend.removeActivities(source: source)])
+
+        case ("POST", 1, "notify"):
+            let n = try decode(NotifyPush.self, from: r)
+            let spec = ActivitySpec(
+                source: n.source ?? "notify", title: n.title, subtitle: n.subtitle, icon: n.icon ?? .symbol("bell.fill"),
+                state: .info, tint: n.tint, priority: n.priority ?? .normal, ttl: n.ttl ?? 6, sneak: true
+            )
+            return .json(try await backend.applyActivity(spec), status: 201)
+
+        case ("POST", 1, "timer"):
+            let t = try decode(TimerPush.self, from: r)
+            guard t.seconds > 0, t.seconds <= 24 * 3600 else { return .error(422, "'seconds' must be between 1 and 86400") }
+            let now = clock()
+            let spec = ActivitySpec(
+                id: t.id ?? "timer-\(Int(now.timeIntervalSince1970))", source: "timer", title: t.title ?? "Timer",
+                icon: .symbol("timer"), state: .running, tint: "orange", priority: .normal,
+                ttl: t.seconds + 8, endsAt: now.addingTimeInterval(t.seconds), sneak: true
+            )
+            return .json(try await backend.applyActivity(spec), status: 201)
+
+        case ("POST", 1, "hud"):
+            let h = try decode(HUDPush.self, from: r)
+            guard h.value.isFinite else { return .error(422, "'value' must be a number between 0 and 1") }
+            await backend.showHUD(kind: h.kind, value: h.value, muted: h.muted ?? false, label: h.label)
+            return .noContent
+
+        case ("POST", 1, "media"):
+            let m = try decode(MediaPush.self, from: r)
+            let np = NowPlaying(
+                source: .external, bundleID: m.bundleID, appName: m.appName, title: m.title, artist: m.artist,
+                album: m.album, isPlaying: m.isPlaying ?? true, duration: m.duration, elapsed: m.elapsed,
+                timestamp: clock(), artworkURL: m.artworkURL
+            )
+            await backend.pushMedia(np)
+            return .noContent
+
+        case ("DELETE", 1, "media"):
+            await backend.pushMedia(nil)
+            return .noContent
+
+        case ("POST", 2, "media") where sub == "command":
+            let c = try decode(CommandPush.self, from: r)
+            let ok = await backend.mediaCommand(c.command, position: c.position)
+            return ok ? .noContent : .error(503, "no player available for '\(c.command.rawValue)'")
+
+        case ("POST", 2, "island") where sub == "open":
+            await backend.setExpanded(true)
+            return .noContent
+
+        case ("POST", 2, "island") where sub == "close":
+            await backend.setExpanded(false)
+            return .noContent
+
+        case ("POST", 1, "focus"):
+            let f = try decode(FocusPush.self, from: r)
+            return .json(try await backend.applyActivity(FocusPill.activity(name: f.name ?? "Focus", on: f.on ?? true)), status: 201)
+
+        case ("POST", 2, "hooks"):
+            let provider = sub
+            switch try AgentHooks.map(provider: provider, payload: r.body, now: clock()) {
+            case .upsert(let spec): return .json(try await backend.applyActivity(spec))
+            case .remove(let id):
+                _ = await backend.removeActivity(id: id)
+                return .noContent
+            case .ignore: return .noContent
+            }
+
+        default:
+            let known = ["state", "activities", "notify", "timer", "hud", "media", "island", "hooks", "focus"]
+            if let first = rest.first, known.contains(first) {
+                return .error(405, "\(r.method) is not supported on \(r.path)")
+            }
+            return .error(404, "unknown endpoint \(r.path)")
+        }
+    }
+}

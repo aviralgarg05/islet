@@ -1,0 +1,407 @@
+import AppKit
+import IsletCore
+import IsletSystem
+import ServiceManagement
+import SwiftUI
+
+struct SettingsView: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        TabView {
+            GeneralSettings(model: model).tabItem { Label("General", systemImage: "gearshape") }
+            AppearanceSettings(model: model).tabItem { Label("Appearance", systemImage: "paintbrush") }
+            ModulesSettings(model: model).tabItem { Label("Modules", systemImage: "square.grid.2x2") }
+            AppRulesSettings(model: model).tabItem { Label("Apps", systemImage: "app.badge") }
+            IntegrationsSettings(model: model).tabItem { Label("Integrations", systemImage: "point.3.connected.trianglepath.dotted") }
+            AboutSettings().tabItem { Label("About", systemImage: "info.circle") }
+        }
+        .frame(width: 620, height: 540)
+        .onChange(of: model.settings) { _, _ in
+            model.saveSettings()
+            NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
+        }
+    }
+}
+
+struct GeneralSettings: View {
+    @Bindable var model: AppModel
+    @ViewState private var launchAtLogin = SMAppService.mainApp.status == .enabled
+
+    var body: some View {
+        Form {
+            Section("Placement") {
+                Picker("Show island on", selection: $model.settings.displayMode) {
+                    Text("Notched display (or main)").tag(DisplayMode.notchedScreen)
+                    Text("Main display").tag(DisplayMode.mainScreen)
+                    Text("All displays").tag(DisplayMode.allScreens)
+                }
+                Toggle("Show on displays without a notch", isOn: $model.settings.showOnNonNotchDisplays)
+                Toggle("Hide when an app is fullscreen", isOn: $model.settings.hideInFullscreen)
+                Toggle("Hide from screenshots and screen sharing", isOn: $model.settings.hideFromScreenCapture)
+            }
+            Section("Behaviour") {
+                Toggle("Open on hover", isOn: $model.settings.hoverToOpen)
+                LabeledContent("Hover delay") {
+                    Slider(value: $model.settings.openDelay, in: 0...1, step: 0.05) { Text("") }
+                    Text(String(format: "%.2fs", model.settings.openDelay)).monospacedDigit().frame(width: 44)
+                }
+                LabeledContent("Shortcut to open or close") {
+                    TextField("ctrl+option+i", text: $model.settings.hotkey)
+                        .frame(width: 140)
+                    Text(Hotkey.parse(model.settings.hotkey)?.label ?? (model.settings.hotkey.isEmpty ? "Off" : "Invalid"))
+                        .foregroundStyle(.secondary).frame(width: 60)
+                }
+                Toggle("Launch at login", isOn: $launchAtLogin)
+                    .onChange(of: launchAtLogin) { _, on in
+                        do {
+                            if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+                        } catch {
+                            launchAtLogin = SMAppService.mainApp.status == .enabled
+                        }
+                    }
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+struct AppearanceSettings: View {
+    @Bindable var model: AppModel
+
+    private static let accents = ["auto", "white", "blue", "purple", "pink", "red", "orange", "yellow", "green", "teal"]
+
+    var body: some View {
+        Form {
+            Section("Size") {
+                Picker("Island size", selection: $model.settings.sizePreset) {
+                    Text("Compact").tag(SizePreset.compact)
+                    Text("Standard").tag(SizePreset.standard)
+                    Text("Large").tag(SizePreset.large)
+                    Text("Custom").tag(SizePreset.custom)
+                }
+                .pickerStyle(.segmented)
+                if model.settings.sizePreset == .custom {
+                    LabeledContent("Expanded width") {
+                        Slider(value: $model.settings.expandedWidth, in: 420...900, step: 10) { Text("") }
+                        Text("\(Int(model.settings.expandedWidth))").monospacedDigit().frame(width: 44)
+                    }
+                    LabeledContent("Expanded height") {
+                        Slider(value: $model.settings.expandedHeight, in: 130...360, step: 10) { Text("") }
+                        Text("\(Int(model.settings.expandedHeight))").monospacedDigit().frame(width: 44)
+                    }
+                    LabeledContent("Closed wing width") {
+                        Slider(value: $model.settings.wingWidth, in: 40...140, step: 2) { Text("") }
+                        Text("\(Int(model.settings.wingWidth))").monospacedDigit().frame(width: 44)
+                    }
+                }
+            }
+            Section("Look") {
+                Picker("Theme", selection: $model.settings.theme) {
+                    Text("Black").tag(IslandTheme.black)
+                    Text("Graphite").tag(IslandTheme.graphite)
+                    Text("Glass").tag(IslandTheme.glass)
+                }
+                .pickerStyle(.segmented)
+                LabeledContent("Accent") {
+                    HStack(spacing: 6) {
+                        ForEach(Self.accents, id: \.self) { name in
+                            Button { model.settings.accentColor = name } label: {
+                                ZStack {
+                                    if name == "auto" {
+                                        Circle().fill(AngularGradient(colors: [.red, .yellow, .green, .blue, .purple, .red], center: .center))
+                                    } else {
+                                        Circle().fill(Color(tint: name))
+                                    }
+                                    if model.settings.accentColor == name { Circle().stroke(Color.primary, lineWidth: 2).padding(-3) }
+                                }
+                                .frame(width: 16, height: 16)
+                            }
+                            .buttonStyle(.plain)
+                            .help(name == "auto" ? "Follow album art" : name.capitalized)
+                        }
+                    }
+                }
+                Toggle("Rounded text", isOn: $model.settings.roundedFont)
+                Toggle("Smart icons and colors for activities", isOn: $model.settings.smartIcons)
+            }
+            Section("Motion & feel") {
+                Picker("Animation", selection: $model.settings.animationStyle) {
+                    Text("Fluid").tag(AnimationStyle.fluid)
+                    Text("Snappy").tag(AnimationStyle.snappy)
+                    Text("Smooth").tag(AnimationStyle.smooth)
+                    Text("Minimal").tag(AnimationStyle.minimal)
+                    Text("Off").tag(AnimationStyle.off)
+                }
+                .pickerStyle(.segmented)
+                Toggle("Bounce when something new arrives", isOn: $model.settings.bounceOnActivity)
+                Toggle("Glow while something needs you", isOn: $model.settings.urgentGlow)
+                Picker("Trackpad haptics", selection: $model.settings.hapticsMode) {
+                    Text("Off").tag(HapticsMode.off)
+                    Text("When I use the island").tag(HapticsMode.direct)
+                    Text("Also for important alerts").tag(HapticsMode.all)
+                }
+                Toggle("Reduce motion", isOn: $model.settings.reduceMotion)
+                LabeledContent("New activity stays open") {
+                    Slider(value: $model.settings.alertDuration, in: 1...6, step: 0.5) { Text("") }
+                    Text(String(format: "%.1fs", model.settings.alertDuration)).monospacedDigit().frame(width: 40)
+                }
+                LabeledContent("Volume/brightness HUD") {
+                    Slider(value: $model.settings.hudDuration, in: 0.8...4, step: 0.2) { Text("") }
+                    Text(String(format: "%.1fs", model.settings.hudDuration)).monospacedDigit().frame(width: 40)
+                }
+                Button("Preview") { AppActions.previewAppearance(model) }
+            }
+            Section("Several things at once") {
+                Picker("Activities shown together", selection: $model.settings.maxConcurrent) {
+                    Text("1").tag(1)
+                    Text("2").tag(2)
+                    Text("3").tag(3)
+                }
+                .pickerStyle(.segmented)
+                Picker("Extra activities appear", selection: $model.settings.bubblePlacement) {
+                    Text("Right of the notch").tag(BubblePlacement.right)
+                    Text("Left of the notch").tag(BubblePlacement.left)
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// Per-app customisation: tint, icon, visibility and notification handling.
+struct AppRulesSettings: View {
+    @Bindable var model: AppModel
+    @ViewState private var selection: String?
+
+    private var runningApps: [NSRunningApplication] {
+        let existing = Set(model.settings.appRules.map(\.bundleID))
+        return NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular && $0.bundleIdentifier != nil && !existing.contains($0.bundleIdentifier!) }
+            .sorted { ($0.localizedName ?? "") < ($1.localizedName ?? "") }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Customise how each app appears in the island.").foregroundStyle(.secondary)
+                Spacer()
+                Menu("Add App") {
+                    ForEach(runningApps, id: \.processIdentifier) { app in
+                        Button(app.localizedName ?? app.bundleIdentifier!) {
+                            model.settings.appRules.append(AppRule(bundleID: app.bundleIdentifier!))
+                            selection = app.bundleIdentifier
+                        }
+                    }
+                }
+                .fixedSize()
+            }
+            if model.settings.appRules.isEmpty {
+                ContentUnavailableView("No app rules yet", systemImage: "app.dashed",
+                                       description: Text("Add an app to give it a color, hide the island while it's in front, keep the island in fullscreen, or mute its notifications."))
+            } else {
+                List(selection: $selection) {
+                    ForEach($model.settings.appRules) { $rule in
+                        AppRuleRow(rule: $rule) {
+                            model.settings.appRules.removeAll { $0.bundleID == rule.bundleID }
+                        }
+                        .tag(rule.bundleID)
+                    }
+                }
+            }
+        }
+        .padding()
+    }
+}
+
+struct AppRuleRow: View {
+    @Binding var rule: AppRule
+    var onDelete: () -> Void
+
+    private var name: String {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: rule.bundleID)
+            .map { FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "") } ?? rule.bundleID
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                AppIconView(bundleID: rule.bundleID, size: 20)
+                Text(name).bold()
+                Spacer()
+                Picker("", selection: Binding(get: { rule.tint ?? "" }, set: { rule.tint = $0.isEmpty ? nil : $0 })) {
+                    Text("Default color").tag("")
+                    ForEach(["blue", "purple", "pink", "red", "orange", "yellow", "green", "teal", "gray"], id: \.self) { Text($0.capitalized).tag($0) }
+                }
+                .frame(width: 140)
+                Button(role: .destructive, action: onDelete) { Image(systemName: "trash") }.buttonStyle(.borderless)
+            }
+            HStack(spacing: 14) {
+                Toggle("Hide island when in front", isOn: Binding(get: { rule.hideIsland ?? false }, set: { rule.hideIsland = $0 ? true : nil }))
+                Toggle("Show in fullscreen", isOn: Binding(get: { rule.showInFullscreen ?? false }, set: { rule.showInFullscreen = $0 ? true : nil }))
+                Toggle("Mute notifications", isOn: Binding(get: { rule.muteNotifications ?? false }, set: { rule.muteNotifications = $0 ? true : nil }))
+            }
+            .toggleStyle(.checkbox)
+            .font(.caption)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+struct ModulesSettings: View {
+    @Bindable var model: AppModel
+    @ViewState private var calendarAccess = CalendarService.eventAccess
+    @ViewState private var axTrusted = MediaKeyInterceptor.hasAccessibility
+
+    var body: some View {
+        Form {
+            Section("Media") {
+                Toggle("Now Playing", isOn: $model.settings.mediaEnabled)
+                Toggle("Show paused media in the closed island", isOn: $model.settings.showPausedMedia)
+                LabeledContent("System-wide bridge") {
+                    Text(model.systemMedia.isRunning ? "Running" : "Unavailable")
+                        .foregroundStyle(model.systemMedia.isRunning ? .green : .orange)
+                }
+            }
+            Section("Heads-up display") {
+                Toggle("Volume HUD", isOn: $model.settings.hudEnabled)
+                Toggle("Brightness HUD", isOn: $model.settings.brightnessHUDEnabled)
+                Toggle("Replace the system HUD (uses Accessibility)", isOn: $model.settings.replaceSystemHUD)
+                if model.settings.replaceSystemHUD && !axTrusted {
+                    HStack {
+                        Text("Grant Accessibility so Islet can take over the volume and brightness keys.").font(.caption)
+                        Button("Grant…") {
+                            MediaKeyInterceptor.requestAccessibility()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { axTrusted = MediaKeyInterceptor.hasAccessibility }
+                        }
+                    }
+                }
+            }
+            Section("iPhone-style events") {
+                Toggle("Call timer when FaceTime, Zoom, Meet… use the mic", isOn: $model.settings.callDetection)
+                Toggle("Download progress from ~/Downloads", isOn: $model.settings.downloadsEnabled)
+                Toggle("“Welcome back” summary when you unlock", isOn: $model.settings.unlockSplash)
+                HStack {
+                    Toggle("Mirror notifications from every app (experimental)", isOn: $model.settings.notificationMirroring)
+                    if model.settings.notificationMirroring && !axTrusted {
+                        Button("Grant Access…") {
+                            MediaKeyInterceptor.requestAccessibility()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                                axTrusted = MediaKeyInterceptor.hasAccessibility
+                                model.startEventSources()
+                            }
+                        }
+                    }
+                }
+                Text("Includes iPhone notifications that macOS already forwards. Uses Accessibility to read banners; nothing is stored or sent anywhere.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle("On-device AI for icons and summaries", isOn: $model.settings.aiAssist)
+                LabeledContent("Apple Intelligence") { Text(AIAssist.shared.statusText).foregroundStyle(.secondary) }
+            }
+            Section("Everything else") {
+                Toggle("Battery & charging", isOn: $model.settings.batteryEnabled)
+                HStack {
+                    Toggle("Calendar", isOn: $model.settings.calendarEnabled)
+                    Spacer()
+                    if calendarAccess != .granted {
+                        Button(calendarAccess == .denied ? "Open Privacy Settings" : "Grant Access") {
+                            if calendarAccess == .denied {
+                                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")!)
+                            } else {
+                                model.requestCalendarAccess()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { calendarAccess = CalendarService.eventAccess }
+                            }
+                        }
+                    }
+                }
+                Toggle("File shelf & AirDrop", isOn: $model.settings.shelfEnabled)
+                Toggle("Clipboard history (local only, skips passwords)", isOn: $model.settings.clipboardEnabled)
+                Toggle("Camera & microphone indicators", isOn: $model.settings.privacyIndicatorsEnabled)
+                Toggle("System stats", isOn: $model.settings.systemStatsEnabled)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+struct IntegrationsSettings: View {
+    @Bindable var model: AppModel
+    @ViewState private var copied = false
+
+    private var hookSnippet: String {
+        let cli = AppActions.cliPath
+        return """
+        "hooks": {
+          "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "\(cli) hook claude"}]}],
+          "PreToolUse":       [{"hooks": [{"type": "command", "command": "\(cli) hook claude"}]}],
+          "Notification":     [{"hooks": [{"type": "command", "command": "\(cli) hook claude"}]}],
+          "Stop":             [{"hooks": [{"type": "command", "command": "\(cli) hook claude"}]}],
+          "SessionEnd":       [{"hooks": [{"type": "command", "command": "\(cli) hook claude"}]}]
+        }
+        """
+    }
+
+    var body: some View {
+        Form {
+            Section("Local API") {
+                Toggle("Enable local API (127.0.0.1 only, token required)", isOn: $model.settings.apiEnabled)
+                LabeledContent("Status") { Text(model.apiStatus).foregroundStyle(.secondary) }
+                HStack {
+                    Button(copied ? "Copied" : "Copy Token") {
+                        AppActions.copyToken()
+                        copied = true
+                    }
+                    Button("Open API Docs") {
+                        if let doc = Bundle.main.url(forResource: "API", withExtension: "md") { NSWorkspace.shared.open(doc) }
+                    }
+                }
+            }
+            Section("Command line") {
+                Text("Link the bundled CLI onto your PATH:").font(.caption)
+                Text("ln -sf \"\(AppActions.cliPath)\" /opt/homebrew/bin/isletctl")
+                    .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+            }
+            Section("Coding agents") {
+                Text("Add to ~/.claude/settings.json to see agent status in the notch:").font(.caption)
+                Text(hookSnippet).font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
+                Text("Codex: add  notify = [\"\(AppActions.cliPath)\", \"hook\", \"codex\"]  to ~/.codex/config.toml")
+                    .font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
+            }
+            Section("iPhone bridge (local network)") {
+                Toggle("Accept events from iPhone Shortcuts on this network", isOn: $model.settings.lanBridgeEnabled)
+                LabeledContent("Status") { Text(model.lanStatus).foregroundStyle(.secondary) }
+                Text("""
+                In Shortcuts on iPhone, create a Personal Automation (Alarm, Focus, Arrive, Battery Level…) →                 “Get Contents of URL” → POST http://\(ProcessInfo.processInfo.hostName):\(model.settings.lanPort)/v1/notify                 with header Authorization: Bearer <token> and JSON {"title": "…"}. Rate-limited, token required.
+                """)
+                .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+            Section("Script widgets") {
+                Toggle("Run scripts from the plugins folder", isOn: $model.settings.pluginsEnabled)
+                HStack {
+                    Button("Open Plugins Folder") { AppActions.openPluginsFolder(model) }
+                    Button("Install Examples") { AppActions.installExamplePlugins(model) }
+                }
+            }
+            Section("URL scheme") {
+                Text("islet://notify?title=Hello  ·  islet://timer?minutes=5  ·  islet://media/playpause")
+                    .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+struct AboutSettings: View {
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "capsule.fill").font(.system(size: 44)).foregroundStyle(.primary)
+            Text("Islet").font(.title.bold())
+            Text("Version \(AppModel.version)").foregroundStyle(.secondary)
+            Text("An open-source Dynamic Island for the Mac notch.\nMIT licensed. No accounts, no license server, no telemetry.")
+                .multilineTextAlignment(.center).foregroundStyle(.secondary)
+            Text("Settings live in ~/.config/islet/config.json")
+                .font(.system(.caption, design: .monospaced)).foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}

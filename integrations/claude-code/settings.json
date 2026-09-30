@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "SessionStart":     [{ "hooks": [{ "type": "command", "command": "isletctl hook claude" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "isletctl hook claude" }] }],
+    "PreToolUse":       [{ "hooks": [{ "type": "command", "command": "isletctl hook claude" }] }],
+    "Notification":     [{ "hooks": [{ "type": "command", "command": "isletctl hook claude" }] }],
+    "PreCompact":       [{ "hooks": [{ "type": "command", "command": "isletctl hook claude" }] }],
+    "Stop":             [{ "hooks": [{ "type": "command", "command": "isletctl hook claude" }] }],
+    "SessionEnd":       [{ "hooks": [{ "type": "command", "command": "isletctl hook claude" }] }]
+  }
+}
