@@ -117,6 +117,8 @@ enum Snapshots {
         model.tab = .home
         model.settings.theme = .graphite
         shoot("18-expanded-graphite")
+        model.settings.theme = .glass
+        shoot("18b-expanded-glass")
         model.settings.theme = .black
         model.settings.sizePreset = .large
         metrics = metricsFor(model.settings)

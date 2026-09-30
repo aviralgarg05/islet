@@ -96,15 +96,47 @@ extension AnimationStyle {
 extension IslandTheme {
     /// Fill for the island in a given presentation. Closed states stay black so they merge
     /// with the hardware notch; themes only change the expanded surface.
+    /// - Parameters:
+    ///   - row: height of the menu bar row, which stays black in every theme.
+    ///   - height: the island's current height, to place the seam below that row.
     @ViewBuilder
-    func background(expanded: Bool, shape: IslandShape) -> some View {
-        switch (self, expanded) {
-        case (.graphite, true):
+    func background(expanded: Bool, shape: IslandShape, row: CGFloat = 0, height: CGFloat = 0) -> some View {
+        switch self {
+        case .graphite where expanded:
             shape.fill(Color(white: 0.105)).overlay(shape.stroke(Color.white.opacity(0.08), lineWidth: 1))
-        case (.glass, true):
-            GlassSurface(shape: shape, tint: Color.black.opacity(0.5))
+        case .glass:
+            GlassBody(shape: shape, expanded: expanded, row: row, height: height)
         default:
             shape.fill(Color.black)
+        }
+    }
+}
+
+/// The Glass theme's surface. Glass sits only below the menu bar row: beside the hardware notch
+/// it would show the wallpaper at the notch's edges. It fades in once the island has grown
+/// clear of the notch and the black comes back first when it closes.
+private struct GlassBody: View {
+    let shape: IslandShape
+    let expanded: Bool
+    let row: CGFloat
+    let height: CGFloat
+
+    var body: some View {
+        ZStack {
+            if expanded {
+                GlassSurface(shape: shape, tint: Color.black.opacity(0.5))
+                    .transition(.asymmetric(insertion: .identity, removal: .opacity.animation(.linear(duration: 0.12))))
+                if row > 0, height > row + 14 {
+                    shape.fill(LinearGradient(stops: [
+                        .init(color: .black, location: 0),
+                        .init(color: .black, location: row / height),
+                        .init(color: .black.opacity(0), location: (row + 14) / height),
+                    ], startPoint: .top, endPoint: .bottom))
+                }
+            }
+            shape.fill(Color.black)
+                .opacity(expanded ? 0 : 1)
+                .animation(expanded ? .easeOut(duration: 0.18).delay(0.15) : .easeIn(duration: 0.08), value: expanded)
         }
     }
 }
@@ -130,13 +162,14 @@ struct GlassSurface<S: Shape>: View {
 }
 
 extension View {
-    /// Background for a card inside the expanded island: glass with the Glass theme,
-    /// a faint fill otherwise.
+    /// Background for a card inside the expanded island. On the Glass theme it is a plain
+    /// translucent fill with a hairline, not more glass: glass can't sample glass behind it,
+    /// and every glass card would cost another sampling pass.
     func islandCard(_ theme: IslandTheme, cornerRadius: CGFloat = 12) -> some View {
         background {
             let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             if theme == .glass {
-                GlassSurface(shape: shape, tint: Color.white.opacity(0.04), fallback: Color.islandFill)
+                shape.fill(Color.white.opacity(0.07)).overlay(shape.strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5))
             } else {
                 shape.fill(Color.islandFill)
             }
