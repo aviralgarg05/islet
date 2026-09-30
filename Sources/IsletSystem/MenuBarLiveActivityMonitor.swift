@@ -13,6 +13,8 @@ public final class MenuBarLiveActivityMonitor {
 
     /// Current Live Activities, left to right, each paired with its item for pressing.
     public var onChange: (([MirroredLiveActivity]) -> Void)?
+    /// Items appeared, went away or moved (the menu bar layout changed).
+    public var onStructureChange: (() -> Void)?
 
     private var observer: AXObserver?
     private var app: AXUIElement?
@@ -71,19 +73,53 @@ public final class MenuBarLiveActivityMonitor {
         let element = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(element, 0.3)
         var obs: AXObserver?
-        let callback: AXObserverCallback = { _, _, _, refcon in
+        let callback: AXObserverCallback = { _, element, name, refcon in
             guard let refcon else { return }
-            Unmanaged<MenuBarLiveActivityMonitor>.fromOpaque(refcon).takeUnretainedValue().scheduleScan()
+            Unmanaged<MenuBarLiveActivityMonitor>.fromOpaque(refcon).takeUnretainedValue().received(name as String, element: element)
         }
         guard AXObserverCreate(pid, callback, &obs) == .success, let obs else { return }
         let refcon = Unmanaged.passUnretained(self).toOpaque()
         for name in [kAXCreatedNotification, kAXUIElementDestroyedNotification, kAXValueChangedNotification,
-                     kAXTitleChangedNotification, kAXLayoutChangedNotification] {
+                     kAXTitleChangedNotification, kAXLayoutChangedNotification, kAXMovedNotification, kAXResizedNotification] {
             AXObserverAddNotification(obs, element, name as CFString, refcon)
         }
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), .defaultMode)
         observer = obs
         app = element
+    }
+
+    /// Title and value changes arrive about once a second (the clock, tickers and meters from
+    /// other apps), so they only lead to a scan when they come from a mirrored activity.
+    private func received(_ name: String, element: AXUIElement) {
+        switch name {
+        case kAXTitleChangedNotification, kAXValueChangedNotification:
+            if belongsToActivity(element) { scheduleScan() }
+        default:
+            scheduleScan()
+            scheduleStructureChange()
+        }
+    }
+
+    private func belongsToActivity(_ element: AXUIElement) -> Bool {
+        guard !items.isEmpty else { return false }
+        var e: AXUIElement? = element
+        for _ in 0..<5 {
+            guard let current = e else { return false }
+            if items.values.contains(where: { CFEqual($0, current) }) { return true }
+            e = Self.element(current, kAXParentAttribute)
+        }
+        return false
+    }
+
+    private var structurePending = false
+
+    private func scheduleStructureChange() {
+        guard !structurePending, onStructureChange != nil else { return }
+        structurePending = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            self?.structurePending = false
+            self?.onStructureChange?()
+        }
     }
 
     private func scheduleScan() {

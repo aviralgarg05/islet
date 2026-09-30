@@ -188,6 +188,7 @@ final class AppModel {
         if settings.apiEnabled && settings.lanBridgeEnabled { startLAN() } else { stopLAN() }
         if settings.mirrorMenuBarActivities && MenuBarLiveActivityMonitor.isAvailable {
             menuBarActivities.onChange = { [weak self] list in self?.syncMenuBarActivities(list) }
+            menuBarActivities.onStructureChange = { NotificationCenter.default.post(name: .isletMenuBarChanged, object: nil) }
             menuBarActivities.start()
         } else {
             menuBarActivities.stop()

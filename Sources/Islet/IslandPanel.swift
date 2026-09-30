@@ -10,7 +10,8 @@ final class IslandPanel: NSPanel {
         isFloatingPanel = true
         // 27: above the menu bar (24) and status items (25), below pop-up menus (101).
         level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 3)
-        collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+        // Transient, not stationary: stationary windows stay drawn over Mission Control's Spaces bar.
+        collectionBehavior = [.canJoinAllSpaces, .transient, .fullScreenAuxiliary, .ignoresCycle]
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false
@@ -133,9 +134,21 @@ final class IslandWindowController {
     /// Bounding box of `hitRects` (empty when nothing is drawn).
     var islandRect: CGRect { hitRects.reduce(CGRect.null) { $0.union($1) } }
 
+    /// Something in the menu bar may have changed since the last measurement.
+    private var menuBarStale = true
+    private var lastLayoutSwitch: Date?
+    private var deferredMeasure: DispatchWorkItem?
+
     /// Measure the menu bar beside the notch and store the automatic placement.
-    func measureMenuBar() {
+    /// While nothing is drawn on this display it only notes that a measurement is due, so an
+    /// idle island never reads the menu bar; `measureIfStale` catches up when it appears.
+    func measureMenuBar(force: Bool = false) {
         guard model.settings.closedLayout == .auto else { return }
+        guard force || IslandLayout.isVisible(model.presentation(for: display)) else {
+            menuBarStale = true
+            return
+        }
+        menuBarStale = false
         let wing = metrics.wingWidth
         let notch = notchRect
         let display = display
@@ -146,14 +159,42 @@ final class IslandWindowController {
         MenuBarInspector.measure(notch: notch, screenFrame: descriptor.frame) { [weak self] occupancy in
             guard let self else { return }
             let layout = MenuBarLayoutEngine.decide(preference: .auto, notch: notch, preferredWing: wing, occupancy: occupancy, hasMenuBar: true)
+            let current = self.model.closedPlacements[display]
+            switch MenuBarLayoutEngine.stabilise(current: current?.layout, next: layout, lastSwitch: self.lastLayoutSwitch, now: Date()) {
+            case .keep: return
+            case .defer:
+                self.deferredMeasure?.cancel()
+                let work = DispatchWorkItem { [weak self] in self?.measureMenuBar(force: true) }
+                self.deferredMeasure = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + MenuBarLayoutEngine.minimumSwitchInterval, execute: work)
+                return
+            case .apply: break
+            }
             var placement = ClosedPlacement(layout: layout, leftSlack: 0, rightSlack: 0)
             if case .wings(let l, _) = layout, let occupancy {
                 let slack = MenuBarLayoutEngine.slack(notch: notch, occupancy: occupancy, wing: l)
                 placement.leftSlack = slack.left
                 placement.rightSlack = slack.right
             }
-            if self.model.closedPlacements[display] != placement { self.model.closedPlacements[display] = placement }
+            if current?.layout != layout { self.lastLayoutSwitch = Date() }
+            if current != placement { self.model.closedPlacements[display] = placement }
         }
+    }
+
+    /// Called when the silhouette changes: measure if the island just appeared after a change.
+    func measureIfStale() {
+        if menuBarStale, IslandLayout.isVisible(model.presentation(for: display)) { measureMenuBar() }
+    }
+
+    private var lastPointerMeasure = Date.distantPast
+
+    /// The pointer reached the island. Hidden menu bar items may have been revealed next to it
+    /// since the last measurement (macOS doesn't always announce that), so check again.
+    func pointerEntered() {
+        let now = Date()
+        guard now.timeIntervalSince(lastPointerMeasure) > 2 else { return }
+        lastPointerMeasure = now
+        measureMenuBar()
     }
 
     /// Hovering here arms the island: the notch itself, nothing beside it.
@@ -179,7 +220,7 @@ final class TriggerPanel: NSPanel {
         isFloatingPanel = true
         // Just below the island panel (27), above the menu bar.
         level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 2)
-        collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+        collectionBehavior = [.canJoinAllSpaces, .transient, .fullScreenAuxiliary, .ignoresCycle]
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false
@@ -307,7 +348,10 @@ final class PointerCoordinator {
     }
 
     private func layoutChanged() {
-        controllers.forEach { $0.updateTrigger() }
+        controllers.forEach {
+            $0.updateTrigger()
+            $0.measureIfStale()
+        }
         // Opened by the API, a hotkey or the menu: start tracking so it can close on leave.
         if model.expandedScreen != nil, !isActive { activate(from: model.expandedScreen) }
     }
@@ -335,6 +379,7 @@ final class PointerCoordinator {
 
     private func activate(from display: CGDirectDisplayID?) {
         activeDisplay = display ?? activeDisplay
+        if let display { controllers.first { $0.display == display }?.pointerEntered() }
         if monitors.isEmpty {
             let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .leftMouseUp]
             if let g = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] e in
@@ -436,4 +481,6 @@ final class PointerCoordinator {
 extension Notification.Name {
     /// Posted by the island view when its silhouette changes (trigger windows follow it).
     static let isletLayoutChanged = Notification.Name("IsletLayoutChanged")
+    /// Posted when items in the menu bar appear, disappear or move.
+    static let isletMenuBarChanged = Notification.Name("IsletMenuBarChanged")
 }

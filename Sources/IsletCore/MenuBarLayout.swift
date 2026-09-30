@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 
 /// How the closed island uses the space around the notch.
 public enum ClosedLayoutPreference: String, Codable, Sendable, CaseIterable {
@@ -31,8 +32,16 @@ public struct MenuBarOccupancy: Equatable, Sendable {
     }
 
     /// Build from item frames in global coordinates: menu titles and status items, anywhere in the bar.
-    public static func from(menuFrames: [CGRect], statusFrames: [CGRect], notch: CGRect) -> MenuBarOccupancy {
-        let items = (menuFrames + statusFrames).filter { $0.width > 0 }
+    /// - Parameter chevron: macOS 26+ "Show Hidden Menu Bar Items" button. Items it has collapsed
+    ///   still report frames stacked on it; they aren't drawn, so they don't count. The chevron
+    ///   itself is always an obstacle: covering it would hide those items for good.
+    public static func from(menuFrames: [CGRect], statusFrames: [CGRect], chevron: CGRect? = nil, notch: CGRect) -> MenuBarOccupancy {
+        var status = statusFrames.filter { $0.width > 0 }
+        if let chevron, chevron.width > 0 {
+            let zone = chevron.insetBy(dx: -2, dy: 0)
+            status = status.filter { !$0.intersects(zone) } + [chevron]
+        }
+        let items = menuFrames.filter { $0.width > 0 } + status
         let left = items.filter { $0.midX < notch.midX }.map(\.maxX).max()
         let right = items.filter { $0.midX >= notch.midX }.map(\.minX).min()
         return MenuBarOccupancy(leftObstacleMaxX: left, rightObstacleMinX: right)
@@ -88,4 +97,28 @@ public enum MenuBarLayoutEngine {
 
     /// Height of the dropped pill below the notch.
     public static let dropHeight: CGFloat = 26
+
+    /// Width changes smaller than this are ignored, so a status item that retitles every few
+    /// seconds doesn't make the wings twitch.
+    public static let widthHysteresis: CGFloat = 4
+    /// Switching between wings and the dropped pill happens at most this often.
+    public static let minimumSwitchInterval: TimeInterval = 1
+
+    /// Whether a new measurement should replace the layout in use.
+    /// - Returns: `.apply`, `.keep` (change too small), or `.defer` (a wings/drop switch came too
+    ///   soon after the last one; measure again later).
+    public static func stabilise(current: ClosedLayout?, next: ClosedLayout, lastSwitch: Date?, now: Date) -> Stabilised {
+        guard let current else { return .apply }
+        switch (current, next) {
+        case (.drop, .drop):
+            return .keep
+        case (.wings(let a, let b), .wings(let c, let d)):
+            return abs(a - c) < widthHysteresis && abs(b - d) < widthHysteresis ? .keep : .apply
+        default:
+            if let lastSwitch, now.timeIntervalSince(lastSwitch) < minimumSwitchInterval { return .defer }
+            return .apply
+        }
+    }
+
+    public enum Stabilised: Equatable, Sendable { case apply, keep, `defer` }
 }

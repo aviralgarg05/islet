@@ -48,6 +48,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         nc.addObserver(forName: .isletSettingsChanged, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.settingsChanged() }
         }
+        nc.addObserver(forName: .isletMenuBarChanged, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.scheduleMenuBarMeasure(after: 0.1) }
+        }
         let wnc = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification, NSWorkspace.activeSpaceDidChangeNotification] {
             wnc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
@@ -58,7 +61,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // status items come and go (apps launching and quitting).
         for name in [NSWorkspace.didActivateApplicationNotification, NSWorkspace.didLaunchApplicationNotification,
                      NSWorkspace.didTerminateApplicationNotification] {
-            wnc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+            wnc.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                if let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication {
+                    if note.name == NSWorkspace.didLaunchApplicationNotification { MenuBarInspector.appLaunched(app.processIdentifier) }
+                    if note.name == NSWorkspace.didTerminateApplicationNotification { MenuBarInspector.appTerminated(app.processIdentifier) }
+                }
                 MainActor.assumeIsolated { self?.scheduleMenuBarMeasure() }
             }
         }

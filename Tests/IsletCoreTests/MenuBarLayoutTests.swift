@@ -50,6 +50,46 @@ import Testing
         #expect(o.leftObstacleMaxX == 396)
         #expect(o.rightObstacleMinX == 877)
     }
+
+    @Test func collapsedItemsBehindTheChevronDontCount() {
+        // Three hidden items still report frames stacked on the chevron (x 873–915); the first
+        // drawn item is at 921. Only the chevron itself is in the way.
+        let chevron = CGRect(x: 897, y: 0, width: 17.5, height: 24)
+        let hidden = [CGRect(x: 873, y: 0, width: 24, height: 24), CGRect(x: 885, y: 0, width: 24, height: 24),
+                      CGRect(x: 891, y: 0, width: 24, height: 24)]
+        let visible = [CGRect(x: 921, y: 0, width: 24, height: 24), CGRect(x: 1374.5, y: 0, width: 117.5, height: 24)]
+        let o = MenuBarOccupancy.from(menuFrames: [CGRect(x: 30, y: 0, width: 442, height: 24)], statusFrames: hidden + visible,
+                                      chevron: chevron, notch: notch)
+        #expect(o.rightObstacleMinX == 897)
+        // 897 - 848.5 - 6 = 42.5 pt wings instead of dropping.
+        #expect(decide(o) == .wings(left: 42.5, right: 42.5))
+        // Without the chevron filter the stacked frames would force the dropped layout.
+        #expect(decide(MenuBarOccupancy.from(menuFrames: [], statusFrames: hidden + visible, notch: notch)) == .drop)
+    }
+
+    @Test func revealedItemsLeftOfTheNotchForceDrop() {
+        // Revealing hidden items moves them to the left of the notch (x 512–644).
+        let revealed = [CGRect(x: 582, y: 0, width: 38, height: 24), CGRect(x: 627, y: 0, width: 17, height: 24)]
+        let o = MenuBarOccupancy.from(menuFrames: [CGRect(x: 30, y: 0, width: 442, height: 24)], statusFrames: revealed,
+                                      chevron: CGRect(x: 897, y: 0, width: 17.5, height: 24), notch: notch)
+        #expect(o.leftObstacleMaxX == 644)
+        #expect(decide(o) == .drop)
+    }
+
+    @Test func smallWidthChangesAreIgnored() {
+        let now = Date()
+        #expect(MenuBarLayoutEngine.stabilise(current: .wings(left: 42.5, right: 42.5), next: .wings(left: 45, right: 45), lastSwitch: nil, now: now) == .keep)
+        #expect(MenuBarLayoutEngine.stabilise(current: .wings(left: 42.5, right: 42.5), next: .wings(left: 50, right: 50), lastSwitch: nil, now: now) == .apply)
+        #expect(MenuBarLayoutEngine.stabilise(current: .drop, next: .drop, lastSwitch: nil, now: now) == .keep)
+        #expect(MenuBarLayoutEngine.stabilise(current: nil, next: .drop, lastSwitch: nil, now: now) == .apply)
+    }
+
+    @Test func switchingLayoutsIsRateLimited() {
+        let now = Date()
+        let recent = now.addingTimeInterval(-0.4)
+        #expect(MenuBarLayoutEngine.stabilise(current: .drop, next: .wings(left: 42.5, right: 42.5), lastSwitch: recent, now: now) == .defer)
+        #expect(MenuBarLayoutEngine.stabilise(current: .drop, next: .wings(left: 42.5, right: 42.5), lastSwitch: now.addingTimeInterval(-2), now: now) == .apply)
+    }
 }
 
 @Suite struct MenuBarLiveActivityTests {

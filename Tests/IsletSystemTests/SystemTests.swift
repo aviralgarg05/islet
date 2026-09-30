@@ -285,6 +285,11 @@ func request(_ port: UInt16, _ method: String, _ path: String, token: String? = 
             MenuBarInspector.measure(notch: notch, screenFrame: screen.frame) { cont.resume(returning: $0) }
         }
         #expect(occupancy != nil)
+        // The second measurement reuses the cached status-item owners.
+        let again: MenuBarOccupancy? = await withCheckedContinuation { cont in
+            MenuBarInspector.measure(notch: notch, screenFrame: screen.frame) { cont.resume(returning: $0) }
+        }
+        #expect(again?.rightObstacleMinX == occupancy?.rightObstacleMinX)
         if let r = occupancy?.rightObstacleMinX { #expect(r >= notch.maxX - 1) }
         if let l = occupancy?.leftObstacleMaxX { #expect(l <= notch.minX + 1) }
     }

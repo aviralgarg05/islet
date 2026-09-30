@@ -7,10 +7,23 @@ import IsletCore
 ///
 /// Reads frames only (no titles or values) through Accessibility, which the user grants in
 /// Settings. Without that permission `measure` returns nil and Islet uses the drop layout.
+///
+/// Cost: asking an app with no status items for its extras bar runs into the timeout (20–50 ms
+/// each, and it wakes the app), so only a handful of processes are asked. The list of apps that
+/// own status items is built once, then kept current from launch and quit events; a measurement
+/// reads the frontmost app's menus, MenuBarAgent and those owners, about 5–10 ms in all.
 public enum MenuBarInspector {
     public static var isAvailable: Bool { AXIsProcessTrusted() }
 
+    static let agentBundleID = "com.apple.MenuBarAgent"
+
     private static let queue = DispatchQueue(label: "islet.menubar", qos: .utility)
+
+    // Guarded by `queue`.
+    private static var owners: Set<pid_t> = []
+    private static var ownersBuiltAt: Date?
+    /// Rebuild the owner list this often, for apps that add a status item long after launch.
+    private static let ownersMaxAge: TimeInterval = 15 * 60
 
     /// Measure asynchronously; the completion runs on the main queue.
     /// - Parameters:
@@ -18,18 +31,45 @@ public enum MenuBarInspector {
     ///   - screenFrame: the notch display's frame in AppKit global coordinates.
     public static func measure(notch: CGRect, screenFrame: CGRect, completion: @escaping (MenuBarOccupancy?) -> Void) {
         guard isAvailable else { return completion(nil) }
-        let apps = NSWorkspace.shared.runningApplications
-            .filter { $0.activationPolicy != .prohibited || $0.bundleIdentifier == "com.apple.MenuBarAgent" }
-            .map(\.processIdentifier)
+        let running = NSWorkspace.shared.runningApplications
+        let candidates = running.filter { $0.activationPolicy != .prohibited }.map(\.processIdentifier)
+        let agent = running.first { $0.bundleIdentifier == agentBundleID }?.processIdentifier
         let front = NSWorkspace.shared.frontmostApplication?.processIdentifier
         let primaryHeight = NSScreen.screens.first?.frame.height ?? screenFrame.maxY
         queue.async {
-            let result = occupancy(apps: apps, front: front, notch: notch, screenFrame: screenFrame, primaryHeight: primaryHeight)
+            if ownersBuiltAt.map({ Date().timeIntervalSince($0) > ownersMaxAge }) ?? true {
+                owners = Set(candidates.filter { $0 != agent && hasExtras($0) })
+                ownersBuiltAt = Date()
+            }
+            let live = Set(candidates)
+            owners.formIntersection(live)
+            let result = occupancy(owners: Array(owners), agent: agent, front: front, notch: notch,
+                                   screenFrame: screenFrame, primaryHeight: primaryHeight)
             DispatchQueue.main.async { completion(result) }
         }
     }
 
-    static func occupancy(apps: [pid_t], front: pid_t?, notch: CGRect, screenFrame: CGRect, primaryHeight: CGFloat) -> MenuBarOccupancy {
+    /// A new app may own status items; check it once it has had time to add them.
+    public static func appLaunched(_ pid: pid_t) {
+        queue.asyncAfter(deadline: .now() + 2) {
+            guard ownersBuiltAt != nil, isAvailable, hasExtras(pid) else { return }
+            owners.insert(pid)
+        }
+    }
+
+    public static func appTerminated(_ pid: pid_t) {
+        queue.async { owners.remove(pid) }
+    }
+
+    static func hasExtras(_ pid: pid_t) -> Bool {
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.05)
+        guard let bar = element(app, kAXExtrasMenuBarAttribute) else { return false }
+        return !children(bar).isEmpty
+    }
+
+    static func occupancy(owners: [pid_t], agent: pid_t?, front: pid_t?, notch: CGRect, screenFrame: CGRect,
+                          primaryHeight: CGFloat) -> MenuBarOccupancy {
         // AX uses top-left global coordinates; convert the menu bar row of this screen.
         let rowTop = primaryHeight - screenFrame.maxY
         let rowBottom = rowTop + max(notch.height, 24)
@@ -45,7 +85,24 @@ public enum MenuBarInspector {
             }
         }
         var extras: [CGRect] = []
-        for pid in apps {
+        var chevron: CGRect?
+        if let agent {
+            let app = AXUIElementCreateApplication(agent)
+            AXUIElementSetMessagingTimeout(app, 0.15)
+            if let bar = element(app, kAXExtrasMenuBarAttribute) {
+                for item in children(bar) {
+                    let f = frame(item)
+                    guard inRow(f), f.width > 0 else { continue }
+                    // The overflow chevron is the bar's only button; its label is localised, its role isn't.
+                    if string(item, kAXRoleAttribute) == kAXButtonRole, string(item, kAXIdentifierAttribute) == nil {
+                        chevron = f
+                    } else {
+                        extras.append(f)
+                    }
+                }
+            }
+        }
+        for pid in owners {
             let app = AXUIElementCreateApplication(pid)
             AXUIElementSetMessagingTimeout(app, 0.15)
             guard let bar = element(app, kAXExtrasMenuBarAttribute) else { continue }
@@ -54,13 +111,19 @@ public enum MenuBarInspector {
                 if inRow(f), f.width > 0 { extras.append(f) }
             }
         }
-        return MenuBarOccupancy.from(menuFrames: menus, statusFrames: extras, notch: notch)
+        return MenuBarOccupancy.from(menuFrames: menus, statusFrames: extras, chevron: chevron, notch: notch)
     }
 
     static func element(_ e: AXUIElement, _ name: String) -> AXUIElement? {
         var v: CFTypeRef?
         guard AXUIElementCopyAttributeValue(e, name as CFString, &v) == .success, let v, CFGetTypeID(v) == AXUIElementGetTypeID() else { return nil }
         return (v as! AXUIElement)
+    }
+
+    static func string(_ e: AXUIElement, _ name: String) -> String? {
+        var v: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(e, name as CFString, &v) == .success else { return nil }
+        return v as? String
     }
 
     static func children(_ e: AXUIElement) -> [AXUIElement] {
