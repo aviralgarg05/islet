@@ -71,6 +71,16 @@ enum TemplateSnapshots {
             ("progress", spec("progress", "ci", "Release build", "Compiling 142/310", "hammer.fill", "orange", .progress) {
                 $0.progress = 0.46
             }, now),
+            // Later phases of the same kinds.
+            ("eta-arrived", spec("eta2", "com.zimride.instant", "Grey Prius · 7ABC123", "Your driver is here", "car.fill", "#FF00BF", .eta) {
+                $0.trackerIcon = .symbol("car.fill")
+                $0.phase = "arrived"
+                $0.progress = 1
+            }, now),
+            ("flight-airborne", spec("flight2", "com.flightyapp.flighty", "BA 287 to San Francisco", nil, "airplane", "#0A84FF", .flight) {
+                $0.flight = ActivityFlight(number: "BA 287", from: "LHR", to: "SFO", departs: now.addingTimeInterval(-4 * 3600),
+                                           arrives: now.addingTimeInterval(72 * 60), status: "Delayed 25 min", carousel: "7")
+            }, now),
             // Mirrored from the menu bar: a template from the catalogue, but only text to fill it.
             ("mirrored-uber", mirrored("Uber", "Arriving · 4 min"), now),
             ("mirrored-espn", mirrored("ESPN", "IND 245/3 · AUS 198"), now),

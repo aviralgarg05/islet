@@ -569,9 +569,14 @@ struct TemplateTrailing: View {
         case nil:
             ActivityTrailing(activity: a, tint: base, compact: compact)
         case .eta? where a.trailing == nil && a.phase == "arrived":
-            HStack(spacing: 3) {
-                IconView(icon: a.trackerIcon ?? model.icon(for: a), size: size, tint: tint)
-                Text("Here").font(.system(size: size, weight: .semibold, design: .rounded)).foregroundStyle(tint)
+            let here = Text("Here").font(.system(size: size, weight: .semibold, design: .rounded)).foregroundStyle(tint)
+                .lineLimit(1).fixedSize()
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 3) {
+                    IconView(icon: a.trackerIcon ?? model.icon(for: a), size: size, tint: tint)
+                    here
+                }
+                here
             }
         case .score? where a.trailing == nil && a.teams?.count == 2:
             TeamScore(team: a.teams![1], height: compact ? 14 : 15, trailing: true, animation: motion.value)
