@@ -14,6 +14,7 @@ struct SettingsView: View {
             AppRulesSettings(model: model).tabItem { Label("Apps", systemImage: "app.badge") }
             IntegrationsSettings(model: model).tabItem { Label("Integrations", systemImage: "point.3.connected.trianglepath.dotted") }
             AISettingsView(model: model).tabItem { Label("AI", systemImage: "sparkles") }
+            PermissionsSettings(model: model).tabItem { Label("Permissions", systemImage: "hand.raised") }
             AboutSettings().tabItem { Label("About", systemImage: "info.circle") }
         }
         .frame(width: 620, height: 540)
