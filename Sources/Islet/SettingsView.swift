@@ -61,6 +61,7 @@ struct GeneralSettings: View {
                         }
                     }
             }
+            GestureSettingsSection(model: model)
         }
         .formStyle(.grouped)
     }
@@ -373,6 +374,7 @@ struct ModulesSettings: View {
                 Toggle("Camera & microphone indicators", isOn: $model.settings.privacyIndicatorsEnabled)
                 Toggle("System stats", isOn: $model.settings.systemStatsEnabled)
             }
+            BatteryAlertSettingsSection(model: model)
         }
         .formStyle(.grouped)
     }
@@ -437,7 +439,7 @@ struct IntegrationsSettings: View {
                 }
             }
             Section("URL scheme") {
-                Text("islet://notify?title=Hello  ·  islet://timer?minutes=5  ·  islet://media/playpause")
+                Text("islet://notify?title=Hello  ·  islet://timer?minutes=5  ·  islet://media/playpause  ·  islet://awake?for=1h")
                     .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
             }
         }

@@ -105,7 +105,6 @@ public final class SystemNowPlayingBridge {
     /// Send a transport command. Returns false when the helper isn't running.
     @discardableResult
     public func send(_ command: PlaybackCommand, position: Double? = nil) -> Bool {
-        guard let stdin else { return false }
         let line: String
         switch command {
         case .play: line = "cmd 0"
@@ -113,10 +112,32 @@ public final class SystemNowPlayingBridge {
         case .togglePlayPause: line = "cmd 2"
         case .next: line = "cmd 4"
         case .previous: line = "cmd 5"
+        case .toggleShuffle: line = "cmd 6"
+        case .toggleRepeat: line = "cmd 7"
+        // MediaRemote's own 15 s skips; the app prefers a computed seek when it knows the position.
+        case .skipBackward: line = "cmd 12"
+        case .skipForward: line = "cmd 13"
         case .seek:
             guard let position else { return false }
             line = "seek \(max(0, position))"
         }
+        return write(line)
+    }
+
+    /// Set shuffle explicitly (more reliable than the toggle command when the state is known).
+    @discardableResult
+    public func setShuffle(_ on: Bool) -> Bool {
+        write("shuffle \(MediaModes.mediaRemoteShuffle(on))")
+    }
+
+    /// Set the repeat mode explicitly.
+    @discardableResult
+    public func setRepeat(_ mode: RepeatMode) -> Bool {
+        write("repeat \(MediaModes.mediaRemoteRepeat(mode))")
+    }
+
+    private func write(_ line: String) -> Bool {
+        guard let stdin else { return false }
         do {
             try stdin.write(contentsOf: Data((line + "\n").utf8))
             return true
@@ -171,7 +192,9 @@ public final class SystemNowPlayingBridge {
             artist: o["artist"] as? String, album: o["album"] as? String, isPlaying: playing,
             duration: (o["duration"] as? Double).flatMap { $0 > 0 ? $0 : nil },
             elapsed: o["elapsed"] as? Double, playbackRate: rate > 0 ? rate : 1,
-            timestamp: (o["timestamp"] as? Double).map(Date.init(timeIntervalSince1970:)) ?? Date()
+            timestamp: (o["timestamp"] as? Double).map(Date.init(timeIntervalSince1970:)) ?? Date(),
+            shuffle: MediaModes.shuffle(mediaRemote: o["shuffleMode"] as? Int),
+            repeatMode: MediaModes.repeatMode(mediaRemote: o["repeatMode"] as? Int)
         )
         let art = (o["artwork"] as? String).flatMap { Data(base64Encoded: $0) }
         return (np, o["artworkHash"] as? Int, art)

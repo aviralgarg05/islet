@@ -29,11 +29,15 @@ public struct PresenterInputs: Sendable {
     public var isSuppressed: Bool
     /// Show paused media in the compact island (off by default: paused music is noise).
     public var showPausedMedia: Bool
+    /// The activity the user brought forward by swiping; it stays in the compact island while it exists.
+    public var focusedActivityID: String?
 
     public init(now: Date, center: ActivityCenter, nowPlaying: NowPlaying? = nil, batteryEvent: BatteryEvent? = nil,
-                isExpanded: Bool = false, isSuppressed: Bool = false, showPausedMedia: Bool = false) {
+                isExpanded: Bool = false, isSuppressed: Bool = false, showPausedMedia: Bool = false,
+                focusedActivityID: String? = nil) {
         self.now = now; self.center = center; self.nowPlaying = nowPlaying; self.batteryEvent = batteryEvent
         self.isExpanded = isExpanded; self.isSuppressed = isSuppressed; self.showPausedMedia = showPausedMedia
+        self.focusedActivityID = focusedActivityID
     }
 }
 
@@ -54,6 +58,9 @@ public enum Presenter {
 
         let ordered = i.center.ordered(now: i.now)
         let others = max(0, ordered.count - 1)
+        if let id = i.focusedActivityID, let focused = ordered.first(where: { $0.id == id }) {
+            return .compact(.activity(focused, others: others))
+        }
         if let top = ordered.first, top.priority >= .high {
             return .compact(.activity(top, others: others))
         }

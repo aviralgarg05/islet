@@ -14,6 +14,8 @@ public protocol IsletBackend: Sendable {
     func stateSnapshot() async -> StateSnapshot
     /// What MenuBarAgent exposes right now (diagnostics for Live Activity mirroring).
     func menuBarItems() async -> [MenuBarItemInfo]
+    /// Start or stop keep awake (nil only reads the state).
+    func keepAwake(_ change: KeepAwakeChange?) async -> KeepAwakeStatus
 }
 
 public struct StateSnapshot: Codable, Equatable, Sendable {
@@ -90,6 +92,11 @@ struct FocusPush: Codable {
 struct CommandPush: Codable {
     var command: PlaybackCommand
     var position: Double?
+}
+
+struct AwakePush: Codable {
+    /// Omitted or 0 = until turned off.
+    var minutes: Double?
 }
 
 /// Authenticates and routes local API requests.
@@ -260,6 +267,22 @@ public struct APIRouter: Sendable {
         case ("POST", 2, "island") where sub == "close":
             await backend.setExpanded(false)
             return .noContent
+
+        case (_, 1, "awake"):
+            switch r.method {
+            case "GET":
+                return .json(await backend.keepAwake(nil))
+            case "POST", "PUT":
+                let minutes = r.body.isEmpty ? nil : try decode(AwakePush.self, from: r).minutes
+                if let m = minutes, !(m >= 0 && m <= KeepAwake.maxMinutes) {
+                    return .error(422, "'minutes' must be from 0 (until turned off) to \(Int(KeepAwake.maxMinutes))")
+                }
+                return .json(await backend.keepAwake(.start(minutes: minutes == 0 ? nil : minutes)))
+            case "DELETE":
+                return .json(await backend.keepAwake(.stop))
+            default:
+                return .error(405, "\(r.method) is not supported on \(r.path)")
+            }
 
         case ("GET", 2, "debug") where sub == "menubar":
             return .json(await backend.menuBarItems())

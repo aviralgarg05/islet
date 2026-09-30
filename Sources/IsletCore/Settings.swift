@@ -127,7 +127,6 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var bounceOnActivity = true
     /// Replace spring animations with quick fades (also follows the system Reduce Motion setting).
     public var reduceMotion = false
-    public var hapticFeedback = true
     public var hapticsMode: HapticsMode = .direct
     /// How many activities can show at once in the closed island (1 = no bubbles).
     public var maxConcurrent = 3
@@ -167,6 +166,25 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var smartIcons = true
     /// Use on-device Apple Intelligence (when available) for icons and one-line summaries.
     public var aiAssist = true
+
+    // Now Playing controls, gestures and battery alerts
+    /// Show the time left (rather than the track length) right of the scrubber. Tap the label to switch.
+    public var mediaShowsRemainingTime = true
+    /// Two-finger swipes on the island (no permissions needed).
+    public var gesturesEnabled = true
+    public var swipeDownToOpen = true
+    public var swipeUpToClose = true
+    /// Swipe sideways over playing media to change track (or seek, see `swipeMediaAction`).
+    public var swipeMedia = true
+    public var swipeMediaAction: MediaSwipeAction = .track
+    /// Swipe sideways over a closed activity to bring the next one forward.
+    public var swipeCyclesActivities = true
+    /// Warn on battery at this level (percent).
+    public var batteryLowThreshold = 20
+    /// Warn again, more urgently, at this level.
+    public var batteryCriticalThreshold = 10
+    /// Tell me when charging reaches this level (0 = off), e.g. 80 to match a charge limit.
+    public var batteryChargedAlert = 0
 
     // Integrations
     public var apiEnabled = true
@@ -217,6 +235,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         s.maxConcurrent = min(3, max(1, s.maxConcurrent))
         s.alertDuration = min(10, max(0.5, s.alertDuration))
         s.hudDuration = min(5, max(0.5, s.hudDuration))
+        s.batteryLowThreshold = min(50, max(5, s.batteryLowThreshold))
+        s.batteryCriticalThreshold = min(s.batteryLowThreshold - 1, max(1, s.batteryCriticalThreshold))
+        if s.batteryChargedAlert != 0 { s.batteryChargedAlert = min(100, max(50, s.batteryChargedAlert)) }
         let d = IsletSettings()
         if !(1024...65535).contains(s.apiPort) { s.apiPort = d.apiPort }
         if !(1024...65535).contains(s.lanPort) || s.lanPort == s.apiPort { s.lanPort = d.lanPort }
@@ -243,7 +264,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
             }
         }
         guard let d = try? JSONSerialization.data(withJSONObject: merged),
-              let s = try? decoder.decode(IsletSettings.self, from: d) else { return IsletSettings() }
+              var s = try? decoder.decode(IsletSettings.self, from: d) else { return IsletSettings() }
+        // Older configs switched haptics off with `hapticFeedback: false`; `hapticsMode` replaced it.
+        if user["hapticFeedback"] as? Bool == false, user["hapticsMode"] == nil { s.hapticsMode = .off }
         return s.sanitized()
     }
 

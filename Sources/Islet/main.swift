@@ -127,7 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func settingsChanged() {
-        Haptics.mode = model.settings.hapticFeedback ? model.settings.hapticsMode : .off
+        Haptics.mode = model.settings.hapticsMode
         model.applyTiming()
         model.startEventSources()
         setUpHotkey()

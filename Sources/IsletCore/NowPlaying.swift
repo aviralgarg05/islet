@@ -15,6 +15,14 @@ public enum MediaSourceKind: String, Codable, Sendable, CaseIterable {
 
 public enum PlaybackCommand: String, Codable, Sendable, CaseIterable {
     case play, pause, togglePlayPause, next, previous, seek
+    /// Jump 15 s forward or back, computed from the current position so it works with any player.
+    case skipForward, skipBackward
+    /// Only offered when the player reports its shuffle or repeat state.
+    case toggleShuffle, toggleRepeat
+}
+
+public enum RepeatMode: String, Codable, Sendable, CaseIterable {
+    case off, one, all
 }
 
 public struct NowPlaying: Codable, Equatable, Sendable {
@@ -35,17 +43,22 @@ public struct NowPlaying: Codable, Equatable, Sendable {
     public var timestamp: Date
     public var artworkData: Data?
     public var artworkURL: URL?
+    /// Shuffle state; nil when the player doesn't report it (no shuffle button then).
+    public var shuffle: Bool?
+    /// Repeat state; nil when the player doesn't report it (no repeat button then).
+    public var repeatMode: RepeatMode?
 
     public init(
         source: MediaSourceKind, bundleID: String? = nil, appName: String? = nil, title: String,
         artist: String? = nil, album: String? = nil, isPlaying: Bool, duration: Double? = nil,
         elapsed: Double? = nil, playbackRate: Double = 1, timestamp: Date,
-        artworkData: Data? = nil, artworkURL: URL? = nil
+        artworkData: Data? = nil, artworkURL: URL? = nil, shuffle: Bool? = nil, repeatMode: RepeatMode? = nil
     ) {
         self.source = source; self.bundleID = bundleID; self.appName = appName; self.title = title
         self.artist = artist; self.album = album; self.isPlaying = isPlaying; self.duration = duration
         self.elapsed = elapsed; self.playbackRate = playbackRate; self.timestamp = timestamp
         self.artworkData = artworkData; self.artworkURL = artworkURL
+        self.shuffle = shuffle; self.repeatMode = repeatMode
     }
 
     /// Elapsed time extrapolated to `now` (clamped to the duration).
@@ -120,6 +133,8 @@ public struct MediaArbiter: Sendable {
             if result.artworkURL == nil { result.artworkURL = other.artworkURL }
             if result.duration == nil { result.duration = other.duration }
             if result.bundleID == nil { result.bundleID = other.bundleID }
+            if result.shuffle == nil { result.shuffle = other.shuffle }
+            if result.repeatMode == nil { result.repeatMode = other.repeatMode }
             if result.elapsed == nil, other.elapsed != nil {
                 result.elapsed = other.elapsed
                 result.timestamp = other.timestamp
