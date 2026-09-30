@@ -405,14 +405,17 @@ struct Wings<Leading: View, Trailing: View>: View {
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
+        // Narrow wings (a crowded menu bar) give the content more of their width.
+        let inset: CGFloat = wing < 46 ? max(5, (wing * 0.18).rounded()) : 11
         HStack(spacing: 0) {
             leading
-                .padding(.leading, 11)
+                .padding(.leading, inset)
                 .frame(width: wing, height: metrics.notch.height, alignment: .leading)
             Spacer(minLength: 0)
             trailing
-                .padding(.trailing, 11)
+                .padding(.trailing, inset)
                 .frame(width: wing, height: metrics.notch.height, alignment: .trailing)
+                .environment(\.wingRoom, wing - inset)
         }
         .frame(width: metrics.notch.width + 2 * wing, height: metrics.notch.height)
     }
@@ -532,18 +535,25 @@ struct ActivityTrailing: View {
     let tint: Color
     /// Slightly smaller type for the dropped pill and sneak peeks.
     var compact = false
+    @Environment(\.wingRoom) private var room
 
     private var size: CGFloat { compact ? 11.5 : 12.5 }
 
     var body: some View {
-        if activity.endsAt != nil || activity.startedAt != nil {
+        if room < NarrowValue.wordRoom, activity.endsAt == nil, activity.startedAt == nil,
+           let text = activity.trailingText(now: Date()), activity.trailing != nil || activity.progress == nil,
+           let glyph = NarrowValue.glyph(for: text, state: activity.state) {
+            Image(systemName: glyph)
+                .font(.system(size: min(size, room * 0.6), weight: .semibold))
+                .foregroundStyle(tint)
+        } else if activity.endsAt != nil || activity.startedAt != nil {
             TimelineView(.periodic(from: .now, by: 1)) { ctx in
                 Text(activity.trailingText(now: ctx.date) ?? "")
                     .font(.system(size: size, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(tint)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                    .minimumScaleFactor(room < NarrowValue.wordRoom ? 0.5 : 0.7)
                     .contentTransition(.numericText(countsDown: activity.endsAt != nil))
             }
         } else if let text = activity.trailingText(now: Date()), activity.trailing != nil || activity.progress == nil {
@@ -552,7 +562,7 @@ struct ActivityTrailing: View {
                 .monospacedDigit()
                 .foregroundStyle(tint)
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .minimumScaleFactor(room < NarrowValue.wordRoom ? 0.5 : 0.75)
         } else if activity.progress != nil {
             ProgressRing(progress: activity.clampedProgress, tint: tint, size: compact ? 13 : 15, lineWidth: 2.2)
         } else {

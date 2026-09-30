@@ -84,20 +84,28 @@ struct TemplateValueText: View {
     var size: CGFloat = 12.5
     var tint: Color?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.wingRoom) private var room
 
     var body: some View {
         let motion = TemplateMotion(model, systemReduceMotion: reduceMotion)
         let perSecond = activity.templateRefresh(now: Date())?.interval == 1
+        let narrow = room < NarrowValue.wordRoom
         TemplateClock(activity: activity) { now in
             let text = activity.templateTrailing(now: now) ?? ""
-            Text(text)
-                .font(.system(size: size, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(tint ?? model.tint(for: activity))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .contentTransition(.numericText(countsDown: activity.endsAt != nil))
-                .animation(perSecond ? nil : motion.value, value: text)
+            if narrow, let glyph = NarrowValue.glyph(for: text, state: activity.state) {
+                Image(systemName: glyph)
+                    .font(.system(size: min(size, room * 0.6), weight: .semibold))
+                    .foregroundStyle(tint ?? model.tint(for: activity))
+            } else {
+                Text(narrow ? activity.minimalText(now: now) ?? text : text)
+                    .font(.system(size: size, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(tint ?? model.tint(for: activity))
+                    .lineLimit(1)
+                    .minimumScaleFactor(narrow ? 0.5 : 0.7)
+                    .contentTransition(.numericText(countsDown: activity.endsAt != nil))
+                    .animation(perSecond ? nil : motion.value, value: text)
+            }
         }
     }
 }
