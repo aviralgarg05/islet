@@ -12,6 +12,8 @@ public protocol IsletBackend: Sendable {
     func mediaCommand(_ command: PlaybackCommand, position: Double?) async -> Bool
     func setExpanded(_ expanded: Bool) async
     func stateSnapshot() async -> StateSnapshot
+    /// What MenuBarAgent exposes right now (diagnostics for Live Activity mirroring).
+    func menuBarItems() async -> [MenuBarItemInfo]
 }
 
 public struct StateSnapshot: Codable, Equatable, Sendable {
@@ -259,6 +261,9 @@ public struct APIRouter: Sendable {
             await backend.setExpanded(false)
             return .noContent
 
+        case ("GET", 2, "debug") where sub == "menubar":
+            return .json(await backend.menuBarItems())
+
         case ("POST", 1, "focus"):
             let f = try decode(FocusPush.self, from: r)
             return .json(try await backend.applyActivity(FocusPill.activity(name: f.name ?? "Focus", on: f.on ?? true)), status: 201)
@@ -274,7 +279,7 @@ public struct APIRouter: Sendable {
             }
 
         default:
-            let known = ["state", "activities", "notify", "timer", "hud", "media", "island", "hooks", "focus"]
+            let known = ["state", "activities", "notify", "timer", "hud", "media", "island", "hooks", "focus", "debug"]
             if let first = rest.first, known.contains(first) {
                 return .error(405, "\(r.method) is not supported on \(r.path)")
             }

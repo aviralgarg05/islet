@@ -19,6 +19,8 @@ public enum URLCommand: Equatable, Sendable {
     case hud(HUDKind, Double)
     case media(PlaybackCommand)
     case focus(name: String, on: Bool)
+    /// Open the menu bar Live Activity Islet mirrors (Apple's expanded view / iPhone Mirroring).
+    case openMenuBarActivity(key: String)
     case open, close, toggle, settings
 
     public enum ParseError: Error, Equatable, CustomStringConvertible {
@@ -114,6 +116,9 @@ public enum URLCommand: Equatable, Sendable {
         case "focus":
             let state = (q["state"] ?? q["on"] ?? "on").lowercased()
             return .focus(name: q["name"] ?? "Focus", on: !["off", "0", "false", "no"].contains(state))
+        case "menubar-activity":
+            guard let key = q["key"], !key.isEmpty else { throw ParseError.missing("key") }
+            return .openMenuBarActivity(key: key)
         case "open", "expand": return .open
         case "close", "collapse": return .close
         case "toggle": return .toggle

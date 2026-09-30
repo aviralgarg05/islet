@@ -88,6 +88,8 @@ final class AppModel {
     let notificationMirror = NotificationMirror()
     let downloads = DownloadsWatcher()
     let unlock = UnlockMonitor()
+    let menuBarActivities = MenuBarLiveActivityMonitor()
+    private var mirroredKeys: Set<String> = []
     private var calls = CallDetector()
     private var lastMicUsers: Set<String> = []
     private var lanServer: LocalAPIServer?
@@ -184,6 +186,30 @@ final class AppModel {
         unlock.onUnlock = { [weak self] in self?.welcomeBack() }
         if settings.unlockSplash { unlock.start() } else { unlock.stop() }
         if settings.apiEnabled && settings.lanBridgeEnabled { startLAN() } else { stopLAN() }
+        if settings.mirrorMenuBarActivities && MenuBarLiveActivityMonitor.isAvailable {
+            menuBarActivities.onChange = { [weak self] list in self?.syncMenuBarActivities(list) }
+            menuBarActivities.start()
+        } else {
+            menuBarActivities.stop()
+            syncMenuBarActivities([])
+        }
+    }
+
+    /// Show the menu bar's Live Activities (iPhone and system) as island activities.
+    private func syncMenuBarActivities(_ list: [MirroredLiveActivity]) {
+        let keys = Set(list.map(\.key))
+        for key in mirroredKeys.subtracting(keys) { remove(activityID: MenuBarLiveActivities.activityID(key)) }
+        for m in list {
+            let look = LiveActivityCatalog.look(for: m.appName).map { ($0.symbol, $0.tint) }
+            var spec = MenuBarLiveActivities.activity(for: m, look: look, isNew: !mirroredKeys.contains(m.key))
+            var c = URLComponents()
+            c.scheme = "islet"
+            c.host = "menubar-activity"
+            c.queryItems = [URLQueryItem(name: "key", value: m.key)]
+            spec.url = c.url
+            _ = try? applyLocal(spec)
+        }
+        mirroredKeys = keys
     }
 
     func applyTiming() {
@@ -832,6 +858,13 @@ extension AppModel: IsletBackend {
             let target = NSScreen.main.flatMap { $0.displayID }
             self.pinned = expanded
             self.setExpanded(expanded ? target : nil)
+        }
+    }
+
+    nonisolated func menuBarItems() async -> [MenuBarItemInfo] {
+        await MainActor.run {
+            if !self.menuBarActivities.isStarted { self.menuBarActivities.start() }
+            return self.menuBarActivities.dump()
         }
     }
 

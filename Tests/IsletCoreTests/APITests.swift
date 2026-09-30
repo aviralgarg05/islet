@@ -27,6 +27,7 @@ actor FakeBackend: IsletBackend {
     func stateSnapshot() async -> StateSnapshot {
         StateSnapshot(version: "test", presentation: "idle", activities: center.ordered(now: now), nowPlaying: nil, battery: nil)
     }
+    func menuBarItems() async -> [MenuBarItemInfo] { [] }
 }
 
 @Suite struct HTTPParserTests {

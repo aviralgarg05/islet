@@ -181,6 +181,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var mutedSources: [String] = []
     /// Mirror every app's notification banners into the island. Needs Accessibility.
     public var notificationMirroring = false
+    /// Show the Live Activities macOS puts in the menu bar (from your iPhone) in the island.
+    /// Needs Accessibility.
+    public var mirrorMenuBarActivities = true
     public var appRules: [AppRule] = []
 
     public var launchAtLogin = false

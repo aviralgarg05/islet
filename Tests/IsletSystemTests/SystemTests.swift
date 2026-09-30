@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import IOKit.ps
 import IsletCore
 import Testing
@@ -20,6 +21,7 @@ actor MemoryBackend: IsletBackend {
     func stateSnapshot() async -> StateSnapshot {
         StateSnapshot(version: "t", presentation: "idle", activities: [], nowPlaying: nil, battery: nil)
     }
+    func menuBarItems() async -> [MenuBarItemInfo] { [] }
 }
 
 func startServer(lan: Bool = false, limit: Int? = nil) async throws -> (LocalAPIServer, UInt16) {
@@ -256,5 +258,34 @@ func request(_ port: UInt16, _ method: String, _ path: String, token: String? = 
             #expect(SystemNowPlayingBridge.helperPaths() != nil)
             unsetenv("ISLET_HELPERS_DIR")
         }
+    }
+}
+
+@Suite struct MenuBarHostTests {
+    /// Runs against this Mac's real menu bar when Accessibility is available (read-only).
+    @Test func systemExtrasAreNotMirrored() throws {
+        guard MenuBarLiveActivityMonitor.isAvailable else { return }
+        let monitor = MenuBarLiveActivityMonitor()
+        var published: [MirroredLiveActivity] = []
+        monitor.onChange = { published = $0 }
+        monitor.start()
+        monitor.scan()
+        let systemNames: Set<String> = ["Battery", "Wi‑Fi, connected, 2 bars", "Bluetooth", "Screen Mirroring", "Control Center", "Clock"]
+        #expect(published.allSatisfy { !systemNames.contains($0.appName) }, "\(published)")
+        #expect(!monitor.dump().isEmpty)
+        monitor.stop()
+    }
+
+    @Test func inspectorMeasuresTheMenuBar() async {
+        guard MenuBarInspector.isAvailable, let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }),
+              let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea else { return }
+        let notch = CGRect(x: left.maxX, y: screen.frame.maxY - screen.safeAreaInsets.top,
+                           width: right.minX - left.maxX, height: screen.safeAreaInsets.top)
+        let occupancy: MenuBarOccupancy? = await withCheckedContinuation { cont in
+            MenuBarInspector.measure(notch: notch, screenFrame: screen.frame) { cont.resume(returning: $0) }
+        }
+        #expect(occupancy != nil)
+        if let r = occupancy?.rightObstacleMinX { #expect(r >= notch.maxX - 1) }
+        if let l = occupancy?.leftObstacleMaxX { #expect(l <= notch.minX + 1) }
     }
 }

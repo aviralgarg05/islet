@@ -21,6 +21,7 @@ USAGE
   isletctl open | close                expand or collapse the island
   isletctl hook <claude|codex|AGENT> [JSON]   forward an agent hook payload (stdin or last arg)
   isletctl state | health | token
+  isletctl debug menubar                what macOS shows in the menu bar (for Live Activity mirroring)
 
 STATES     info running success warning failure waiting
 PRIORITIES low normal high critical
@@ -211,6 +212,11 @@ func run(_ argv: [String]) async throws -> Int32 {
 
     case "ls", "list":
         try expectOK(try await Client.discover().send("GET", "/v1/activities"), print: true)
+        return 0
+
+    case "debug":
+        guard a.positional.first == "menubar" else { throw CLIError("usage: isletctl debug menubar") }
+        try expectOK(try await Client.discover().send("GET", "/v1/debug/menubar"), print: true)
         return 0
 
     case "state":

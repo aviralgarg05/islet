@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import Testing
 @testable import IsletCore
 
@@ -48,5 +49,66 @@ import Testing
         let o = MenuBarOccupancy.from(menuFrames: menus, statusFrames: extras, notch: notch)
         #expect(o.leftObstacleMaxX == 396)
         #expect(o.rightObstacleMinX == 877)
+    }
+}
+
+@Suite struct MenuBarLiveActivityTests {
+    // The items MenuBarAgent exposed on this Mac (macOS 27.0.1) with no Live Activity running.
+    let observed = [
+        MenuBarItemInfo(identifier: "com.apple.menuextra.battery", subrole: "AXMenuExtra", description: "Battery", value: "80%, charging"),
+        MenuBarItemInfo(identifier: "com.apple.menuextra.wifi", subrole: "AXMenuExtra", description: "Wi‑Fi, connected, 2 bars"),
+        MenuBarItemInfo(identifier: "com.apple.menuextra.bluetooth", subrole: "AXMenuExtra", description: "Bluetooth"),
+        MenuBarItemInfo(identifier: "com.apple.menuextra.screen-mirroring", subrole: "AXMenuExtra", description: "Screen Mirroring"),
+        MenuBarItemInfo(identifier: "com.apple.menuextra.controlcenter", subrole: "AXMenuExtra", description: "Control Center"),
+        MenuBarItemInfo(identifier: "com.apple.menuextra.clock", subrole: "AXMenuExtra", description: "Clock", value: "Wed 30 Sep  20:57"),
+        MenuBarItemInfo(description: "Show Hidden Menu Bar Items"),
+        MenuBarItemInfo(subrole: "AXHostingView"),
+    ]
+
+    @Test func systemItemsAreNotLiveActivities() {
+        for item in observed { #expect(!MenuBarLiveActivities.isLiveActivity(item), "\(item)") }
+    }
+
+    @Test func unknownContentfulItemsAre() {
+        let uber = MenuBarItemInfo(identifier: "com.apple.menuextra.liveactivity.3F2A", description: "Uber", value: "4 min")
+        #expect(MenuBarLiveActivities.isLiveActivity(uber))
+        #expect(MenuBarLiveActivities.mirror(uber) == MirroredLiveActivity(key: "com.apple.menuextra.liveactivity.3F2A", appName: "Uber", detail: "4 min"))
+        let noID = MenuBarItemInfo(subrole: "AXMenuExtra", description: "Flighty, Boarding 12:40")
+        #expect(MenuBarLiveActivities.mirror(noID) == MirroredLiveActivity(key: "app:flighty", appName: "Flighty", detail: "Boarding 12:40"))
+        let texts = MenuBarItemInfo(identifier: "x.unknown", texts: ["ESPN", "IND 245/3", "AUS 198"])
+        #expect(MenuBarLiveActivities.mirror(texts)?.detail == "IND 245/3 · AUS 198")
+    }
+
+    @Test func activitySpecForMirroredItem() throws {
+        let m = MirroredLiveActivity(key: "k", appName: "Uber", detail: "Arriving · 4 min")
+        let spec = MenuBarLiveActivities.activity(for: m, look: ("car.fill", "#000000"), isNew: true)
+        #expect(spec.icon == .symbol("car.fill"))
+        #expect(spec.trailing == "4 min")
+        #expect(spec.source == "iphone")
+        #expect(spec.sneak == true)
+        #expect(ActivityCenter.isValidID(spec.id!))
+        // Without a catalogue entry, smart icons still pick something sensible.
+        let smart = MenuBarLiveActivities.activity(for: MirroredLiveActivity(key: "d", appName: "DoorDash", detail: "Your order is on the way"), look: nil, isNew: false)
+        #expect(smart.icon == .symbol("takeoutbag.and.cup.and.straw.fill"))
+        var c = ActivityCenter()
+        #expect(try c.apply(spec, now: t0).title == "Uber")
+    }
+}
+
+@Suite struct LiveActivityCatalogTests {
+    @Test func looksUpByNameAndAlias() {
+        #expect(LiveActivityCatalog.look(for: "Uber")?.symbol == "car.fill")
+        #expect(LiveActivityCatalog.look(for: "Uber Eats")?.symbol == "takeoutbag.and.cup.and.straw.fill")
+        #expect(LiveActivityCatalog.look(for: "  flighty ")?.symbol == "airplane")
+        #expect(LiveActivityCatalog.look(for: "Some Unknown App") == nil)
+    }
+
+    @Test func everyTintParses() {
+        for (name, look) in LiveActivityCatalog.entries { #expect(RGBA.parse(look.tint) != nil, "\(name)") }
+    }
+
+    @Test func menuBarActivityURL() throws {
+        #expect(try URLCommand.parse(URL(string: "islet://menubar-activity?key=com.apple.x.1")!) == .openMenuBarActivity(key: "com.apple.x.1"))
+        #expect(throws: URLCommand.ParseError.missing("key")) { try URLCommand.parse(URL(string: "islet://menubar-activity")!) }
     }
 }
