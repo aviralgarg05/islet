@@ -87,6 +87,7 @@ isletctl set upload --state success --subtitle "All done"
 | **Home Assistant** | [`integrations/home-assistant/islet.yaml`](../integrations/home-assistant/islet.yaml): a `rest_command` to the LAN bridge, plus a doorbell automation. |
 | **Makefiles, npm scripts, git hooks** | `isletctl run -- <cmd>` or `isletctl notify`. For example, a `post-merge` hook: `isletctl notify "Pulled $(git rev-parse --short HEAD)" --icon sf:arrow.down.circle`. |
 | **CI (GitHub Actions)** | Watch a run from your Mac: `isletctl run --title "CI main" -- gh run watch --exit-status`. |
+| **A hotkey for the Ask box** | In any of the above, bind a hotkey to Open URL `islet://ask`, or `islet://ask?q={query}` to pass what you typed in Alfred or Raycast. The island opens with the question filled in; you press Return to send. See [AI.md](AI.md). |
 
 ---
 
