@@ -97,6 +97,21 @@ private func writtenKeys(_ s: IsletSettings) throws -> Set<String> {
         #expect(IsletSettings.decodeLenient(try JSONEncoder().encode(s)) == s)
     }
 
+    @Test func oldDropLayoutInAConfigFileIsReplacedOnSave() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("islet-layout-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("config.json")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data(#"{"closedLayout": "drop", "sizePreset": "standard"}"#.utf8).write(to: file)
+        let s = IsletSettings.load(from: file)
+        #expect(s.closedLayout == .auto)
+        #expect(s.sizePreset == .standard)
+        try s.save(to: file)
+        let text = try String(contentsOf: file, encoding: .utf8)
+        #expect(!text.contains("\"drop\""))
+        #expect(IsletSettings.load(from: file) == s)
+    }
+
     @Test func remainingChoicesStillLoad() {
         #expect(decode(#"{"closedLayout": "wings"}"#).closedLayout == .wings)
         #expect(decode(#"{"closedLayout": "auto"}"#).closedLayout == .auto)

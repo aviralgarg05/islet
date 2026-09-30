@@ -85,12 +85,22 @@ public enum MenuBarLayoutEngine {
     }
 
     /// Width changes smaller than this are ignored, so a status item that retitles every few
-    /// seconds doesn't make the wings twitch.
+    /// seconds doesn't make the wings twitch or the bubbles jump between rows. It is less than
+    /// `clearance`, so a width kept this way never reaches the item it was measured against.
     public static let widthHysteresis: CGFloat = 4
 
-    /// Whether a newly measured wing width should replace the one in use (always, when none is).
-    public static func shouldReplace(_ current: CGFloat?, with next: CGFloat) -> Bool {
+    /// Whether two measured widths differ enough to act on. Infinity (nothing on that side)
+    /// only matches itself.
+    public static func differs(_ a: CGFloat, _ b: CGFloat) -> Bool {
+        a.isFinite && b.isFinite ? abs(a - b) >= widthHysteresis : a != b
+    }
+
+    /// Whether a newly measured wing width should replace the one in use: always when none is,
+    /// and at once when the wing width from Settings changed (the wings are now wider than it,
+    /// or the menu bar has room for exactly it), however small the change.
+    public static func shouldReplace(_ current: CGFloat?, with next: CGFloat, preferredWing: CGFloat) -> Bool {
         guard let current else { return true }
-        return abs(current - next) >= widthHysteresis
+        if current > preferredWing || (next == preferredWing && current != next) { return true }
+        return differs(current, next)
     }
 }

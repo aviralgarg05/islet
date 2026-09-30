@@ -177,16 +177,22 @@ final class IslandWindowController {
         }
         MenuBarInspector.measure(notch: notch, screenFrame: descriptor.frame) { [weak self] occupancy in
             guard let self else { return }
-            let wing = MenuBarLayoutEngine.wingWidth(preference: .auto, notch: notch, preferredWing: preferred, occupancy: occupancy, hasMenuBar: true)
+            let measured = MenuBarLayoutEngine.wingWidth(preference: .auto, notch: notch, preferredWing: preferred, occupancy: occupancy, hasMenuBar: true)
             let current = self.model.closedPlacements[display]
-            guard MenuBarLayoutEngine.shouldReplace(current?.wing, with: wing) else { return }
+            var wing = measured
+            if let kept = current?.wing, !MenuBarLayoutEngine.shouldReplace(kept, with: measured, preferredWing: preferred) { wing = kept }
             var placement = ClosedPlacement(wing: wing, slack: 0)
             if let occupancy {
                 let slack = MenuBarLayoutEngine.slack(notch: notch, occupancy: occupancy, wing: wing)
                 placement.leftSlack = slack.left
                 placement.rightSlack = slack.right
             }
-            if current != placement { self.model.closedPlacements[display] = placement }
+            // The room beyond the wings is refreshed even when the wings keep their width, so a
+            // bubble never stays in the row over an item that has appeared since.
+            if let current, current.wing == placement.wing,
+               !MenuBarLayoutEngine.differs(current.leftSlack, placement.leftSlack),
+               !MenuBarLayoutEngine.differs(current.rightSlack, placement.rightSlack) { return }
+            self.model.closedPlacements[display] = placement
         }
     }
 

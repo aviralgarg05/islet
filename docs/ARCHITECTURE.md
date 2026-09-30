@@ -78,7 +78,7 @@ Precedence: suppressed (a fullscreen app, or a per-app rule) → only the HUD or
 The closed island always sits in the menu bar row, with a wing either side of the notch; `closedLayout` only sets how wide the wings are. It is `auto` by default, and `wings` always uses the wing width from Settings. (An old `drop` value, which hung a pill below the notch, loads as `auto`.) With `auto`, `IslandWindowController.measureMenuBar()` finds what is beside the notch and `MenuBarLayoutEngine.wingWidth` sizes the wings:
 
 - Both wings take the narrower of the free space on each side, less 6 pt of clearance and capped at the wing width from Settings, so the island stays centred.
-- 34 pt or more gives wings with an icon and a short value. Anything less gives icon-only wings of 26 pt, even if they then cover the edge of the nearest menu bar item (such as the overflow chevron right beside the notch).
+- 34 pt or more gives wings with an icon and a short value. Anything less still gives icon-only wings of 26 pt, which may cover the nearest menu bar item in part or in full. An overflow chevron a few points from the notch, for example, sits under the right wing while the island is showing something.
 - Without Accessibility nothing can be measured, and the wings are capped at 36 pt. A display without a menu bar row gets wings at the width from Settings.
 - Width changes under 4 pt are ignored, so a status item that retitles itself doesn't make the wings twitch.
 - The room left beyond each wing decides whether bubbles sit in the menu bar row or just below it.

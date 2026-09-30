@@ -111,11 +111,43 @@ import Testing
     }
 
     @Test func smallWidthChangesAreIgnored() {
-        #expect(!MenuBarLayoutEngine.shouldReplace(42.5, with: 45))
-        #expect(MenuBarLayoutEngine.shouldReplace(42.5, with: 50))
-        #expect(MenuBarLayoutEngine.shouldReplace(34, with: 26))
-        #expect(!MenuBarLayoutEngine.shouldReplace(26, with: 26))
-        #expect(MenuBarLayoutEngine.shouldReplace(nil, with: 26))
+        func replace(_ current: CGFloat?, _ next: CGFloat) -> Bool {
+            MenuBarLayoutEngine.shouldReplace(current, with: next, preferredWing: 58)
+        }
+        #expect(!replace(42.5, 45))
+        #expect(replace(42.5, 50))
+        #expect(replace(34, 26))
+        #expect(!replace(26, 26))
+        #expect(replace(nil, 26))
+        // A status item that retitles beside full-width wings doesn't narrow them.
+        #expect(!replace(58, 55.5))
+    }
+
+    @Test func aNewWingWidthInSettingsAppliesAtOnce() {
+        // The Settings slider moves in 2 pt steps, under the hysteresis. With room to spare the
+        // wings follow it both ways instead of staying at the old width.
+        #expect(MenuBarLayoutEngine.shouldReplace(52, with: 54, preferredWing: 54))
+        #expect(MenuBarLayoutEngine.shouldReplace(54, with: 52, preferredWing: 52))
+        // Wings kept wider than the new setting shrink even when the bar is tight.
+        #expect(MenuBarLayoutEngine.shouldReplace(54, with: 51, preferredWing: 52))
+        // Still tight and under the setting: small changes are ignored as before.
+        #expect(!MenuBarLayoutEngine.shouldReplace(45, with: 43, preferredWing: 54))
+        #expect(!MenuBarLayoutEngine.shouldReplace(54, with: 54, preferredWing: 54))
+    }
+
+    @Test func smallSlackChangesAreIgnored() {
+        #expect(!MenuBarLayoutEngine.differs(20, 17))
+        #expect(MenuBarLayoutEngine.differs(20, 16))
+        #expect(MenuBarLayoutEngine.differs(0, 38))
+        // Nothing measured on a side (infinity) against a measurement is always a change.
+        #expect(MenuBarLayoutEngine.differs(.infinity, 200))
+        #expect(MenuBarLayoutEngine.differs(0, .infinity))
+        #expect(!MenuBarLayoutEngine.differs(.infinity, .infinity))
+    }
+
+    @Test func hysteresisNeverReachesTheItemBeside() {
+        // A width kept within the hysteresis still leaves part of the clearance free.
+        #expect(MenuBarLayoutEngine.widthHysteresis < MenuBarLayoutEngine.clearance)
     }
 }
 
