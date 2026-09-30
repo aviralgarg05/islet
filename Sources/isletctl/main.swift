@@ -21,7 +21,7 @@ USAGE
   isletctl open | close                expand or collapse the island
   isletctl hook <claude|codex|AGENT> [JSON]   forward an agent hook payload (stdin or last arg)
   isletctl state | health | token
-  isletctl debug menubar                what macOS shows in the menu bar (for Live Activity mirroring)
+  isletctl debug menubar [--watch]      what Islet sees in the menu bar (--watch: print each change)
   isletctl mcp                         run as an MCP server on stdio (for Claude Code, Codex, Cursor…)
 
 STATES     info running success warning failure waiting
@@ -76,6 +76,9 @@ struct Client {
 
 /// Parses `--flag value` pairs and positional arguments.
 struct Args {
+    /// Flags that take no value.
+    static let switches: Set<String> = ["watch"]
+
     var positional: [String] = []
     var flags: [String: String] = [:]
     var trailing: [String] = []
@@ -91,6 +94,8 @@ struct Args {
                 let name = String(a.dropFirst(2))
                 if let eq = name.firstIndex(of: "=") {
                     flags[String(name[..<eq])] = String(name[name.index(after: eq)...])
+                } else if Self.switches.contains(name) {
+                    flags[name] = "true"
                 } else {
                     guard let v = it.next() else { throw CLIError("--\(name) needs a value") }
                     flags[name] = v
@@ -216,9 +221,8 @@ func run(_ argv: [String]) async throws -> Int32 {
         return 0
 
     case "debug":
-        guard a.positional.first == "menubar" else { throw CLIError("usage: isletctl debug menubar") }
-        try expectOK(try await Client.discover().send("GET", "/v1/debug/menubar"), print: true)
-        return 0
+        guard a.positional.first == "menubar" else { throw CLIError("usage: isletctl debug menubar [--watch]") }
+        return try await debugMenuBar(watch: a.flags["watch"] != nil)
 
     case "state":
         try expectOK(try await Client.discover().send("GET", "/v1/state"), print: true)
