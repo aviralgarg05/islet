@@ -196,7 +196,11 @@ echo '{"title":"Lakers at Celtics","teams":[{"abbr":"LAL","score":3},{"abbr":"BO
 | `DELETE /v1/activities/{id}` | — | `204`, or `404` |
 | `DELETE /v1/activities?source=NAME` | — | `{"removed": n}` |
 | `POST /v1/notify` | `{title, subtitle?, icon?, tint?, ttl? (6), priority?, source?}` | a short-lived notification |
-| `POST /v1/timer` | `{seconds, title?, id?}` | a countdown activity |
+| `POST /v1/timer` (or `/v1/timers`) | `{seconds \| in, title?, id?}` | `201` + the timer; see [Timers](#timers) |
+| `GET /v1/timers` | — | timers: ringing first, then by end time, then paused |
+| `PATCH /v1/timers/{id}` (or `/v1/timers`) | `{action: pause\|resume\|add\|stop\|restart\|snooze, seconds?, in?}` | the timer, or `204` after `stop`; `404` for an unknown id |
+| `DELETE /v1/timers/{id}` | — | stops it: `204`, or `404` |
+| `POST /v1/pomodoro` | `{action: start\|stop\|toggle}` | `201` + the Pomodoro timer, or `204` when it stopped |
 | `POST /v1/hud` | `{kind: volume\|brightness\|keyboardBrightness\|microphone, value: 0…1, muted?, label?}` | shows the HUD |
 | `POST /v1/focus` | `{name, on}` | iPhone-style Focus pill |
 | `POST /v1/media` | `{title, artist?, album?, isPlaying?, duration?, elapsed?, bundleID?, appName?, artworkURL?}` | report playback from any player |
@@ -241,6 +245,36 @@ curl -s -X POST http://127.0.0.1:47831/v1/awake -H "Authorization: Bearer $TOKEN
 - While it's on, a live activity with a cup icon counts down (or shows "On" when it has no end), with a **Turn Off** button.
 - On battery below 20% it turns itself off (and a new request is refused: the reply says `"active": false`). It never outlives Islet: quitting releases it.
 - `minutes` outside 0–1440 gets a `422`.
+### Timers
+
+Timers live in Islet rather than in the activity list: they survive a relaunch, can be paused and extended, and ring when they end. Each timer shows up as an activity with the same `id` (source `timer`), and dismissing that activity stops the timer.
+
+```bash
+curl -s -X POST http://127.0.0.1:47831/v1/timer -H "Authorization: Bearer $TOKEN" \
+  -d '{"in": "in 20 minutes to take the pizza out"}'
+```
+
+```json
+{"id": "timer-1", "title": "Take the pizza out", "duration": 1200, "status": "running",
+ "endsAt": "2026-09-30T18:05:10Z", "createdAt": "2026-09-30T17:45:10Z"}
+```
+
+| Field | Meaning |
+|---|---|
+| `id` | `timer-1`, `timer-2`, … (the lowest free number), your own `id`, or `pomodoro`. Commands also accept the number alone (`2`) or the title. |
+| `status` | `running`, `paused` or `ringing` |
+| `duration` | Seconds it was started with; `restart` runs it again for this long. |
+| `endsAt` | Running: when it ends. Ringing: when it ended. Absent while paused. |
+| `remaining` | Paused only: seconds left. |
+| `phase` | Pomodoro only: `focus`, `shortBreak` or `longBreak`. |
+
+**`in`** takes what you'd type or say: `20m`, `90s`, `1h 30m`, `1h30`, `25 min`, `half an hour`, `an hour and a half`, `tea 4m`, `for 10 min`, `in 20 minutes to take the pizza out`, `at 18:30` (or `18.30`), `at 6pm`. Words that aren't part of the length become the title (`title` wins if you send both). Clock times roll forward to their next occurrence, and a number on its own means minutes. Anything unreadable, zero or longer than 24 hours is a `422` with a hint.
+
+**Actions.** `pause` keeps the time left; `resume` counts down from there; `add` adds `seconds` or `in` (default 60), and restarts a ringing timer for just that long; `snooze` rings again in 5 minutes (or `seconds`); `restart` runs the full length again; `stop` removes it. `PATCH /v1/timers` without an id acts on the ringing timer, or else the newest one.
+
+**When a timer ends** it rings: the island opens on Home with Stop, Snooze 5 and Restart (unless you've hidden the island for the app in front or for fullscreen apps), the chosen sound plays, and the activity turns critical, so it pops up over fullscreen apps too. A timer that ended more than an hour before Islet could ring it (the Mac was asleep or Islet wasn't running) is dropped instead.
+
+**Pomodoro.** 25 minutes of focus, a 5-minute break, and a 15-minute break after every 4th round, moving on by itself. Change the lengths in Settings → Modules → Timers, or with the `pomodoro` key in the settings file.
 
 ### Local-network bridge (iPhone Shortcuts)
 
@@ -266,7 +300,11 @@ isletctl set <id> [--title T] [--subtitle S] [--progress P] [--state STATE] [--t
 isletctl rm <id>                      remove an activity
 isletctl clear --source NAME          remove all activities from a source
 isletctl ls                           list activities (JSON)
-isletctl timer <90s|5m|1h> [--title T]
+isletctl timer <90s|5m|1h 30m|"tea 4m"|"at 18:30"> [--title T] [--id ID]   prints the id
+isletctl timer ls                     timers (JSON)
+isletctl timer pause|resume|stop|restart|snooze [ID]   no ID: the ringing or newest timer
+isletctl timer add [ID] <1m>
+isletctl pomodoro [start|stop|toggle] (toggle when left out)
 isletctl run [--title T] -- <command…>   mirror a command in the notch; exit code passes through
 isletctl hud <volume|brightness|keyboardBrightness> <0-1>
 isletctl media <play|pause|playpause|next|previous|forward|rewind|shuffle|repeat>
@@ -282,6 +320,7 @@ isletctl state | health | token
 `isletctl hook` never fails the calling agent: it exits 0 within ~1.5 s even when Islet isn't running.
 
 `isletctl statusline` is a Claude Code status line command. It reads the JSON Claude passes on stdin and saves the plan limits, model and context use to `~/Library/Application Support/Islet/usage/claude.json` (mode 0600, written only when a figure changes). Then it runs `<command…>` with the same stdin and passes its output and exit code through; if Claude Code stops the status line early, the command is stopped too. A single argument runs with `/bin/sh -c`, which is how Claude stores a command line; several arguments run directly, without a shell. With no command it prints a short line such as `Opus 5.5 · 42% context · 5h 62%`. It never contacts the app or the network, and its own work takes a few milliseconds. See [Usage limits](INTEGRATIONS.md#usage-limits).
+`isletctl timer` reads the same phrases as the API's `in`, with one difference: a bare number is seconds (`isletctl timer 300`), as it always was. Quote phrases with spaces: `isletctl timer "in 20 minutes to check the oven"`.
 
 ---
 
@@ -293,6 +332,10 @@ islet://activity?id=deploy&title=Deploying&progress=0.4&state=running&priority=h
 islet://activity?id=pizza&title=Pizza&endsIn=1200&url=https://…&actionTitle=Track&actionURL=https://…&steps=4&step=2
 islet://dismiss?id=deploy
 islet://timer?minutes=25&title=Focus
+islet://timer?in=20m&title=Pizza          (in= reads "tea%204m", "1h%2030m", "at%2018:30"; a bare number is minutes)
+islet://timer?action=pause&id=timer-1     (pause, resume, add, stop, restart, snooze; no id: the ringing or newest timer)
+islet://timer?action=add&in=1m
+islet://pomodoro?action=start             (start, stop, toggle)
 islet://hud?kind=volume&value=0.5
 islet://media/playpause     (play, pause, next, previous, forward, rewind, shuffle, repeat)
 islet://awake?for=1h        (15m, 2h, 1h30m or a number of minutes; islet://awake alone = until turned off)
@@ -309,6 +352,7 @@ Any app or web page can open these URLs, and they carry no token, so they are li
 - `priority=critical` is treated as `high`.
 
 Use the local API or `isletctl` when you need more.
+Siri can open these links through a shortcut: see [Siri and Shortcuts](SHORTCUTS.md).
 
 ---
 
@@ -335,6 +379,8 @@ Everything in Settings lives in `~/.config/islet/config.json` (or `$XDG_CONFIG_H
   "maxConcurrent": 3,
   "hapticsMode": "direct",
   "mutedSources": ["noisy-script"],
+  "timerSound": "Glass",
+  "pomodoro": { "focusMinutes": 25, "shortBreakMinutes": 5, "longBreakMinutes": 15, "longBreakEvery": 4 },
   "appRules": [
     { "bundleID": "us.zoom.xos", "showInFullscreen": true, "tint": "blue" },
     { "bundleID": "com.valvesoftware.steam", "hideIsland": true }

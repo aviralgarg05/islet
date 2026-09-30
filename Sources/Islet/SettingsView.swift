@@ -320,6 +320,7 @@ struct ModulesSettings: View {
                 Toggle("On-device AI for icons and summaries", isOn: $model.settings.aiAssist)
                 LabeledContent("Apple Intelligence") { Text(AIAssist.shared.statusText).foregroundStyle(.secondary) }
             }
+            TimerSettingsSection(model: model)
             Section("Everything else") {
                 Toggle("Battery & charging", isOn: $model.settings.batteryEnabled)
                 HStack {

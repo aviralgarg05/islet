@@ -95,13 +95,8 @@ enum AppActions {
             switch try URLCommand.parse(url) {
             case .activity(let spec): try model.applyLocal(spec)
             case .dismiss(let id): model.remove(activityID: id)
-            case .timer(let seconds, let title):
-                let now = Date()
-                try model.applyLocal(ActivitySpec(
-                    id: "timer-\(Int(now.timeIntervalSince1970))", source: "timer", title: title ?? "Timer",
-                    icon: .symbol("timer"), state: .running, tint: "orange", ttl: seconds + 8,
-                    endsAt: now.addingTimeInterval(seconds), sneak: true
-                ))
+            case .timer(let seconds, let title): try model.timers.perform(.start(seconds: seconds, title: title, id: nil))
+            case .timerCommand(let command): try model.timers.perform(command)
             case .hud(let kind, let value): Task { await model.showHUD(kind: kind, value: value, muted: false, label: nil) }
             case .media(let cmd): model.send(cmd)
             case .focus(let name, let on): try model.applyLocal(FocusPill.activity(name: name, on: on))

@@ -91,6 +91,7 @@ final class AppModel {
     let menuBarActivities = MenuBarLiveActivityMonitor()
     let agentUsage = AgentUsageModel()
     let controls = IslandControls()
+    @ObservationIgnored lazy var timers = TimerController(model: self)
     private var mirroredKeys: Set<String> = []
     private var mirrorClock = LiveActivityClock()
     /// Mirrored activity id → the menu bar item it came from. Clicking one presses that item;
@@ -149,6 +150,7 @@ final class AppModel {
         }
         fullscreen.start()
         applyTiming()
+        timers.start()
         startEventSources()
         watchSettingsFile()
     }
@@ -768,6 +770,7 @@ final class AppModel {
     func remove(activityID: String) {
         center.remove(id: activityID)
         reschedule()
+        timers.activityRemoved(activityID)
     }
 
     func perform(_ action: ActivityAction, activityID: String) {
@@ -893,6 +896,7 @@ extension AppModel: IsletBackend {
         await MainActor.run {
             let removed = self.center.remove(id: id) != nil
             self.reschedule()
+            self.timers.activityRemoved(id)
             return removed
         }
     }
@@ -901,6 +905,7 @@ extension AppModel: IsletBackend {
         await MainActor.run {
             let n = self.center.removeAll(source: source)
             self.reschedule()
+            self.timers.activitiesRemoved(source: source)
             return n
         }
     }

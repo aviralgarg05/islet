@@ -135,6 +135,7 @@ enum Snapshots {
         shoot("19-expanded-large")
         model.settings.sizePreset = .compact
         metrics = metricsFor(model.settings)
+        renderTimers(model: model, now: now, shoot: shoot) { model.settings.sizePreset = $0; metrics = metricsFor(model.settings) }
 
         // Now Playing controls: the volume row on a short card, the roomy layout, and keep awake.
         model.controls.outputs = [

@@ -14,7 +14,12 @@ USAGE
   isletctl rm <id>                     remove an activity
   isletctl clear --source NAME         remove all activities from a source
   isletctl ls                          list activities (JSON)
-  isletctl timer <5m|90s|1h> [--title T]
+  isletctl timer <5m|90s|1h 30m|"tea 4m"|"at 18:30"> [--title T] [--id ID]
+                                       a bare number is seconds; prints the new timer's id
+  isletctl timer ls                    list timers (JSON)
+  isletctl timer pause|resume|stop|restart|snooze [ID]   no ID: the ringing or newest timer
+  isletctl timer add [ID] <1m>         add time to a timer
+  isletctl pomodoro start|stop|toggle  25 min focus, 5 min break, long break every 4th
   isletctl run [--title T] -- <command…>   show a command's progress and result in the notch
   isletctl hud <volume|brightness|keyboardBrightness> <0-1>
   isletctl media <play|pause|playpause|next|previous|forward|rewind|shuffle|repeat>
@@ -118,14 +123,44 @@ struct Args {
     }
 }
 
-func parseDuration(_ s: String) throws -> Double {
-    let lower = s.lowercased()
-    let units: [(String, Double)] = [("h", 3600), ("m", 60), ("s", 1)]
-    for (suffix, mult) in units where lower.hasSuffix(suffix) {
-        if let n = Double(lower.dropLast()) { return n * mult }
+/// "5m", "1h 30m", "tea 4m", "in 20 minutes to check the oven", "at 18:30". A bare number is
+/// seconds, as it always was for `isletctl timer 300`.
+func parseDuration(_ s: String) throws -> DurationParser.Result {
+    do {
+        return try DurationParser.parse(s, bareNumberUnit: 1)
+    } catch {
+        throw CLIError(String(describing: error))
     }
-    if let n = Double(lower) { return n }
-    throw CLIError("can't read duration '\(s)'; use 90s, 5m or 1h")
+}
+
+func timerCommand(_ a: Args) async throws -> Int32 {
+    let words = a.positional
+    let sub = words.first?.lowercased() ?? ""
+    func control(_ body: [String: Any], id: String?) async throws {
+        // The id can be a title, so a '/' in it must stay inside the one path segment.
+        let segment = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))
+        let path = id.map { "/v1/timers/\($0.addingPercentEncoding(withAllowedCharacters: segment) ?? $0)" } ?? "/v1/timers"
+        try expectOK(try await Client.discover().send("PATCH", path, json: try JSONSerialization.data(withJSONObject: body)))
+    }
+    switch sub {
+    case "ls", "list":
+        try expectOK(try await Client.discover().send("GET", "/v1/timers"), print: true)
+    case "pause", "resume", "stop", "restart", "snooze", "rm":
+        try await control(["action": sub == "rm" ? "stop" : sub], id: words.count > 1 ? words[1] : nil)
+    case "add":
+        guard words.count == 2 || words.count == 3 else { throw CLIError("usage: isletctl timer add [ID] <duration>") }
+        let seconds = try parseDuration(words[words.count - 1]).seconds
+        try await control(["action": "add", "seconds": seconds], id: words.count == 3 ? words[1] : nil)
+    default:
+        guard !words.isEmpty else { throw CLIError("timer needs a duration, e.g. isletctl timer 5m or isletctl timer \"tea 4m\"") }
+        let parsed = try parseDuration(words.joined(separator: " "))
+        var body: [String: Any] = ["seconds": parsed.seconds]
+        body["title"] = a.flags["title"] ?? parsed.title
+        body["id"] = a.flags["id"]
+        let data = try expectOK(try await Client.discover().send("POST", "/v1/timer", json: try JSONSerialization.data(withJSONObject: body)))
+        if let timer = try? APIJSON.decoder.decode(TimerItem.self, from: data) { print(timer.id) }
+    }
+    return 0
 }
 
 func spec(from a: Args, id: String?) throws -> ActivitySpec {
@@ -244,11 +279,13 @@ func run(_ argv: [String]) async throws -> Int32 {
         print(try Client.discover().token)
         return 0
 
-    case "timer":
-        guard let raw = a.positional.first else { throw CLIError("timer needs a duration like 5m") }
-        var body: [String: Any] = ["seconds": try parseDuration(raw)]
-        body["title"] = a.flags["title"]
-        try expectOK(try await Client.discover().send("POST", "/v1/timer", json: try JSONSerialization.data(withJSONObject: body)))
+    case "timer", "timers":
+        return try await timerCommand(a)
+
+    case "pomodoro":
+        let action = a.positional.first?.lowercased() ?? "toggle"
+        guard PomodoroAction(rawValue: action) != nil else { throw CLIError("usage: isletctl pomodoro start|stop|toggle") }
+        try expectOK(try await Client.discover().send("POST", "/v1/pomodoro", json: Data("{\"action\":\"\(action)\"}".utf8)))
         return 0
 
     case "hud":

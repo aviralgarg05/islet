@@ -8,6 +8,9 @@ import Foundation
 ///     islet://activity?id=pizza&title=Pizza&endsIn=1200&url=https://…&actionTitle=Track&actionURL=https://…
 ///     islet://dismiss?id=deploy
 ///     islet://timer?seconds=300&title=Tea
+///     islet://timer?in=20m&title=Pizza   (in= takes "tea 4m", "1h 30m", "at 18:30", …)
+///     islet://timer?action=pause&id=timer-1   (pause, resume, add, stop, restart, snooze)
+///     islet://pomodoro?action=start   (start, stop, toggle)
 ///     islet://hud?kind=volume&value=0.5
 ///     islet://media/playpause   (also play, pause, next, previous, forward, rewind, shuffle, repeat)
 ///     islet://awake?for=1h      (also 15m, on, off; islet://awake/off)
@@ -22,6 +25,8 @@ public enum URLCommand: Equatable, Sendable {
     case activity(ActivitySpec)
     case dismiss(id: String)
     case timer(seconds: Double, title: String?)
+    /// Pause, resume, extend, stop, restart or snooze a timer, or start and stop the Pomodoro.
+    case timerCommand(TimerCommand)
     case hud(HUDKind, Double)
     case media(PlaybackCommand)
     case focus(name: String, on: Bool)
@@ -120,9 +125,27 @@ public enum URLCommand: Equatable, Sendable {
             guard let id = q["id"], !id.isEmpty else { throw ParseError.missing("id") }
             return .dismiss(id: namespaced(id))
         case "timer":
-            guard let s = try double("seconds") ?? (try double("minutes")).map({ $0 * 60 }) else { throw ParseError.missing("seconds") }
-            guard s > 0, s <= 86400 else { throw ParseError.invalid("seconds", String(s)) }
-            return .timer(seconds: s, title: q["title"])
+            // seconds=, minutes= or in= ("20m", "tea 4m", "at 18:30"; a bare number is minutes).
+            func length() throws -> DurationParser.Result? {
+                if let s = try double("seconds") ?? (try double("minutes")).map({ $0 * 60 }) {
+                    guard s > 0, s <= 86400 else { throw ParseError.invalid("seconds", String(s)) }
+                    return DurationParser.Result(seconds: s)
+                }
+                guard let raw = q["in"] else { return nil }
+                guard let r = try? DurationParser.parse(raw) else { throw ParseError.invalid("in", raw) }
+                return r
+            }
+            if let a = q["action"], a.lowercased() != "start" {
+                guard let action = TimerAction(rawValue: a.lowercased()) else { throw ParseError.invalid("action", a) }
+                let id = q["id"].flatMap { $0.isEmpty ? nil : $0 }
+                return .timerCommand(.control(action, id: id, seconds: try length()?.seconds))
+            }
+            guard let r = try length() else { throw ParseError.missing("seconds") }
+            return .timer(seconds: r.seconds, title: q["title"] ?? r.title)
+        case "pomodoro":
+            let a = (q["action"] ?? path.first ?? "start").lowercased()
+            guard let action = PomodoroAction(rawValue: a) else { throw ParseError.invalid("action", a) }
+            return .timerCommand(.pomodoro(action))
         case "hud":
             guard let k = q["kind"] else { throw ParseError.missing("kind") }
             guard let kind = HUDKind(rawValue: k) else { throw ParseError.invalid("kind", k) }

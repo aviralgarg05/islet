@@ -23,6 +23,9 @@ actor MemoryBackend: IsletBackend {
     }
     func menuBarItems() async -> [MenuBarItemInfo] { [] }
     func keepAwake(_ change: KeepAwakeChange?) async -> KeepAwakeStatus { KeepAwakeStatus(active: false) }
+    var timers = TimerEngine()
+    func listTimers() async -> [TimerItem] { timers.ordered }
+    func timerCommand(_ command: TimerCommand) async throws -> TimerItem? { try timers.perform(command, now: Date()) }
 }
 
 func startServer(lan: Bool = false, limit: Int? = nil) async throws -> (LocalAPIServer, UInt16) {

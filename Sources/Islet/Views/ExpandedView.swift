@@ -116,8 +116,15 @@ struct HomeTab: View {
     var body: some View {
         let cardWidth = min(260, (width - 16) * 0.5)
         let event = model.upcomingEvent
-        // Rows that fit without scrolling (event row and activity rows are ~44 pt with spacing).
-        let rowsThatFit = max(1, Int((height - (event == nil ? 0 : 48)) / 48))
+        let acts = model.activities.filter { !model.timers.owns($0) }
+        // Room under the Timer card, and the rows that fit there without scrolling (event row
+        // and activity rows are ~44 pt with spacing). When they don't, the whole column scrolls.
+        // The scroll view is always there (only switched off) so the Timer card, and a custom
+        // timer being typed into it, isn't rebuilt when an activity comes or goes.
+        let room = height - TimerCard.height(model.timers.timers)
+        let rowsThatFit = max(0, Int((room - (event == nil ? 0 : 48)) / 48))
+        let agents = AgentUsageSection.isShown(model)
+        let overflows = acts.count > rowsThatFit || event != nil && room < 42 || agents
         HStack(alignment: .top, spacing: 16) {
             if let np = model.nowPlaying, model.settings.mediaEnabled {
                 NowPlayingCard(model: model, media: np, height: height)
@@ -125,23 +132,26 @@ struct HomeTab: View {
             } else {
                 TodayCard(model: model).frame(width: cardWidth)
             }
-            VStack(alignment: .leading, spacing: 6) {
-                if let event { EventRow(item: event, theme: model.settings.theme) }
-                let acts = model.activities
-                let agents = AgentUsageSection.isShown(model)
-                if acts.isEmpty && event == nil && !agents {
-                    EmptyHint(symbol: "sparkles", text: "Live activities from scripts, agents and CI appear here.",
-                              detail: "Try: isletctl notify \"Hello\"")
-                } else {
-                    let shown = snapshotMode ? Array(acts.prefix(rowsThatFit)) : acts
-                    AdaptiveScroll(scrolls: acts.count > rowsThatFit || agents) {
-                        VStack(spacing: 6) {
-                            ForEach(shown) { a in TemplateRow(activity: a, model: model) }
-                            if agents { AgentUsageSection(model: model) }
+            AdaptiveScroll {
+                VStack(alignment: .leading, spacing: 6) {
+                    TimerCard(model: model)
+                    // Snapshots can't scroll, so they show only what fits (like the rows below).
+                    if let event, !snapshotMode || room >= 42 { EventRow(item: event, theme: model.settings.theme) }
+                    if acts.isEmpty && event == nil && !agents {
+                        // The hint only where it fits under the timers.
+                        if room >= 56 {
+                            EmptyHint(symbol: "sparkles", text: "Live activities from scripts, agents and CI appear here.",
+                                      detail: room >= 84 ? "Try: isletctl notify \"Hello\"" : nil)
                         }
+                    } else {
+                        let shown = snapshotMode ? Array(acts.prefix(rowsThatFit)) : acts
+                        ForEach(shown) { a in TemplateRow(activity: a, model: model) }
+                        if agents { AgentUsageSection(model: model) }
                     }
                 }
+                .frame(minHeight: height, alignment: .topLeading)
             }
+            .scrollDisabled(!overflows)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
     }

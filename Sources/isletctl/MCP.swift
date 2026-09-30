@@ -50,7 +50,7 @@ enum MCPServer {
         Tool(name: "start_timer",
              description: "Start a countdown in the notch, e.g. to remind the user to check something later.",
              schema: object([
-                "duration": ["type": "string", "description": "Like 90s, 5m or 1h."],
+                "duration": ["type": "string", "description": "Like 90s, 5m, 1h 30m or 'half an hour'."],
                 "title": ["type": "string"],
              ], required: ["duration"])),
         Tool(name: "list_activities",
@@ -155,12 +155,11 @@ enum MCPServer {
                 return status == 404 ? ("Nothing with id \(raw) is showing.", false) : ("Removed.", false)
             case "start_timer":
                 guard let raw = string("duration") else { return ("'duration' is required.", true) }
-                let seconds = try parseDuration(raw)
-                guard seconds > 0, seconds <= 86_400 else { return ("Use a duration between 1 s and 24 h.", true) }
-                var body: [String: Any] = ["seconds": seconds]
+                var body: [String: Any] = ["in": raw]
                 body["title"] = string("title")
-                try expectOK(try await client.send("POST", "/v1/timer", json: try JSONSerialization.data(withJSONObject: body)))
-                return ("Timer started.", false)
+                let (status, _) = try await client.send("POST", "/v1/timer", json: try JSONSerialization.data(withJSONObject: body))
+                if status == 422 { return ("Couldn't read '\(raw)' as a duration; try 90s, 5m or 1h.", true) }
+                return (200..<300).contains(status) ? ("Timer started.", false) : ("Islet refused it (\(status)).", true)
             case "list_activities":
                 let data = try expectOK(try await client.send("GET", "/v1/activities"))
                 let list = (try? APIJSON.decoder.decode([Activity].self, from: data)) ?? []
