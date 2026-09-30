@@ -22,6 +22,7 @@ USAGE
   isletctl hook <claude|codex|AGENT> [JSON]   forward an agent hook payload (stdin or last arg)
   isletctl state | health | token
   isletctl debug menubar                what macOS shows in the menu bar (for Live Activity mirroring)
+  isletctl mcp                         run as an MCP server on stdio (for Claude Code, Codex, Cursor…)
 
 STATES     info running success warning failure waiting
 PRIORITIES low normal high critical
@@ -287,6 +288,9 @@ func run(_ argv: [String]) async throws -> Int32 {
     case "run":
         guard !a.trailing.isEmpty else { throw CLIError("usage: isletctl run [--title T] -- <command…>") }
         return try await runWrapped(a)
+
+    case "mcp":
+        return await MCPServer.run()
 
     default:
         throw CLIError("unknown command '\(command)'. Run `isletctl help`.")

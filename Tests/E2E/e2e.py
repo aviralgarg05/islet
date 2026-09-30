@@ -323,6 +323,21 @@ def run_suite(e, app, windows_bin):
     else:
         skip("islet:// URL", "lsregister not found")
 
+    print("▸ MCP server")
+    msgs = [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "e2e", "version": "1"}}},
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+        {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "show_progress", "arguments": {"id": "e2e", "title": "Refactoring", "step": 2, "steps": 5}}},
+        {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "finish", "arguments": {"id": "e2e", "success": True}}},
+    ]
+    p = ctl(e, "mcp", stdin="".join(json.dumps(m) + "\n" for m in msgs), check_rc=False)
+    replies = {r.get("id"): r for r in (json.loads(l) for l in p.stdout.splitlines() if l.strip())}
+    check("MCP handshake and tool list", replies.get(1, {}).get("result", {}).get("protocolVersion") == "2025-06-18"
+          and len(replies.get(2, {}).get("result", {}).get("tools", [])) >= 5, p.stdout[:300])
+    got = activities(e).get("mcp-e2e", {})
+    check("MCP tools drive an activity", got.get("state") == "success" and got.get("step") == 2, str(got))
+
     print("▸ menu bar Live Activities")
     p = ctl(e, "debug", "menubar", check_rc=False)
     try:
