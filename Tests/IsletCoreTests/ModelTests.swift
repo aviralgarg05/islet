@@ -227,6 +227,26 @@ import Testing
     }
 }
 
+@Suite struct ClipboardHistoryTests {
+    @Test func loweringTheLimitTrimsAtOnce() {
+        var h = ClipboardHistory(limit: 5)
+        for (i, text) in ["one", "two", "three", "four", "five"].enumerated() {
+            h.add(text, types: [], sourceBundleID: nil, now: t0.addingTimeInterval(Double(i)))
+        }
+        let oldest = h.entries.last!.id
+        h.togglePin(id: oldest)
+        h.limit = 2
+        // The newest unpinned entry and the pinned one stay; nothing waits for the next copy.
+        #expect(h.entries.map(\.text) == ["five", "one"])
+        h.limit = 10
+        #expect(h.entries.count == 2)
+        // The smallest limit is 1, and a pinned entry outlasts newer unpinned ones.
+        h.limit = 0
+        #expect(h.limit == 1)
+        #expect(h.entries.map(\.text) == ["one"])
+    }
+}
+
 @Suite struct PresenterTests {
     func playing() -> NowPlaying {
         NowPlaying(source: .appleMusic, title: "Song", isPlaying: true, timestamp: t0)
