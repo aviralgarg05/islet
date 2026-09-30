@@ -29,7 +29,8 @@ public final class AIAssist {
         }
     }
 
-    /// Suggest an SF Symbol for a short piece of text. Validated against the installed symbols.
+    /// Suggest an SF Symbol for a short piece of text. The model picks one of
+    /// `IconCategory.names` through structured output, so the answer is always one Islet knows.
     public func suggestSymbol(for text: String, completion: @escaping (String?) -> Void) {
         let key = String(text.prefix(120)).lowercased()
         if let cached = symbolCache[key] { return completion(cached) }
@@ -37,27 +38,42 @@ public final class AIAssist {
         inFlight.insert(key)
         Task { @MainActor in
             defer { self.inFlight.remove(key) }
-            let session = LanguageModelSession(instructions: """
-                You choose one Apple SF Symbol name that best represents a short status message. \
-                Reply with only the symbol name, for example: car.fill, airplane, hammer.fill, cart.fill.
-                """)
-            guard let reply = try? await session.respond(to: "Message: \(text)").content,
-                  let name = AISanitizer.symbolName(from: reply),
-                  NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil else {
+            let symbol = await Self.category(for: text).flatMap(IconCategory.symbol(for:))
+            guard let symbol, NSImage(systemSymbolName: symbol, accessibilityDescription: nil) != nil else {
                 completion(nil)
                 return
             }
             if self.symbolCache.count >= 256 { self.symbolCache.removeAll() }
-            self.symbolCache[key] = name
-            completion(name)
+            self.symbolCache[key] = symbol
+            completion(symbol)
         }
+    }
+
+    @available(macOS 26, *)
+    private static func category(for text: String) async -> String? {
+        let choice = DynamicGenerationSchema(name: "Category", anyOf: IconCategory.names)
+        let root = DynamicGenerationSchema(name: "Icon", properties: [.init(name: "category", schema: choice)])
+        guard let schema = try? GenerationSchema(root: root, dependencies: []) else { return nil }
+        let session = LanguageModelSession(
+            model: SystemLanguageModel(useCase: .contentTagging),
+            instructions: "Pick the category that best describes a short status message from an app or script."
+        )
+        guard let reply = try? await session.respond(to: "Message: \(text)", schema: schema, includeSchemaInPrompt: false) else {
+            return nil
+        }
+        return try? reply.content.value(String.self, forProperty: "category")
     }
 
     /// Condense a long notification into one short line.
     public func summarize(_ text: String, completion: @escaping (String?) -> Void) {
         guard isAvailable, text.count > 90, #available(macOS 26, *) else { return completion(nil) }
         Task { @MainActor in
-            let session = LanguageModelSession(instructions: "Summarize the notification in at most 12 words. Plain text, no quotes.")
+            // The text is the user's own notification: transforming it shouldn't trip the guardrails
+            // meant for open-ended generation.
+            let session = LanguageModelSession(
+                model: SystemLanguageModel(guardrails: .permissiveContentTransformations),
+                instructions: "Summarize the notification in at most 12 words. Plain text, no quotes."
+            )
             let reply = try? await session.respond(to: text).content
             completion(reply.flatMap { AISanitizer.summary(from: $0) })
         }
