@@ -11,6 +11,7 @@ import Foundation
 ///     islet://hud?kind=volume&value=0.5
 ///     islet://media/playpause   (also play, pause, next, previous)
 ///     islet://focus?name=Work&state=on   (from a Shortcuts Focus automation)
+///     islet://ask?q=What%20is%20a%20monad&provider=claude   (fills in the Ask box; never sends)
 ///     islet://open  islet://close  islet://toggle  islet://settings
 public enum URLCommand: Equatable, Sendable {
     case activity(ActivitySpec)
@@ -21,6 +22,8 @@ public enum URLCommand: Equatable, Sendable {
     case focus(name: String, on: Bool)
     /// Open the menu bar Live Activity Islet mirrors (Apple's expanded view / iPhone Mirroring).
     case openMenuBarActivity(key: String)
+    /// Open the Ask box with this question filled in. Never sends it: a link must not spend money.
+    case ask(query: String?, provider: AskProviderKind?)
     case open, close, toggle, settings
 
     public enum ParseError: Error, Equatable, CustomStringConvertible {
@@ -119,6 +122,14 @@ public enum URLCommand: Equatable, Sendable {
         case "menubar-activity":
             guard let key = q["key"], !key.isEmpty else { throw ParseError.missing("key") }
             return .openMenuBarActivity(key: key)
+        case "ask":
+            var provider: AskProviderKind?
+            if let p = q["provider"], !p.isEmpty {
+                guard let kind = AskProviderKind(alias: p) else { throw ParseError.invalid("provider", p) }
+                provider = kind
+            }
+            let text = (q["q"] ?? q["text"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return .ask(query: text.isEmpty ? nil : String(text.prefix(AskLimits.questionCharacters)), provider: provider)
         case "open", "expand": return .open
         case "close", "collapse": return .close
         case "toggle": return .toggle

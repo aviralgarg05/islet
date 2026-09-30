@@ -6,6 +6,7 @@ import Observation
 
 enum IslandTab: String, CaseIterable, Identifiable {
     case home, today, shelf, widgets, clipboard, stats
+    case ask
     var id: String { rawValue }
 
     var symbol: String {
@@ -16,6 +17,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
         case .widgets: return "square.grid.2x2.fill"
         case .clipboard: return "doc.on.clipboard.fill"
         case .stats: return "gauge.with.dots.needle.33percent"
+        case .ask: return "sparkles"
         }
     }
 
@@ -27,6 +29,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
         case .widgets: return "Widgets"
         case .clipboard: return "Clipboard"
         case .stats: return "System"
+        case .ask: return "Ask"
         }
     }
 }
@@ -89,6 +92,7 @@ final class AppModel {
     let downloads = DownloadsWatcher()
     let unlock = UnlockMonitor()
     let menuBarActivities = MenuBarLiveActivityMonitor()
+    let ask = AskController()
     private var mirroredKeys: Set<String> = []
     private var calls = CallDetector()
     private var lastMicUsers: Set<String> = []
@@ -437,6 +441,7 @@ final class AppModel {
         } else {
             statsSampler.stop()
             pinned = false
+            ask.islandDidCollapse()
         }
     }
 

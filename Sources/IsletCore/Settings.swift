@@ -167,6 +167,8 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var smartIcons = true
     /// Use on-device Apple Intelligence (when available) for icons and one-line summaries.
     public var aiAssist = true
+    /// The Ask box: default provider, models, effort, follow-ups. API keys live in the Keychain.
+    public var ask = AskSettings()
 
     // Integrations
     public var apiEnabled = true

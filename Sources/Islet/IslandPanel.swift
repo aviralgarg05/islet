@@ -22,8 +22,27 @@ final class IslandPanel: NSPanel {
         animationBehavior = .none
     }
 
-    override var canBecomeKey: Bool { false }
+    /// True only while the Ask field is in use, so typing reaches the island. In every other
+    /// state keyboard focus stays with the app you are working in.
+    private(set) var acceptsKeyboard = false
+
+    override var canBecomeKey: Bool { acceptsKeyboard }
     override var canBecomeMain: Bool { false }
+
+    func beginKeyboardInput() {
+        acceptsKeyboard = true
+        if !isKeyWindow { makeKey() }
+    }
+
+    /// Give the keyboard back. Ordering the panel out and straight back in returns key focus to
+    /// the app that had it (the panel never activated Islet); it keeps its level and position.
+    func endKeyboardInput() {
+        guard acceptsKeyboard else { return }
+        acceptsKeyboard = false
+        guard isKeyWindow, isVisible else { return }
+        orderOut(nil)
+        orderFrontRegardless()
+    }
 }
 
 /// One island on one display.
@@ -399,7 +418,7 @@ final class PointerCoordinator {
         case .open:
             if model.settings.hoverToOpen { model.setExpanded(display) }
         case .close:
-            if !model.pinned, !model.isDraggingFile { model.setExpanded(nil) }
+            if !model.pinned, !model.isDraggingFile, !model.ask.wantsKeyboard { model.setExpanded(nil) }
             intent.reset()
         case .none:
             break

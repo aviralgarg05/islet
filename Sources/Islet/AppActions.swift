@@ -87,6 +87,7 @@ enum AppActions {
             case .media(let cmd): model.send(cmd)
             case .focus(let name, let on): try model.applyLocal(FocusPill.activity(name: name, on: on))
             case .openMenuBarActivity(let key): model.menuBarActivities.press(key: key)
+            case .ask(let query, let provider): openAsk(model, query: query, provider: provider)
             case .open: model.setExpanded(NSScreen.main?.displayID)
             case .close: model.setExpanded(nil)
             case .toggle: model.setExpanded(model.expandedScreen == nil ? NSScreen.main?.displayID : nil)
