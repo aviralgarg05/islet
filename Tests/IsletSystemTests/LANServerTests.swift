@@ -134,6 +134,10 @@ final class RawSocket {
         // IPv4 clients seen through a dual-stack socket keep their own address.
         #expect(key(.ipv6(IPv6Address("::ffff:192.168.1.20")!)) == "192.168.1.20")
         #expect(key(.ipv6(IPv6Address("::ffff:192.168.1.21")!)) != "192.168.1.20")
+        // IPv4-compatible addresses are plain IPv6 on the wire: they share ::/64.
+        let compatible = key(.ipv6(IPv6Address("::192.168.1.20")!))
+        #expect(compatible != "192.168.1.20")
+        #expect(compatible == key(.ipv6(IPv6Address("::192.168.1.21")!)))
     }
 }
 

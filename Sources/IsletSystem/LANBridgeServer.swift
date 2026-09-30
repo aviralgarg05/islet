@@ -21,12 +21,13 @@ extension LocalAPIServer {
     }
 
     /// Rate-limit key: the IPv4 address, or the /64 prefix for IPv6, since one device can pick
-    /// any address in its /64.
+    /// any address in its /64. Only IPv4-mapped addresses (an IPv4 client on the dual-stack
+    /// socket) count as IPv4: `asIPv4` alone also unwraps `::a.b.c.d`, a key per address.
     static func clientKey(_ endpoint: NWEndpoint) -> String {
         guard case .hostPort(let host, _) = endpoint else { return "unknown" }
         switch host {
         case .ipv6(let address):
-            if let v4 = address.asIPv4 { return "\(v4)" }
+            if address.isIPv4Mapped, let v4 = address.asIPv4 { return "\(v4)" }
             return "v6:" + address.rawValue.prefix(8).map { String(format: "%02x", $0) }.joined()
         case .ipv4(let address):
             return "\(address)"
