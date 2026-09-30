@@ -22,6 +22,9 @@ actor MemoryBackend: IsletBackend {
         StateSnapshot(version: "t", presentation: "idle", activities: [], nowPlaying: nil, battery: nil)
     }
     func menuBarItems() async -> [MenuBarItemInfo] { [] }
+    var timers = TimerEngine()
+    func listTimers() async -> [TimerItem] { timers.ordered }
+    func timerCommand(_ command: TimerCommand) async throws -> TimerItem? { try timers.perform(command, now: Date()) }
 }
 
 func startServer(lan: Bool = false, limit: Int? = nil) async throws -> (LocalAPIServer, UInt16) {

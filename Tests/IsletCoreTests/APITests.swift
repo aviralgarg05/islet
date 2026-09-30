@@ -28,6 +28,9 @@ actor FakeBackend: IsletBackend {
         StateSnapshot(version: "test", presentation: "idle", activities: center.ordered(now: now), nowPlaying: nil, battery: nil)
     }
     func menuBarItems() async -> [MenuBarItemInfo] { [] }
+    var timers = TimerEngine()
+    func listTimers() async -> [TimerItem] { timers.ordered }
+    func timerCommand(_ command: TimerCommand) async throws -> TimerItem? { try timers.perform(command, now: now) }
 }
 
 @Suite struct HTTPParserTests {
@@ -165,7 +168,7 @@ actor FakeBackend: IsletBackend {
 
         let t = await rt.handle(request("POST", "/v1/timer", body: #"{"seconds":300,"title":"Tea"}"#))
         #expect(t.status == 201)
-        #expect(try APIJSON.decoder.decode(Activity.self, from: t.body).endsAt == t0.addingTimeInterval(300))
+        #expect(try APIJSON.decoder.decode(TimerItem.self, from: t.body).endsAt == t0.addingTimeInterval(300))
         #expect(await rt.handle(request("POST", "/v1/timer", body: #"{"seconds":0}"#)).status == 422)
 
         #expect(await rt.handle(request("POST", "/v1/hud", body: #"{"kind":"volume","value":0.4}"#)).status == 204)

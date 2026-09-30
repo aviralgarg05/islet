@@ -122,8 +122,9 @@ struct HomeTab: View {
                 TodayCard(model: model).frame(width: cardWidth)
             }
             VStack(alignment: .leading, spacing: 6) {
+                TimerCard(model: model)
                 if let event { EventRow(item: event, theme: model.settings.theme) }
-                let acts = model.activities
+                let acts = model.activities.filter { !model.timers.owns($0) }
                 if acts.isEmpty && event == nil {
                     EmptyHint(symbol: "sparkles", text: "Live activities from scripts, agents and CI appear here.",
                               detail: "Try: isletctl notify \"Hello\"")

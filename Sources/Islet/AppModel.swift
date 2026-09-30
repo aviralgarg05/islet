@@ -89,6 +89,7 @@ final class AppModel {
     let downloads = DownloadsWatcher()
     let unlock = UnlockMonitor()
     let menuBarActivities = MenuBarLiveActivityMonitor()
+    @ObservationIgnored lazy var timers = TimerController(model: self)
     private var mirroredKeys: Set<String> = []
     private var calls = CallDetector()
     private var lastMicUsers: Set<String> = []
@@ -150,6 +151,7 @@ final class AppModel {
         if settings.pluginsEnabled { startPlugins() }
         if settings.apiEnabled { startAPI() }
         applyTiming()
+        timers.start()
         startEventSources()
         watchSettingsFile()
     }
@@ -711,6 +713,7 @@ final class AppModel {
     func remove(activityID: String) {
         center.remove(id: activityID)
         reschedule()
+        timers.activityRemoved(activityID)
     }
 
     func perform(_ action: ActivityAction, activityID: String) {
@@ -826,6 +829,7 @@ extension AppModel: IsletBackend {
         await MainActor.run {
             let removed = self.center.remove(id: id) != nil
             self.reschedule()
+            self.timers.activityRemoved(id)
             return removed
         }
     }
@@ -834,6 +838,7 @@ extension AppModel: IsletBackend {
         await MainActor.run {
             let n = self.center.removeAll(source: source)
             self.reschedule()
+            self.timers.activitiesRemoved(source: source)
             return n
         }
     }

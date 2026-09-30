@@ -14,6 +14,10 @@ public protocol IsletBackend: Sendable {
     func stateSnapshot() async -> StateSnapshot
     /// What MenuBarAgent exposes right now (diagnostics for Live Activity mirroring).
     func menuBarItems() async -> [MenuBarItemInfo]
+    /// Timers and the Pomodoro, ringing first, then by end time.
+    func listTimers() async -> [TimerItem]
+    /// Runs a timer command; returns the timer it started or changed, nil when it stopped one.
+    func timerCommand(_ command: TimerCommand) async throws -> TimerItem?
 }
 
 public struct StateSnapshot: Codable, Equatable, Sendable {
@@ -77,9 +81,29 @@ struct NotifyPush: Codable {
 }
 
 struct TimerPush: Codable {
-    var seconds: Double
+    var seconds: Double?
+    /// "20m", "tea 4m", "in 20 minutes to take the pizza out", "at 18:30".
+    var inText: String?
     var title: String?
     var id: String?
+
+    enum CodingKeys: String, CodingKey {
+        case seconds, inText = "in", title, id
+    }
+}
+
+struct TimerControlPush: Codable {
+    var action: TimerAction
+    var seconds: Double?
+    var inText: String?
+
+    enum CodingKeys: String, CodingKey {
+        case action, seconds, inText = "in"
+    }
+}
+
+struct PomodoroPush: Codable {
+    var action: PomodoroAction
 }
 
 struct FocusPush: Codable {
@@ -217,16 +241,34 @@ public struct APIRouter: Sendable {
             )
             return .json(try await backend.applyActivity(spec), status: 201)
 
-        case ("POST", 1, "timer"):
+        case ("POST", 1, "timer"), ("POST", 1, "timers"):
             let t = try decode(TimerPush.self, from: r)
-            guard t.seconds > 0, t.seconds <= 24 * 3600 else { return .error(422, "'seconds' must be between 1 and 86400") }
-            let now = clock()
-            let spec = ActivitySpec(
-                id: t.id ?? "timer-\(Int(now.timeIntervalSince1970))", source: "timer", title: t.title ?? "Timer",
-                icon: .symbol("timer"), state: .running, tint: "orange", priority: .normal,
-                ttl: t.seconds + 8, endsAt: now.addingTimeInterval(t.seconds), sneak: true
-            )
-            return .json(try await backend.applyActivity(spec), status: 201)
+            var seconds = t.seconds
+            var title = t.title
+            if seconds == nil, let text = t.inText {
+                let parsed = try DurationParser.parse(text, now: clock())
+                seconds = parsed.seconds
+                title = title ?? parsed.title
+            }
+            guard let seconds else { return .error(422, "send 'seconds' or 'in', e.g. {\"in\": \"20m\", \"title\": \"Tea\"}") }
+            guard seconds > 0, seconds <= 24 * 3600 else { return .error(422, "'seconds' must be between 1 and 86400") }
+            return try await timerReply(.start(seconds: seconds, title: title, id: t.id), status: 201)
+
+        case ("GET", 1, "timers"):
+            return .json(await backend.listTimers())
+
+        case ("PATCH", 1, "timers"), ("PATCH", 2, "timers"), ("POST", 2, "timers"):
+            let c = try decode(TimerControlPush.self, from: r)
+            var seconds = c.seconds
+            if seconds == nil, let text = c.inText { seconds = try DurationParser.parse(text, now: clock()).seconds }
+            return try await timerReply(.control(c.action, id: rest.count == 2 ? sub : nil, seconds: seconds))
+
+        case ("DELETE", 2, "timers"):
+            return try await timerReply(.control(.stop, id: sub, seconds: nil))
+
+        case ("POST", 1, "pomodoro"):
+            let p = try decode(PomodoroPush.self, from: r)
+            return try await timerReply(.pomodoro(p.action), status: 201)
 
         case ("POST", 1, "hud"):
             let h = try decode(HUDPush.self, from: r)
@@ -279,11 +321,24 @@ public struct APIRouter: Sendable {
             }
 
         default:
-            let known = ["state", "activities", "notify", "timer", "hud", "media", "island", "hooks", "focus", "debug"]
+            let known = ["state", "activities", "notify", "timer", "hud", "media", "island", "hooks", "focus", "debug", "timers", "pomodoro"]
             if let first = rest.first, known.contains(first) {
                 return .error(405, "\(r.method) is not supported on \(r.path)")
             }
             return .error(404, "unknown endpoint \(r.path)")
+        }
+    }
+
+    /// The timer a command touched (`204` when it stopped one); unknown timers are `404`.
+    private func timerReply(_ command: TimerCommand, status: Int = 200) async throws -> HTTPResponse {
+        do {
+            guard let timer = try await backend.timerCommand(command) else { return .noContent }
+            return .json(timer, status: status)
+        } catch let e as TimerError {
+            switch e {
+            case .notFound, .noTimers: return .error(404, e.description)
+            default: throw e
+            }
         }
     }
 }

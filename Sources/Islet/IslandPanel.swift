@@ -22,7 +22,7 @@ final class IslandPanel: NSPanel {
         animationBehavior = .none
     }
 
-    override var canBecomeKey: Bool { false }
+    override var canBecomeKey: Bool { IslandKeyboard.allowsKey }
     override var canBecomeMain: Bool { false }
 }
 
