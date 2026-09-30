@@ -131,4 +131,11 @@ public enum NotchGeometry {
         let h = max(metrics.notch.height, 6)
         return CGRect(x: screen.frame.midX - w / 2, y: screen.frame.maxY - h, width: w, height: h)
     }
+
+    /// The pointer location to hit-test against rectangles anchored to the top of `frame`.
+    /// A pointer pushed against the top edge reports `y == frame.maxY`, which `CGRect.contains`
+    /// treats as outside, so the notch would never arm on the most natural movement.
+    public static func hitPoint(_ p: CGPoint, in frame: CGRect) -> CGPoint {
+        p.y >= frame.maxY ? CGPoint(x: p.x, y: frame.maxY - 0.5) : p
+    }
 }

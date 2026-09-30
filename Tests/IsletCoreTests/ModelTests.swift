@@ -59,6 +59,20 @@ import Testing
         #expect(visible.minX == 606)
         #expect(visible.minY == 950)
     }
+
+    @Test func pointerAgainstTheTopEdgeIsInsideTheNotch() {
+        // Quartz y 0 (the top row) arrives from NSEvent.mouseLocation as exactly frame.maxY.
+        let m = NotchGeometry.metrics(for: mbp)
+        let zone = NotchGeometry.hoverZone(for: mbp, metrics: m, slop: 0)
+        let edge = CGPoint(x: mbp.frame.midX, y: mbp.frame.maxY)
+        #expect(!zone.contains(edge))
+        #expect(zone.contains(NotchGeometry.hitPoint(edge, in: mbp.frame)))
+        let below = CGPoint(x: mbp.frame.midX, y: mbp.frame.maxY - 10)
+        #expect(NotchGeometry.hitPoint(below, in: mbp.frame) == below)
+        // The top edge of a display without a notch arms its thin strip too.
+        let strip = CGRect(x: external.frame.midX - 50, y: external.frame.maxY - 4, width: 100, height: 4)
+        #expect(strip.contains(NotchGeometry.hitPoint(CGPoint(x: external.frame.midX, y: external.frame.maxY), in: external.frame)))
+    }
 }
 
 @Suite struct NowPlayingTests {

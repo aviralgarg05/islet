@@ -438,8 +438,9 @@ final class PointerCoordinator {
         evaluate(at: NSEvent.mouseLocation, now: Date())
     }
 
-    private func evaluate(at p: CGPoint, now: Date) {
-        guard let c = controller(at: p) else {
+    private func evaluate(at location: CGPoint, now: Date) {
+        guard let c = controller(at: location) else {
+            let p = location
             // On a display without an island: that's leaving, so a pending open is cancelled and
             // an open island starts its close grace period instead of waiting for the pointer.
             if let display = activeDisplay {
@@ -451,6 +452,7 @@ final class PointerCoordinator {
             maybeDeactivate(pointerNearIsland: false)
             return
         }
+        let p = NotchGeometry.hitPoint(location, in: c.screen.frame)
         let expandedHere = model.expandedScreen == c.display
         let inIsland = c.hitRects.contains { $0.contains(p) }
         c.setInteractive(inIsland || expandedHere && c.expandedRect.contains(p) || model.isDraggingFile)
@@ -509,7 +511,9 @@ final class PointerCoordinator {
         if intent.enteredAt == nil && intent.exitedAt == nil || decision != .none {
             restTimer?.invalidate()
             restTimer = nil
-            maybeDeactivate(pointerNearIsland: controller(at: NSEvent.mouseLocation)?.hoverZone.contains(NSEvent.mouseLocation) ?? false)
+            let location = NSEvent.mouseLocation
+            let near = controller(at: location).map { $0.hoverZone.contains(NotchGeometry.hitPoint(location, in: $0.screen.frame)) } ?? false
+            maybeDeactivate(pointerNearIsland: near)
         }
     }
 }

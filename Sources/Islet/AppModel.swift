@@ -473,7 +473,7 @@ final class AppModel {
     /// under the pointer if it has one, otherwise the first (notched) one.
     func targetDisplay() -> CGDirectDisplayID? {
         let mouse = NSEvent.mouseLocation
-        if let under = NSScreen.screens.first(where: { $0.frame.contains(mouse) })?.displayID, islandDisplays.contains(under) {
+        if let under = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })?.displayID, islandDisplays.contains(under) {
             return under
         }
         return islandDisplays.first
