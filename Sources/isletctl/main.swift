@@ -20,6 +20,7 @@ USAGE
   isletctl focus <name> [on|off]       show a Focus change (for Shortcuts automations)
   isletctl open | close                expand or collapse the island
   isletctl hook <claude|codex|AGENT> [JSON]   forward an agent hook payload (stdin or last arg)
+  isletctl statusline [-- <command…>]  Claude Code status line: record plan usage, run your own line
   isletctl state | health | token
   isletctl debug menubar [--watch]      what Islet sees in the menu bar (--watch: print each change)
   isletctl mcp                         run as an MCP server on stdio (for Claude Code, Codex, Cursor…)
@@ -295,6 +296,9 @@ func run(_ argv: [String]) async throws -> Int32 {
 
     case "mcp":
         return await MCPServer.run()
+
+    case "statusline":
+        return runStatusLine(a.trailing)
 
     default:
         throw CLIError("unknown command '\(command)'. Run `isletctl help`.")

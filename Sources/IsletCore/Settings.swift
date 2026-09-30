@@ -190,6 +190,10 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var mirrorOnlyHiddenActivities = false
     /// Include mirrored Live Activities, which often hold addresses, names and scores, in API responses.
     public var shareMirroredActivities = false
+    /// Claude Code plan limits, from the status line (`isletctl statusline`). Local files only.
+    public var claudeUsageEnabled = true
+    /// Codex plan limits, from its session logs in `~/.codex/sessions`. Local files only.
+    public var codexUsageEnabled = true
     public var appRules: [AppRule] = []
 
     public var launchAtLogin = false

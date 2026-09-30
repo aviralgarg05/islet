@@ -89,6 +89,7 @@ final class AppModel {
     let downloads = DownloadsWatcher()
     let unlock = UnlockMonitor()
     let menuBarActivities = MenuBarLiveActivityMonitor()
+    let agentUsage = AgentUsageModel()
     private var mirroredKeys: Set<String> = []
     private var mirrorClock = LiveActivityClock()
     /// Mirrored activity id → the menu bar item it came from. Clicking one presses that item;
@@ -211,6 +212,7 @@ final class AppModel {
             menuBarActivities.stop()
             syncMenuBarActivities([])
         }
+        agentUsage.apply(settings) { [weak self] spec in _ = try? self?.applyLocal(spec) }
     }
 
     /// Show the menu bar's Live Activities (iPhone and Mac) as island activities.

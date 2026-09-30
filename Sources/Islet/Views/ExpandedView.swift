@@ -124,14 +124,16 @@ struct HomeTab: View {
             VStack(alignment: .leading, spacing: 6) {
                 if let event { EventRow(item: event, theme: model.settings.theme) }
                 let acts = model.activities
-                if acts.isEmpty && event == nil {
+                let agents = AgentUsageSection.isShown(model)
+                if acts.isEmpty && event == nil && !agents {
                     EmptyHint(symbol: "sparkles", text: "Live activities from scripts, agents and CI appear here.",
                               detail: "Try: isletctl notify \"Hello\"")
                 } else {
                     let shown = snapshotMode ? Array(acts.prefix(rowsThatFit)) : acts
-                    AdaptiveScroll(scrolls: acts.count > rowsThatFit) {
+                    AdaptiveScroll(scrolls: acts.count > rowsThatFit || agents) {
                         VStack(spacing: 6) {
                             ForEach(shown) { a in ActivityRow(activity: a, model: model) }
+                            if agents { AgentUsageSection(model: model) }
                         }
                     }
                 }
