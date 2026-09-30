@@ -35,6 +35,27 @@ import Testing
         #expect(ScriptablePlayerProvider.verb(for: .seek, position: nil, bundleID: spotify) == nil)
         #expect(ScriptablePlayerProvider.verb(for: .next, position: nil, bundleID: music) == "next track")
     }
+
+    /// Nothing is started and no script reaches a player: the providers only hear answers.
+    @MainActor @Test func playersScriptOnlyOnceAutomationIsAllowed() {
+        let music = AppleMusicProvider(), spotify = SpotifyProvider()
+        #expect(music.permission.automationTarget == music.bundleID)
+        #expect(spotify.permission.automationTarget == spotify.bundleID)
+        #expect(!music.canScript && !spotify.canScript)
+        #expect(!music.runScript("return 1"))
+        func answer(_ bundleID: String, _ status: PermissionStatus) {
+            NotificationCenter.default.post(name: .isletAutomationStatus, object: bundleID, userInfo: ["status": status])
+        }
+        // Allow in Settings → Permissions reaches the matching player only.
+        answer("com.apple.Music", .granted)
+        #expect(music.canScript)
+        #expect(!spotify.canScript)
+        answer("com.spotify.client", .notDetermined)
+        #expect(!spotify.canScript)
+        answer("com.apple.Music", .denied)
+        #expect(!music.canScript)
+        #expect(!music.runScript("return 1"))
+    }
 }
 
 @Suite struct BatteryAdapterTests {

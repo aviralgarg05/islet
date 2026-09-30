@@ -245,7 +245,8 @@ final class AppModel {
     private func startMedia() {
         systemMedia.onUpdate = { [weak self] np in self?.mediaUpdate(np, source: .system) }
         systemMedia.onUnavailable = { [weak self] reason in
-            // Fall back to per-player integrations with AppleScript enrichment.
+            // Fall back to per-player enrichment. It uses AppleScript only where Automation is
+            // already allowed, so this never brings up the prompt; Settings → Permissions does.
             NSLog("Islet: %@", reason)
             self?.music.enrich = true
             self?.spotify.enrich = true

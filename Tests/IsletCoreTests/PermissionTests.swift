@@ -35,6 +35,54 @@ import Testing
         #expect(PermissionKind.allCases.filter { $0.automationTarget != nil }.count == 2)
     }
 
+    @Test func automationGateSendsNothingUntilGranted() {
+        var gate = AutomationGate()
+        // `#expect` can't take a mutating call, so each step goes through these.
+        func check(_ t: AutomationGate.Trigger) -> Bool { gate.shouldCheck(t) }
+        func answer(_ s: PermissionStatus) -> Bool { gate.record(s) }
+        #expect(!gate.allowsEvents)
+        #expect(check(.firstUse))
+        // One check at a time.
+        #expect(!check(.firstUse))
+        #expect(!check(.appActivated))
+        #expect(!answer(.notDetermined))
+        #expect(!gate.allowsEvents)
+        // Once per launch, then again only when the app becomes active.
+        #expect(!check(.firstUse))
+        #expect(check(.appActivated))
+        #expect(!answer(.appNotRunning))
+        #expect(check(.appActivated))
+        #expect(answer(.granted))
+        #expect(gate.allowsEvents)
+        // Granted is a lasting answer: no more checks, and no second "just allowed".
+        #expect(!check(.appActivated))
+        #expect(!check(.firstUse))
+        #expect(!answer(.granted))
+    }
+
+    @Test func automationGateStopsAskingAfterARefusal() {
+        var gate = AutomationGate()
+        func check(_ t: AutomationGate.Trigger) -> Bool { gate.shouldCheck(t) }
+        #expect(check(.firstUse))
+        gate.record(.denied)
+        #expect(!gate.allowsEvents)
+        #expect(!check(.appActivated))
+        #expect(!check(.firstUse))
+        // Allow in Settings → Permissions (or the switch in System Settings) still gets through.
+        let allowed = gate.record(.granted)
+        #expect(allowed)
+        #expect(gate.allowsEvents)
+    }
+
+    @Test func automationGateTakesAnAnswerWithoutAskingItself() {
+        var gate = AutomationGate()
+        let allowed = gate.record(.granted)
+        #expect(allowed)
+        #expect(gate.allowsEvents)
+        let due = gate.shouldCheck(.firstUse)
+        #expect(!due)
+    }
+
     @Test func promptOnlyAsTheUserSwitchesOn() {
         // At launch a feature found switched on never asks, even without its permission.
         #expect(!PermissionPrompt.shouldAsk(wasOn: nil, isOn: true))

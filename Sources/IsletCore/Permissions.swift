@@ -114,6 +114,54 @@ public enum PermissionAction: Equatable, Sendable {
     case request, openSettings, none
 }
 
+/// Whether Islet may send Apple Events to one app, and when to ask macOS about it again.
+/// Asking never prompts, so nothing is sent until macOS reports Automation as granted: allowed
+/// earlier, or by the user pressing Allow in Settings → Permissions. macOS is asked once per
+/// launch, then again each time the app becomes active while it has given no lasting answer
+/// (not asked yet, or the app wasn't open to check).
+public struct AutomationGate: Equatable, Sendable {
+    public enum Trigger: Sendable {
+        /// Islet is about to want Apple Events for the app (its integration started, or the
+        /// system bridge went away).
+        case firstUse
+        /// The app came to the front.
+        case appActivated
+    }
+
+    /// The last answer from macOS; nil until one arrives.
+    public private(set) var status: PermissionStatus?
+    private var checking = false
+
+    public init() {}
+
+    /// Whether Apple Events may be sent now.
+    public var allowsEvents: Bool { status == .granted }
+
+    /// Whether to ask macOS now. A true result counts as the check starting; `record` ends it.
+    public mutating func shouldCheck(_ trigger: Trigger) -> Bool {
+        guard !checking else { return false }
+        switch trigger {
+        case .firstUse: guard status == nil else { return false }
+        case .appActivated: guard !isSettled else { return false }
+        }
+        checking = true
+        return true
+    }
+
+    /// Take an answer from macOS: one of these checks, or the user's in Settings → Permissions.
+    /// - Returns: true when Apple Events have just become allowed.
+    @discardableResult
+    public mutating func record(_ status: PermissionStatus) -> Bool {
+        let was = allowsEvents
+        self.status = status
+        checking = false
+        return allowsEvents && !was
+    }
+
+    /// Allowed or refused: only the user changes that, in System Settings.
+    private var isSettled: Bool { status == .granted || status == .denied }
+}
+
 /// When a feature that is switched on may ask macOS for its permission.
 public enum PermissionPrompt {
     /// Only as the user switches the feature on. Finding it already on (at launch, or on some other

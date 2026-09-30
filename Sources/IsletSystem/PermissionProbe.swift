@@ -86,7 +86,17 @@ public enum PermissionProbe {
             let target = NSAppleEventDescriptor(bundleIdentifier: bundleID)
             let code = AEDeterminePermissionToAutomateTarget(target.aeDesc, typeWildCard, typeWildCard, ask)
             let result = PermissionStatus.automation(code)
-            DispatchQueue.main.async { completion(result) }
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .isletAutomationStatus, object: bundleID, userInfo: ["status": result])
+                completion(result)
+            }
         }
     }
+}
+
+public extension Notification.Name {
+    /// Every Automation answer from macOS, posted on the main thread. The object is the target
+    /// app's bundle ID and `userInfo["status"]` its `PermissionStatus`. The Music and Spotify
+    /// providers listen, so an Allow in Settings → Permissions takes effect at once.
+    static let isletAutomationStatus = Notification.Name("IsletAutomationStatus")
 }
