@@ -495,6 +495,41 @@ extension Activity {
         return trailingText(now: now)
     }
 
+    /// How the template's time-based text changes on its own: a periodic refresh from `anchor`
+    /// every `interval` seconds (1 for clocks, 60 for minute counts, aligned so each tick lands
+    /// where the text changes), or nil when nothing changes until the next update.
+    public func templateRefresh(now: Date) -> (anchor: Date, interval: TimeInterval)? {
+        func until(_ deadline: Date?, _ step: TimeInterval) -> (anchor: Date, interval: TimeInterval)? {
+            guard let deadline else { return nil }
+            let remaining = deadline.timeIntervalSince(now)
+            guard remaining > 0 else { return nil }
+            return (deadline.addingTimeInterval(-step * (remaining / step).rounded(.up)), step)
+        }
+        func since(_ start: Date?) -> (anchor: Date, interval: TimeInterval)? { start.map { ($0, 1) } }
+        switch resolvedTemplate {
+        case .eta:
+            return phase == "arrived" || phase == "delivered" ? nil : until(endsAt, 60)
+        case .stages, .gauge:
+            return until(endsAt, 60)
+        case .flight:
+            switch flightPhase(now: now) {
+            case "airborne": return until(flight?.arrives, 60)
+            case "landed": return nil
+            default: return until(flight?.departs, 60)
+            }
+        case .route:
+            return route?.stopsLeft != nil || route?.distance != nil ? nil : until(endsAt, 60)
+        case .score:
+            return nil
+        case .workout:
+            return until(endsAt, 1) ?? since(startedAt)
+        case .liveAudio, .media:
+            return since(startedAt)
+        case .timer, .agent, .progress:
+            return until(endsAt, 1) ?? since(startedAt)
+        }
+    }
+
     /// At most 5 characters for the minimal bubble: `compactShort`, else a short form of the
     /// changing value. Nil when the bubble shows a glyph or ring instead.
     public func minimalText(now: Date) -> String? {

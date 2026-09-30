@@ -218,9 +218,10 @@ extension AppModel {
         return a.icon(smart: settings.smartIcons)
     }
 
+    /// Lifted until it reads on the island's black (a brand black or navy would vanish).
     func tint(for a: Activity) -> Color {
-        if a.tint == nil, let t = settings.rule(for: a.source)?.tint { return Color(tint: t) }
-        return Color(tint: a.tintName(smart: settings.smartIcons))
+        if a.tint == nil, let t = settings.rule(for: a.source)?.tint { return Color(tint: t).readableOnBlack }
+        return Color(tint: a.tintName(smart: settings.smartIcons)).readableOnBlack
     }
 
     /// Accent for media UI: the user's choice, or derived from album art.

@@ -348,7 +348,9 @@ struct BubbleView: View {
             case .media(let np):
                 ArtworkView(media: np, size: diameter - 8, corner: (diameter - 8) / 2)
             case .activity(let a):
-                if a.clampedProgress != nil || a.isIndeterminate, a.endsAt == nil, a.startedAt == nil {
+                if model.visualTemplate(for: a) != nil {
+                    TemplateBubble(activity: a, model: model, diameter: diameter)
+                } else if a.clampedProgress != nil || a.isIndeterminate, a.endsAt == nil, a.startedAt == nil {
                     ProgressRing(progress: a.clampedProgress, tint: model.tint(for: a), size: diameter - 8, lineWidth: 2.2)
                     IconView(icon: model.icon(for: a), size: diameter - 17, tint: model.tint(for: a))
                 } else {
@@ -457,14 +459,14 @@ struct CompactContentView: View {
             let tint = model.tint(for: a)
             Wings(metrics: metrics, wing: geometry.wing) {
                 HStack(spacing: 4) {
-                    IconView(icon: model.icon(for: a), size: 15, tint: tint)
+                    TemplateLeading(activity: a, model: model, tint: tint)
                     // With bubbles off, count the other activities here instead.
                     if others > 0, model.settings.maxConcurrent == 1 {
                         Text("+\(others)").font(.system(size: 9.5, weight: .bold, design: .rounded)).foregroundStyle(Color.islandSecondary)
                     }
                 }
             } trailing: {
-                ActivityTrailing(activity: a, tint: tint)
+                TemplateTrailing(activity: a, model: model, tint: tint)
             }
         case .battery(let ev):
             let tint = BatteryGlyph.tint(ev)
@@ -502,11 +504,11 @@ struct CompactContentView: View {
         case .activity(let a, _):
             let tint = model.tint(for: a)
             DropRow(metrics: metrics) {
-                IconView(icon: model.icon(for: a), size: 14, tint: tint)
+                TemplateLeading(activity: a, model: model, tint: tint, size: 14, compact: true)
             } center: {
-                Text(a.title).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+                TemplateDropCenter(activity: a, model: model)
             } trailing: {
-                ActivityTrailing(activity: a, tint: tint, compact: true)
+                TemplateTrailing(activity: a, model: model, tint: tint, compact: true)
             }
         case .battery(let ev):
             let tint = BatteryGlyph.tint(ev)
@@ -599,25 +601,25 @@ struct SneakView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Color.clear.frame(height: metrics.notch.height - 2)
                 HStack(spacing: 8) {
-                    IconView(icon: model.icon(for: activity), size: 15, tint: tint)
+                    TemplateLeading(activity: activity, model: model, tint: tint, compact: true)
                     Text(activity.title).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
                     Spacer(minLength: 4)
-                    ActivityTrailing(activity: activity, tint: tint, compact: true)
+                    TemplateTrailing(activity: activity, model: model, tint: tint, compact: true)
                 }
-                details(tint: tint).padding(.leading, 23)
+                TemplateDetail(activity: activity, model: model, roomy: true) { details(tint: tint) }.padding(.leading, 23)
             }
             .padding(.horizontal, 14)
         } else {
             VStack(spacing: 0) {
                 Wings(metrics: metrics, wing: geometry.wing) {
-                    IconView(icon: model.icon(for: activity), size: 15, tint: tint)
+                    TemplateLeading(activity: activity, model: model, tint: tint)
                 } trailing: {
-                    ActivityTrailing(activity: activity, tint: tint, compact: true)
+                    TemplateTrailing(activity: activity, model: model, tint: tint, compact: true)
                 }
                 .frame(maxWidth: .infinity)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(activity.title).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
-                    details(tint: tint)
+                    TemplateDetail(activity: activity, model: model) { details(tint: tint) }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 15)

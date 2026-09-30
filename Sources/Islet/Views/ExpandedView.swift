@@ -131,7 +131,7 @@ struct HomeTab: View {
                     let shown = snapshotMode ? Array(acts.prefix(rowsThatFit)) : acts
                     AdaptiveScroll(scrolls: acts.count > rowsThatFit) {
                         VStack(spacing: 6) {
-                            ForEach(shown) { a in ActivityRow(activity: a, model: model) }
+                            ForEach(shown) { a in TemplateRow(activity: a, model: model) }
                         }
                     }
                 }

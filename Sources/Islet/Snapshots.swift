@@ -127,6 +127,7 @@ enum Snapshots {
         // Home without media shows the Today card.
         model.clearNowPlayingForSnapshot()
         shoot("15-expanded-today")
+        TemplateSnapshots.render(to: dir, model: model)
         print("Rendered snapshots to \(dir.path)")
     }
 

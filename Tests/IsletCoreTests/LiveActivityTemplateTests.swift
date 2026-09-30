@@ -362,6 +362,32 @@ import Testing
         #expect(TemplateFormat.shortDuration(since: t0, now: t0.addingTimeInterval(7300)) == "2h")
     }
 
+    @Test func refreshTicksOnlyWhenTheTextCanChange() throws {
+        var c = ActivityCenter()
+        var eta = ActivitySpec(id: "e", title: "Ride", endsAt: t0.addingTimeInterval(250))
+        eta.template = "eta"
+        let e = try c.apply(eta, now: t0)
+        // Minute counts tick once a minute, on the moments "5 min" becomes "4 min".
+        let r = try #require(e.templateRefresh(now: t0))
+        #expect(r.interval == 60)
+        #expect(r.anchor == t0.addingTimeInterval(250 - 300))
+        var here = ActivitySpec(id: "e")
+        here.phase = "arrived"
+        #expect(try c.apply(here, now: t0).templateRefresh(now: t0) == nil)
+
+        let timer = try c.apply(ActivitySpec(id: "t", title: "Tea", endsAt: t0.addingTimeInterval(90.5)), now: t0)
+        #expect(timer.templateRefresh(now: t0)?.interval == 1)
+        #expect(timer.templateRefresh(now: t0)?.anchor == t0.addingTimeInterval(-0.5))
+        #expect(timer.templateRefresh(now: t0.addingTimeInterval(100)) == nil)
+
+        var game = ActivitySpec(id: "g", title: "Game")
+        game.teams = [ActivityTeam(abbr: "A", score: "1"), ActivityTeam(abbr: "B", score: "0")]
+        #expect(try c.apply(game, now: t0).templateRefresh(now: t0) == nil)
+
+        let call = try c.apply(ActivitySpec(id: "c", title: "Call", startedAt: t0.addingTimeInterval(-30)), now: t0)
+        #expect(call.templateRefresh(now: t0)?.anchor == t0.addingTimeInterval(-30))
+    }
+
     @Test func detectedCallsUseLiveAudio() {
         var d = CallDetector()
         guard case .started(let s) = d.update(micUsers: ["us.zoom.xos"], cameraOn: false, now: t0).first else {
