@@ -49,6 +49,9 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 - `islet://` links can't replace Islet's own activities or open anything but https. Script widgets are off until you turn them on and only run files you own. Meeting links must be on the real host to get a Join button.
 - Downloads, the clipboard and plugins stop checking while nothing changes or the screen is locked.
 - Local builds use the hardened runtime.
+- The iPhone bridge has its own token, separate from the local API's, with Copy Token and New Token in Settings. It only accepts notifications, timers, Focus and simple activities (no links, buttons or image files), refuses a wrong token before reading the body, and limits bodies to 16 KB and connections to 8. Bonjour advertises it as "Islet" rather than the Mac's name.
+- Calendar and Reminders access works in the app bundle: the hardened runtime needed the calendars entitlement, without which macOS refused access and never asked.
+- Hovering opens the island when the pointer is pushed against the top edge of the screen. Settings can switch it to open on click instead.
 
 ### Measured on an M3 Pro MacBook Pro, macOS 27.0.1
 

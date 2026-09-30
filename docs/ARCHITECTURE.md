@@ -38,7 +38,7 @@ Islet is a menu bar agent (no Dock icon) built with SwiftPM from four targets: `
 ## Principles
 
 - **All decisions live in `IsletCore`, and they are pure.** What the island shows, which player wins, when hover opens it, how the closed island fits the menu bar, which icon and template an activity gets, how a hook payload maps to an activity or an approval card, when a timer rings: all are value types with an injected clock, covered by `swift test`. `IsletCore` imports only Foundation and CoreGraphics. The system layer turns macOS events into calls on that core.
-- **Event-driven.** Changes arrive as callbacks, not by polling. The few timers that do run are listed under [Performance rules](#performance-rules), each with the condition that starts it.
+- **Event-driven.** Changes arrive as callbacks from macOS. The few timers that do run are listed under [Performance rules](#performance-rules), each with the condition that starts it.
 - **Looping motion runs in Core Animation**, so the window server animates it and Islet's process does no per-frame work.
 - **Pointer tracking is dormant until needed.** An invisible trigger window over the notch has a tracking area. Global mouse monitors are installed only after the pointer enters it, and removed once the island is closed and the pointer has left. The island panel ignores the mouse except over the parts that are drawn, so clicks beside it reach the menu bar.
 - **Every permission is opt-in.** Islet asks for one only when the user switches on, or asks to use, a feature that needs it. See [Privacy rules](#privacy-rules).
@@ -165,7 +165,7 @@ See [AI.md](AI.md).
 
 ## MCP
 
-`isletctl mcp` is a Model Context Protocol server on stdio, started by the agent or chat app that uses it. It runs in the `isletctl` process, not in the app. It speaks JSON-RPC 2.0, one message per line, and offers six tools (`notify`, `show_progress`, `finish`, `dismiss`, `start_timer`, `list_activities`). Each tool call becomes a local API request, with the port and token from the discovery file. Activities it creates get ids starting with `mcp-`, so a tool can't replace Islet's own, and a `show_progress` task dims after 15 minutes without an update. See [MCP.md](MCP.md).
+`isletctl mcp` is a Model Context Protocol server on stdio, started by the agent or chat app that uses it. It runs in the `isletctl` process, outside the app. It speaks JSON-RPC 2.0, one message per line, and offers six tools (`notify`, `show_progress`, `finish`, `dismiss`, `start_timer`, `list_activities`). Each tool call becomes a local API request, with the port and token from the discovery file. Activities it creates get ids starting with `mcp-`, so a tool can't replace Islet's own, and a `show_progress` task dims after 15 minutes without an update. See [MCP.md](MCP.md).
 
 ## Usage limits
 
@@ -184,7 +184,8 @@ Claude Code and Codex plan usage come from local files. Nothing polls and nothin
 - `Host` must be localhost (DNS-rebinding defence) and web-page `Origin`s are refused (CSRF). Browser-extension origins and `Origin: null` are allowed, still with the token.
 - 16 KB header limit and 1 MB body limit; chunked bodies are refused. A connection that hasn't delivered a whole request within 5 s is dropped.
 - At most 16 long-polls (`?wait=`) are held at once; more get `503`.
-- The LAN bridge (off by default, port 47832, advertised over Bonjour as `_islet._tcp`) reuses the same router with any `Host` allowed. It keeps the token and origin checks, limits each client address to 30 requests per 10 s, and never takes part in approvals.
+- A wrong token, a refused route or an oversized `Content-Length` is answered as soon as the headers arrive, before the body is read.
+- The LAN bridge (off by default, port 47832, advertised over Bonjour as `_islet._tcp` under the name "Islet") is a second listener with its own token (`lan.json`, `0600`). The API token is refused there, and the bridge token is refused on loopback. It uses the router's `.lan` scope: any `Host`, but only notify, timer, Focus and simple activities (no links or buttons, no file or remote icons, ids under `lan-`, priority at most high); everything else gets `403`. It limits each client to 30 requests per 10 s (IPv6 clients per /64), bodies to 16 KB and connections to 8, and never takes part in approvals.
 - `islet://` URLs need no token, so they can do less: their activities get ids starting with `url-`, links must be https, icons are symbols, emoji or app icons, and priority tops out at high.
 
 ## Performance rules
@@ -199,7 +200,7 @@ Claude Code and Codex plan usage come from local files. Nothing polls and nothin
   |---|---|---|
   | Clipboard history | reads `NSPasteboard.changeCount` once a second (macOS has no change notification) | clipboard history is on and the screen is unlocked with the displays awake |
   | Calendar alerts | once a minute; events and reminders themselves arrive through `EKEventStoreChanged` | the calendar or reminders module is running |
-  | Downloads | once a second while a partial file grows (file growth doesn't change the folder), every 30 s after 15 s without growth, not at all after 10 quiet minutes | a partial download is in the folder |
+  | Downloads | once a second while a partial file grows (file growth doesn't change the folder), every 30 s after 15 s without growth, and stops after 10 quiet minutes | a partial download is in the folder |
   | System stats | every 2 s | the System tab is open |
   | Script widgets | each script's interval from its file name (5 minutes by default), with a 15 s timeout | widgets are on and the screen is unlocked with the displays awake |
   | Live Activity mirroring | a safety rescan every 15 s | at least one activity is mirrored |
@@ -239,7 +240,7 @@ Claude Code and Codex plan usage come from local files. Nothing polls and nothin
 | Layer | How |
 |---|---|
 | Core logic | `make test`: presenter, activity centre, arbiter, hover intent, gestures, keep awake, HTTP parser, router (auth, CSRF, rebinding), URL scheme, hooks and approvals, risk rules, templates and catalogue, timers and durations, menu bar layout and Live Activity recognition, Ask decoders, usage parsing, status line setup, settings, calls, notifications, downloads, smart icons |
-| System adapters | `make test`: real sockets (API server, held long-polls, LAN rate limit, malformed requests), IOKit/Music/Spotify/MediaRemote parsers, script runner (output, exit codes, timeouts), Safari/Chrome partial downloads, shelf persistence, discovery-file permissions, Ask service with fake transports and CLIs, Keychain queries, usage file watching, hook installer, menu bar inspector |
+| System adapters | `make test`: real sockets (API server, held long-polls, LAN rate limit, LAN token, early 401, body and connection limits, malformed requests), IOKit/Music/Spotify/MediaRemote parsers, script runner (output, exit codes, timeouts), Safari/Chrome partial downloads, shelf persistence, discovery-file permissions, Ask service with fake transports and CLIs, Keychain queries, usage file watching, hook installer, menu bar inspector |
 | End to end | `make e2e`: launches the real app with isolated config and port; drives the CLI, HTTP, URL scheme, agent and zsh hooks, plugins, MCP and the LAN bridge; checks window level and placement, single instance, clean shutdown, idle CPU and memory. `make e2e-media` adds the MediaRemote bridge, which skips itself if something is playing. |
 | Performance | `make perf`: CPU in seven island states against the budgets above |
 | Visual | `make snapshots`: renders every island state to PNG offline, with sample content and a scratch config |
