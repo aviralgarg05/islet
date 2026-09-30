@@ -89,6 +89,7 @@ final class AppModel {
     let downloads = DownloadsWatcher()
     let unlock = UnlockMonitor()
     let menuBarActivities = MenuBarLiveActivityMonitor()
+    let agentUsage = AgentUsageModel()
     private var mirroredKeys: Set<String> = []
     private var calls = CallDetector()
     private var lastMicUsers: Set<String> = []
@@ -193,6 +194,7 @@ final class AppModel {
             menuBarActivities.stop()
             syncMenuBarActivities([])
         }
+        agentUsage.apply(settings) { [weak self] spec in _ = try? self?.applyLocal(spec) }
     }
 
     /// Show the menu bar's Live Activities (iPhone and system) as island activities.

@@ -127,6 +127,25 @@ enum Snapshots {
         // Home without media shows the Today card.
         model.clearNowPlayingForSnapshot()
         shoot("15-expanded-today")
+
+        // Agent plan limits on Home, and the alert when a window crosses 90%.
+        model.agentUsage.showDemo(now: now)
+        model.settings.calendarEnabled = false
+        model.remove(activityID: "build")
+        model.settings.sizePreset = .standard
+        metrics = metricsFor(model.settings)
+        shoot("22-expanded-agents")
+        model.remove(activityID: "claude-demo")
+        model.settings.sizePreset = .compact
+        metrics = metricsFor(model.settings)
+        shoot("23-expanded-agents-compact")
+        let crossing = UsageAlert(provider: .claude, window: UsageWindow(id: "five_hour", usedPercent: 90, windowMinutes: 300,
+                                                                         resetsAt: now.addingTimeInterval(72 * 60)), threshold: 90)
+        let usageAlert = activity(crossing.activity(now: now))
+        model.forcedPresentation = .sneak(usageAlert)
+        shoot("24-sneak-usage-alert")
+        model.forcedPresentation = .compact(.activity(usageAlert, others: 0))
+        shoot("25-compact-usage-alert")
         print("Rendered snapshots to \(dir.path)")
     }
 

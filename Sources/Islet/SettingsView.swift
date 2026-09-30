@@ -421,6 +421,7 @@ struct IntegrationsSettings: View {
                 Text("Codex: add  notify = [\"\(AppActions.cliPath)\", \"hook\", \"codex\"]  to ~/.codex/config.toml")
                     .font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
             }
+            UsageLimitsSection(model: model)
             Section("iPhone bridge (local network)") {
                 Toggle("Accept events from iPhone Shortcuts on this network", isOn: $model.settings.lanBridgeEnabled)
                 LabeledContent("Status") { Text(model.lanStatus).foregroundStyle(.secondary) }
