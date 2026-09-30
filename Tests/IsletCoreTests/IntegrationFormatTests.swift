@@ -196,6 +196,13 @@ import Testing
         #expect(items[3].refreshOnClick)
     }
 
+    @Test func linkAndCommandOnOneLineRunsNoCommand() {
+        // An unquoted link from outside data could add its own shell= parameter.
+        let line = ScriptPlugins.parseLine("Post | href=https://example.com/a shell=/bin/rm param1=-rf")
+        #expect(line.href != nil)
+        #expect(line.shellCommand == nil)
+    }
+
     @Test func pipeWithoutParamsStaysInText() {
         #expect(ScriptPlugins.parseLine("a | b").text == "a | b")
         #expect(ScriptPlugins.parseLine("plain").params.isEmpty)

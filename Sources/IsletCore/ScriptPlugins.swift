@@ -26,8 +26,10 @@ public enum ScriptPlugins {
         public var sfSymbol: String? { params["sfimage"] ?? params["sfsymbol"] }
         public var isDisabled: Bool { params["disabled"] == "true" }
         /// Shell command to run on click (`shell=` / `bash=` plus `param1=`… arguments).
+        /// Ignored on a line that also has `href=`: a link printed from outside data could
+        /// otherwise smuggle in a command.
         public var shellCommand: [String]? {
-            guard let exe = params["shell"] ?? params["bash"] else { return nil }
+            guard params["href"] == nil, let exe = params["shell"] ?? params["bash"] else { return nil }
             var argv = [exe]
             var i = 1
             while let p = params["param\(i)"] {

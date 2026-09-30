@@ -33,9 +33,12 @@ enum AppActions {
         model.pluginRunner?.rescan()
     }
 
+    /// Plugin commands the user has agreed to run this session.
+    private static var confirmedCommands: Set<String> = []
+
     static func runPluginLine(_ line: ScriptPlugins.Line, plugin: PluginResult, model: AppModel) {
         if let url = line.href { NSWorkspace.shared.open(url) }
-        if let argv = line.shellCommand, let exe = argv.first {
+        if let argv = line.shellCommand, let exe = argv.first, confirm(argv, plugin: plugin) {
             let p = Process()
             p.executableURL = URL(fileURLWithPath: exe.hasPrefix("/") ? exe : "/usr/bin/env")
             p.arguments = exe.hasPrefix("/") ? Array(argv.dropFirst()) : argv
@@ -43,6 +46,21 @@ enum AppActions {
             try? p.run()
         }
         if line.refreshOnClick { model.runPlugin(plugin.path) }
+    }
+
+    /// Show the exact command the first time a plugin's menu item would run it.
+    private static func confirm(_ argv: [String], plugin: PluginResult) -> Bool {
+        let key = plugin.path + "\u{0}" + argv.joined(separator: "\u{0}")
+        if confirmedCommands.contains(key) { return true }
+        let alert = NSAlert()
+        alert.messageText = "Run this command from “\(plugin.name)”?"
+        alert.informativeText = argv.map { $0.contains(" ") ? "'\($0)'" : $0 }.joined(separator: " ")
+        alert.addButton(withTitle: "Run")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return false }
+        confirmedCommands.insert(key)
+        return true
     }
 
     static func setClipboard(_ model: AppModel, enabled: Bool) {
