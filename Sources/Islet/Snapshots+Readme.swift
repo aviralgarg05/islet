@@ -83,7 +83,7 @@ extension Snapshots {
             let m = NotchGeometry.metrics(for: screen, expandedSize: CGSize(width: model.settings.expandedSize.width, height: model.settings.expandedSize.height),
                                           wingWidth: model.settings.effectiveWingWidth)
             let view = IslandView(model: model, display: 1, metrics: m)
-                .frame(width: 760, height: m.expanded.height + 30)
+                .frame(width: 760, height: m.expanded.height + 30 + PageSwitcher.band)
                 .background(backdrop(metrics: m))
             write(view, to: out.appendingPathComponent("\(name).png"))
         }

@@ -52,7 +52,7 @@ extension AnimationStyle {
     /// Shape morphing between island states (expanding).
     var morph: Animation? {
         switch self {
-        case .fluid: return .spring(response: 0.42, dampingFraction: 0.78)
+        case .fluid: return Motion.open
         case .snappy: return .snappy(duration: 0.26, extraBounce: 0.04)
         case .smooth: return .smooth(duration: 0.38)
         case .minimal: return .easeInOut(duration: 0.16)
@@ -63,7 +63,7 @@ extension AnimationStyle {
     /// Collapsing is quicker and settles without overshoot.
     var collapse: Animation? {
         switch self {
-        case .fluid: return .spring(response: 0.34, dampingFraction: 0.92)
+        case .fluid: return Motion.close
         case .snappy: return .snappy(duration: 0.22)
         case .smooth: return .smooth(duration: 0.3)
         case .minimal: return .easeInOut(duration: 0.14)
@@ -157,22 +157,6 @@ struct GlassSurface<S: Shape>: View {
             Color.clear.glassEffect(.regular.tint(tint), in: shape)
         } else {
             shape.fill(.ultraThinMaterial).overlay(shape.fill(tint))
-        }
-    }
-}
-
-extension View {
-    /// Background for a card inside the expanded island. On the Glass theme it is a plain
-    /// translucent fill with a hairline, not more glass: glass can't sample glass behind it,
-    /// and every glass card would cost another sampling pass.
-    func islandCard(_ theme: IslandTheme, cornerRadius: CGFloat = 12) -> some View {
-        background {
-            let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            if theme == .glass {
-                shape.fill(Color.white.opacity(0.07)).overlay(shape.strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5))
-            } else {
-                shape.fill(Color.islandFill)
-            }
         }
     }
 }

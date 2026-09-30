@@ -92,9 +92,10 @@ extension Color {
         }
     }
 
-    static let islandSecondary = Color.white.opacity(0.62)
-    static let islandTertiary = Color.white.opacity(0.38)
-    static let islandFill = Color.white.opacity(0.10)
+    // Older names for the design system's ink and wash (DesignSystem.swift).
+    static let islandSecondary = Ink.secondary
+    static let islandTertiary = Ink.tertiary
+    static let islandFill = Wash.regular
 }
 
 /// Renders any `ActivityIcon` (SF Symbol, emoji, app icon, file or remote image).
@@ -391,33 +392,15 @@ struct PlayingIndicator: View {
     }
 }
 
-struct PillButton: View {
-    let symbol: String
-    var size: CGFloat = 13
-    var action: () -> Void
-
-    var body: some View {
-        Button {
-            Haptics.play(.tap)
-            action()
-        } label: {
-            Image(systemName: symbol)
-                .font(.system(size: size, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: size * 2.2, height: size * 2.2)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(HoverButtonStyle())
-    }
-}
-
+/// Round hover wash and a little give when pressed, for borderless icon buttons.
 struct HoverButtonStyle: ButtonStyle {
     @ViewState private var hovering = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .background(Circle().fill(Color.white.opacity(configuration.isPressed ? 0.22 : hovering ? 0.12 : 0)))
-            .scaleEffect(configuration.isPressed ? 0.92 : 1)
+            .background(Circle().fill(configuration.isPressed ? Wash.strong : hovering ? Wash.regular : .clear))
+            .scaleEffect(configuration.isPressed ? Motion.pressScale : 1)
+            .animation(Motion.settle, value: configuration.isPressed)
             .onHover { hovering = $0 }
     }
 }

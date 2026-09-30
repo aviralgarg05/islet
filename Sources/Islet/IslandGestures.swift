@@ -46,11 +46,20 @@ enum IslandMenu {
         var checked = false
         var enabled = true
         var action: (() -> Void)?
+        /// Shown as a submenu.
+        var children: [Item] = []
 
         static let separator = Item(title: "-")
     }
 
     static func show(_ items: [Item], model: AppModel) {
+        let menu = build(items)
+        model.controls.holdsOpen = true
+        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+        model.controls.holdsOpen = false
+    }
+
+    private static func build(_ items: [Item]) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
         for item in items {
@@ -58,15 +67,14 @@ enum IslandMenu {
                 menu.addItem(.separator())
                 continue
             }
-            let m = ClosureMenuItem(title: item.title, handler: item.action)
+            let m = ClosureMenuItem(title: item.title, handler: item.children.isEmpty ? item.action : nil)
             m.isEnabled = item.enabled
             m.state = item.checked ? .on : .off
             if let symbol = item.symbol { m.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) }
+            if !item.children.isEmpty { m.submenu = build(item.children) }
             menu.addItem(m)
         }
-        model.controls.holdsOpen = true
-        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
-        model.controls.holdsOpen = false
+        return menu
     }
 }
 

@@ -13,13 +13,13 @@ struct AskView: View {
         let ask = model.ask
         let kind = ask.provider(in: model.settings.ask)
         let status = ask.status(of: kind)
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: Space.m) {
+            HStack(spacing: Space.s) {
                 AskProviderChip(model: model, kind: kind)
                 field(kind: kind, ready: status.isReady)
                 actions(ready: status.isReady)
             }
-            .frame(height: 26)
+            .frame(height: AskView.fieldHeight)
             if ask.phase == .idle && ask.answer.isEmpty {
                 hint(kind: kind, status: status)
             } else {
@@ -40,6 +40,8 @@ struct AskView: View {
         .onChange(of: ask.focusRequest) { _, _ in focusSoon() }
     }
 
+    static let fieldHeight: CGFloat = 28
+
     /// Focus once the panel has become key (the bridge makes it key in the same update).
     private func focusSoon() {
         DispatchQueue.main.async { fieldFocused = true }
@@ -55,7 +57,7 @@ struct AskView: View {
         return ZStack(alignment: .leading) {
             if snapshotMode {
                 Text(ask.draft.isEmpty ? placeholder(kind) : ask.draft)
-                    .foregroundStyle(ask.draft.isEmpty ? Color.islandTertiary : Color.white)
+                    .foregroundStyle(ask.draft.isEmpty ? Ink.tertiary : Ink.primary)
                     .lineLimit(1)
             } else {
                 TextField(placeholder(kind), text: Binding(get: { model.ask.draft }, set: { model.ask.draft = $0 }))
@@ -73,18 +75,18 @@ struct AskView: View {
                 }
             }
         }
-        .font(.system(size: 12.5))
-        .padding(.horizontal, 11)
+        .textStyle(.body)
+        .padding(.horizontal, Space.m)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(Capsule().fill(Color.islandFill))
-        .overlay(Capsule().strokeBorder(Color.white.opacity(fieldFocused && ask.wantsKeyboard ? 0.22 : 0), lineWidth: 1))
+        .background(Capsule().fill(Wash.regular))
+        .overlay(Capsule().strokeBorder(Ink.quaternary.opacity(fieldFocused && ask.wantsKeyboard ? 1 : 0), lineWidth: 1))
         .opacity(ready ? 1 : 0.6)
     }
 
     @ViewBuilder
     private func actions(ready: Bool) -> some View {
         let ask = model.ask
-        HStack(spacing: 2) {
+        HStack(spacing: Space.xs) {
             if !ask.answer.isEmpty && !ask.isStreaming {
                 AskIconButton(symbol: "doc.on.doc", help: "Copy answer") { ask.copyAnswer() }
             }
@@ -120,18 +122,18 @@ struct AskView: View {
     }
 
     private func hint(kind: AskProviderKind, status: AskProviderStatus) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Space.s) {
             Text(status.message(for: kind))
-                .font(.system(size: 11.5))
-                .foregroundStyle(Color.islandSecondary)
+                .textStyle(.body)
+                .foregroundStyle(Ink.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if status == .needsKey {
                 Button("Open Settings") { AppActions.openSettings() }
-                    .buttonStyle(CapsuleButtonStyle(tint: .blue))
+                    .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 4)
+        .padding(.horizontal, Space.xs)
     }
 }
 
@@ -144,41 +146,41 @@ struct AskAnswerView: View {
         let ask = model.ask
         ScrollViewReader { proxy in
             AdaptiveScroll(scrolls: !snapshotMode) {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: Space.xs) {
                     if !ask.question.isEmpty {
                         Text(ask.question)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Color.islandTertiary)
+                            .textStyle(.caption, emphasized: true)
+                            .foregroundStyle(Ink.tertiary)
                             .lineLimit(2)
                     }
                     if case .refused(let why) = ask.phase {
                         Text("\(ask.answeredBy?.title ?? "The model") declined to answer this." + (why.map { " \($0)" } ?? ""))
-                            .font(.system(size: 12.5))
-                            .foregroundStyle(Color.islandSecondary)
+                            .textStyle(.body)
+                            .foregroundStyle(Ink.secondary)
                     } else if ask.answer.isEmpty && ask.isStreaming {
-                        HStack(spacing: 6) {
-                            SpinnerArc(tint: Color.islandSecondary, lineWidth: 1.5).frame(width: 10, height: 10)
-                            Text("Thinking").font(.system(size: 12)).foregroundStyle(Color.islandSecondary)
+                        HStack(spacing: Space.s) {
+                            SpinnerArc(tint: Ink.secondary, lineWidth: 1.5).frame(width: 10, height: 10)
+                            Text("Thinking").textStyle(.body).foregroundStyle(Ink.secondary)
                         }
                     } else if !ask.answer.isEmpty {
                         Text(Self.render(ask.answer.shown))
-                            .font(.system(size: 12.5))
-                            .foregroundStyle(.white)
-                            .lineSpacing(1.5)
+                            .font(.system(size: TextStyle.headline.size))
+                            .foregroundStyle(Ink.primary)
+                            .lineSpacing(2)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if let footer = footer(ask) {
                         Text(footer.text)
-                            .font(.system(size: 10))
-                            .foregroundStyle(footer.warning ? Color.orange : Color.islandTertiary)
+                            .textStyle(.caption)
+                            .foregroundStyle(footer.warning ? Color.orange : Ink.tertiary)
                             .fixedSize(horizontal: false, vertical: true)
-                            .padding(.top, 2)
+                            .padding(.top, Space.xs)
                     }
                     Color.clear.frame(height: 1).id(Self.end)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 4)
+                .padding(.horizontal, Space.xs)
             }
             // Follow the answer while it streams (at most 20 times a second, like the text).
             .onChange(of: ask.answer.shown.utf8.count) { _, _ in
@@ -187,6 +189,13 @@ struct AskAnswerView: View {
         }
         .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
         .clipped()
+        // Long answers fade out at the bottom edge instead of being cut through a line.
+        .mask {
+            VStack(spacing: 0) {
+                Color.black
+                LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom).frame(height: Space.m)
+            }
+        }
     }
 
     private static let end = "ask-end"
@@ -264,18 +273,18 @@ struct AskProviderChip: View {
     }
 
     private var label: some View {
-        HStack(spacing: 4) {
-            Image(systemName: kind.symbol).font(.system(size: 10.5, weight: .semibold))
-            Text(kind.title).font(.system(size: 11.5, weight: .semibold)).lineLimit(1).fixedSize()
+        HStack(spacing: Space.xs) {
+            Image(systemName: kind.symbol).font(.system(size: 11, weight: .semibold))
+            Text(kind.title).textStyle(.body, emphasized: true).lineLimit(1).fixedSize()
             if kind.leavesMac {
-                Image(systemName: "cloud.fill").font(.system(size: 8.5)).foregroundStyle(Color.islandTertiary)
+                Image(systemName: "cloud.fill").font(.system(size: 9)).foregroundStyle(Ink.tertiary)
             }
-            Image(systemName: "chevron.down").font(.system(size: 7.5, weight: .bold)).foregroundStyle(Color.islandTertiary)
+            Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold)).foregroundStyle(Ink.tertiary)
         }
-        .foregroundStyle(Color.white)
-        .padding(.horizontal, 9)
-        .frame(height: 26)
-        .background(Capsule().fill(Color.islandFill))
+        .foregroundStyle(Ink.primary)
+        .padding(.horizontal, Space.m)
+        .frame(height: AskView.fieldHeight)
+        .background(Capsule().fill(Wash.regular))
         .contentShape(Capsule())
     }
 }
@@ -294,35 +303,13 @@ struct AskIconButton: View {
         } label: {
             Image(systemName: symbol)
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(prominent ? Color.black : Color.islandSecondary)
-                .frame(width: 26, height: 26)
-                .background(Circle().fill(prominent ? Color.white.opacity(isEnabled ? 0.92 : 0.3) : Color.islandFill.opacity(isEnabled ? 1 : 0.5)))
+                .foregroundStyle(prominent ? Color.black : Ink.secondary)
+                .frame(width: AskView.fieldHeight, height: AskView.fieldHeight)
+                .background(Circle().fill(prominent ? Color.white.opacity(isEnabled ? 0.92 : 0.3) : Wash.regular.opacity(isEnabled ? 1 : 0.5)))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .help(help)
-    }
-}
-
-/// The sparkles button in the island's top strip that opens the Ask tab.
-struct AskStripButton: View {
-    let model: AppModel
-
-    var body: some View {
-        let selected = model.tab == .ask
-        Button {
-            Haptics.play(.tap)
-            model.select(tab: .ask)
-        } label: {
-            Image(systemName: IslandTab.ask.symbol)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(selected ? Color.white : Color.islandTertiary)
-                .frame(width: 22, height: 20)
-                .background(RoundedRectangle(cornerRadius: 6).fill(selected ? Color.islandFill : .clear))
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(IslandTab.ask.title)
     }
 }
 

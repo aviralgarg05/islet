@@ -32,8 +32,9 @@ struct ApprovalCard: View {
     private var request: ApprovalRequest { entry.request }
 
     var body: some View {
+        let layout = ExpandedLayout(metrics: metrics)
         VStack(spacing: 0) {
-            header
+            header.frame(height: layout.row)
             Group {
                 switch request.kind {
                 case .tool: ToolApproval(model: model, entry: entry)
@@ -42,9 +43,9 @@ struct ApprovalCard: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(.horizontal, 18)
-            .padding(.top, 2)
-            .padding(.bottom, 12)
+            .padding(.horizontal, ExpandedLayout.inset)
+            .padding(.top, Space.xs)
+            .padding(.bottom, Space.m)
         }
         .frame(width: metrics.expanded.width, height: metrics.expanded.height, alignment: .top)
     }
@@ -52,27 +53,27 @@ struct ApprovalCard: View {
     /// Level with the notch: who is asking on the left; the queue and controls on the right.
     private var header: some View {
         HStack(spacing: 0) {
-            HStack(spacing: 6) {
-                IconView(icon: .symbol(request.provider.symbol), size: 13, tint: Color(tint: request.provider.tint))
+            HStack(spacing: Space.s) {
+                IconView(icon: .symbol(request.provider.symbol), size: 14, tint: Color(tint: request.provider.tint))
                 Text(request.title)
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .textStyle(.body, emphasized: true)
+                    .foregroundStyle(Ink.primary)
                     .lineLimit(1)
                     .help(request.agentType.map { "\(request.title) (\($0) subagent)" } ?? request.title)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Color.clear.frame(width: metrics.notch.width + 12)
+            Color.clear.frame(width: metrics.notch.width + Space.m)
 
-            HStack(spacing: 9) {
+            HStack(spacing: Space.xs) {
                 let behind = model.approvals.waitingBehind
                 if behind > 0 {
-                    Text("+\(behind)")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .foregroundStyle(.black)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(Capsule().fill(Color.white.opacity(0.85)))
+                    Text("\(behind) more")
+                        .textStyle(.caption, emphasized: true, numeric: true)
+                        .foregroundStyle(Ink.secondary)
+                        .padding(.horizontal, Space.s)
+                        .frame(height: 20)
+                        .background(Capsule().fill(Wash.regular))
                         .help(behind == 1 ? "1 more request waiting" : "\(behind) more requests waiting")
                 }
                 if snapshotMode || TerminalJump.canJump(request.terminal) {
@@ -82,8 +83,8 @@ struct ApprovalCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .padding(.horizontal, 16)
-        .frame(height: max(metrics.notch.height, 28))
+        .padding(.leading, ExpandedLayout.inset)
+        .padding(.trailing, ExpandedLayout.inset - 6)
     }
 }
 
@@ -96,17 +97,17 @@ struct ToolApproval: View {
     var body: some View {
         let r = entry.request
         let risks = r.risks
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+        VStack(alignment: .leading, spacing: Space.s) {
+            HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                 if let agent = r.agentType { Chip(text: agent).help("Asked by the \(agent) subagent") }
                 if risks.isEmpty {
                     Text(r.action)
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(Color.islandSecondary)
+                        .textStyle(.body, emphasized: true)
+                        .foregroundStyle(Ink.secondary)
                         .lineLimit(1)
                 } else {
                     Label(risks.joined(separator: " · "), systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 11, weight: .semibold))
+                        .textStyle(.caption, emphasized: true)
                         .foregroundStyle(Color.orange)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -114,28 +115,28 @@ struct ToolApproval: View {
                 }
             }
             ScrollBox(risky: !risks.isEmpty) {
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: Space.xs) {
                     Text(r.subject)
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.white)
+                        .font(.system(size: TextStyle.caption.size, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Ink.primary)
                         .fixedSize(horizontal: false, vertical: true)
                     if let detail = r.detail, !detail.isEmpty {
                         Text(detail)
-                            .font(.system(size: 10.5, design: .monospaced))
-                            .foregroundStyle(Color.islandSecondary)
+                            .font(.system(size: TextStyle.caption.size, design: .monospaced))
+                            .foregroundStyle(Ink.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
-            HStack(spacing: 6) {
+            HStack(spacing: Space.s) {
                 TerminalButton { decide(.terminal) }
                 Spacer(minLength: 0)
                 Button("Deny") { decide(.deny(ApprovalDecision.deniedMessage)) }
-                    .buttonStyle(ApprovalButtonStyle(fill: .white.opacity(0.14)))
+                    .buttonStyle(ApprovalButtonStyle(fill: Wash.strong))
                 if risks.isEmpty {
                     if r.canAllowForSession {
                         Button("Always") { decide(.allowForSession) }
-                            .buttonStyle(ApprovalButtonStyle(fill: .white.opacity(0.14)))
+                            .buttonStyle(ApprovalButtonStyle(fill: Wash.strong))
                             .help("Allow \(r.sessionRuleSummary ?? "this") for the rest of this session")
                     }
                     Button("Allow") { decide(.allow) }
@@ -163,10 +164,10 @@ struct HoldToAllowButton: View {
 
     var body: some View {
         Text(armed ? "Confirm" : "Allow")
-            .font(.system(size: 11.5, weight: .semibold))
+            .textStyle(.body, emphasized: true)
             .foregroundStyle(.white)
-            .padding(.horizontal, 12)
-            .frame(height: 24)
+            .padding(.horizontal, Space.l)
+            .frame(height: ApprovalButtonStyle.height)
             .background {
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.orange.opacity(armed ? 0.65 : 0.4))
@@ -212,27 +213,27 @@ struct QuestionApproval: View {
     var body: some View {
         let q = questions[min(index, questions.count - 1)]
         let rows = stride(from: 0, to: q.options.count, by: 2).map { Array(q.options[$0..<min($0 + 2, q.options.count)]) }
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+        VStack(alignment: .leading, spacing: Space.xs) {
+            HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                 if let header = q.header, !header.isEmpty { Chip(text: header) }
                 Text(q.question)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .textStyle(.headline)
+                    .foregroundStyle(Ink.primary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
                     .help(q.question)
                 Spacer(minLength: 0)
                 if questions.count > 1 {
                     Text("\(index + 1) of \(questions.count)")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Color.islandTertiary)
+                        .textStyle(.caption, numeric: true)
+                        .foregroundStyle(Ink.tertiary)
                         .fixedSize()
                 }
             }
             AdaptiveScroll(scrolls: rows.count > 2) {
-                VStack(spacing: 5) {
+                VStack(spacing: Space.xs) {
                     ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                        HStack(spacing: 6) {
+                        HStack(spacing: Space.xs) {
                             ForEach(row, id: \.label) { option in optionButton(option, in: q) }
                             if row.count == 1 { Color.clear.frame(maxWidth: .infinity, maxHeight: 1) }
                         }
@@ -240,13 +241,13 @@ struct QuestionApproval: View {
                 }
             }
             Spacer(minLength: 0)
-            HStack(spacing: 6) {
+            HStack(spacing: Space.s) {
                 TerminalButton { model.approvals.decide(.terminal, for: entry) }
                 Spacer(minLength: 0)
                 if q.multiSelect {
                     Text("Choose any")
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(Color.islandTertiary)
+                        .textStyle(.caption)
+                        .foregroundStyle(Ink.tertiary)
                     Button(index + 1 < questions.count ? "Next" : "Send") {
                         answer(q, with: q.options.map(\.label).filter(picked.contains).joined(separator: ", "))
                     }
@@ -267,23 +268,23 @@ struct QuestionApproval: View {
                 answer(q, with: option.label)
             }
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: Space.s) {
                 if q.multiSelect {
                     Image(systemName: on ? "checkmark.square.fill" : "square")
                         .font(.system(size: 11))
-                        .foregroundStyle(on ? Color.blue : Color.islandTertiary)
+                        .foregroundStyle(on ? Color.blue : Ink.tertiary)
                 }
                 Text(option.label)
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(.white)
+                    .textStyle(.body, emphasized: true)
+                    .foregroundStyle(Ink.primary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 9)
-            .frame(maxWidth: .infinity, minHeight: 24)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(on ? Color.blue.opacity(0.3) : Color.islandFill))
-            .contentShape(RoundedRectangle(cornerRadius: 7))
+            .padding(.horizontal, Space.m)
+            .frame(maxWidth: .infinity, minHeight: ApprovalButtonStyle.height)
+            .background(RoundedRectangle(cornerRadius: Radius.s, style: .continuous).fill(on ? Color.blue.opacity(0.3) : Wash.regular))
+            .contentShape(RoundedRectangle(cornerRadius: Radius.s, style: .continuous))
         }
         .buttonStyle(.plain)
         .help([option.label, option.detail].compactMap { $0 }.joined(separator: "\n"))
@@ -310,15 +311,15 @@ struct PlanApproval: View {
     let plan: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Space.s) {
             ScrollBox {
                 PlanText(blocks: PlanMarkdown.blocks(plan))
             }
-            HStack(spacing: 6) {
+            HStack(spacing: Space.s) {
                 TerminalButton { model.approvals.decide(.terminal, for: entry) }
                 Spacer(minLength: 0)
                 Button("Keep planning") { model.approvals.decide(.deny(ApprovalDecision.keepPlanningMessage), for: entry) }
-                    .buttonStyle(ApprovalButtonStyle(fill: .white.opacity(0.14)))
+                    .buttonStyle(ApprovalButtonStyle(fill: Wash.strong))
                 Button("Approve") { model.approvals.decide(.allow, for: entry) }
                     .buttonStyle(ApprovalButtonStyle(fill: .green.opacity(0.8)))
             }
@@ -331,33 +332,33 @@ struct PlanText: View {
     let blocks: [PlanMarkdown.Block]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: Space.xs) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 switch block {
                 case .heading(let text, let level):
                     Text(Self.inline(text))
-                        .font(.system(size: level == 1 ? 12.5 : 11.5, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(.top, 2)
+                        .textStyle(level == 1 ? .headline : .body, emphasized: true)
+                        .foregroundStyle(Ink.primary)
+                        .padding(.top, Space.hair)
                 case .item(let text, let marker, let depth):
-                    HStack(alignment: .firstTextBaseline, spacing: 5) {
-                        Text(marker).foregroundStyle(Color.islandTertiary).monospacedDigit()
+                    HStack(alignment: .firstTextBaseline, spacing: Space.xs) {
+                        Text(marker).foregroundStyle(Ink.tertiary).monospacedDigit()
                         Text(Self.inline(text)).fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.leading, CGFloat(depth) * 12)
                 case .code(let code):
                     Text(code)
-                        .font(.system(size: 10.5, design: .monospaced))
-                        .padding(5)
+                        .font(.system(size: TextStyle.caption.size, design: .monospaced))
+                        .padding(Space.s)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(0.06)))
+                        .background(RoundedRectangle(cornerRadius: Radius.xs, style: .continuous).fill(Wash.subtle))
                 case .paragraph(let text):
                     Text(Self.inline(text)).fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
-        .font(.system(size: 11))
-        .foregroundStyle(Color.white.opacity(0.88))
+        .textStyle(.body)
+        .foregroundStyle(Ink.primary.opacity(0.88))
     }
 
     static func inline(_ s: String) -> AttributedString {
@@ -376,15 +377,15 @@ struct ScrollBox<Content: View>: View {
     @ViewState private var visibleHeight: CGFloat = 0
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: Radius.s, style: .continuous)
         let overflows = contentHeight > visibleHeight + 2
         let inner = content
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 9)
-            .padding(.top, 7)
+            .padding(.horizontal, Space.m)
+            .padding(.top, Space.s)
             // Room below the last line for the "More" badge, so scrolling to the end shows
             // every character instead of leaving the tail of a command under the badge.
-            .padding(.bottom, overflows ? 28 : 7)
+            .padding(.bottom, overflows ? 28 : Space.s)
             .textSelection(.enabled)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
         Group {
@@ -397,17 +398,17 @@ struct ScrollBox<Content: View>: View {
         .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { visibleHeight = $0 }
         .clipShape(shape)
-        .background(shape.fill(Color.white.opacity(0.07)))
-        .overlay(shape.strokeBorder(risky ? Color.orange.opacity(0.75) : Color.white.opacity(0.08), lineWidth: 1))
+        .background(shape.fill(Wash.subtle))
+        .overlay(shape.strokeBorder(risky ? Color.orange.opacity(0.75) : .clear, lineWidth: 1))
         .overlay(alignment: .bottomTrailing) {
             if overflows {
                 Label("More", systemImage: "arrow.down")
-                    .font(.system(size: 9.5, weight: .semibold))
+                    .textStyle(.caption, emphasized: true)
                     .foregroundStyle(.black)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
+                    .padding(.horizontal, Space.s)
+                    .frame(height: 20)
                     .background(Capsule().fill(Color.white.opacity(0.85)))
-                    .padding(5)
+                    .padding(Space.xs)
                     .allowsHitTesting(false)
             }
         }
@@ -422,25 +423,28 @@ struct TerminalButton: View {
         Button(action: action) {
             Label("Terminal", systemImage: "terminal")
         }
-        .buttonStyle(ApprovalButtonStyle(fill: .clear, foreground: Color.islandSecondary))
+        .buttonStyle(ApprovalButtonStyle(fill: .clear, foreground: Ink.secondary))
         .help("Answer in the terminal instead")
     }
 }
 
+/// The decisions: the island's capsule, one text size up, since they are the point of the card.
 struct ApprovalButtonStyle: ButtonStyle {
     var fill: Color
     var foreground: Color = .white
 
+    static let height: CGFloat = 24
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 11.5, weight: .semibold))
+            .textStyle(.body, emphasized: true)
             .lineLimit(1)
             .foregroundStyle(foreground)
-            .padding(.horizontal, 11)
-            .frame(height: 24)
+            .padding(.horizontal, Space.m)
+            .frame(height: Self.height)
             .background(Capsule().fill(fill.opacity(configuration.isPressed ? 0.7 : 1)))
             .contentShape(Capsule())
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .scaleEffect(configuration.isPressed ? Motion.pressScale : 1)
     }
 }
 
@@ -453,8 +457,8 @@ private struct HeaderButton: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color.islandTertiary)
-                .frame(width: 16, height: 16)
+                .foregroundStyle(Ink.tertiary)
+                .frame(width: 24, height: 24)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -467,11 +471,11 @@ private struct Chip: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 9.5, weight: .semibold))
-            .foregroundStyle(Color.islandSecondary)
+            .textStyle(.caption, emphasized: true)
+            .foregroundStyle(Ink.secondary)
             .lineLimit(1)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(Capsule().fill(Color.islandFill))
+            .padding(.horizontal, Space.s)
+            .frame(height: 18)
+            .background(Capsule().fill(Wash.regular))
     }
 }

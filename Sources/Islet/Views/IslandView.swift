@@ -52,15 +52,39 @@ enum IslandLayout {
         case .hidden, .idle:
             return IslandGeometry(size: n, top: 6, bottom: small)
         case .expanded:
-            return IslandGeometry(size: m.expanded, top: 10, bottom: 24)
+            return IslandGeometry(size: m.expanded, top: Radius.flare, bottom: Radius.shell)
         case .compact, .hud:
             return IslandGeometry(size: CGSize(width: row, height: n.height), top: 6, bottom: small, wing: wing)
-        case .sneak:
+        case .sneak(let a):
             // The wings stay in the menu bar row; the body opens out below it for a moment.
             let width = max(row + 32, 276)
-            return IslandGeometry(size: CGSize(width: width, height: n.height + 42), top: 8, bottom: 18,
+            return IslandGeometry(size: CGSize(width: width, height: n.height + 46 + sneakBar(a)), top: 8, bottom: 18,
                                   stemWidth: width > row ? row : 0, stemHeight: n.height, wing: wing)
         }
+    }
+
+    /// A sneak peek with a bar under its text gets a little more height, so the bar clears the
+    /// rounded bottom edge.
+    static func sneakBar(_ a: Activity) -> CGFloat {
+        a.state == .running && (a.clampedProgress != nil || a.steps != nil) ? Space.s : 0
+    }
+
+    /// The panel: room for the widest and tallest island, its shadow, and the page switcher
+    /// that floats under the open island.
+    static func windowFrame(for screen: ScreenDescriptor, metrics: IslandMetrics) -> CGRect {
+        var frame = NotchGeometry.windowFrame(for: screen, metrics: metrics)
+        frame.origin.y -= PageSwitcher.band
+        frame.size.height += PageSwitcher.band
+        return frame
+    }
+
+    /// Where the page switcher sits, relative to the top centre of the screen (y up), or nil
+    /// when it isn't shown. Generous in width: the switcher's own width depends on its labels.
+    static func switcherRect(for p: IslandPresentation, geometry g: IslandGeometry, showsApproval: Bool) -> CGRect? {
+        guard p == .expanded, !showsApproval else { return nil }
+        let width = min(g.size.width, 340)
+        let height = PageSwitcher.gap + PageSwitcher.height
+        return CGRect(x: -width / 2, y: -g.size.height - height, width: width, height: height)
     }
 
     /// Gap between the island and the second-activity bubble.
@@ -180,6 +204,7 @@ struct IslandView: View {
             // Bubbles on one side are balanced by invisible spacers on the other,
             // so the island itself stays centred on the notch.
             if left { bubbleViews(bubbles, diameter: bp.diameter, top: bp.top) } else { spacers(bubbles.items.count, diameter: bp.diameter) }
+            VStack(spacing: PageSwitcher.gap) {
             ZStack(alignment: .top) {
                 if let glow {
                     if snapshotMode {
@@ -213,6 +238,12 @@ struct IslandView: View {
                 }
             }
             .contextMenu { islandMenu(p) }
+            // Pages float under the open island, once it has room (not over an approval).
+            if p == .expanded && model.approvals.current == nil {
+                PageSwitcher(model: model)
+                    .transition(switcherTransition)
+            }
+            }
             if left { spacers(bubbles.items.count, diameter: bp.diameter) } else { bubbleViews(bubbles, diameter: bp.diameter, top: bp.top) }
         }
         .opacity(visible ? 1 : 0)
@@ -275,6 +306,21 @@ struct IslandView: View {
         )
         .combined(with: .offset(x: tuck))
         .combined(with: .opacity)
+    }
+
+    /// The switcher buds off the island's lower edge after the shape has settled, and goes
+    /// first when it closes.
+    private var switcherTransition: AnyTransition {
+        switch style {
+        case .off: return .identity
+        case .minimal: return .opacity
+        default:
+            return .asymmetric(
+                insertion: AnyTransition.scale(scale: 0.6, anchor: .top).combined(with: .opacity).combined(with: .offset(y: -PageSwitcher.height / 2))
+                    .animation(Motion.open.delay(0.14)),
+                removal: .opacity.animation(.easeIn(duration: 0.08))
+            )
+        }
     }
 
     /// Clicking an activity with a link opens it; anything else expands the island.
@@ -398,9 +444,12 @@ struct Wings<Leading: View, Trailing: View>: View {
     @ViewBuilder var leading: Leading
     @ViewBuilder var trailing: Trailing
 
+    /// Space between the island's edge and the wing's content. Narrow wings (a crowded menu
+    /// bar) give the content more of their width.
+    static func inset(for wing: CGFloat) -> CGFloat { wing < 46 ? max(5, (wing * 0.18).rounded()) : 11 }
+
     var body: some View {
-        // Narrow wings (a crowded menu bar) give the content more of their width.
-        let inset: CGFloat = wing < 46 ? max(5, (wing * 0.18).rounded()) : 11
+        let inset = Self.inset(for: wing)
         HStack(spacing: 0) {
             leading
                 .padding(.leading, inset)
@@ -450,7 +499,7 @@ struct CompactContentView: View {
                     .foregroundStyle(tint)
             } trailing: {
                 Text("\(ev.state.level)%")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .textStyle(.body, emphasized: true, numeric: true)
                     .foregroundStyle(tint)
                     .monospacedDigit()
                     // Icon-only wings are too narrow for "100%" at full size; never wrap it.
@@ -468,7 +517,7 @@ struct ActivityTrailing: View {
     var compact = false
     @Environment(\.wingRoom) private var room
 
-    private var size: CGFloat { compact ? 11.5 : 12.5 }
+    private var size: CGFloat { compact ? TextStyle.caption.size : TextStyle.body.size }
 
     var body: some View {
         if room < NarrowValue.wordRoom, activity.endsAt == nil, activity.startedAt == nil,
@@ -489,7 +538,7 @@ struct ActivityTrailing: View {
             }
         } else if let text = activity.trailingText(now: Date()), activity.trailing != nil || activity.progress == nil {
             Text(text)
-                .font(.system(size: size - 0.5, weight: .semibold, design: .rounded))
+                .font(.system(size: size, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(tint)
                 .lineLimit(1)
@@ -533,6 +582,9 @@ struct SneakView: View {
 
     var body: some View {
         let tint = model.tint(for: activity)
+        // The text lines up under the wing's icon, so the peek reads as one column.
+        let row = metrics.notch.width + 2 * geometry.wing
+        let lead = max(Space.m, (geometry.size.width - row) / 2 + Wings<EmptyView, EmptyView>.inset(for: geometry.wing))
         VStack(spacing: 0) {
             Wings(metrics: metrics, wing: geometry.wing) {
                 TemplateLeading(activity: activity, model: model, tint: tint)
@@ -540,23 +592,23 @@ struct SneakView: View {
                 TemplateTrailing(activity: activity, model: model, tint: tint, compact: true)
             }
             .frame(maxWidth: .infinity)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(activity.title).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+            VStack(alignment: .leading, spacing: Space.hair) {
+                Text(activity.title).textStyle(.headline).foregroundStyle(Ink.primary).lineLimit(1)
                 TemplateDetail(activity: activity, model: model) { details(tint: tint) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 15)
-            .padding(.top, 1)
+            .padding(.horizontal, lead)
+            .padding(.top, Space.hair)
         }
     }
 
     @ViewBuilder
     private func details(tint: Color) -> some View {
         if let sub = activity.subtitle {
-            Text(sub).font(.system(size: 11)).foregroundStyle(Color.islandSecondary).lineLimit(1)
+            Text(sub).textStyle(.caption).foregroundStyle(Ink.secondary).lineLimit(1)
         }
         if activity.clampedProgress != nil, activity.state == .running {
-            ActivityProgress(activity: activity, tint: tint, height: 3.5).padding(.top, 2)
+            ActivityProgress(activity: activity, tint: tint, height: 4).padding(.top, Space.hair)
         }
     }
 }
