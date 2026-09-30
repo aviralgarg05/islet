@@ -239,6 +239,7 @@ struct IslandView: View {
             NotificationCenter.default.post(name: .isletLayoutChanged, object: nil)
         }
         .fontDesign(model.settings.roundedFont ? .rounded : .default)
+        .environment(\.islandReduceMotion, model.settings.reduceMotion || model.settings.animationStyle == .off)
         .environment(\.colorScheme, .dark)
     }
 

@@ -293,6 +293,9 @@ func run(_ argv: [String]) async throws -> Int32 {
     }
 }
 
+/// The command `run` is waiting for, so a signal can be passed on to it.
+nonisolated(unsafe) var runChildPID: pid_t = 0
+
 /// Run a command, mirroring its lifecycle in the notch. Output passes through untouched.
 func runWrapped(_ a: Args) async throws -> Int32 {
     let title = a.flags["title"] ?? a.trailing.joined(separator: " ")
@@ -315,10 +318,24 @@ func runWrapped(_ a: Args) async throws -> Int32 {
     p.standardInput = FileHandle.standardInput
     p.standardOutput = FileHandle.standardOutput
     p.standardError = FileHandle.standardError
+    // Ctrl-C or a kill reaches the command, and isletctl stays to report how it ended rather than
+    // leaving "Running…" in the notch. (A caught signal reverts to the default in the child.)
+    signal(SIGINT) { sig in if runChildPID > 0 { kill(runChildPID, sig) } }
+    signal(SIGTERM) { sig in if runChildPID > 0 { kill(runChildPID, sig) } }
     try p.run()
+    runChildPID = p.processIdentifier
     p.waitUntilExit()
+    runChildPID = 0
 
     let elapsed = Format.clock(Date().timeIntervalSince(started))
+    if p.terminationReason == .uncaughtSignal {
+        await post(ActivitySpec(
+            id: id, source: "run", title: String(title.prefix(80)), subtitle: "Cancelled after \(elapsed)",
+            icon: .symbol("stop.circle.fill"), trailing: "Stopped", progress: 1, state: .warning,
+            priority: .normal, ttl: 15, sneak: false
+        ))
+        return 128 + p.terminationStatus
+    }
     let ok = p.terminationStatus == 0
     await post(ActivitySpec(
         id: id, source: "run", title: String(title.prefix(80)),

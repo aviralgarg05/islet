@@ -18,7 +18,7 @@ struct EqualizerView: NSViewRepresentable {
     }
 
     func updateNSView(_ view: EqualizerNSView, context: Context) {
-        view.update(color: color, playing: playing, reduceMotion: context.environment.accessibilityReduceMotion)
+        view.update(color: color, playing: playing, reduceMotion: context.environment.reduceMotionAnywhere)
     }
 }
 
@@ -74,6 +74,7 @@ final class EqualizerNSView: NSView {
                 a.repeatCount = .infinity
                 a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 a.timeOffset = Double(i) * 0.13
+                a.capFrameRate()
                 bar.add(a, forKey: "eq")
             } else {
                 bar.removeAnimation(forKey: "eq")
@@ -91,7 +92,7 @@ struct LayerSpinner: NSViewRepresentable {
     func makeNSView(context: Context) -> SpinnerNSView { SpinnerNSView() }
 
     func updateNSView(_ view: SpinnerNSView, context: Context) {
-        view.configure(color: color, lineWidth: lineWidth, reduceMotion: context.environment.accessibilityReduceMotion)
+        view.configure(color: color, lineWidth: lineWidth, reduceMotion: context.environment.reduceMotionAnywhere)
     }
 }
 
@@ -132,6 +133,7 @@ final class SpinnerNSView: NSView {
             a.toValue = -2 * Double.pi
             a.duration = 1
             a.repeatCount = .infinity
+            a.capFrameRate()
             arc.add(a, forKey: "spin")
         }
     }

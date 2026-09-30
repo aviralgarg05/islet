@@ -188,7 +188,7 @@ struct GlowPulse: NSViewRepresentable {
     func makeNSView(context: Context) -> GlowNSView { GlowNSView() }
 
     func updateNSView(_ view: GlowNSView, context: Context) {
-        view.configure(color: color, cornerRadius: cornerRadius, animate: !context.environment.accessibilityReduceMotion)
+        view.configure(color: color, cornerRadius: cornerRadius, animate: !context.environment.reduceMotionAnywhere)
     }
 }
 
@@ -209,6 +209,8 @@ final class GlowNSView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     private var radius: CGFloat = 12
+    /// Pulse once per appearance; later SwiftUI updates leave the steady glow alone.
+    private var didPulse = false
 
     override func layout() {
         super.layout()
@@ -223,17 +225,23 @@ final class GlowNSView: NSView {
         glow.shadowColor = color.cgColor
         radius = cornerRadius
         needsLayout = true
-        if animate, glow.animation(forKey: "pulse") == nil {
+        if animate, !didPulse {
+            didPulse = true
             let a = CABasicAnimation(keyPath: "shadowOpacity")
             a.fromValue = 0.15
             a.toValue = 0.85
             a.duration = 0.9
             a.autoreverses = true
-            a.repeatCount = .infinity
+            // A few pulses to catch the eye, then a steady glow: something left waiting
+            // overnight shouldn't keep the window server busy.
+            a.repeatCount = 6
             a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            a.capFrameRate()
+            glow.shadowOpacity = 0.5
             glow.add(a, forKey: "pulse")
         } else if !animate {
             glow.removeAnimation(forKey: "pulse")
+            glow.shadowOpacity = 0.5
         }
     }
 }

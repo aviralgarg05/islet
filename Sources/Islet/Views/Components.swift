@@ -115,11 +115,8 @@ struct IconView: View {
         case .app(let bundleID):
             AppIconView(bundleID: bundleID, size: size)
         case .file(let path):
-            if let img = NSImage(contentsOfFile: path) {
-                Image(nsImage: img).resizable().scaledToFit().frame(width: size, height: size)
-            } else {
-                Image(nsImage: IconCache.file(path, size: size)).resizable().frame(width: size, height: size)
-            }
+            Image(nsImage: IconCache.picture(path, size: size) ?? IconCache.file(path, size: size))
+                .resizable().scaledToFit().frame(width: size, height: size)
         case .url(let url):
             AsyncImage(url: url) { img in img.resizable().scaledToFit() } placeholder: { Color.islandFill }
                 .frame(width: size, height: size)
@@ -142,6 +139,31 @@ enum IconCache {
         cache[key] = img
         return img
     }
+
+    /// Largest image file used as an icon; anything bigger shows the file's Finder icon.
+    static let pictureLimit = 5 * 1024 * 1024
+
+    /// An image file used as an icon, decoded once per file version and size. Only regular
+    /// files under `pictureLimit` are decoded, so a huge file can't stall the island.
+    static func picture(_ path: String, size: CGFloat) -> NSImage? {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+              attrs[.type] as? FileAttributeType == .typeRegular,
+              let bytes = (attrs[.size] as? NSNumber)?.intValue, bytes <= pictureLimit else { return nil }
+        let stamp = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        let key = "picture:\(path)@\(Int(size))#\(stamp)"
+        if let hit = cache[key] { return hit }
+        if failed.contains(key) { return nil }
+        guard let img = NSImage(contentsOfFile: path) else {
+            failed.insert(key)
+            return nil
+        }
+        let out = rasterize(img, size: size)
+        if cache.count > 400 { cache.removeAll() }
+        cache[key] = out
+        return out
+    }
+
+    private static var failed: Set<String> = []
 
     static func file(_ path: String, size: CGFloat) -> NSImage {
         let key = "file:\(path)@\(Int(size))"
@@ -217,12 +239,23 @@ struct ArtworkView: View {
 enum ArtworkCache {
     private static var images: [Int: NSImage] = [:]
     private static var colors: [Int: Color] = [:]
+    private static let context = CIContext(options: [.workingColorSpace: NSNull()])
+
+    /// A cheap identity for artwork bytes (length and both ends), instead of hashing whole
+    /// images on every render.
+    static func key(_ data: Data) -> Int {
+        var h = Hasher()
+        h.combine(data.count)
+        h.combine(data.prefix(512))
+        h.combine(data.suffix(512))
+        return h.finalize()
+    }
 
     static func image(for data: Data) -> NSImage? {
-        let key = data.hashValue
+        let key = key(data)
         if let img = images[key] { return img }
         guard let img = NSImage(data: data) else { return nil }
-        if images.count > 16 { images.removeAll() }
+        if images.count >= 3 { images.removeAll() }
         images[key] = img
         return img
     }
@@ -230,13 +263,13 @@ enum ArtworkCache {
     /// Average color of the artwork, brightened so it reads on black.
     static func accent(for media: NowPlaying?) -> Color {
         guard let data = media?.artworkData else { return .white }
-        let key = data.hashValue
+        let key = key(data)
         if let c = colors[key] { return c }
         guard let ci = CIImage(data: data) else { return .white }
         let filter = CIFilter(name: "CIAreaAverage", parameters: [kCIInputImageKey: ci, kCIInputExtentKey: CIVector(cgRect: ci.extent)])
         var px = [UInt8](repeating: 0, count: 4)
         guard let out = filter?.outputImage else { return .white }
-        CIContext(options: [.workingColorSpace: NSNull()]).render(out, toBitmap: &px, rowBytes: 4, bounds: CGRect(x: 0, y: 0, width: 1, height: 1), format: .RGBA8, colorSpace: nil)
+        context.render(out, toBitmap: &px, rowBytes: 4, bounds: CGRect(x: 0, y: 0, width: 1, height: 1), format: .RGBA8, colorSpace: nil)
         let ns = NSColor(srgbRed: CGFloat(px[0]) / 255, green: CGFloat(px[1]) / 255, blue: CGFloat(px[2]) / 255, alpha: 1)
         var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         ns.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
@@ -394,10 +427,30 @@ private struct SnapshotModeKey: EnvironmentKey {
     static let defaultValue = false
 }
 
+/// Islet's own "Reduce motion" or "Animation: Off", on top of the system setting.
+private struct IslandReduceMotionKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 extension EnvironmentValues {
     var snapshotMode: Bool {
         get { self[SnapshotModeKey.self] }
         set { self[SnapshotModeKey.self] = newValue }
+    }
+
+    var islandReduceMotion: Bool {
+        get { self[IslandReduceMotionKey.self] }
+        set { self[IslandReduceMotionKey.self] = newValue }
+    }
+
+    /// Perpetual animations stop when either the system or Islet asks for less motion.
+    var reduceMotionAnywhere: Bool { accessibilityReduceMotion || islandReduceMotion }
+}
+
+extension CAAnimation {
+    /// Looping decorations don't need the display's full 120 Hz.
+    func capFrameRate() {
+        preferredFrameRateRange = CAFrameRateRange(minimum: 10, maximum: 30, preferred: 30)
     }
 }
 
