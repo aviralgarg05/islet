@@ -184,6 +184,10 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// Show the Live Activities macOS puts in the menu bar (from your iPhone) in the island.
     /// Needs Accessibility.
     public var mirrorMenuBarActivities = true
+    /// Claude Code plan limits, from the status line (`isletctl statusline`). Local files only.
+    public var claudeUsageEnabled = true
+    /// Codex plan limits, from its session logs in `~/.codex/sessions`. Local files only.
+    public var codexUsageEnabled = true
     public var appRules: [AppRule] = []
 
     public var launchAtLogin = false
