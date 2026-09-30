@@ -413,6 +413,14 @@ final class PointerCoordinator {
 
     private func evaluate(at p: CGPoint, now: Date) {
         guard let c = controller(at: p) else {
+            // On a display without an island: that's leaving, so a pending open is cancelled and
+            // an open island starts its close grace period instead of waiting for the pointer.
+            if let display = activeDisplay {
+                let decision = intent.sample(point: p, now: now, inTrigger: false, inExpanded: false,
+                                             isOpen: model.expandedScreen == display)
+                apply(decision, display: display)
+                armRestTimerIfNeeded()
+            }
             maybeDeactivate(pointerNearIsland: false)
             return
         }

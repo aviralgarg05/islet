@@ -87,9 +87,9 @@ enum AppActions {
             case .hud(let kind, let value): Task { await model.showHUD(kind: kind, value: value, muted: false, label: nil) }
             case .media(let cmd): model.send(cmd)
             case .focus(let name, let on): try model.applyLocal(FocusPill.activity(name: name, on: on))
-            case .open: model.setExpanded(NSScreen.main?.displayID)
+            case .open: model.setExpanded(model.targetDisplay())
             case .close: model.setExpanded(nil)
-            case .toggle: model.setExpanded(model.expandedScreen == nil ? NSScreen.main?.displayID : nil)
+            case .toggle: model.setExpanded(model.expandedScreen == nil ? model.targetDisplay() : nil)
             case .settings: openSettings()
             }
         } catch {

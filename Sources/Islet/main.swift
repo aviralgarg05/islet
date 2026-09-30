@@ -130,6 +130,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controllers.forEach { $0.close() }
         controllers = screens.map { IslandWindowController(model: model, screen: $0) }
         pointer.controllers = controllers
+        model.islandDisplays = controllers.sorted { ($0.metrics.isSynthetic ? 1 : 0) < ($1.metrics.isSynthetic ? 1 : 0) }.map(\.display)
+        // The display the island was open on may be gone (unplugged, lid closed, new ID after wake).
+        if let open = model.expandedScreen, !model.islandDisplays.contains(open) {
+            model.pinned = false
+            model.setExpanded(nil)
+        }
         scheduleMenuBarMeasure(after: 0.1)
     }
 
@@ -222,7 +228,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func toggleIsland() {
-        let target = controllers.first?.display
+        let target = model.targetDisplay()
         model.pinned = model.expandedScreen == nil
         model.setExpanded(model.expandedScreen == nil ? target : nil)
     }

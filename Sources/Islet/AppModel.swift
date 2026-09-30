@@ -448,6 +448,19 @@ final class AppModel {
 
     var upcomingEvent: AgendaItem? { settings.calendarEnabled ? Agenda.upcoming(visibleAgenda, now: Date()) : nil }
 
+    /// Displays that have an island, notched ones first. Set when panels are rebuilt.
+    var islandDisplays: [CGDirectDisplayID] = []
+
+    /// Where the island opens when asked from a hotkey, the menu, a URL or the API: the display
+    /// under the pointer if it has one, otherwise the first (notched) one.
+    func targetDisplay() -> CGDirectDisplayID? {
+        let mouse = NSEvent.mouseLocation
+        if let under = NSScreen.screens.first(where: { $0.frame.contains(mouse) })?.displayID, islandDisplays.contains(under) {
+            return under
+        }
+        return islandDisplays.first
+    }
+
     func setExpanded(_ display: CGDirectDisplayID?) {
         guard expandedScreen != display else { return }
         expandedScreen = display
@@ -882,9 +895,8 @@ extension AppModel: IsletBackend {
 
     nonisolated func setExpanded(_ expanded: Bool) async {
         await MainActor.run {
-            let target = NSScreen.main.flatMap { $0.displayID }
             self.pinned = expanded
-            self.setExpanded(expanded ? target : nil)
+            self.setExpanded(expanded ? self.targetDisplay() : nil)
         }
     }
 
