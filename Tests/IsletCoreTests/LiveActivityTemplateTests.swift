@@ -362,6 +362,62 @@ import Testing
         #expect(TemplateFormat.shortDuration(since: t0, now: t0.addingTimeInterval(7300)) == "2h")
     }
 
+    @Test func timerRingStartsFullForEachCountdown() throws {
+        var c = ActivityCenter()
+        // A timer restarted after it ran out: the new countdown starts with a full ring.
+        try c.apply(ActivitySpec(id: "p", title: "Pomodoro", endsAt: t0.addingTimeInterval(1500)), now: t0)
+        let brk = t0.addingTimeInterval(1500)
+        let restarted = try c.apply(ActivitySpec(id: "p", endsAt: brk.addingTimeInterval(300)), now: brk)
+        #expect(restarted.timerFractionLeft(now: brk) == 1)
+        #expect(restarted.timerFractionLeft(now: brk.addingTimeInterval(150)) == 0.5)
+        // An explicit start wins for a timer.
+        let started = try c.apply(ActivitySpec(id: "s", title: "Eggs", endsAt: t0.addingTimeInterval(240),
+                                               startedAt: t0.addingTimeInterval(-60)), now: t0)
+        #expect(started.timerFractionLeft(now: t0) == 0.8)
+        // A workout's rest countdown is measured from when it was set, not from the session start.
+        var run = ActivitySpec(id: "w", title: "Legs", startedAt: t0.addingTimeInterval(-1500))
+        run.metrics = [ActivityMetric(value: "3", unit: "sets")]
+        try c.apply(run, now: t0)
+        let rest = try c.apply(ActivitySpec(id: "w", endsAt: t0.addingTimeInterval(90)), now: t0)
+        #expect(rest.resolvedTemplate == .workout)
+        #expect(rest.timerFractionLeft(now: t0) == 1)
+    }
+
+    @Test func scoreGameClockTicks() throws {
+        var c = ActivityCenter()
+        var game = ActivitySpec(id: "g", title: "Game", endsAt: t0.addingTimeInterval(151))
+        game.teams = [ActivityTeam(abbr: "A", score: "1"), ActivityTeam(abbr: "B", score: "0")]
+        #expect(try c.apply(game, now: t0).templateRefresh(now: t0)?.interval == 1)
+    }
+
+    @Test func absurdDatesDoNotTrap() {
+        let far = Date(timeIntervalSince1970: 1e297)
+        let past = Date(timeIntervalSince1970: -1e297)
+        #expect(TemplateFormat.minutes(until: far, now: t0).hasSuffix(" h"))
+        #expect(TemplateFormat.hoursMinutes(until: far, now: t0).hasSuffix(" d"))
+        #expect(TemplateFormat.shortDuration(until: far, now: t0).hasSuffix("h"))
+        #expect(TemplateFormat.shortDuration(since: past, now: t0).hasSuffix("h"))
+        #expect(Format.countdown(until: far, now: t0).hasSuffix(":40"))
+        #expect(Format.clock(-1e297) == "0:00")
+    }
+
+    @Test func emptyStringsClearFieldsInsideObjects() throws {
+        var c = ActivityCenter()
+        var s = ActivitySpec(id: "f", title: "UA 1")
+        s.flight = ActivityFlight(number: "", gate: "B22", status: "On time")
+        s.route = ActivityRoute(line: "N", instruction: "Get off at Church")
+        s.teams = [ActivityTeam(abbr: "A", tint: ""), ActivityTeam(abbr: "B")]
+        let a = try c.apply(s, now: t0)
+        #expect(a.flight?.number == nil)
+        #expect(a.teams?[0].tint == nil)
+        var u = ActivitySpec(id: "f")
+        u.flight = ActivityFlight(gate: "", status: "")
+        u.route = ActivityRoute(instruction: "")
+        let b = try c.apply(u, now: t0)
+        #expect(b.flight?.gate == nil && b.flight?.status == nil)
+        #expect(b.route?.instruction == nil && b.route?.line == "N")
+    }
+
     @Test func refreshTicksOnlyWhenTheTextCanChange() throws {
         var c = ActivityCenter()
         var eta = ActivitySpec(id: "e", title: "Ride", endsAt: t0.addingTimeInterval(250))

@@ -64,8 +64,10 @@ public enum LiveActivityCatalog {
             return w.isEmpty ? nil : (w, w.joined(separator: " ").count, look)
         }
 
-    /// The entry for an activity's `source`: exact matches only, so short or generic sources
-    /// ("focus", "run") never pick up an unrelated app by accident.
+    /// The entry for an activity's `source`: exact matches only, so a source that merely contains
+    /// an app's name ("claude-code", "github-actions") never picks up that app. A generic source
+    /// can still equal a name ("focus" is the Focus app), which is why `resolvedTemplate` uses the
+    /// entry's template only when the activity has the data for it.
     public static func entry(forSource source: String) -> Look? { exact(source) }
 
     static func words(_ text: String) -> [String] {

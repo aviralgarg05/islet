@@ -99,8 +99,9 @@ public struct ActivityTeam: Codable, Equatable, Sendable {
     /// Badge text: the abbreviation, else the first three letters of the name.
     public var badge: String { abbr ?? name.map { String($0.prefix(3)).uppercased() } ?? "" }
 
+    /// Sent fields replace the old ones; an empty string clears one.
     func merged(with new: ActivityTeam) -> ActivityTeam {
-        ActivityTeam(abbr: new.abbr ?? abbr, name: new.name ?? name, score: new.score ?? score, tint: new.tint ?? tint)
+        ActivityTeam(abbr: pick(new.abbr, abbr), name: pick(new.name, name), score: pick(new.score, score), tint: pick(new.tint, tint))
     }
 }
 
@@ -142,10 +143,11 @@ public struct ActivityFlight: Codable, Equatable, Sendable {
         return min(1, max(0, now.timeIntervalSince(departs) / arrives.timeIntervalSince(departs)))
     }
 
+    /// Sent fields replace the old ones; an empty string clears one.
     func merged(with new: ActivityFlight) -> ActivityFlight {
-        ActivityFlight(number: new.number ?? number, from: new.from ?? from, to: new.to ?? to, departs: new.departs ?? departs,
-                       arrives: new.arrives ?? arrives, gate: new.gate ?? gate, terminal: new.terminal ?? terminal,
-                       seat: new.seat ?? seat, status: new.status ?? status, carousel: new.carousel ?? carousel)
+        ActivityFlight(number: pick(new.number, number), from: pick(new.from, from), to: pick(new.to, to), departs: new.departs ?? departs,
+                       arrives: new.arrives ?? arrives, gate: pick(new.gate, gate), terminal: pick(new.terminal, terminal),
+                       seat: pick(new.seat, seat), status: pick(new.status, status), carousel: pick(new.carousel, carousel))
     }
 }
 
@@ -186,11 +188,18 @@ public struct ActivityRoute: Codable, Equatable, Sendable {
         }
     }
 
+    /// Sent fields replace the old ones; an empty string clears one.
     func merged(with new: ActivityRoute) -> ActivityRoute {
-        ActivityRoute(mode: new.mode ?? mode, line: new.line ?? line, lineTint: new.lineTint ?? lineTint,
-                      stopsLeft: new.stopsLeft ?? stopsLeft, instruction: new.instruction ?? instruction,
-                      distance: new.distance ?? distance)
+        ActivityRoute(mode: pick(new.mode, mode), line: pick(new.line, line), lineTint: pick(new.lineTint, lineTint),
+                      stopsLeft: new.stopsLeft ?? stopsLeft, instruction: pick(new.instruction, instruction),
+                      distance: pick(new.distance, distance))
     }
+}
+
+/// A merged text field: the new value when sent (nil when it is empty), else the old one.
+private func pick(_ new: String?, _ old: String?) -> String? {
+    guard let new else { return old }
+    return new.isEmpty ? nil : new
 }
 
 /// One live value in a `workout` or `gauge` activity: `{"label": "pace", "value": "5:31", "unit": "/km"}`.
@@ -363,12 +372,12 @@ extension Activity {
             } else if let old = teams, old.count == new.count {
                 teams = zip(old, new).map { $0.merged(with: $1) }
             } else {
-                teams = new
+                teams = new.map { ActivityTeam().merged(with: $0) }
             }
         }
         period = str(spec.period, period)
-        if let new = spec.flight { flight = flight.map { $0.merged(with: new) } ?? new }
-        if let new = spec.route { route = route.map { $0.merged(with: new) } ?? new }
+        if let new = spec.flight { flight = (flight ?? ActivityFlight()).merged(with: new) }
+        if let new = spec.route { route = (route ?? ActivityRoute()).merged(with: new) }
         metrics = list(spec.metrics, metrics)
     }
 
@@ -464,11 +473,20 @@ extension Activity {
         return f.departs == nil ? nil : "predeparture"
     }
 
-    /// Countdown share left for a timer ring, 1 → 0; nil without an end time.
+    /// Countdown share left for a timer ring, 1 → 0; nil without an end time. The ring spans
+    /// from `startedAt` for a timer that sends one, else from when the current countdown was
+    /// set (`trackSpan`), so a timer restarted with a new `endsAt`, or a workout's rest
+    /// countdown, starts full rather than measured from when the activity was created.
     public func timerFractionLeft(now: Date) -> Double? {
         guard let endsAt else { return nil }
-        let start = startedAt.map { min($0, createdAt) } ?? createdAt
-        let total = endsAt.timeIntervalSince(start)
+        let total: Double
+        if resolvedTemplate != .workout, let startedAt, startedAt < endsAt {
+            total = endsAt.timeIntervalSince(startedAt)
+        } else if let trackSpan, trackSpan > 0 {
+            total = trackSpan
+        } else {
+            total = endsAt.timeIntervalSince(createdAt)
+        }
         guard total > 0 else { return 0 }
         return min(1, max(0, endsAt.timeIntervalSince(now) / total))
     }
@@ -543,7 +561,8 @@ extension Activity {
         case .route:
             return route?.stopsLeft != nil || route?.distance != nil ? nil : until(endsAt, 60)
         case .score:
-            return nil
+            // Only the game clock (`endsAt` or `startedAt`) changes on its own.
+            return until(endsAt, 1) ?? since(startedAt)
         case .workout:
             return until(endsAt, 1) ?? since(startedAt)
         case .liveAudio, .media:
@@ -583,9 +602,18 @@ extension Activity {
 
 /// Text formats used by the templates.
 public enum TemplateFormat {
+    /// Longest span the formats count (about 31 years). Dates come from API clients, and
+    /// converting a larger number of seconds to `Int` would trap.
+    static let maxSeconds: Double = 1e9
+
+    /// Seconds from `start` to `end`, at least 0 and at most `maxSeconds`.
+    static func span(_ start: Date, _ end: Date) -> Double {
+        min(maxSeconds, max(0, end.timeIntervalSince(start)))
+    }
+
     /// ETA style: "4 min", "Now" when due, whole hours beyond 99 minutes.
     public static func minutes(until date: Date, now: Date) -> String {
-        let remaining = date.timeIntervalSince(now)
+        let remaining = span(now, date)
         guard remaining > 0 else { return "Now" }
         let mins = Int((remaining / 60).rounded(.up))
         return mins < 100 ? "\(mins) min" : "\(Int((remaining / 3600).rounded())) h"
@@ -593,7 +621,7 @@ public enum TemplateFormat {
 
     /// Departure board style: "0:42", "13:05", or days beyond 99 hours.
     public static func hoursMinutes(until date: Date, now: Date) -> String {
-        let remaining = max(0, date.timeIntervalSince(now))
+        let remaining = span(now, date)
         let mins = Int((remaining / 60).rounded(.up))
         if mins >= 100 * 60 { return "\(Int((remaining / 86400).rounded())) d" }
         return String(format: "%d:%02d", mins / 60, mins % 60)
@@ -601,12 +629,12 @@ public enum TemplateFormat {
 
     /// Bubble style: "45s", "5m", "2h".
     public static func shortDuration(until date: Date, now: Date) -> String {
-        short(max(0, date.timeIntervalSince(now)), roundUp: true)
+        short(span(now, date), roundUp: true)
     }
 
     /// Bubble style for a count-up: "12m".
     public static func shortDuration(since date: Date, now: Date) -> String {
-        short(max(0, now.timeIntervalSince(date)), roundUp: false)
+        short(span(date, now), roundUp: false)
     }
 
     static func short(_ seconds: Double, roundUp: Bool) -> String {

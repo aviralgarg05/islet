@@ -258,8 +258,15 @@ struct MilestoneBar: View {
     var animate: Bool
     @Environment(\.snapshotMode) private var snapshotMode
 
+    /// Dots drawn: at most `TemplateLimits.stages`, since `steps` alone may be larger.
+    private var n: Int { max(1, min(count, TemplateLimits.stages)) }
+
+    /// The current stage on the drawn dots, scaled down when there are more steps than dots.
+    private var shown: Int {
+        count > n ? Int((Double(current) * Double(n) / Double(count)).rounded(.up)) : current
+    }
+
     var body: some View {
-        let n = max(1, min(count, TemplateLimits.stages))
         VStack(spacing: 2) {
             HStack(spacing: 0) {
                 ForEach(0..<n, id: \.self) { i in
@@ -278,8 +285,8 @@ struct MilestoneBar: View {
                 HStack(spacing: 0) {
                     ForEach(0..<n, id: \.self) { i in
                         Text(i < labels.count ? labels[i] : "")
-                            .font(.system(size: 8.5, weight: i + 1 == current ? .bold : .medium))
-                            .foregroundStyle(i + 1 == current ? Color.white : Color.islandTertiary)
+                            .font(.system(size: 8.5, weight: i + 1 == shown ? .bold : .medium))
+                            .foregroundStyle(i + 1 == shown ? Color.white : Color.islandTertiary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
                             .frame(maxWidth: .infinity)
@@ -294,9 +301,9 @@ struct MilestoneBar: View {
     private func leg(_ to: Int?) -> some View {
         if let to {
             let stageTo = to + 1
-            if current >= stageTo {
+            if shown >= stageTo {
                 Capsule().fill(tint).frame(height: 2.5)
-            } else if current == stageTo - 1 {
+            } else if shown == stageTo - 1 {
                 if animate && !snapshotMode {
                     BreathingCapsule(color: NSColor(tint), animate: true).frame(height: 2.5)
                 } else {
@@ -312,9 +319,9 @@ struct MilestoneBar: View {
 
     @ViewBuilder
     private func stageDot(_ stage: Int) -> some View {
-        if stage < current {
+        if stage < shown {
             Circle().fill(tint).frame(width: dot, height: dot)
-        } else if stage == current {
+        } else if stage == shown {
             Circle().fill(tint).frame(width: dot + 2, height: dot + 2)
                 .overlay(Circle().stroke(Color.white.opacity(0.85), lineWidth: 1.2))
         } else {
@@ -363,6 +370,7 @@ struct FlightLine: View {
                     .font(.system(size: 8.5, weight: .semibold, design: .rounded))
                     .foregroundStyle(Color.islandTertiary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
             GeometryReader { geo in
                 let p = progress ?? 0
@@ -1000,11 +1008,18 @@ struct TemplateRow: View {
             HStack(spacing: 10) {
                 leadingMark(t, tint: tint)
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 5) {
-                        Text(rowTitle(t)).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
-                        if t == .stages, let label = activity.currentStageLabel {
-                            Text(label).font(.system(size: 11)).foregroundStyle(Color.islandSecondary).lineLimit(1).layoutPriority(1)
+                    let title = Text(rowTitle(t)).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+                    if t == .stages, let label = activity.currentStageLabel {
+                        // The stage label only when both fit: a squeezed title ("Swi…") loses the identity.
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 5) {
+                                title.fixedSize()
+                                Text(label).font(.system(size: 11)).foregroundStyle(Color.islandSecondary).lineLimit(1).fixedSize()
+                            }
+                            title
                         }
+                    } else {
+                        title
                     }
                     secondLine(t, tint: tint, motion: motion)
                 }
@@ -1051,7 +1066,8 @@ struct TemplateRow: View {
         case .stages:
             MilestoneBar(count: a.stageCount ?? 1, current: a.currentStage ?? 1, tint: tint, dot: 6, animate: motion.perpetual)
         case .workout:
-            if let metrics = a.metrics {
+            // Non-empty: `1...0` below would trap.
+            if let metrics = a.metrics, !metrics.isEmpty {
                 ViewThatFits(in: .horizontal) {
                     ForEach((1...min(metrics.count, TemplateLimits.metrics)).reversed(), id: \.self) { n in
                         MetricsLine(metrics: Array(metrics.prefix(n)), size: 11.5, motion: motion)

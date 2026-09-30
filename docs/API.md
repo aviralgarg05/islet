@@ -75,9 +75,9 @@ Pick one with `template`. Without it, Islet looks up `source` in its catalogue o
 | `route` | `{mode, line, lineTint, stopsLeft, instruction, distance}` | `mode`: walk, bus, tram, train, subway, ferry, car or bike. `line` ≤ 6 characters, `stopsLeft` 0–999, `instruction` ≤ 80, `distance` ≤ 10 ("200 m"). |
 | `metrics` | up to 3 of `{label, value, unit}` | Live values; `value` (text or number) ≤ 10 characters, `label` ≤ 12, `unit` ≤ 8. |
 
-On update, omitted fields keep their value, as elsewhere. An empty string or array clears a field. `flight` and `route` merge field by field, so `{"flight":{"gate":"C4"}}` changes only the gate, and `teams` merges by position, so `{"teams":[{"score":103},{"score":98}]}` changes only the scores. A value over its limit is rejected with `422` and the field's name. Responses also carry `trackSpan`, the seconds the ETA track covers.
+On update, omitted fields keep their value, as elsewhere. An empty string or array clears a field, including one inside `flight`, `route` or a team (`trackerIcon`, like `icon`, can only be replaced). `flight` and `route` merge field by field, so `{"flight":{"gate":"C4"}}` changes only the gate, and `teams` merges by position, so `{"teams":[{"score":103},{"score":98}]}` changes only the scores. A value over its limit is rejected with `422` and the field's name. Responses also carry `trackSpan`, the seconds the ETA track covers.
 
-Some updates open the island briefly on their own, unless they carry `"sneak": false`: a ride arriving, an order reaching its next stage, a score changing, a gate or flight status changing, and a transit trip two stops from its stop or at it.
+Some updates open the island briefly on their own, unless they carry `"sneak": false`: a ride arriving, an order reaching its next stage, a score changing, a gate change, a flight turning delayed, cancelled or back on time, boarding starting, and a transit trip two stops from its stop or at it.
 
 Numbers roll when they change. Timer rings and waveforms run on Core Animation and never redraw the view; minute counts refresh once a minute. Motion Off freezes them and Reduce Motion stops the waveforms. The island stays black: the tint colours glyphs, rings, bars and keylines only, and tints too dark to read on black (Uber's black, JetBlue's navy) are lifted until they reach 3:1 contrast.
 
@@ -148,7 +148,7 @@ Numbers roll when they change. Timer rings and waveforms run on Core Animation a
  "startedAt": "2026-10-01T08:00:00Z"}
 ```
 
-**`media`**: Now Playing from a source other than a local player (those use the Now Playing card). Wings: the glyph and an equaliser, or `trailing` when sent.
+**`media`**: Now Playing from a source other than a local player (those use the Now Playing card). Wings: the glyph and an equaliser, `trailing` when sent, or the elapsed time with `startedAt`.
 
 ```json
 {"id": "np", "title": "Midnight City", "subtitle": "M83", "icon": "sf:music.note", "tint": "#FA2D48", "template": "media", "state": "running"}
