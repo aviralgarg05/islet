@@ -135,6 +135,8 @@ final class AppModel {
     private var modules = RunningModules()
     /// Calendar and reminder alerts already shown, by occurrence, with when they were for.
     private var alertedEvents: [String: Date] = [:]
+    /// Activities already sent to the on-device model for an icon.
+    private var iconAttempts: Set<String> = []
     private var settingsWatcher: DispatchSourceFileSystemObject?
 
     init(settings: IsletSettings = IsletSettings.load(from: IsletPaths.configFile)) {
@@ -658,23 +660,29 @@ final class AppModel {
     func commit(_ spec: ActivitySpec) throws -> Activity {
         let now = Date()
         let before = center.sneak
+        let isNew = spec.id.map { center.activities[$0] == nil } ?? true
         let a = try center.apply(spec, now: now)
         if let after = center.sneak, after.id != before?.id || after.until != before?.until {
             pulse &+= 1
             if a.state == .waiting || a.priority >= .high { Haptics.play(.alert) }
         }
-        if lockedAt != nil { lockedDigest[a.source, default: 0] += 1 }
+        // The digest counts what arrived while locked, not every progress update.
+        if lockedAt != nil, isNew { lockedDigest[a.source, default: 0] += 1 }
         reschedule()
         refineIcon(a)
         return a
     }
 
     /// Ask the on-device model for an icon when neither the sender nor the keyword rules chose one.
+    /// Ask the on-device model for an icon once per activity (not on every update), from its
+    /// title and source only, so a changing subtitle can't start a new request each time.
     private func refineIcon(_ a: Activity) {
-        guard settings.smartIcons, settings.aiAssist, a.icon == nil,
+        guard settings.smartIcons, settings.aiAssist, a.icon == nil, !iconAttempts.contains(a.id),
               SmartIcon.suggest(title: a.title, subtitle: a.subtitle, source: a.source) == nil,
               AIAssist.shared.isAvailable else { return }
-        let text = [a.title, a.subtitle].compactMap { $0 }.joined(separator: " — ")
+        if iconAttempts.count > 500 { iconAttempts.removeAll() }
+        iconAttempts.insert(a.id)
+        let text = a.title + " (" + a.source + ")"
         AIAssist.shared.suggestSymbol(for: text) { [weak self] symbol in
             guard let self, let symbol, self.center.activities[a.id]?.icon == nil else { return }
             _ = try? self.center.apply(ActivitySpec(id: a.id, icon: .symbol(symbol), sneak: false), now: Date())

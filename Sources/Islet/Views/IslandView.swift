@@ -201,6 +201,8 @@ struct IslandView: View {
                     .shadow(color: .black.opacity(p == .expanded ? 0.45 : 0), radius: 14, y: 6)
                 content(p, geometry: g)
                     .opacity(stale ? 0.55 : 1)
+                    // Out-of-date content stops its spinner, glow and other looping motion.
+                    .environment(\.islandReduceMotion, stale || model.settings.reduceMotion || model.settings.animationStyle == .off)
                     .padding(.horizontal, g.top)
                     .frame(width: g.outerWidth, height: g.size.height, alignment: .top)
                     .clipShape(shape)

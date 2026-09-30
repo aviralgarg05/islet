@@ -14,17 +14,26 @@ public enum AgentHooks {
         case ignore
     }
 
+    /// How long a working agent may go without an event before it's shown as out of date.
+    public static let staleAfter: TimeInterval = 15 * 60
+
     /// Decode a raw payload for `provider` ("claude", "codex", or anything else for the generic shape).
     public static func map(provider: String, payload: Data, now: Date = Date()) throws -> Result {
         let json = try JSONSerialization.jsonObject(with: payload, options: [.fragmentsAllowed])
         guard let obj = json as? [String: Any] else {
             throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "hook payload must be a JSON object"))
         }
+        let result: Result
         switch provider.lowercased() {
-        case "claude", "claude-code", "claudecode": return mapClaude(obj)
-        case "codex": return mapCodex(obj)
-        default: return mapGeneric(obj, provider: provider)
+        case "claude", "claude-code", "claudecode": result = mapClaude(obj)
+        case "codex": result = mapCodex(obj)
+        default: result = mapGeneric(obj, provider: provider)
         }
+        // An agent that stops reporting (its terminal was closed mid-turn) dims after a while
+        // instead of spinning forever; any later event brings it back.
+        guard case .upsert(var spec) = result else { return result }
+        spec.staleAt = spec.state == .running ? now.addingTimeInterval(staleAfter) : .distantFuture
+        return .upsert(spec)
     }
 
     static func shortID(_ s: String?) -> String {

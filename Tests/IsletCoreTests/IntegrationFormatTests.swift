@@ -3,6 +3,20 @@ import Testing
 @testable import IsletCore
 
 @Suite struct AgentHookTests {
+    @Test func silentAgentsGoStaleButWaitingOnesDont() throws {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let working = #"{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"Bash","tool_input":{"command":"make"}}"#
+        guard case .upsert(let a) = try AgentHooks.map(provider: "claude", payload: Data(working.utf8), now: now) else {
+            Issue.record("expected an update"); return
+        }
+        #expect(a.staleAt == now.addingTimeInterval(AgentHooks.staleAfter))
+        let waiting = #"{"hook_event_name":"Notification","session_id":"s1","message":"Claude needs your permission"}"#
+        guard case .upsert(let b) = try AgentHooks.map(provider: "claude", payload: Data(waiting.utf8), now: now) else {
+            Issue.record("expected an update"); return
+        }
+        #expect(b.staleAt == .distantFuture)
+    }
+
     @Test func commandsShownInTheNotchHideSecrets() {
         // Fake credentials are assembled here so the source never contains anything shaped like
         // a real one (secret scanners would flag it).
