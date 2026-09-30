@@ -104,7 +104,7 @@ import Testing
     }
 
     @Test func everyTintParses() {
-        for (name, look) in LiveActivityCatalog.entries { #expect(RGBA.parse(look.tint) != nil, "\(name)") }
+        for look in LiveActivityCatalog.all { #expect(RGBA.parse(look.tint) != nil, "\(look.app)") }
     }
 
     @Test func menuBarActivityURL() throws {

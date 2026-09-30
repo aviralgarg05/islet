@@ -66,10 +66,12 @@ public struct ActivityCenter: Sendable {
         let id = spec.id ?? makeID()
         guard Self.isValidID(id) else { throw ActivityError.invalidID(id) }
         if let tint = spec.tint, RGBA.parse(tint) == nil { throw ActivityError.invalidTint(tint) }
+        try spec.validateTemplateFields()
         let progress = try spec.progress.map(Self.normalizeProgress)
 
         if var existing = activities[id] {
             let previousState = existing.state
+            existing.stretchTrack(to: spec.endsAt, now: now)
             if let v = spec.source { existing.source = v }
             if let v = spec.title { existing.title = v }
             if let v = spec.subtitle { existing.subtitle = v.isEmpty ? nil : v }
@@ -87,6 +89,7 @@ public struct ActivityCenter: Sendable {
             if let v = spec.steps { existing.steps = max(1, v) }
             if let v = spec.step { existing.step = max(0, v) }
             if let v = spec.actions { existing.actions = v }
+            existing.mergeTemplateFields(spec)
             existing.expiresAt = expiry(ttl: spec.ttl, state: existing.state, previous: existing.expiresAt, now: now)
             existing.updatedAt = now
             activities[id] = existing
@@ -99,7 +102,7 @@ public struct ActivityCenter: Sendable {
 
         guard let title = spec.title, !title.isEmpty else { throw ActivityError.missingTitle }
         let state = spec.state ?? (progress != nil ? .running : .info)
-        let activity = Activity(
+        var activity = Activity(
             id: id,
             source: spec.source ?? "api",
             title: title,
@@ -122,6 +125,8 @@ public struct ActivityCenter: Sendable {
             createdAt: now,
             updatedAt: now
         )
+        activity.mergeTemplateFields(spec)
+        activity.stretchTrack(to: spec.endsAt, now: now)
         activities[id] = activity
         evictIfNeeded()
         if spec.sneak ?? (activity.priority >= .normal) {

@@ -10,6 +10,7 @@ USAGE
                     [--trailing TEXT] [--icon ICON] [--tint COLOR] [--priority P] [--ttl SECONDS]
                     [--steps N --step K] [--url URL] [--relevance 0-100] [--stale-in SECONDS]
                     [--ends-in SECONDS] [--started-ago SECONDS] [--action "Title=URL"]
+                    [--template NAME] [--json FILE|-]   (a full activity; flags win)
   isletctl rm <id>                     remove an activity
   isletctl clear --source NAME         remove all activities from a source
   isletctl ls                          list activities (JSON)
@@ -24,6 +25,7 @@ USAGE
   isletctl debug menubar                what macOS shows in the menu bar (for Live Activity mirroring)
 
 STATES     info running success warning failure waiting
+TEMPLATES  eta stages flight route score timer workout gauge live-audio media agent progress
 PRIORITIES low normal high critical
 Reads the port and token from ~/Library/Application Support/Islet/api.json.
 Env overrides: ISLET_PORT, ISLET_TOKEN.
@@ -122,6 +124,7 @@ func spec(from a: Args, id: String?) throws -> ActivitySpec {
     s.title = a.flags["title"]
     s.subtitle = a.flags["subtitle"]
     s.trailing = a.flags["trailing"]
+    s.template = a.flags["template"]
     s.tint = a.flags["tint"]
     s.source = a.flags["source"] ?? "cli"
     s.progress = try a.double("progress")
@@ -195,7 +198,8 @@ func run(_ argv: [String]) async throws -> Int32 {
     case "set", "update":
         guard let id = a.positional.first else { throw CLIError("set needs an id") }
         let s = try spec(from: a, id: id)
-        try expectOK(try await Client.discover().send("PUT", "/v1/activities/\(id)", body: s))
+        let body = try a.flags["json"].map { try mergedSpecJSON(file: $0, flags: s, keepSource: a.flags["source"] != nil) } ?? APIJSON.encoder.encode(s)
+        try expectOK(try await Client.discover().send("PUT", "/v1/activities/\(id)", json: body))
         return 0
 
     case "rm", "remove", "dismiss":
