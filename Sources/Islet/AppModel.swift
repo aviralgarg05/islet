@@ -420,9 +420,8 @@ final class AppModel {
         let fresh = IsletSettings.load(from: IsletPaths.configFile)
         guard fresh != settings else { return }
         settings = fresh
-        media.disabled = Set(fresh.disabledMediaSources)
-        clipboard.limit = fresh.clipboardLimit
-        // The app delegate applies everything else (modules, hotkey, panels) on this notification.
+        // The app delegate applies the rest (modules, media sources, clipboard size, hotkey, panels)
+        // on this notification.
         NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
     }
 
@@ -1030,7 +1029,7 @@ extension AppModel {
             if s.mediaEnabled { startMedia() } else { stopMedia() }
             modules.media = s.mediaEnabled
         }
-        // Sources switched off in Settings, and the clipboard size, apply without a restart.
+        // Sources switched off (in Settings or config.json), and the clipboard size, apply without a restart.
         if Set(s.disabledMediaSources) != media.disabled {
             media.disabled = Set(s.disabledMediaSources)
             let next = media.current(now: Date())

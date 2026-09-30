@@ -6,10 +6,13 @@ import SwiftUI
 /// Settings → Permissions: each macOS permission Islet can use, what uses it, whether Islet has
 /// it, and a button that asks for it or opens its page in System Settings. Checked when the pane
 /// appears and when Islet becomes active again (say, back from System Settings); never polled.
+/// Closing the Settings window doesn't make SwiftUI call `onDisappear` (or `onAppear` on reopening),
+/// so the window's own visibility gates the checks, and it becoming key counts as appearing.
 struct PermissionsSettings: View {
     @Bindable var model: AppModel
     @ViewState private var statuses: [PermissionKind: PermissionStatus] = [:]
     @ViewState private var visible = false
+    @ViewState private var host = HostWindow.Box()
     /// Reading the Downloads folder can prompt, so it's only read once the user has asked
     /// or the downloads module (which reads it anyway) is on.
     @ViewState private var askedForDownloads = false
@@ -26,14 +29,23 @@ struct PermissionsSettings: View {
             }
         }
         .formStyle(.grouped)
+        .background(HostWindow(box: host))
         .onAppear {
             visible = true
             refresh()
         }
         .onDisappear { visible = false }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            if visible { refresh() }
+            refreshIfShown()
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { note in
+            if let window = host.window, note.object as? NSWindow === window { refreshIfShown() }
+        }
+    }
+
+    /// Check again only while this is the selected tab of a Settings window that is on screen.
+    private func refreshIfShown() {
+        if visible, host.window?.isVisible == true { refresh() }
     }
 
     private func refresh() {
@@ -79,6 +91,29 @@ struct PermissionsSettings: View {
         refresh()
         model.startEventSources()
         if model.settings.calendarEnabled || model.settings.remindersEnabled { model.calendar.refresh() }
+    }
+}
+
+/// Keeps track of the window a view is in, without holding on to it.
+private struct HostWindow: NSViewRepresentable {
+    final class Box { weak var window: NSWindow? }
+    let box: Box
+
+    func makeNSView(context: Context) -> NSView { Probe(box: box) }
+    func updateNSView(_ view: NSView, context: Context) {}
+
+    final class Probe: NSView {
+        let box: Box
+        init(box: Box) {
+            self.box = box
+            super.init(frame: .zero)
+        }
+        required init?(coder: NSCoder) { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            box.window = window
+        }
     }
 }
 

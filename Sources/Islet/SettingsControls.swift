@@ -99,7 +99,10 @@ struct PortField: View {
                 Text(problem).font(.caption).foregroundStyle(.red)
             }
         }
-        .onAppear { text = String(port) }
+        .onAppear {
+            text = String(port)
+            problem = nil
+        }
         .onChange(of: port) { _, value in if !focused { text = String(value) } }
     }
 
