@@ -14,8 +14,9 @@ BUNDLE_ID="${BUNDLE_ID:-dev.islet.Islet}"
 APP="build/Islet.app"
 
 echo "▸ swift build ($CONFIG)"
-swift build -c "$CONFIG" --product Islet
-swift build -c "$CONFIG" --product isletctl
+# JOBS=4 make app keeps the build from taking every core.
+swift build -c "$CONFIG" ${JOBS:+-j "$JOBS"} --product Islet
+swift build -c "$CONFIG" ${JOBS:+-j "$JOBS"} --product isletctl
 BIN="$(swift build -c "$CONFIG" --show-bin-path)"
 
 echo "▸ MediaRemote helper"
