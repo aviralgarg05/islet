@@ -59,9 +59,9 @@ enum MCPServer {
     ] }
 
     /// Activities made through MCP get their own id prefix, so a tool can't replace Islet's own.
+    /// An id copied from list_activities already has it and is used as it is.
     static func activityID(_ raw: String) -> String {
-        let cleaned = String(raw.filter { $0.isLetter || $0.isNumber || "-_.".contains($0) }.prefix(100))
-        return "mcp-" + (cleaned.isEmpty ? "task" : cleaned)
+        ActivityCenter.namespacedID(raw, prefix: "mcp-")
     }
 
     static func run() async -> Int32 {

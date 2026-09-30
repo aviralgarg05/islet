@@ -13,7 +13,7 @@
 | `start_timer` | A countdown (`duration` like `90s`, `5m`, `1h`, optional `title`). |
 | `list_activities` | What the notch is showing now. |
 
-Activities made this way get ids starting with `mcp-`, so a tool call can't replace one made by Islet itself or another app. A task that gets no update for 15 minutes is dimmed.
+Activities made this way get ids starting with `mcp-`, so a tool call can't replace one made by Islet itself or another app. An id that already starts with `mcp-`, as `list_activities` shows it, is used as it is. Ids keep only ASCII letters, digits and `._:-`; when anything else had to go, a short hash of the original is added, so the same id always finds the same task. A task that gets no update for 15 minutes is dimmed.
 
 ## Setting it up
 
