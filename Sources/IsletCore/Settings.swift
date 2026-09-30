@@ -227,6 +227,8 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var launchAtLogin = false
     /// Global shortcut that opens or closes the island ("" to disable).
     public var hotkey = "ctrl+option+i"
+    /// Global shortcut that opens the Ask box ready to type ("" to disable).
+    public var askHotkey = "ctrl+option+a"
 
     public init() {}
 

@@ -8,7 +8,7 @@ extension AppActions {
         model.ask.prefill(query, provider: provider)
         model.select(tab: .ask)
         model.pinned = true
-        model.setExpanded(model.expandedScreen ?? NSScreen.main?.displayID)
+        model.setExpanded(model.expandedScreen ?? model.targetDisplay())
         model.ask.requestKeyboard()
     }
 }

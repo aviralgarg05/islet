@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let brightness = BrightnessMonitor()
     private let keys = MediaKeyInterceptor()
     private let hotkey = GlobalHotkey()
+    private let askHotkey = GlobalHotkey()
     private let demo: Bool
 
     init(demo: Bool) {
@@ -176,12 +177,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setUpHotkey() {
-        guard let key = Hotkey.parse(model.settings.hotkey) else {
+        if let key = Hotkey.parse(model.settings.hotkey) {
+            hotkey.onPress = { [weak self] in self?.toggleIsland() }
+            hotkey.register(key)
+        } else {
             hotkey.unregister()
-            return
         }
-        hotkey.onPress = { [weak self] in self?.toggleIsland() }
-        hotkey.register(key)
+        if let key = Hotkey.parse(model.settings.askHotkey) {
+            askHotkey.onPress = { [weak self] in
+                guard let self else { return }
+                // A second press closes the Ask box again.
+                if self.model.expandedScreen != nil, self.model.tab == .ask {
+                    self.model.setExpanded(nil)
+                } else {
+                    AppActions.openAsk(self.model, query: nil, provider: nil)
+                }
+            }
+            askHotkey.register(key)
+        } else {
+            askHotkey.unregister()
+        }
     }
 
     // MARK: HUD
