@@ -143,6 +143,15 @@ islet://focus?name=Work&state=on
 islet://open   islet://close   islet://toggle   islet://settings
 ```
 
+Any app or web page can open these URLs, and they carry no token, so they are limited:
+
+- Activities they create or dismiss get ids starting with `url-` (`id=deploy` becomes `url-deploy`), so a link can't replace or remove an activity made by Islet or the API.
+- `url` and `actionURL` must be `https`.
+- Icons are limited to `sf:`, `emoji:` and `app:`.
+- `priority=critical` is treated as `high`.
+
+Use the local API or `isletctl` when you need more.
+
 ---
 
 ## Script widgets

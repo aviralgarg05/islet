@@ -91,6 +91,21 @@ final class AppModel {
     let menuBarActivities = MenuBarLiveActivityMonitor()
     private var mirroredKeys: Set<String> = []
     private var mirrorClock = LiveActivityClock()
+    /// Mirrored activity id → the menu bar item it came from. Clicking one presses that item;
+    /// this never goes through a URL, so nothing outside Islet can trigger the press.
+    private var mirroredActivityKeys: [String: String] = [:]
+
+    /// Whether clicking the activity opens something.
+    func canOpen(_ a: Activity) -> Bool { a.url != nil || mirroredActivityKeys[a.id] != nil }
+
+    /// Open what an activity points to: a mirrored Live Activity's original item, or its link.
+    func openActivity(_ a: Activity) {
+        if let key = mirroredActivityKeys[a.id] {
+            menuBarActivities.press(key: key)
+        } else if let url = a.url {
+            NSWorkspace.shared.open(url)
+        }
+    }
     private var calls = CallDetector()
     private var lastMicUsers: Set<String> = []
     private var lanServer: LocalAPIServer?
@@ -203,19 +218,17 @@ final class AppModel {
         let list = settings.mirrorOnlyHiddenActivities ? all.filter(\.hidden) : all
         let keys = Set(list.map(\.key))
         for key in mirroredKeys.subtracting(keys) {
-            remove(activityID: MenuBarLiveActivities.activityID(key))
+            let id = MenuBarLiveActivities.activityID(key)
+            remove(activityID: id)
+            mirroredActivityKeys[id] = nil
             mirrorClock.forget(key)
         }
         let now = Date()
         for m in list {
             let look = LiveActivityCatalog.look(for: m.appName).map { ($0.symbol, $0.tint) }
             let clock = mirrorClock.update(key: m.key, detail: m.detail, now: now)
-            var spec = MenuBarLiveActivities.activity(for: m, look: look, isNew: !mirroredKeys.contains(m.key), clock: clock)
-            var c = URLComponents()
-            c.scheme = "islet"
-            c.host = "menubar-activity"
-            c.queryItems = [URLQueryItem(name: "key", value: m.key)]
-            spec.url = c.url
+            let spec = MenuBarLiveActivities.activity(for: m, look: look, isNew: !mirroredKeys.contains(m.key), clock: clock)
+            mirroredActivityKeys[MenuBarLiveActivities.activityID(m.key)] = m.key
             _ = try? applyLocal(spec)
         }
         mirroredKeys = keys
@@ -822,7 +835,7 @@ extension AppModel: IsletBackend {
 
     /// Activities as the API reports them: mirrored Live Activities only when the user allows it.
     private var sharedActivities: [Activity] {
-        settings.shareMirroredActivities ? activities : activities.filter { $0.source != "iphone" }
+        settings.shareMirroredActivities ? activities : activities.filter { $0.source != MenuBarLiveActivities.source }
     }
 
     nonisolated func applyActivity(_ spec: ActivitySpec) async throws -> Activity {

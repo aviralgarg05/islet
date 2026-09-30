@@ -12,6 +12,11 @@ import Foundation
 ///     islet://media/playpause   (also play, pause, next, previous)
 ///     islet://focus?name=Work&state=on   (from a Shortcuts Focus automation)
 ///     islet://open  islet://close  islet://toggle  islet://settings
+///
+/// Any app or web page can open these URLs, and no token is involved, so what they can do is
+/// limited: activities they create get ids starting with `url-` (they can't replace Islet's own
+/// or the API's), links must be https, icons are symbols, emoji or app icons, and priority tops
+/// out at high. Scripts that need more use the local API.
 public enum URLCommand: Equatable, Sendable {
     case activity(ActivitySpec)
     case dismiss(id: String)
@@ -19,9 +24,30 @@ public enum URLCommand: Equatable, Sendable {
     case hud(HUDKind, Double)
     case media(PlaybackCommand)
     case focus(name: String, on: Bool)
-    /// Open the menu bar Live Activity Islet mirrors (Apple's expanded view / iPhone Mirroring).
-    case openMenuBarActivity(key: String)
     case open, close, toggle, settings
+
+    /// Activities created or dismissed through the URL scheme live under this id prefix.
+    public static let idPrefix = "url-"
+
+    static func namespaced(_ id: String) -> String { id.hasPrefix(idPrefix) ? id : idPrefix + id }
+
+    /// Only https links: a click on the notch opens them, so no files or app-launching schemes.
+    static func link(_ raw: String, _ param: String) throws -> URL {
+        guard let url = URL(string: raw), url.scheme?.lowercased() == "https", url.host?.isEmpty == false else {
+            throw ParseError.invalid(param, raw)
+        }
+        return url
+    }
+
+    /// Symbols, emoji and installed apps' icons; never a file or remote image.
+    static func icon(_ raw: String?) -> ActivityIcon? {
+        switch raw.flatMap(ActivityIcon.init(string:)) {
+        case .symbol(let s)?: return .symbol(s)
+        case .emoji(let e)?: return .emoji(e)
+        case .app(let b)?: return .app(bundleID: b)
+        default: return nil
+        }
+    }
 
     public enum ParseError: Error, Equatable, CustomStringConvertible {
         case wrongScheme(String?)
@@ -59,24 +85,21 @@ public enum URLCommand: Equatable, Sendable {
             guard let title = q["title"], !title.isEmpty else { throw ParseError.missing("title") }
             return .activity(ActivitySpec(
                 source: q["source"] ?? "url", title: title, subtitle: q["subtitle"],
-                icon: q["icon"].flatMap(ActivityIcon.init(string:)) ?? .symbol("bell.fill"),
+                icon: icon(q["icon"]) ?? .symbol("bell.fill"),
                 state: .info, tint: q["tint"], ttl: try double("ttl") ?? 6, sneak: true
             ))
         case "activity":
-            var spec = ActivitySpec(id: q["id"], source: q["source"] ?? "url", title: q["title"], subtitle: q["subtitle"])
-            spec.icon = q["icon"].flatMap(ActivityIcon.init(string:))
+            var spec = ActivitySpec(id: q["id"].map(namespaced), source: q["source"] ?? "url", title: q["title"], subtitle: q["subtitle"])
+            spec.icon = icon(q["icon"])
             spec.trailing = q["trailing"]
             spec.progress = try double("progress")
             spec.tint = q["tint"]
             spec.ttl = try double("ttl")
             if let v = try double("endsIn") { spec.endsAt = Date().addingTimeInterval(v) }
             if let v = try double("startedAgo") { spec.startedAt = Date().addingTimeInterval(-v) }
-            if let u = q["url"] {
-                guard let url = URL(string: u), url.scheme != nil else { throw ParseError.invalid("url", u) }
-                spec.url = url
-            }
-            if let title = q["actionTitle"], let u = q["actionURL"], let url = URL(string: u) {
-                spec.actions = [ActivityAction(title: title, url: url)]
+            if let u = q["url"] { spec.url = try link(u, "url") }
+            if let title = q["actionTitle"], let u = q["actionURL"] {
+                spec.actions = [ActivityAction(title: title, url: try link(u, "actionURL"))]
             }
             if let v = try double("steps") { spec.steps = Int(v) }
             if let v = try double("step") { spec.step = Int(v) }
@@ -85,7 +108,7 @@ public enum URLCommand: Equatable, Sendable {
                 spec.state = st
             }
             if let p = q["priority"] {
-                guard let pr = ["low": ActivityPriority.low, "normal": .normal, "high": .high, "critical": .critical][p.lowercased()] else {
+                guard let pr = ["low": ActivityPriority.low, "normal": .normal, "high": .high, "critical": .high][p.lowercased()] else {
                     throw ParseError.invalid("priority", p)
                 }
                 spec.priority = pr
@@ -93,7 +116,7 @@ public enum URLCommand: Equatable, Sendable {
             return .activity(spec)
         case "dismiss", "remove":
             guard let id = q["id"], !id.isEmpty else { throw ParseError.missing("id") }
-            return .dismiss(id: id)
+            return .dismiss(id: namespaced(id))
         case "timer":
             guard let s = try double("seconds") ?? (try double("minutes")).map({ $0 * 60 }) else { throw ParseError.missing("seconds") }
             guard s > 0, s <= 86400 else { throw ParseError.invalid("seconds", String(s)) }
@@ -116,9 +139,6 @@ public enum URLCommand: Equatable, Sendable {
         case "focus":
             let state = (q["state"] ?? q["on"] ?? "on").lowercased()
             return .focus(name: q["name"] ?? "Focus", on: !["off", "0", "false", "no"].contains(state))
-        case "menubar-activity":
-            guard let key = q["key"], !key.isEmpty else { throw ParseError.missing("key") }
-            return .openMenuBarActivity(key: key)
         case "open", "expand": return .open
         case "close", "collapse": return .close
         case "toggle": return .toggle

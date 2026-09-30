@@ -316,10 +316,10 @@ def run_suite(e, app, windows_bin):
         subprocess.run(["open", "-g", "islet://focus?name=Sleep&state=on"], capture_output=True)
         got = wait_for(lambda: activities(e).get("focus", {}).get("title") == "Sleep", timeout=6)
         check("islet://focus from a Shortcuts automation", got)
-        # Pressing a mirrored activity that no longer exists must be harmless.
-        subprocess.run(["open", "-g", "islet://menubar-activity?key=gone"], capture_output=True)
+        # Menu bar items can only be pressed by a click in Islet, never through a URL.
+        subprocess.run(["open", "-g", "islet://menubar-activity?key=id:x"], capture_output=True)
         time.sleep(0.5)
-        check("islet://menubar-activity with an unknown key is ignored", ctl(e, "health").returncode == 0)
+        check("islet://menubar-activity is not a command", ctl(e, "health").returncode == 0)
     else:
         skip("islet:// URL", "lsregister not found")
 
@@ -331,7 +331,7 @@ def run_suite(e, app, windows_bin):
         items = None
     check("debug menubar returns the MenuBarAgent items as JSON", p.returncode == 0 and isinstance(items, list), p.stderr.strip())
     system = {"Battery", "Wi‑Fi", "Wi-Fi", "Bluetooth", "Clock", "Control Center", "Screen Mirroring", "Now Playing"}
-    mirrored = [a for a in activities(e).values() if a.get("source") == "iphone"]
+    mirrored = [a for a in activities(e).values() if a.get("source") == "live-activity"]
     check("system menu extras are never mirrored as Live Activities",
           not any(a["title"] in system for a in mirrored), str([a["title"] for a in mirrored]))
 

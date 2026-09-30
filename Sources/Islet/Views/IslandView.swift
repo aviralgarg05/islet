@@ -282,8 +282,8 @@ struct IslandView: View {
     /// Clicking an activity with a link opens it; anything else expands the island.
     private func activate(_ p: IslandPresentation) {
         Haptics.play(.tap)
-        if let a = model.focusedActivity(for: p), let url = a.url {
-            NSWorkspace.shared.open(url)
+        if let a = model.focusedActivity(for: p), model.canOpen(a) {
+            model.openActivity(a)
         } else {
             model.setExpanded(display)
         }
@@ -292,7 +292,7 @@ struct IslandView: View {
     @ViewBuilder
     private func islandMenu(_ p: IslandPresentation) -> some View {
         if let a = model.focusedActivity(for: p) {
-            if let url = a.url { Button("Open") { NSWorkspace.shared.open(url) } }
+            if model.canOpen(a) { Button("Open") { model.openActivity(a) } }
             Button("Dismiss “\(a.title)”") { model.remove(activityID: a.id) }
             Button("Mute “\(a.source)”") { model.mute(source: a.source) }
             Divider()

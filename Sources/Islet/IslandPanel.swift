@@ -359,8 +359,8 @@ final class PointerCoordinator {
     private func clicked(_ display: CGDirectDisplayID) {
         let p = model.presentation(for: display)
         Haptics.play(.tap)
-        if let a = model.focusedActivity(for: p), let url = a.url {
-            NSWorkspace.shared.open(url)
+        if let a = model.focusedActivity(for: p), model.canOpen(a) {
+            model.openActivity(a)
         } else {
             model.setExpanded(display)
         }

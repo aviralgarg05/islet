@@ -107,6 +107,9 @@ public struct MirroredLiveActivity: Equatable, Sendable {
 }
 
 public enum MenuBarLiveActivities {
+    /// `source` of mirrored activities. They may come from the iPhone or from the Mac itself
+    /// (Shortcuts, Clock); macOS doesn't say which.
+    public static let source = "live-activity"
     /// Bundle IDs of the processes that render Live Activity content for MenuBarAgent.
     public static let rendererBundleIDs: Set<String> = ["com.apple.chrono.WidgetRenderer-Activities", "com.apple.ScreenContinuity"]
 
@@ -163,7 +166,7 @@ public enum MenuBarLiveActivities {
         } else if text.count >= 2, !looksLikeValue(text[0]) {
             app = text.removeFirst()
         } else {
-            app = "iPhone"
+            app = "Live Activity"
         }
         let detail = text.joined(separator: " · ")
         guard let key = key ?? item.identifier else { return nil }
@@ -179,7 +182,7 @@ public enum MenuBarLiveActivities {
     public static func activityID(_ key: String) -> String {
         var h: UInt64 = 1469598103934665603
         for b in key.utf8 { h = (h ^ UInt64(b)) &* 1099511628211 }
-        return "iphone-\(String(h, radix: 36))"
+        return "live-\(String(h, radix: 36))"
     }
 
     /// The live activity Islet shows for a mirrored item.
@@ -190,8 +193,8 @@ public enum MenuBarLiveActivities {
                                 clock: LiveActivityClock.Reading? = nil) -> ActivitySpec {
         let suggestion = look ?? SmartIcon.suggest(title: m.appName, subtitle: m.detail).map { ($0.symbol, $0.tint) }
         var spec = ActivitySpec(
-            id: activityID(m.key), source: "iphone", title: m.appName, subtitle: m.detail,
-            icon: .symbol(suggestion?.0 ?? "iphone.gen3"), trailing: shortTrailing(m.detail),
+            id: activityID(m.key), source: source, title: m.appName, subtitle: m.detail,
+            icon: .symbol(suggestion?.0 ?? "dot.radiowaves.left.and.right"), trailing: shortTrailing(m.detail),
             state: .running, tint: suggestion?.1 ?? "white", priority: .normal, ttl: 0, sneak: isNew
         )
         switch clock {

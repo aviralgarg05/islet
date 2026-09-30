@@ -116,7 +116,7 @@ import Testing
         guard case .activity(let s) = try parse("islet://activity?id=deploy&title=Deploying&progress=0.4&state=running&priority=high") else {
             Issue.record("expected activity"); return
         }
-        #expect(s.id == "deploy")
+        #expect(s.id == "url-deploy")
         #expect(s.progress == 0.4)
         #expect(s.state == .running)
         #expect(s.priority == .high)
@@ -134,8 +134,24 @@ import Testing
         #expect(throws: URLCommand.ParseError.invalid("url", "nope")) { try parse("islet://activity?id=x&url=nope") }
     }
 
+    @Test func urlSchemeCantImpersonateOrLaunch() throws {
+        // Its own id namespace: a link can't replace Islet's battery warning.
+        guard case .activity(let s) = try parse("islet://activity?id=battery-low&title=x&priority=critical") else {
+            Issue.record("expected activity"); return
+        }
+        #expect(s.id == "url-battery-low")
+        #expect(s.priority == .high)
+        #expect(try parse("islet://dismiss?id=battery-low") == .dismiss(id: "url-battery-low"))
+        // Only https links, and no file or remote icons.
+        #expect(throws: URLCommand.ParseError.self) { try parse("islet://activity?id=x&url=file:///Applications/Calculator.app") }
+        #expect(throws: URLCommand.ParseError.self) { try parse("islet://activity?id=x&url=http://example.com") }
+        #expect(throws: URLCommand.ParseError.self) { try parse("islet://activity?id=x&actionTitle=Go&actionURL=shortcuts://run-shortcut?name=x") }
+        guard case .activity(let n) = try parse("islet://notify?title=Hi&icon=file:/tmp/huge.png") else { return }
+        #expect(n.icon == .symbol("bell.fill"))
+    }
+
     @Test func misc() throws {
-        #expect(try parse("islet://dismiss?id=deploy") == .dismiss(id: "deploy"))
+        #expect(try parse("islet://dismiss?id=deploy") == .dismiss(id: "url-deploy"))
         #expect(try parse("islet://timer?minutes=5&title=Tea") == .timer(seconds: 300, title: "Tea"))
         #expect(try parse("islet://timer?seconds=90") == .timer(seconds: 90, title: nil))
         #expect(throws: URLCommand.ParseError.self) { try parse("islet://timer?seconds=-1") }

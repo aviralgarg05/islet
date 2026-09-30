@@ -158,7 +158,7 @@ import Testing
         #expect(MenuBarLiveActivities.mirror(d, knownApp: { $0 == "Uber" }) == MirroredLiveActivity(key: "live-activity-pill-9", appName: "Uber", detail: "4 min"))
         // Values alone: say where it came from.
         let e = MenuBarItemInfo(identifier: "live-activity-pill-10", texts: ["2 – 1"])
-        #expect(MenuBarLiveActivities.mirror(e)?.appName == "iPhone")
+        #expect(MenuBarLiveActivities.mirror(e)?.appName == "Live Activity")
         // Hidden in the overflow is carried through.
         let f = MenuBarItemInfo(role: "AXMenuBarItem", description: "Live Activity", texts: ["Timer", "4:59"], hidden: true)
         #expect(MenuBarLiveActivities.mirror(f, key: "el:4")?.hidden == true)
@@ -204,7 +204,7 @@ import Testing
         let spec = MenuBarLiveActivities.activity(for: m, look: ("car.fill", "#000000"), isNew: true)
         #expect(spec.icon == .symbol("car.fill"))
         #expect(spec.trailing == "4 min")
-        #expect(spec.source == "iphone")
+        #expect(spec.source == MenuBarLiveActivities.source)
         #expect(spec.sneak == true)
         #expect(ActivityCenter.isValidID(spec.id!))
         // Without a catalogue entry, smart icons still pick something sensible.
@@ -227,8 +227,8 @@ import Testing
         for (name, look) in LiveActivityCatalog.entries { #expect(RGBA.parse(look.tint) != nil, "\(name)") }
     }
 
-    @Test func menuBarActivityURL() throws {
-        #expect(try URLCommand.parse(URL(string: "islet://menubar-activity?key=com.apple.x.1")!) == .openMenuBarActivity(key: "com.apple.x.1"))
-        #expect(throws: URLCommand.ParseError.missing("key")) { try URLCommand.parse(URL(string: "islet://menubar-activity")!) }
+    @Test func mirroredActivitiesCantBePressedFromAURL() {
+        // Pressing the original item only ever follows a click inside Islet.
+        #expect(throws: (any Error).self) { try URLCommand.parse(URL(string: "islet://menubar-activity?key=id:x")!) }
     }
 }
