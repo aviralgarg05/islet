@@ -11,6 +11,15 @@ public enum MediaSourceKind: String, Codable, Sendable, CaseIterable {
     case browser
     /// Pushed through the local API (`POST /v1/media`) by any app or script.
     case external
+
+    /// The dedicated integration for a player's bundle ID (Music, Spotify), if it has one.
+    public static func player(bundleID: String?) -> MediaSourceKind? {
+        switch bundleID {
+        case "com.apple.Music": return .appleMusic
+        case "com.spotify.client": return .spotify
+        default: return nil
+        }
+    }
 }
 
 public enum PlaybackCommand: String, Codable, Sendable, CaseIterable {
@@ -89,6 +98,8 @@ public struct NowPlaying: Codable, Equatable, Sendable {
 /// 3. Direct app integrations beat the generic system bridge when they describe the same
 ///    track, because they carry richer data (artwork URL, reliable state).
 /// 4. Paused players are forgotten after `pausedTimeout` so a stale track doesn't linger forever.
+/// 5. Sources switched off in settings are ignored. Music and Spotify count as themselves even
+///    when the system bridge reports them (`setting(for:)`).
 public struct MediaArbiter: Sendable {
     public private(set) var snapshots: [MediaSourceKind: NowPlaying] = [:]
     public var pausedTimeout: TimeInterval
@@ -107,6 +118,14 @@ public struct MediaArbiter: Sendable {
     /// A provider reports that its player quit or has nothing loaded.
     public mutating func clear(_ source: MediaSourceKind) {
         snapshots[source] = nil
+    }
+
+    /// The switch in settings a snapshot answers to. Music and Spotify reported by the system
+    /// bridge follow their own switch rather than "Other apps", so a player that is switched off
+    /// stays hidden whichever path reports it.
+    public static func setting(for s: NowPlaying) -> MediaSourceKind {
+        guard s.source == .system, let player = MediaSourceKind.player(bundleID: s.bundleID) else { return s.source }
+        return player
     }
 
     /// The next moment a paused player is forgotten. The app arms its one deadline timer for this,
@@ -129,7 +148,7 @@ public struct MediaArbiter: Sendable {
 
     public func current(now: Date) -> NowPlaying? {
         let live = snapshots.values.filter { s in
-            guard !disabled.contains(s.source) else { return false }
+            guard !disabled.contains(Self.setting(for: s)) else { return false }
             if s.isPlaying { return true }
             return now.timeIntervalSince(s.timestamp) < pausedTimeout
         }

@@ -184,6 +184,47 @@ import Testing
         #expect(forgotten)
         #expect(b.current(now: t0.addingTimeInterval(60)) == nil)
     }
+
+    @Test func switchedOffPlayerIsHiddenWhicheverPathReportsIt() {
+        func bridge(_ bundle: String, _ title: String) -> NowPlaying {
+            var s = np(.system, title, playing: true, at: 0)
+            s.bundleID = bundle
+            return s
+        }
+        #expect(MediaSourceKind.player(bundleID: "com.apple.Music") == .appleMusic)
+        #expect(MediaSourceKind.player(bundleID: "com.spotify.client") == .spotify)
+        #expect(MediaSourceKind.player(bundleID: "com.apple.podcasts") == nil)
+        #expect(MediaSourceKind.player(bundleID: nil) == nil)
+
+        var a = MediaArbiter(disabled: [.appleMusic])
+        a.update(bridge("com.apple.Music", "Song"))
+        #expect(a.current(now: t0) == nil)
+        a.update(np(.appleMusic, "Song", playing: true, at: 0))
+        #expect(a.current(now: t0) == nil)
+        a.disabled = [.spotify]
+        #expect(a.current(now: t0)?.title == "Song")
+
+        var s = MediaArbiter(disabled: [.spotify])
+        s.update(bridge("com.spotify.client", "Track"))
+        #expect(s.current(now: t0) == nil)
+        // Other apps still come through the bridge.
+        s.update(bridge("com.apple.podcasts", "Episode"))
+        #expect(s.current(now: t0)?.title == "Episode")
+
+        // Music and Spotify aren't "Other apps": switching that off leaves them alone, and hides the rest.
+        var o = MediaArbiter(disabled: [.system])
+        o.update(bridge("com.apple.Music", "Song"))
+        #expect(o.current(now: t0)?.title == "Song")
+        o.update(bridge("com.apple.podcasts", "Episode"))
+        #expect(o.current(now: t0) == nil)
+        // A browser keeps its own switch.
+        var w = MediaArbiter(disabled: [.browser])
+        var video = np(.browser, "Video", playing: true, at: 0)
+        video.bundleID = "com.apple.Safari"
+        w.update(video)
+        #expect(w.current(now: t0) == nil)
+        #expect(MediaArbiter.setting(for: video) == .browser)
+    }
 }
 
 @Suite struct PresenterTests {
