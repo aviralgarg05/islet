@@ -11,8 +11,8 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 - Needs Accessibility. Settings can limit mirroring to activities the notch hides, and mirrored text is kept out of the API unless you allow it.
 
 ### The menu bar
-- The closed island stays in the top row like the iPhone's. With Accessibility it measures the free space beside the notch and fits itself to it, down to icon-only wings on a crowded menu bar; it drops below the notch only when not even an icon fits.
-- It never covers macOS 27's overflow chevron, and items hidden behind the chevron no longer make the menu bar look full.
+- The closed island always stays in the top row, beside the notch, like the iPhone's. With Accessibility it measures the free space beside the notch and fits itself to it, down to icon-only wings on a crowded menu bar. If even those don't fit, it keeps the icon-only wings and may cover the edge of the nearest menu bar item.
+- It keeps clear of macOS 27's overflow chevron whenever there's room, and items hidden behind the chevron no longer make the menu bar look full.
 - Measuring reads one window of the system menu bar instead of asking every app, and only while the island is showing.
 - Mission Control now hides the island.
 

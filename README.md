@@ -20,7 +20,7 @@
 
 ## How it stays out of the way
 
-- **It sits beside the notch, like the iPhone's.** With Accessibility it measures the menu bar and fits into the free space, so it doesn't cover your menu bar icons; it only drops below the notch when there's no room at all.
+- **It sits beside the notch, like the iPhone's.** It always stays in the menu bar row. With Accessibility it measures the menu bar and shrinks to the free space, down to just an icon each side, so it covers a menu bar icon only when the bar is packed right up to the notch.
 - **It costs nothing when idle.** Everything is driven by events, looping animations run in Core Animation, and the pointer isn't watched until it reaches the notch. `make perf` checks each state against a CPU budget; the latest figures are in the [changelog](CHANGELOG.md).
 - **It asks for nothing up front.** Each permission is requested when you turn on the feature that needs it.
 - **It keeps things on your Mac.** No account, no telemetry, no licence server. Questions go to an AI provider only when you ask one, with your own key.

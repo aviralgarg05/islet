@@ -57,7 +57,7 @@ An activity is identified by `id`. Sending the same `id` again **updates** it (f
 
 ### Templates
 
-A template gives an activity the look of an iPhone Live Activity of its kind: a ride with a moving car, a score with two team badges, a flight board. It changes what the wings, the dropped pill, the sneak peek, the bubble and the expanded row show. Every surface follows one rule: what it is on the left, the one value that changes on the right.
+A template gives an activity the look of an iPhone Live Activity of its kind: a ride with a moving car, a score with two team badges, a flight board. It changes what the wings, the sneak peek, the bubble and the expanded row show. Every surface follows one rule: what it is on the left, the one value that changes on the right.
 
 Pick one with `template`. Without it, Islet looks up `source` in its catalogue of 137 apps with Live Activities (by bundle id, app name or alias, for example `com.ubercab.UberClient`, `Uber` or `Flighty`) and uses that app's template when the activity has the data for it. Failing that, the fields decide: `teams` → score, `flight` → flight, `route` → route, `stageLabels` → stages, `trackerIcon` or an eta `phase` → eta, `metrics` → workout, only `endsAt` or `startedAt` → timer, anything else → progress (the generic look).
 
@@ -112,7 +112,7 @@ Numbers roll when they change. Timer rings and waveforms run on Core Animation a
  "route": {"mode": "tram", "line": "N", "lineTint": "#0A84FF", "stopsLeft": 3, "instruction": "Get off at Carl & Cole"}}
 ```
 
-**`score`**: two teams. Wings: each team's badge and score, both sides the same width (in the narrow wings the abbreviation sits over the score). Dropped pill: the period between them. Sneak: period, game clock and `subtitle` as the last play.
+**`score`**: two teams. Wings: each team's badge and score, both sides the same width (in the narrow wings the abbreviation sits over the score). Sneak: the same wings, with the period, game clock and `subtitle` as the last play below them.
 
 ```json
 {"id": "game", "title": "Lakers at Celtics", "subtitle": "Tatum makes 3-pt jump shot", "template": "score", "period": "Q4",
