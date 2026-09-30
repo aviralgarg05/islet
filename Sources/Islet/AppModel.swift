@@ -117,11 +117,11 @@ final class AppModel {
     }
     private var calls = CallDetector()
     private var lastMicUsers: Set<String> = []
-    private var lanServer: LocalAPIServer?
-    /// One token for the loopback API and the LAN bridge, created once per launch
+    /// The iPhone bridge, with its own token (LANBridge.swift).
+    let lan = LANBridge()
+    /// The loopback API's token, created once per launch
     /// (reusing the previous one so scripts that cached it keep working).
     @ObservationIgnored private lazy var apiToken = APIDiscoveryStore.loadOrCreateToken()
-    var lanStatus = "Off"
     /// While the screen is locked: what happened, for the "welcome back" digest.
     private var lockedAt: Date?
     private var lockedDigest: [String: Int] = [:]
@@ -759,26 +759,11 @@ final class AppModel {
     }
 
     private func startLAN() {
-        guard lanServer == nil else { return }
-        let token = apiToken
-        let server = LocalAPIServer(router: APIRouter(token: token, version: Self.version, backend: self, allowRemoteHosts: true))
-        server.rateLimiter = RateLimiter(limit: 30, window: 10)
-        lanServer = server
-        let port = UInt16(settings.lanPort)
-        server.start(port: port, onAllInterfaces: true, bonjourName: Host.current().localizedName ?? "Islet") { [weak self] result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let p): self?.lanStatus = "Listening on \(ProcessInfo.processInfo.hostName):\(p)"
-                case .failure(let e): self?.lanStatus = "Could not listen: \(e.localizedDescription)"
-                }
-            }
-        }
+        lan.start(port: settings.lanPort, backend: self, version: Self.version)
     }
 
     private func stopLAN() {
-        lanServer?.stop()
-        lanServer = nil
-        lanStatus = "Off"
+        lan.stop()
     }
 
     func remove(activityID: String) {

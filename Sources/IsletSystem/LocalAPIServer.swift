@@ -8,7 +8,8 @@ public final class LocalAPIServer {
 
     private var listener: NWListener?
     private let queue = DispatchQueue(label: "islet.api")
-    private let router: APIRouter
+    /// Read on `queue`; `update(router:)` swaps it there.
+    private var router: APIRouter
     /// Connections that have not delivered a full request by then are dropped. Once the request
     /// has arrived, the connection stays open until the response is sent (long-polls).
     public var requestTimeout: TimeInterval = 5
@@ -16,12 +17,19 @@ public final class LocalAPIServer {
     public var maxHeldRequests = 16
     /// Set for the local-network listener: limits requests per client address.
     public var rateLimiter: RateLimiter?
+    /// Longest body accepted; a longer `Content-Length` gets 413 before the body is read.
+    public var maxBodyBytes = HTTPParser.maxBodyBytes
+    /// Most connections open at once (nil: no limit); more get 503.
+    public var maxConnections: Int?
+    private var openConnections = 0
     private let held = HeldCount()
 
     /// One connection and whether its request has fully arrived.
     private final class Exchange {
         let conn: NWConnection
         var received = false
+        /// Set once the headers have arrived and passed the router's preflight.
+        var head: HTTPHead?
         init(_ conn: NWConnection) { self.conn = conn }
     }
 
@@ -81,12 +89,33 @@ public final class LocalAPIServer {
         listener = nil
     }
 
+    /// Serve later requests with `router` (a new token, say) without closing the listener.
+    public func update(router: APIRouter) {
+        queue.async { self.router = router }
+    }
+
     private func accept(_ conn: NWConnection) {
+        if let maxConnections {
+            guard openConnections < maxConnections else {
+                conn.start(queue: queue)
+                return respond(conn, .error(503, "too many connections; try again later"))
+            }
+            openConnections += 1
+            var open = true
+            conn.stateUpdateHandler = { [weak self] state in
+                switch state {
+                case .cancelled, .failed:
+                    guard open else { return }
+                    open = false
+                    self?.openConnections -= 1
+                default:
+                    break
+                }
+            }
+        }
         conn.start(queue: queue)
         if rateLimiter != nil {
-            var client = "unknown"
-            if case .hostPort(let host, _) = conn.endpoint { client = "\(host)" }
-            if rateLimiter?.allow(client, now: Date()) == false {
+            if rateLimiter?.allow(Self.clientKey(conn.endpoint), now: Date()) == false {
                 respond(conn, .error(429, "too many requests; slow down"))
                 return
             }
@@ -105,19 +134,34 @@ public final class LocalAPIServer {
             guard let self else { return conn.cancel() }
             var buffer = buffer
             if let data { buffer.append(data) }
-            switch HTTPParser.parse(buffer) {
-            case .incomplete:
-                if isComplete || error != nil {
-                    conn.cancel()
-                } else {
-                    self.receive(exchange, buffer: buffer)
+            if exchange.head == nil {
+                switch HTTPParser.parseHead(buffer) {
+                case .incomplete:
+                    break
+                case .invalid(let status, let reason):
+                    exchange.received = true
+                    return self.respond(conn, .error(status, reason))
+                case .head(let head):
+                    // A wrong token, a refused route or an oversized body is answered now,
+                    // without waiting for the body.
+                    if let refusal = self.router.preflight(head.request) {
+                        exchange.received = true
+                        return self.respond(conn, refusal)
+                    }
+                    if head.bodyLength > self.maxBodyBytes {
+                        exchange.received = true
+                        return self.respond(conn, .error(413, "body too large; the limit is \(self.maxBodyBytes / 1024) KB"))
+                    }
+                    exchange.head = head
                 }
-            case .invalid(let status, let reason):
-                exchange.received = true
-                self.respond(conn, .error(status, reason))
-            case .complete(let request):
+            }
+            if let request = exchange.head?.request(from: buffer) {
                 exchange.received = true
                 self.handle(request, on: conn)
+            } else if isComplete || error != nil {
+                conn.cancel()
+            } else {
+                self.receive(exchange, buffer: buffer)
             }
         }
     }

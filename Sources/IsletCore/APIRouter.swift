@@ -132,17 +132,25 @@ public struct APIRouter: Sendable {
     public let version: String
     public let backend: any IsletBackend
     public let clock: @Sendable () -> Date
+    /// Which listener this router serves; `.lan` narrows the routes (APIRouter+LAN.swift).
+    public let scope: APIScope
     /// Serving the local network (iPhone Shortcuts): any Host header is accepted, but the
     /// token is still required and browser origins are still refused.
-    public let allowRemoteHosts: Bool
+    public var allowRemoteHosts: Bool { scope == .lan }
 
-    public init(token: String, version: String, backend: any IsletBackend, allowRemoteHosts: Bool = false,
+    public init(token: String, version: String, backend: any IsletBackend, scope: APIScope = .local,
                 clock: @escaping @Sendable () -> Date = { Date() }) {
         self.token = token
         self.version = version
         self.backend = backend
-        self.allowRemoteHosts = allowRemoteHosts
+        self.scope = scope
         self.clock = clock
+    }
+
+    /// `allowRemoteHosts: true` is the local-network scope.
+    public init(token: String, version: String, backend: any IsletBackend, allowRemoteHosts: Bool,
+                clock: @escaping @Sendable () -> Date = { Date() }) {
+        self.init(token: token, version: version, backend: backend, scope: allowRemoteHosts ? .lan : .local, clock: clock)
     }
 
     /// Constant-time comparison so the token can't be guessed byte by byte from timing.
@@ -195,14 +203,31 @@ public struct APIRouter: Sendable {
         return String(describing: error)
     }
 
-    public func handle(_ request: HTTPRequest) async -> HTTPResponse {
-        guard Self.isAllowedOrigin(request, remote: allowRemoteHosts) else { return .error(403, "requests from web pages are not allowed") }
+    static func isHealthCheck(_ request: HTTPRequest) -> Bool {
         let seg = request.segments
-        if request.method == "GET", seg == ["v1", "health"] || seg == ["health"] {
-            return .json(["ok": "true", "version": version])
-        }
+        return request.method == "GET" && (seg == ["v1", "health"] || seg == ["health"])
+    }
+
+    /// What can be decided from the request line and headers alone: the origin, the token and,
+    /// on the local network, the route. The server calls this before reading the body.
+    /// Returns the refusal, or nil when the request may go on.
+    public func preflight(_ request: HTTPRequest) -> HTTPResponse? {
+        guard Self.isAllowedOrigin(request, remote: allowRemoteHosts) else { return .error(403, "requests from web pages are not allowed") }
+        if Self.isHealthCheck(request) { return nil }
         guard authorized(request) else {
-            return .error(401, "missing or wrong token; send 'Authorization: Bearer <token>' (see `isletctl token`)")
+            return scope == .lan
+                ? .error(401, "missing or wrong token; send 'Authorization: Bearer <token>' with the token from Settings → Integrations → iPhone bridge")
+                : .error(401, "missing or wrong token; send 'Authorization: Bearer <token>' (see `isletctl token`)")
+        }
+        if scope == .lan, !Self.lanAllows(request) { return .error(403, Self.lanRefusal) }
+        return nil
+    }
+
+    public func handle(_ request: HTTPRequest) async -> HTTPResponse {
+        if let refusal = preflight(request) { return refusal }
+        let seg = request.segments
+        if Self.isHealthCheck(request) {
+            return .json(["ok": "true", "version": version])
         }
         do {
             return try await route(request, seg)
@@ -225,13 +250,13 @@ public struct APIRouter: Sendable {
 
         case ("POST", 1, "activities"):
             let spec = try decode(ActivitySpec.self, from: r)
-            return .json(try await backend.applyActivity(spec), status: 201)
+            return .json(try await backend.applyActivity(admitted(spec)), status: 201)
 
         case ("PUT", 2, "activities"), ("PATCH", 2, "activities"), ("POST", 2, "activities"):
             let id = sub
             var spec = try decode(ActivitySpec.self, from: r)
             spec.id = id
-            return .json(try await backend.applyActivity(spec))
+            return .json(try await backend.applyActivity(admitted(spec)))
 
         case ("DELETE", 2, "activities"):
             let id = sub
@@ -246,10 +271,10 @@ public struct APIRouter: Sendable {
         case ("POST", 1, "notify"):
             let n = try decode(NotifyPush.self, from: r)
             let spec = ActivitySpec(
-                source: n.source ?? "notify", title: n.title, subtitle: n.subtitle, icon: n.icon ?? .symbol("bell.fill"),
+                source: n.source ?? "notify", title: n.title, subtitle: n.subtitle, icon: admitted(n.icon) ?? .symbol("bell.fill"),
                 state: .info, tint: n.tint, priority: n.priority ?? .normal, ttl: n.ttl ?? 6, sneak: true
             )
-            return .json(try await backend.applyActivity(spec), status: 201)
+            return .json(try await backend.applyActivity(admitted(spec)), status: 201)
 
         case ("POST", 1, "timer"), ("POST", 1, "timers"):
             let t = try decode(TimerPush.self, from: r)
@@ -262,7 +287,7 @@ public struct APIRouter: Sendable {
             }
             guard let seconds else { return .error(422, "send 'seconds' or 'in', e.g. {\"in\": \"20m\", \"title\": \"Tea\"}") }
             guard seconds > 0, seconds <= 24 * 3600 else { return .error(422, "'seconds' must be between 1 and 86400") }
-            return try await timerReply(.start(seconds: seconds, title: title, id: t.id), status: 201)
+            return try await timerReply(.start(seconds: seconds, title: title, id: admitted(timerID: t.id)), status: 201)
 
         case ("GET", 1, "timers"):
             return .json(await backend.listTimers())

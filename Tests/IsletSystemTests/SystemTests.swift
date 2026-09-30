@@ -30,7 +30,8 @@ actor MemoryBackend: IsletBackend {
 }
 
 func startServer(lan: Bool = false, limit: Int? = nil) async throws -> (LocalAPIServer, UInt16) {
-    let server = LocalAPIServer(router: APIRouter(token: "tok", version: "t", backend: MemoryBackend(), allowRemoteHosts: lan))
+    let router = APIRouter(token: "tok", version: "t", backend: MemoryBackend(), scope: lan ? .lan : .local)
+    let server = lan ? LocalAPIServer.localNetwork(router: router) : LocalAPIServer(router: router)
     if let limit { server.rateLimiter = RateLimiter(limit: limit, window: 60) }
     let port: UInt16 = try await withCheckedThrowingContinuation { cont in
         server.start(port: 0, onAllInterfaces: lan) { cont.resume(with: $0) }

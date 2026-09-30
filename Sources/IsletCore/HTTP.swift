@@ -83,11 +83,48 @@ public enum HTTPParseResult: Equatable, Sendable {
     case invalid(status: Int, reason: String)
 }
 
+/// A request line and headers, parsed before the body has arrived, so a server can refuse
+/// the request (wrong token, too big) without reading the body.
+public struct HTTPHead: Equatable, Sendable {
+    /// The request with an empty body.
+    public var request: HTTPRequest
+    /// From `Content-Length`; 0 when absent.
+    public var bodyLength: Int
+    /// Where the body starts in the buffer the head was parsed from.
+    public var bodyOffset: Int
+
+    /// The whole request, once `buffer` holds all of the body.
+    public func request(from buffer: Data) -> HTTPRequest? {
+        guard buffer.count - bodyOffset >= bodyLength else { return nil }
+        let start = buffer.index(buffer.startIndex, offsetBy: bodyOffset)
+        var r = request
+        r.body = Data(buffer[start..<buffer.index(start, offsetBy: bodyLength)])
+        return r
+    }
+}
+
+public enum HTTPHeadResult: Equatable, Sendable {
+    case incomplete
+    case head(HTTPHead)
+    case invalid(status: Int, reason: String)
+}
+
 public enum HTTPParser {
     public static let maxHeaderBytes = 16 * 1024
     public static let maxBodyBytes = 1 * 1024 * 1024
 
     public static func parse(_ data: Data) -> HTTPParseResult {
+        switch parseHead(data) {
+        case .incomplete: return .incomplete
+        case .invalid(let status, let reason): return .invalid(status: status, reason: reason)
+        case .head(let head):
+            if head.bodyLength > maxBodyBytes { return .invalid(status: 413, reason: "body too large") }
+            return head.request(from: data).map { .complete($0) } ?? .incomplete
+        }
+    }
+
+    /// The request line and headers, as soon as they have arrived. The body limit is the caller's.
+    public static func parseHead(_ data: Data) -> HTTPHeadResult {
         let separator = Data("\r\n\r\n".utf8)
         guard let headerEnd = data.range(of: separator) else {
             return data.count > maxHeaderBytes ? .invalid(status: 413, reason: "headers too large") : .incomplete
@@ -117,10 +154,6 @@ public enum HTTPParser {
         } else {
             length = 0
         }
-        if length > maxBodyBytes { return .invalid(status: 413, reason: "body too large") }
-        let bodyStart = headerEnd.upperBound
-        guard data.distance(from: bodyStart, to: data.endIndex) >= length else { return .incomplete }
-        let body = data[bodyStart..<data.index(bodyStart, offsetBy: length)]
 
         let target = String(requestLine[1])
         var path = target
@@ -129,7 +162,8 @@ public enum HTTPParser {
             path = comps.percentEncodedPath.isEmpty ? "/" : comps.percentEncodedPath
             for item in comps.queryItems ?? [] { query[item.name] = item.value ?? "" }
         }
-        return .complete(HTTPRequest(method: String(requestLine[0]), path: path, query: query, headers: headers, body: Data(body)))
+        let request = HTTPRequest(method: String(requestLine[0]), path: path, query: query, headers: headers)
+        return .head(HTTPHead(request: request, bodyLength: length, bodyOffset: data.distance(from: data.startIndex, to: headerEnd.upperBound)))
     }
 }
 

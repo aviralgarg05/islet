@@ -431,12 +431,7 @@ struct IntegrationsSettings: View {
                     .font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
             }
             UsageLimitsSection(model: model)
-            Section("iPhone bridge (local network)") {
-                Toggle("Accept events from iPhone Shortcuts on this network", isOn: $model.settings.lanBridgeEnabled)
-                LabeledContent("Status") { Text(model.lanStatus).foregroundStyle(.secondary) }
-                Text(verbatim: "In Shortcuts on iPhone, make a Personal Automation (Alarm, Focus, Arrive, Battery Level…) that runs “Get Contents of URL” with method POST, URL http://\(ProcessInfo.processInfo.hostName):\(model.settings.lanPort)/v1/notify, header Authorization: Bearer <token> and JSON body {\"title\": \"…\"}. Use the token from Copy Token above. Requests are rate-limited.")
-                .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-            }
+            LANBridgeSection(model: model)
             Section("Script widgets") {
                 Toggle("Run scripts from the plugins folder", isOn: $model.settings.pluginsEnabled)
                 PluginFolderRow(model: model)
