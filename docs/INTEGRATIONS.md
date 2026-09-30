@@ -84,7 +84,7 @@ Each run writes `~/Library/Application Support/Islet/usage/claude.json` (mode 06
 
 ```json
 {"provider":"claude","model":"Opus 5.5","contextPercent":42.4,"costUSD":1.23,"project":"islet","sessionID":"…","updatedAt":1790786093,
- "windows":[{"id":"five_hour","usedPercent":62,"windowMinutes":300,"resetsAt":1790771457},
+ "windows":[{"id":"five_hour","usedPercent":62,"windowMinutes":300,"resetsAt":1790790413},
             {"id":"seven_day","usedPercent":31,"windowMinutes":10080,"resetsAt":1791200000}]}
 ```
 

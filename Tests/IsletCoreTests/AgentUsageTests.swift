@@ -53,6 +53,11 @@ private func tempDir() -> URL {
         #expect(partial.windows[0].resetsAt == nil)
         #expect(partial.model == "claude-x")
 
+        // Numbers too large for a date are dropped rather than overflowing later.
+        let huge = try #require(ClaudeStatusLine.parse(Data(#"{"rate_limits":{"five_hour":{"used_percentage":1e300,"resets_at":1e300}}}"#.utf8), now: morning))
+        #expect(huge.windows.first?.resetsAt == nil)
+        #expect(UsageFormat.percent(huge.windows[0].usedPercent) == "999%")
+
         #expect(ClaudeStatusLine.parse(Data("not json".utf8), now: morning) == nil)
         #expect(ClaudeStatusLine.parse(Data("[1,2]".utf8), now: morning) == nil)
     }
@@ -139,6 +144,14 @@ private func tempDir() -> URL {
         let old = #"{"timestamp":"2026-09-30T09:20:00Z","type":"event_msg","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":40,"window_minutes":300,"resets_in_seconds":600}}}}"#
         let u = try #require(CodexRollout.usage(fromLine: Data(old.utf8)))
         #expect(u.windows[0].resetsAt == morning.addingTimeInterval(600))
+    }
+
+    @Test func outOfRangeNumbersDontCrash() throws {
+        let odd = #"{"timestamp":"2026-09-30T09:20:00Z","type":"event_msg","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":40,"window_minutes":1e300,"resets_in_seconds":1e300},"secondary":{"used_percent":5,"window_minutes":-1e300,"resets_at":-5}}}}"#
+        let u = try #require(CodexRollout.usage(fromLine: Data(odd.utf8)))
+        #expect(u.windows.map(\.windowMinutes) == [nil, nil])
+        #expect(u.windows.map(\.resetsAt) == [nil, nil])
+        #expect(u.windows[0].shortLabel == "5h")
     }
 
     @Test func ignoresOtherLines() {
@@ -254,6 +267,9 @@ private func tempDir() -> URL {
         #expect(UsageFormat.remaining(until: morning.addingTimeInterval(3 * 3600), now: morning) == "3 h")
         #expect(UsageFormat.remaining(until: morning.addingTimeInterval(76 * 3600), now: morning) == "3 d 4 h")
         #expect(UsageFormat.remaining(until: morning.addingTimeInterval(-60), now: morning) == "1 min")
+        // Reset times from a hand-edited usage file must not overflow.
+        #expect(UsageFormat.remaining(until: Date(timeIntervalSince1970: 1e300), now: morning).contains(" d"))
+        #expect(UsageFormat.remaining(until: Date(timeIntervalSince1970: -1e300), now: morning) == "1 min")
         #expect(UsageFormat.percent(62.5) == "63%")
         #expect(UsageFormat.percent(-3) == "0%")
     }

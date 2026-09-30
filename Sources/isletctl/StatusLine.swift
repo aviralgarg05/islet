@@ -36,11 +36,21 @@ func runStatusLine(_ original: [String]) -> Int32 {
         FileHandle.standardError.write(Data("isletctl statusline: \(error)\n".utf8))
         return 127
     }
+    // Claude Code stops a status line that is still running when a newer update arrives. The
+    // child runs in its own process group, so pass the signal on rather than leave it running.
+    let child = p.processIdentifier
+    let forwarders = child > 0 ? [SIGTERM, SIGINT, SIGHUP].map { sig in
+        signal(sig, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: sig, queue: .global(qos: .userInitiated))
+        source.setEventHandler { if kill(-child, sig) != 0 { kill(child, sig) } }
+        source.resume()
+        return source
+    } : []
     let writer = stdin.fileHandleForWriting
     DispatchQueue.global(qos: .userInitiated).async {
         try? writer.write(contentsOf: input)
         try? writer.close()
     }
-    p.waitUntilExit()
+    withExtendedLifetime(forwarders) { p.waitUntilExit() }
     return p.terminationStatus
 }

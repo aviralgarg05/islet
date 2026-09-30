@@ -114,12 +114,19 @@ enum UsageJSON {
         return nil
     }
 
-    /// Epoch seconds (or milliseconds), or an ISO 8601 string.
+    /// Epoch seconds (or milliseconds), or an ISO 8601 string. Nil for a number too large to
+    /// be a date, so later arithmetic on it can't overflow.
     static func date(_ v: Any?) -> Date? {
-        if let n = number(v), n > 0 { return Date(timeIntervalSince1970: n > 100_000_000_000 ? n / 1000 : n) }
+        if let n = number(v), n > 0 {
+            let seconds = n > 100_000_000_000 ? n / 1000 : n
+            return seconds < 100_000_000_000 ? Date(timeIntervalSince1970: seconds) : nil
+        }
         if let s = v as? String { return iso(s) }
         return nil
     }
+
+    /// A whole number that fits in `Int`, or nil.
+    static func int(_ v: Any?) -> Int? { number(v).flatMap { Int(exactly: $0.rounded()) } }
 
     static func iso(_ s: String) -> Date? {
         let f = ISO8601DateFormatter()
@@ -195,11 +202,11 @@ public enum CodexRollout {
         for key in ["primary", "secondary"] {
             guard let w = limits[key] as? [String: Any], let used = UsageJSON.number(w["used_percent"]) else { continue }
             var resets = UsageJSON.date(w["resets_at"])
-            if resets == nil, let seconds = UsageJSON.number(w["resets_in_seconds"]), let stamp {
+            if resets == nil, let seconds = UsageJSON.number(w["resets_in_seconds"]), abs(seconds) < 10_000_000_000, let stamp {
                 resets = stamp.addingTimeInterval(seconds)
             }
             windows.append(UsageWindow(id: key, usedPercent: UsageJSON.rounded(used)!,
-                                       windowMinutes: UsageJSON.number(w["window_minutes"]).map { Int($0) }, resetsAt: resets))
+                                       windowMinutes: UsageJSON.int(w["window_minutes"]), resetsAt: resets))
         }
         guard !windows.isEmpty else { return nil }
         return AgentUsage(provider: .codex, windows: windows, planType: limits["plan_type"] as? String, updatedAt: stamp)
@@ -306,7 +313,8 @@ public struct UsageAlertTracker: Sendable {
 public enum UsageFormat {
     /// Time left until a reset: "12 min", "1 h 12 min", "3 d 4 h". Rounded up to the minute.
     public static func remaining(until date: Date, now: Date) -> String {
-        let mins = max(1, Int((date.timeIntervalSince(now) / 60).rounded(.up)))
+        // Clamped before converting: a reset time from a hand-edited file could overflow Int.
+        let mins = Int(min(1_000_000_000, max(1, (date.timeIntervalSince(now) / 60).rounded(.up))))
         if mins < 60 { return "\(mins) min" }
         if mins < 24 * 60 {
             let h = mins / 60, m = mins % 60

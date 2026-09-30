@@ -40,6 +40,8 @@ final class AgentUsageModel {
     }
 
     private func update(_ provider: UsageProvider, _ usage: AgentUsage?) {
+        // A reading queued just before its source was switched off must not bring the card back.
+        guard provider == .claude ? watcher.isWatchingClaude : watcher.isWatchingCodex else { return }
         switch provider {
         case .claude: claude = usage
         case .codex: codex = usage
