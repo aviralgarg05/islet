@@ -1,7 +1,7 @@
 # Islet — builds with the Xcode Command Line Tools alone.
 SWIFT_TEST_FLAGS = -Xswiftc -plugin-path -Xswiftc /Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing
 
-.PHONY: build app run demo test e2e e2e-media perf snapshots check install clean
+.PHONY: build app run demo test e2e e2e-media perf snapshots check install release clean
 
 build:            ## Debug build of the app and CLI
 	swift build
@@ -35,6 +35,9 @@ check: test e2e perf  ## Everything
 install: app      ## Copy to /Applications and link the CLI (asks nothing; review first)
 	rm -rf /Applications/Islet.app && cp -R build/Islet.app /Applications/
 	@echo "CLI: ln -sf /Applications/Islet.app/Contents/MacOS/isletctl /opt/homebrew/bin/isletctl"
+
+release:          ## Zip, checksum and notes for the newest CHANGELOG version (PUBLISH=1 creates the GitHub release)
+	scripts/release.sh $(if $(PUBLISH),--publish,)
 
 clean:
 	rm -rf .build build
