@@ -199,6 +199,10 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// Run scripts from the plugins folder. Off until the user turns it on: they run with
     /// Islet's permissions.
     public var pluginsEnabled = false
+    /// Show coding-agent permission requests, questions and plans as cards to answer in the notch.
+    public var approvalsEnabled = true
+    /// Seconds a card waits for an answer before the agent asks in the terminal instead.
+    public var approvalWait: Double = 300
     /// Folder of script widgets; default `~/.config/islet/plugins`.
     public var pluginDirectory: String?
     /// Activity sources the user silenced (e.g. "github-actions").
@@ -252,6 +256,7 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         s.batteryLowThreshold = min(50, max(5, s.batteryLowThreshold))
         s.batteryCriticalThreshold = min(s.batteryLowThreshold - 1, max(1, s.batteryCriticalThreshold))
         if s.batteryChargedAlert != 0 { s.batteryChargedAlert = min(100, max(50, s.batteryChargedAlert)) }
+        s.approvalWait = min(3600, max(30, s.approvalWait))
         let d = IsletSettings()
         if !(1024...65535).contains(s.apiPort) { s.apiPort = d.apiPort }
         if !(1024...65535).contains(s.lanPort) || s.lanPort == s.apiPort { s.lanPort = d.lanPort }

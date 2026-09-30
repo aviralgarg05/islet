@@ -92,6 +92,8 @@ final class AppModel {
     let agentUsage = AgentUsageModel()
     let controls = IslandControls()
     @ObservationIgnored lazy var timers = TimerController(model: self)
+    /// Coding-agent approval cards (ApprovalController.swift).
+    @ObservationIgnored lazy var approvals = ApprovalController(model: self)
     private var mirroredKeys: Set<String> = []
     private var mirrorClock = LiveActivityClock()
     /// Mirrored activity id → the menu bar item it came from. Clicking one presses that item;

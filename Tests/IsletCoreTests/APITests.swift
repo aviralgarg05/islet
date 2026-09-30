@@ -40,6 +40,28 @@ actor FakeBackend: IsletBackend {
     var timers = TimerEngine()
     func listTimers() async -> [TimerItem] { timers.ordered }
     func timerCommand(_ command: TimerCommand) async throws -> TimerItem? { try timers.perform(command, now: now) }
+
+    var approvalEvents: [ApprovalEvent] = []
+    /// What `.ask` answers; with `hangs` it waits until cancelled instead.
+    var decision: ApprovalDecision?
+    var hangs = false
+    var cancelledAsks = 0
+
+    func script(_ decision: ApprovalDecision?, hangs: Bool = false) {
+        self.decision = decision
+        self.hangs = hangs
+    }
+
+    func handleApproval(_ event: ApprovalEvent) async -> ApprovalDecision? {
+        approvalEvents.append(event)
+        guard case .ask = event else { return nil }
+        if hangs {
+            try? await Task.sleep(nanoseconds: 3_600_000_000_000)
+            if Task.isCancelled { cancelledAsks += 1 }
+            return nil
+        }
+        return decision
+    }
 }
 
 @Suite struct HTTPParserTests {

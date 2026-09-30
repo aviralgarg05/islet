@@ -20,6 +20,9 @@ public protocol IsletBackend: Sendable {
     func listTimers() async -> [TimerItem]
     /// Runs a timer command; returns the timer it started or changed, nil when it stopped one.
     func timerCommand(_ command: TimerCommand) async throws -> TimerItem?
+    /// Coding-agent approvals: `.ask` shows a card and returns the user's answer (nil: no
+    /// decision); it must return promptly once its task is cancelled. `.settle` returns nil.
+    func handleApproval(_ event: ApprovalEvent) async -> ApprovalDecision?
 }
 
 public struct StateSnapshot: Codable, Equatable, Sendable {
@@ -335,6 +338,7 @@ public struct APIRouter: Sendable {
 
         case ("POST", 2, "hooks"):
             let provider = sub
+            if let held = await approvalHook(r, provider: provider) { return held }
             switch try AgentHooks.map(provider: provider, payload: r.body, now: clock()) {
             case .upsert(let spec): return .json(try await backend.applyActivity(spec))
             case .remove(let id):

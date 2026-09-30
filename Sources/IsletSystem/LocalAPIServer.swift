@@ -9,10 +9,21 @@ public final class LocalAPIServer {
     private var listener: NWListener?
     private let queue = DispatchQueue(label: "islet.api")
     private let router: APIRouter
-    /// Connections that have not delivered a full request by then are dropped.
+    /// Connections that have not delivered a full request by then are dropped. Once the request
+    /// has arrived, the connection stays open until the response is sent (long-polls).
     public var requestTimeout: TimeInterval = 5
+    /// Most long-polls (requests with `?wait=`) held open at once; more get 503.
+    public var maxHeldRequests = 16
     /// Set for the local-network listener: limits requests per client address.
     public var rateLimiter: RateLimiter?
+    private let held = HeldCount()
+
+    /// One connection and whether its request has fully arrived.
+    private final class Exchange {
+        let conn: NWConnection
+        var received = false
+        init(_ conn: NWConnection) { self.conn = conn }
+    }
 
     public private(set) var port: UInt16 = 0
 
@@ -80,13 +91,16 @@ public final class LocalAPIServer {
                 return
             }
         }
-        queue.asyncAfter(deadline: .now() + requestTimeout) { [weak conn] in
-            if let conn, conn.state != .cancelled { conn.cancel() }
+        let exchange = Exchange(conn)
+        queue.asyncAfter(deadline: .now() + requestTimeout) { [weak exchange] in
+            guard let exchange, !exchange.received, exchange.conn.state != .cancelled else { return }
+            exchange.conn.cancel()
         }
-        receive(conn, buffer: Data())
+        receive(exchange, buffer: Data())
     }
 
-    private func receive(_ conn: NWConnection, buffer: Data) {
+    private func receive(_ exchange: Exchange, buffer: Data) {
+        let conn = exchange.conn
         conn.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, isComplete, error in
             guard let self else { return conn.cancel() }
             var buffer = buffer
@@ -96,22 +110,66 @@ public final class LocalAPIServer {
                 if isComplete || error != nil {
                     conn.cancel()
                 } else {
-                    self.receive(conn, buffer: buffer)
+                    self.receive(exchange, buffer: buffer)
                 }
             case .invalid(let status, let reason):
+                exchange.received = true
                 self.respond(conn, .error(status, reason))
             case .complete(let request):
-                let router = self.router
-                Task {
-                    let response = await router.handle(request)
-                    self.respond(conn, response)
-                }
+                exchange.received = true
+                self.handle(request, on: conn)
+            }
+        }
+    }
+
+    private func handle(_ request: HTTPRequest, on conn: NWConnection) {
+        let waits = request.query["wait"] != nil
+        if waits, !held.acquire(max: maxHeldRequests) {
+            return respond(conn, .error(503, "too many requests are waiting; try again later"))
+        }
+        let router = self.router
+        let held = self.held
+        let task = Task {
+            let response = await router.handle(request)
+            if waits { held.release() }
+            self.respond(conn, response)
+        }
+        // A long-poll whose client goes away (hook killed, agent interrupted) stops waiting.
+        if waits { watchForHangUp(conn) { task.cancel() } }
+    }
+
+    private func watchForHangUp(_ conn: NWConnection, then cancel: @escaping () -> Void) {
+        conn.receive(minimumIncompleteLength: 1, maximumLength: 1024) { [weak self] data, _, isComplete, error in
+            if isComplete || error != nil {
+                cancel()
+            } else if data != nil {
+                self?.watchForHangUp(conn, then: cancel)
             }
         }
     }
 
     private func respond(_ conn: NWConnection, _ response: HTTPResponse) {
         conn.send(content: response.serialized(), completion: .contentProcessed { _ in conn.cancel() })
+    }
+}
+
+/// Number of long-polls held open.
+private final class HeldCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    func acquire(max: Int) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard count < max else { return false }
+        count += 1
+        return true
+    }
+
+    func release() {
+        lock.lock()
+        count -= 1
+        lock.unlock()
     }
 }
 

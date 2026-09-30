@@ -26,6 +26,7 @@ actor MemoryBackend: IsletBackend {
     var timers = TimerEngine()
     func listTimers() async -> [TimerItem] { timers.ordered }
     func timerCommand(_ command: TimerCommand) async throws -> TimerItem? { try timers.perform(command, now: Date()) }
+    func handleApproval(_ event: ApprovalEvent) async -> ApprovalDecision? { nil }
 }
 
 func startServer(lan: Bool = false, limit: Int? = nil) async throws -> (LocalAPIServer, UInt16) {
