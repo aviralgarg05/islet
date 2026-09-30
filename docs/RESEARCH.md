@@ -44,7 +44,7 @@ A second round (section 8) looked at feature parity with 22 notch apps, Live Act
 | 7 | **Sleep/wake instability** | disappears after sleep (boring.notch #336) | Rebuild on wake; single-instance guard; discovery file owned per process. |
 | 8 | **Trust and permission friction** | unsigned builds, over-asking | Nothing is requested at launch. Every permission is opt-in from Settings, with a sentence on why. Local build is signed with a stable identity so grants survive rebuilds. |
 | 9 | **Janky animations, bloat** | "wobbly" animation toggle ≈83 👍 | Five motion styles including Minimal and Off, Reduce Motion honoured, every "wow" has an off switch; modules toggle individually. |
-| 10 | **Menu-bar overlap** | covers menu items, fights menu-bar managers | Idle island is invisible (the hardware notch is already there). With Accessibility, Islet measures the menu bar and sizes the wings to the free space or drops the content below the notch; without it, it drops. Only drawn pixels take clicks (section 8). |
+| 10 | **Menu-bar overlap** | covers menu items, fights menu-bar managers | Idle island is invisible (the hardware notch is already there). With Accessibility, Islet measures the menu bar and sizes the wings to the free space or drops the content below the notch; without it, the wings are capped at 36 pt. Only drawn pixels take clicks (section 8). |
 | 11–12 | Shelf and calendar bugs | file promises, all-day date shifts | Bookmarked shelf items survive renames; all-day events never raise alerts. |
 
 ## 3. What people want most (report 02 §2, report 04 §4)
