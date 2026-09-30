@@ -4,5 +4,8 @@
 <dict>
     <!-- Needed under the hardened runtime to send Apple Events to Music and Spotify. -->
     <key>com.apple.security.automation.apple-events</key><true/>
+    <!-- Needed under the hardened runtime for EventKit (Calendar, and Reminders with it). Without
+         it macOS refuses access without ever showing the prompt. -->
+    <key>com.apple.security.personal-information.calendars</key><true/>
 </dict>
 </plist>
