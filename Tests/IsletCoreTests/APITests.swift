@@ -309,18 +309,23 @@ extension APIRouterTests {
                 await rt.handle(request("POST", "/v1/notify", body: #"{"title":"x","source":"live-activity"}"#)),
                 // The count would say how many are showing.
                 await rt.handle(request("DELETE", "/v1/activities?source=live-activity")),
-                // A generic hook for an agent called "live" maps to live-<session>.
-                await rt.handle(request("POST", "/v1/hooks/live", body: #"{"agent":"live","session":"abc123","event":"running"}"#)),
-                await rt.handle(request("POST", "/v1/hooks/live", body: #"{"agent":"live","session":"abc123","event":"end"}"#)),
+                // A generic agent's name becomes the source.
+                await rt.handle(request("POST", "/v1/hooks/x", body: #"{"agent":"live-activity","session":"abc123","event":"running"}"#)),
             ]
             for r in refused {
                 #expect(r.status == 403)
                 #expect(String(decoding: r.body, as: UTF8.self).contains("mirrored from the menu bar"))
                 #expect(!leaks(r))
             }
-            // The approvals path answers as usual but leaves the activity alone.
-            let held = await rt.handle(request("POST", "/v1/hooks/live?wait=1", body: #"{"agent":"live","session":"abc123","event":"end"}"#))
+            // The approvals path answers as usual but shows nothing.
+            let held = await rt.handle(request("POST", "/v1/hooks/x?wait=1", body: #"{"agent":"live-activity","session":"abc123","event":"running"}"#))
             #expect(held.status == 204)
+            // An agent called "live" gets its own activity, not the mirrored one with its would-be id.
+            let agent = await rt.handle(request("POST", "/v1/hooks/live", body: #"{"agent":"live","session":"abc123","event":"running"}"#))
+            #expect(agent.status == 200)
+            #expect(try APIJSON.decoder.decode(Activity.self, from: agent.body).id == "agent-live-abc123")
+            #expect(!leaks(agent))
+            #expect(await rt.handle(request("POST", "/v1/hooks/live", body: #"{"agent":"live","session":"abc123","event":"end"}"#)).status == 204)
             // A timer shows as the activity with its id.
             let timer = await rt.handle(request("POST", "/v1/timer", body: #"{"seconds":60,"id":"live-abc123"}"#))
             #expect(timer.status == 422)

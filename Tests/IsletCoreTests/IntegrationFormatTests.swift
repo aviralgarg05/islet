@@ -98,6 +98,11 @@ import Testing
         #expect(err.state == .failure)
         #expect(try map("aider", #"{"event":"end","session":"s1"}"#) == .remove(id: "aider-s1"))
         #expect(try map("aider", #"{"event":"weird"}"#) == .ignore)
+        // An agent called "live" keeps out of the ids of Live Activities mirrored from the menu bar.
+        #expect(spec(try map("live", #"{"event":"start","session":"s1"}"#))?.id == "agent-live-s1")
+        #expect(spec(try map("x", #"{"agent":"Live-Coder","event":"start","session":"s1"}"#))?.id == "agent-live-coder-s1")
+        #expect(try map("live", #"{"event":"end","session":"s1"}"#) == .remove(id: "agent-live-s1"))
+        #expect(spec(try map("lively", #"{"event":"start","session":"s1"}"#))?.id == "lively-s1")
     }
 
     @Test func rejectsNonObjects() {

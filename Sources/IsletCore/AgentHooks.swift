@@ -197,7 +197,9 @@ public enum AgentHooks {
         let agent = (o["agent"] as? String) ?? provider
         let session = shortID(o["session"] as? String ?? o["session_id"] as? String)
         let slug = String(agent.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "-" }.prefix(24))
-        let id = "\(slug.isEmpty ? "agent" : slug)-\(session)"
+        var id = "\(slug.isEmpty ? "agent" : slug)-\(session)"
+        // An agent called "live" would get a mirrored Live Activity's id, which the API refuses.
+        if MenuBarLiveActivities.isMirrored(id: id) { id = "agent-" + id }
         let event = (o["event"] as? String ?? "").lowercased()
         let message = (o["message"] as? String).map { truncate($0, 70) }
         var spec = ActivitySpec(id: id, source: agent, title: (o["title"] as? String) ?? agent, subtitle: message, icon: .symbol("cpu"))
