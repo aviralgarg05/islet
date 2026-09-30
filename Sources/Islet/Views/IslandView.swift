@@ -453,6 +453,9 @@ struct CompactContentView: View {
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(tint)
                     .monospacedDigit()
+                    // Icon-only wings are too narrow for "100%" at full size; never wrap it.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
             }
         }
     }
