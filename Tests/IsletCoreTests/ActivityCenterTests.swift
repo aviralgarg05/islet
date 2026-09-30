@@ -47,6 +47,31 @@ let t0 = Date(timeIntervalSince1970: 1_800_000_000)
         #expect(!ActivityCenter.isValidID("é"))
     }
 
+    @Test func namespacedIDsAreValidAndStable() {
+        func id(_ s: String) -> String { ActivityCenter.namespacedID(s, prefix: "mcp-") }
+        #expect(id("migrate-db") == "mcp-migrate-db")
+        #expect(id("a:b.c_d") == "mcp-a:b.c_d")
+        // An id copied from list_activities isn't prefixed twice.
+        #expect(id("mcp-migrate-db") == "mcp-migrate-db")
+        #expect(id("mcp-") == "mcp-task")
+        // Letters outside ASCII would be refused by isValidID; the same text always gives the same id.
+        let texts = ["déploiement", "构建", "部署", "Ｂｕｉｌｄ", "a b/c?d", "🚀", String(repeating: "x", count: 150), String(repeating: "é", count: 200)]
+        for text in texts {
+            #expect(ActivityCenter.isValidID(id(text)), "\(text)")
+            #expect(id(text) == id(text))
+            // What list_activities shows finds the same activity.
+            #expect(id(id(text)) == id(text), "\(text)")
+        }
+        #expect(id("déploiement").hasPrefix("mcp-deploiement-"))
+        #expect(id("构建").hasPrefix("mcp-task-"))
+        #expect(id("构建") != id("部署"))
+        #expect(id("café") != id("cafe"))
+        // The same text whether its accents come composed or as combining marks.
+        #expect(id("caf\u{E9}") == id("cafe\u{301}"))
+        #expect(id("mcp-caf\u{E9}") == id("cafe\u{301}"))
+        #expect(id(String(repeating: "x", count: 150)) != id(String(repeating: "x", count: 151)))
+    }
+
     @Test func updateMergesFields() throws {
         var c = ActivityCenter()
         try c.apply(ActivitySpec(id: "a", title: "Deploy", subtitle: "step 1", tint: "blue"), now: t0)

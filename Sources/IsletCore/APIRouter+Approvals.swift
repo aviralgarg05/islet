@@ -23,8 +23,8 @@ extension APIRouter {
         }
         // The hook prints whatever comes back, so the activity JSON is never returned here.
         switch try? AgentHooks.map(provider: provider, payload: r.body, now: clock()) {
-        case .upsert(let spec): _ = try? await backend.applyActivity(spec)
-        case .remove(let id): _ = await backend.removeActivity(id: id)
+        case .upsert(let spec): _ = try? await apply(spec)
+        case .remove(let id): _ = try? await remove(id: id)
         case .ignore, nil: break
         }
         guard let request = ApprovalRequest.parse(provider: provider, payload: r.body) else { return .noContent }

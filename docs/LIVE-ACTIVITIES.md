@@ -36,11 +36,11 @@ Islet looks up the app name in its catalogue of apps with Live Activities, the s
 |---|---|---|---|
 | Show Live Activities from the menu bar | `mirrorMenuBarActivities` | On (needs Accessibility) | Mirror them into the island. |
 | Only when the notch hides them | `mirrorOnlyHiddenActivities` | Off | Mirror only the activities macOS has collapsed into the overflow, so nothing shows twice. |
-| Let scripts read them through the local API | `shareMirroredActivities` | Off | Include them in `GET /v1/activities` and `GET /v1/state`. They often hold addresses, names and scores, so they're left out unless you allow it. |
+| Let scripts read them through the local API | `shareMirroredActivities` | Off | Include them in `GET /v1/activities` and `GET /v1/state`. They often hold addresses, names and scores, so they're left out unless you allow it. The setting also shows their text in `isletctl debug menubar`. Either way, scripts and links can't change or remove them. |
 
 The last two appear once the first is on. Shared activities have `"source": "live-activity"` and an `id` starting with `live-`.
 
-The text Islet reads stays in memory. It isn't written to disk or logs. The sharing setting doesn't cover `GET /v1/debug/menubar` (what `isletctl debug menubar` uses): that endpoint always returns the text Islet can read from the menu bar, even with mirroring off. It still needs the API token.
+The text Islet reads stays in memory. It isn't written to disk or logs. `GET /v1/debug/menubar` (what `isletctl debug menubar` uses) needs the API token and returns the menu bar's layout even with mirroring off, but leaves out the text of Live Activities unless the sharing setting is on.
 
 ## Limits
 
@@ -56,6 +56,6 @@ isletctl debug menubar            # what Islet sees now, as JSON
 isletctl debug menubar --watch    # print each change until Ctrl-C
 ```
 
-Each item shows its position and width, whether it's hidden in the overflow, what Islet thinks it is (`liveActivity`, `systemItem`, `avControls`, `overflowButton`, `thirdParty` or `unknown`) and its text. Other apps' items appear in the JSON with only their bundle ID, position and width; `--watch` leaves them out. An empty list means Islet can't read the menu bar: Accessibility access is missing, or macOS builds the menu bar in a way Islet doesn't read.
+Each item shows its position and width, whether it's hidden in the overflow, what Islet thinks it is (`liveActivity`, `systemItem`, `avControls`, `overflowButton`, `thirdParty` or `unknown`) and its text. Other apps' items appear in the JSON with only their bundle ID, position and width; `--watch` leaves them out. An empty list means Islet can't read the menu bar: Accessibility access is missing, or macOS builds the menu bar in a way Islet doesn't read. The text of Live Activities, and of items Islet can't place, is only shown while **Let scripts read them through the local API** is on, so turn it on while you capture output for an issue.
 
 To try it without an iPhone, make a shortcut with one action, *Wait* 30 seconds, and run it from the Shortcuts menu bar item. From the iPhone, try a food delivery, a ride, a flight in Flighty or a live game in Apple Sports. If one doesn't look right, run `--watch` while it's live and include the output in an issue, after checking it for addresses and names you'd rather not post.

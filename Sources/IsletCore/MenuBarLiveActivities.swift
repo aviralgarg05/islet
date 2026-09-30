@@ -179,10 +179,36 @@ public enum MenuBarLiveActivities {
         return CharacterSet.decimalDigits.contains(first) || clockSeconds(in: s) != nil
     }
 
+    /// Every mirrored activity's id starts with this. Such ids, like `source`, belong to the
+    /// mirror: the API and the URL scheme can't create, change or remove them.
+    public static let idPrefix = "live-"
+
     public static func activityID(_ key: String) -> String {
         var h: UInt64 = 1469598103934665603
         for b in key.utf8 { h = (h ^ UInt64(b)) &* 1099511628211 }
-        return "live-\(String(h, radix: 36))"
+        return idPrefix + String(h, radix: 36)
+    }
+
+    public static func isMirrored(id: String) -> Bool { id.hasPrefix(idPrefix) }
+
+    /// Mirrored activities often hold addresses, names and scores, so scripts only read them
+    /// when the user shares them.
+    public static func isMirrored(_ activity: Activity) -> Bool {
+        activity.source == source || isMirrored(id: activity.id)
+    }
+
+    /// Menu bar items as diagnostics show them while mirrored activities aren't shared: the text
+    /// of Live Activities, and of items that might be ones, is left out.
+    public static func withoutActivityText(_ items: [MenuBarItemInfo]) -> [MenuBarItemInfo] {
+        items.map { item in
+            switch item.kind {
+            case .systemItem?, .avControls?, .overflowButton?, .thirdParty?: return item
+            case .liveActivity?, .unknown?, nil: break
+            }
+            var info = item
+            info.title = nil; info.description = nil; info.value = nil; info.help = nil; info.texts = []
+            return info
+        }
     }
 
     /// The live activity Islet shows for a mirrored item.

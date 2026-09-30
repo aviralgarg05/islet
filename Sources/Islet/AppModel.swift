@@ -886,12 +886,12 @@ extension Notification.Name {
 
 extension AppModel: IsletBackend {
     nonisolated func listActivities() async -> [Activity] {
-        await MainActor.run { self.sharedActivities }
+        await MainActor.run { self.activities }
     }
 
-    /// Activities as the API reports them: mirrored Live Activities only when the user allows it.
-    private var sharedActivities: [Activity] {
-        settings.shareMirroredActivities ? activities : activities.filter { $0.source != MenuBarLiveActivities.source }
+    /// The router leaves mirrored Live Activities out of what scripts read unless the user allows it.
+    nonisolated func sharesMirroredActivities() async -> Bool {
+        await MainActor.run { self.settings.shareMirroredActivities }
     }
 
     nonisolated func applyActivity(_ spec: ActivitySpec) async throws -> Activity {
@@ -955,7 +955,7 @@ extension AppModel: IsletBackend {
             return StateSnapshot(
                 version: Self.version,
                 presentation: String(describing: self.presentation(for: display)).components(separatedBy: "(").first ?? "",
-                activities: self.sharedActivities,
+                activities: self.activities,
                 nowPlaying: self.nowPlaying.map { NowPlayingSummary($0, now: Date()) },
                 battery: self.battery
             )

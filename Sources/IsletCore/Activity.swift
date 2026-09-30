@@ -284,6 +284,8 @@ public enum ActivityError: Error, Equatable, CustomStringConvertible {
     case invalidTint(String)
     case notFound(String)
     case invalidID(String)
+    /// A write to a Live Activity mirrored from the menu bar. The same whether or not it exists.
+    case mirrored
 
     public var description: String {
         switch self {
@@ -292,6 +294,8 @@ public enum ActivityError: Error, Equatable, CustomStringConvertible {
         case .invalidTint(let t): return "'tint' must be a hex color like #34C759 or a named color, got '\(t)'"
         case .notFound(let id): return "No activity with id '\(id)'"
         case .invalidID(let id): return "Invalid id '\(id)': use 1-128 characters from [A-Za-z0-9._:-]"
+        case .mirrored:
+            return "ids starting with '\(MenuBarLiveActivities.idPrefix)' and the source '\(MenuBarLiveActivities.source)' are kept for Live Activities mirrored from the menu bar, which scripts can't create, change or remove"
         }
     }
 }

@@ -98,6 +98,11 @@ import Testing
         #expect(err.state == .failure)
         #expect(try map("aider", #"{"event":"end","session":"s1"}"#) == .remove(id: "aider-s1"))
         #expect(try map("aider", #"{"event":"weird"}"#) == .ignore)
+        // An agent called "live" keeps out of the ids of Live Activities mirrored from the menu bar.
+        #expect(spec(try map("live", #"{"event":"start","session":"s1"}"#))?.id == "agent-live-s1")
+        #expect(spec(try map("x", #"{"agent":"Live-Coder","event":"start","session":"s1"}"#))?.id == "agent-live-coder-s1")
+        #expect(try map("live", #"{"event":"end","session":"s1"}"#) == .remove(id: "agent-live-s1"))
+        #expect(spec(try map("lively", #"{"event":"start","session":"s1"}"#))?.id == "lively-s1")
     }
 
     @Test func rejectsNonObjects() {
@@ -168,6 +173,19 @@ import Testing
         #expect(throws: URLCommand.ParseError.self) { try parse("islet://activity?id=x&actionTitle=Go&actionURL=shortcuts://run-shortcut?name=x") }
         guard case .activity(let n) = try parse("islet://notify?title=Hi&icon=file:/tmp/huge.png") else { return }
         #expect(n.icon == .symbol("bell.fill"))
+    }
+
+    @Test func urlSchemeCantReachMirroredLiveActivities() throws {
+        // A mirrored activity's id gets the url- prefix like any other, so it's never touched.
+        guard case .activity(let s) = try parse("islet://activity?id=live-abc123&title=x") else {
+            Issue.record("expected activity"); return
+        }
+        #expect(s.id == "url-live-abc123")
+        #expect(try parse("islet://dismiss?id=live-abc123") == .dismiss(id: "url-live-abc123"))
+        #expect(try parse("islet://remove?id=live-abc123") == .dismiss(id: "url-live-abc123"))
+        // Nor can a link pass itself off as one.
+        #expect(throws: URLCommand.ParseError.invalid("source", "live-activity")) { try parse("islet://activity?id=x&title=x&source=live-activity") }
+        #expect(throws: URLCommand.ParseError.invalid("source", "live-activity")) { try parse("islet://notify?title=x&source=live-activity") }
     }
 
     @Test func misc() throws {

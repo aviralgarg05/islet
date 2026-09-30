@@ -46,9 +46,32 @@ public struct ActivityCenter: Sendable {
 
     public static func isValidID(_ id: String) -> Bool {
         guard (1...128).contains(id.count) else { return false }
-        return id.unicodeScalars.allSatisfy { c in
-            CharacterSet.alphanumerics.contains(c) && c.isASCII || "._:-".unicodeScalars.contains(c)
+        return id.unicodeScalars.allSatisfy(isIDCharacter)
+    }
+
+    /// ASCII letters and digits, and `._:-`.
+    static func isIDCharacter(_ c: Unicode.Scalar) -> Bool {
+        CharacterSet.alphanumerics.contains(c) && c.isASCII || "._:-".unicodeScalars.contains(c)
+    }
+
+    /// A valid id under `prefix` (a few characters) made from any text, the same every time for
+    /// the same text. Text that already starts with `prefix` isn't prefixed again, so an id read
+    /// back from the API finds the same activity. Accents are dropped ("café" gives "cafe"), and
+    /// when anything else had to change, a short hash of the text keeps different ids apart.
+    public static func namespacedID(_ raw: String, prefix: String) -> String {
+        // Composed first: "é" typed and "é" from a file name compare equal but differ in bytes.
+        let text = (raw.hasPrefix(prefix) ? String(raw.dropFirst(prefix.count)) : raw).precomposedStringWithCanonicalMapping
+        let folded = text.folding(options: [.diacriticInsensitive, .widthInsensitive], locale: nil)
+        var body = String(String.UnicodeScalarView(folded.unicodeScalars.filter(isIDCharacter)))
+        let limit = 100
+        if body != text || body.count > limit {
+            // FNV-1a rather than `hashValue`, which changes from one process to the next.
+            var h: UInt64 = 1469598103934665603
+            for b in text.utf8 { h = (h ^ UInt64(b)) &* 1099511628211 }
+            let hash = String(h, radix: 36)
+            body = String((body.isEmpty ? "task" : body).prefix(limit - hash.count - 1)) + "-" + hash
         }
+        return prefix + (body.isEmpty ? "task" : body)
     }
 
     /// Normalise progress: negative = indeterminate, (1, 100] is treated as a percentage.
