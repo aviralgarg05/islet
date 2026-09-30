@@ -27,7 +27,7 @@ Islet looks up the app name in its catalogue of apps with Live Activities, the s
 
 - A match gives the activity that app's symbol, brand colour and template: `eta` for Uber, `flight` for Flighty, `score` for Apple Sports. A brand colour too dark to read on the black island is lightened, keeping its hue (black and near-greys become white).
 - Without a match, the symbol and colour come from keywords in the text (the rules smart icons use), or else a generic symbol in white. The template is then `timer` when Islet has worked out a running clock, and the generic `progress` otherwise.
-- The last part of the text, when it's 8 characters or fewer ("4 min", "2-1"), becomes the activity's `trailing` value for the right-hand wing. While Islet animates a clock, the wing shows the time from that instead.
+- The last part of the text, when it's 8 characters or fewer ("4 min", "2-1"), becomes the activity's `trailing` value for the right-hand wing. When it's longer, the wing is cleared rather than keeping an older value, and when the text is gone the subtitle goes too. While Islet animates a clock, the wing shows the time from that instead, and once the text shows no time the clock stops.
 - A new activity gets a sneak peek. Later changes to it don't.
 
 ## Settings

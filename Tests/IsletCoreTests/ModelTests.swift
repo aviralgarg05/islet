@@ -150,6 +150,105 @@ import Testing
         a.clear(.browser)
         #expect(a.current(now: t0) == nil)
     }
+
+    @Test func pausedPlayerHasADeadline() {
+        var a = MediaArbiter(pausedTimeout: 60)
+        #expect(a.nextDeadline(now: t0) == nil)
+        a.update(np(.spotify, "s", playing: true, at: 0))
+        // Playing never times out.
+        #expect(a.nextDeadline(now: t0) == nil)
+        a.update(np(.spotify, "s", playing: false, at: 10))
+        a.update(np(.browser, "b", playing: false, at: 5))
+        #expect(a.nextDeadline(now: t0.addingTimeInterval(10)) == t0.addingTimeInterval(65))
+        // The timer was replaced just before it fired: the overdue player is due at once, not skipped.
+        #expect(a.nextDeadline(now: t0.addingTimeInterval(66)) == t0.addingTimeInterval(66))
+        a.expire(now: t0.addingTimeInterval(66))
+        #expect(a.nextDeadline(now: t0.addingTimeInterval(66)) == t0.addingTimeInterval(70))
+        a.expire(now: t0.addingTimeInterval(70))
+        #expect(a.nextDeadline(now: t0.addingTimeInterval(70)) == nil)
+    }
+
+    @Test func expireForgetsTimedOutPausedPlayers() {
+        var a = MediaArbiter(pausedTimeout: 60)
+        a.update(np(.spotify, "s", playing: false, at: 0))
+        a.update(np(.appleMusic, "m", playing: true, at: 0))
+        let early = a.expire(now: t0.addingTimeInterval(59))
+        #expect(!early)
+        #expect(a.current(now: t0.addingTimeInterval(59))?.title == "m")
+        let due = a.expire(now: t0.addingTimeInterval(60))
+        #expect(due)
+        #expect(a.snapshots[.spotify] == nil)
+        #expect(a.snapshots[.appleMusic] != nil)
+        let playing = a.expire(now: t0.addingTimeInterval(600))
+        #expect(!playing)
+        // Forgetting the only player is reported, so the app takes the track down at once.
+        var b = MediaArbiter(pausedTimeout: 60)
+        b.update(np(.spotify, "s", playing: false, at: 0))
+        let forgotten = b.expire(now: t0.addingTimeInterval(60))
+        #expect(forgotten)
+        #expect(b.current(now: t0.addingTimeInterval(60)) == nil)
+    }
+
+    @Test func switchedOffPlayerIsHiddenWhicheverPathReportsIt() {
+        func bridge(_ bundle: String, _ title: String) -> NowPlaying {
+            var s = np(.system, title, playing: true, at: 0)
+            s.bundleID = bundle
+            return s
+        }
+        #expect(MediaSourceKind.player(bundleID: "com.apple.Music") == .appleMusic)
+        #expect(MediaSourceKind.player(bundleID: "com.spotify.client") == .spotify)
+        #expect(MediaSourceKind.player(bundleID: "com.apple.podcasts") == nil)
+        #expect(MediaSourceKind.player(bundleID: nil) == nil)
+
+        var a = MediaArbiter(disabled: [.appleMusic])
+        a.update(bridge("com.apple.Music", "Song"))
+        #expect(a.current(now: t0) == nil)
+        a.update(np(.appleMusic, "Song", playing: true, at: 0))
+        #expect(a.current(now: t0) == nil)
+        a.disabled = [.spotify]
+        #expect(a.current(now: t0)?.title == "Song")
+
+        var s = MediaArbiter(disabled: [.spotify])
+        s.update(bridge("com.spotify.client", "Track"))
+        #expect(s.current(now: t0) == nil)
+        // Other apps still come through the bridge.
+        s.update(bridge("com.apple.podcasts", "Episode"))
+        #expect(s.current(now: t0)?.title == "Episode")
+
+        // Music and Spotify aren't "Other apps": switching that off leaves them alone, and hides the rest.
+        var o = MediaArbiter(disabled: [.system])
+        o.update(bridge("com.apple.Music", "Song"))
+        #expect(o.current(now: t0)?.title == "Song")
+        o.update(bridge("com.apple.podcasts", "Episode"))
+        #expect(o.current(now: t0) == nil)
+        // A browser keeps its own switch.
+        var w = MediaArbiter(disabled: [.browser])
+        var video = np(.browser, "Video", playing: true, at: 0)
+        video.bundleID = "com.apple.Safari"
+        w.update(video)
+        #expect(w.current(now: t0) == nil)
+        #expect(MediaArbiter.setting(for: video) == .browser)
+    }
+}
+
+@Suite struct ClipboardHistoryTests {
+    @Test func loweringTheLimitTrimsAtOnce() {
+        var h = ClipboardHistory(limit: 5)
+        for (i, text) in ["one", "two", "three", "four", "five"].enumerated() {
+            h.add(text, types: [], sourceBundleID: nil, now: t0.addingTimeInterval(Double(i)))
+        }
+        let oldest = h.entries.last!.id
+        h.togglePin(id: oldest)
+        h.limit = 2
+        // The newest unpinned entry and the pinned one stay; nothing waits for the next copy.
+        #expect(h.entries.map(\.text) == ["five", "one"])
+        h.limit = 10
+        #expect(h.entries.count == 2)
+        // The smallest limit is 1, and a pinned entry outlasts newer unpinned ones.
+        h.limit = 0
+        #expect(h.limit == 1)
+        #expect(h.entries.map(\.text) == ["one"])
+    }
 }
 
 @Suite struct PresenterTests {

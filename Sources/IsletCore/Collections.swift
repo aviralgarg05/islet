@@ -18,7 +18,13 @@ public struct ClipboardEntry: Codable, Equatable, Sendable, Identifiable {
 /// passwords copied from password managers are never recorded.
 public struct ClipboardHistory: Codable, Equatable, Sendable {
     public private(set) var entries: [ClipboardEntry] = []
-    public var limit: Int
+    /// Lowering it drops the oldest unpinned entries straight away, not at the next copy.
+    public var limit: Int {
+        didSet {
+            if limit < 1 { limit = 1 }
+            trim()
+        }
+    }
 
     /// Pasteboard types that mark content as secret or throwaway (nspasteboard.org).
     public static let ignoredTypes: Set<String> = [

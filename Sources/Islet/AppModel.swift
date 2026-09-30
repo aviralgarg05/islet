@@ -223,7 +223,11 @@ final class AppModel {
             let look = LiveActivityCatalog.look(for: m.appName).map { ($0.symbol, $0.tint) }
             let clock = mirrorClock.update(key: m.key, detail: m.detail, now: now)
             let spec = MenuBarLiveActivities.activity(for: m, look: look, isNew: !mirroredKeys.contains(m.key), clock: clock)
-            mirroredActivityKeys[MenuBarLiveActivities.activityID(m.key)] = m.key
+            let id = MenuBarLiveActivities.activityID(m.key)
+            mirroredActivityKeys[id] = m.key
+            // A spec can't clear a date: once the item shows no time at all, stop the clock Islet
+            // animated, or the wing would keep counting.
+            if m.detail.flatMap(MenuBarLiveActivities.clockSeconds(in:)) == nil { center.clearClock(id: id) }
             _ = try? applyLocal(spec)
         }
         mirroredKeys = keys
@@ -520,8 +524,10 @@ final class AppModel {
     private func reschedule() {
         deadlineTimer?.invalidate()
         deadlineTimer = nil
+        let now = Date()
         var candidates: [Date] = []
-        if let d = center.nextDeadline(now: Date()) { candidates.append(d) }
+        if let d = center.nextDeadline(now: now) { candidates.append(d) }
+        if let d = media.nextDeadline(now: now) { candidates.append(d) }
         if let b = batteryEvent { candidates.append(b.until) }
         guard let next = candidates.min() else { return }
         let t = Timer(fire: next.addingTimeInterval(0.01), interval: 0, repeats: false) { [weak self] _ in
@@ -536,6 +542,11 @@ final class AppModel {
         let now = Date()
         center.expire(now: now)
         if let b = batteryEvent, b.until <= now { batteryEvent = nil }
+        // A paused player timed out: show whatever is left, or nothing.
+        if media.expire(now: now) {
+            let next = media.current(now: now)
+            if next != nowPlaying { nowPlaying = next }
+        }
         tick &+= 1
         reschedule()
     }
@@ -609,6 +620,7 @@ final class AppModel {
         if let np { media.update(np) } else { media.clear(source) }
         let next = media.current(now: Date())
         if next != nowPlaying { nowPlaying = next }
+        reschedule()
     }
 
     private func pluginFinished(_ r: PluginResult) {
