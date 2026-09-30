@@ -157,7 +157,8 @@ extension AppModel {
             RunLoop.main.add(t, forMode: .common)
             controls.awakeTimer = t
         }
-        if !settings.batteryEnabled, controls.awakeBattery == nil {
+        // Its own watcher: the battery module's monitor only runs if the module was on at launch.
+        if controls.awakeBattery == nil {
             let monitor = BatteryMonitor()
             monitor.onChange = { [weak self] s in self?.keepAwakeBatteryChanged(s) }
             monitor.start()

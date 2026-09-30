@@ -36,6 +36,6 @@ final class IslandControls {
     var awake: KeepAwakeSession?
     @ObservationIgnored let assertion = PowerAssertion()
     @ObservationIgnored var awakeTimer: Timer?
-    /// Watches the battery for the low-battery release when the battery module is off.
+    /// Watches the battery for the low-battery release while keep awake is on.
     @ObservationIgnored var awakeBattery: BatteryMonitor?
 }

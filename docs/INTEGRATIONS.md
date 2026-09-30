@@ -101,13 +101,13 @@ Two-finger swipes on the island work without any permission: Islet reads the scr
 | Left / right | music, closed or on the Home tab | next / previous track, or 10 s forward / back |
 | Left / right | a closed activity | show the next / previous activity, from the bubbles beside the notch |
 
-A swipe fires once per flick, after about 24 pt of travel within a quarter of a second, so scrolling past the notch or the momentum of an earlier scroll doesn't trigger it. Directions follow your *Natural scrolling* setting. Each swipe can be turned off in *Settings → General → Gestures*.
+A swipe fires once per flick, after about 24 pt of travel within a quarter of a second, so scrolling past the notch or the momentum of an earlier scroll doesn't trigger it. Directions are the way your fingers move, whatever your *Natural scrolling* setting. Each swipe can be turned off in *Settings → General → Gestures*.
 
 ---
 
 ## Keep awake
 
-The cup in the open island's header keeps the Mac awake for 15 minutes, 1 or 2 hours, or until you turn it off. A live activity counts down in the notch. It turns itself off on battery below 20%.
+The cup in the open island's header keeps the Mac awake for 15 minutes, 1 or 2 hours, or until you turn it off. A live activity counts down in the notch. It turns itself off on battery below 20%, and won't start then.
 
 | From | Use |
 |---|---|

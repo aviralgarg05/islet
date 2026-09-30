@@ -74,6 +74,9 @@ struct MediaScrubber: View {
                     model.controls.holdsOpen = false
                     preview = nil
                     model.seek(to: MediaSeek.position(fraction: f, duration: duration))
+                } onCancel: {
+                    model.controls.holdsOpen = false
+                    preview = nil
                 }
                 .accessibilityLabel("Playback position")
                 .accessibilityValue(Format.clock(pos))
@@ -99,6 +102,9 @@ struct ScrubBar: View {
     var height: CGFloat = 4
     var onChange: (Double) -> Void
     var onEnd: (Double) -> Void
+    /// The bar went away mid-drag (the island closed, the track lost its length). SwiftUI
+    /// doesn't end the drag then, so this is the only chance to undo what `onChange` started.
+    var onCancel: () -> Void = {}
     @ViewState private var dragging = false
     @ViewState private var hovering = false
     @ViewState private var last: Double?
@@ -126,6 +132,12 @@ struct ScrubBar: View {
         }
         .frame(height: 14)
         .onHover { hovering = $0 }
+        .onDisappear {
+            guard dragging else { return }
+            dragging = false
+            last = nil
+            onCancel()
+        }
         .animation(.snappy(duration: 0.15), value: dragging || hovering)
     }
 }
@@ -225,6 +237,8 @@ struct SoundControls: View {
             } onEnd: { v in
                 c.holdsOpen = false
                 model.setVolume(v)
+            } onCancel: {
+                c.holdsOpen = false
             }
                 .accessibilityLabel("Volume")
                 .accessibilityValue("\(Int((c.volume * 100).rounded()))%")

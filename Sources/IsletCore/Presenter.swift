@@ -58,7 +58,9 @@ public enum Presenter {
 
         let ordered = i.center.ordered(now: i.now)
         let others = max(0, ordered.count - 1)
-        if let id = i.focusedActivityID, let focused = ordered.first(where: { $0.id == id }) {
+        // A swiped-to activity stays forward, except over a critical one (a critical battery warning, say).
+        if let id = i.focusedActivityID, let focused = ordered.first(where: { $0.id == id }),
+           focused.priority >= .critical || (ordered.first?.priority ?? .low) < .critical {
             return .compact(.activity(focused, others: others))
         }
         if let top = ordered.first, top.priority >= .high {

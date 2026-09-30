@@ -279,6 +279,15 @@ private func track(elapsed: Double? = 60, duration: Double? = 200, playing: Bool
         inputs.isExpanded = true
         #expect(Presenter.present(inputs) == .expanded)
     }
+
+    @Test func aCriticalActivityIsNotHiddenByTheSwipedOne() throws {
+        var c = ActivityCenter()
+        try c.apply(ActivitySpec(id: "build", title: "Build", sneak: false), now: t0)
+        try c.apply(ActivitySpec(id: "battery-low", title: "Battery at 4%", priority: .critical, sneak: false), now: t0)
+        let inputs = PresenterInputs(now: t0, center: c, focusedActivityID: "build")
+        guard case .compact(.activity(let shown, _)) = Presenter.present(inputs) else { Issue.record("expected activity"); return }
+        #expect(shown.id == "battery-low")
+    }
 }
 
 @Suite struct KeepAwakeTests {
@@ -457,8 +466,9 @@ private func track(elapsed: Double? = 60, duration: Double? = 200, playing: Bool
     @Test func oldHapticsSwitchIsMigrated() {
         #expect(IsletSettings.decodeLenient(Data(#"{"hapticFeedback": false}"#.utf8)).hapticsMode == .off)
         #expect(IsletSettings.decodeLenient(Data(#"{"hapticFeedback": true}"#.utf8)).hapticsMode == .direct)
-        // An explicit hapticsMode wins over the old key.
-        #expect(IsletSettings.decodeLenient(Data(#"{"hapticFeedback": false, "hapticsMode": "all"}"#.utf8)).hapticsMode == .all)
+        // Configs saved by older versions carry both keys; the old switch turned haptics off whatever the mode said.
+        #expect(IsletSettings.decodeLenient(Data(#"{"hapticFeedback": false, "hapticsMode": "direct"}"#.utf8)).hapticsMode == .off)
+        #expect(IsletSettings.decodeLenient(Data(#"{"hapticFeedback": true, "hapticsMode": "all"}"#.utf8)).hapticsMode == .all)
         // The old key is not written back.
         let saved = String(decoding: (try? JSONEncoder().encode(IsletSettings())) ?? Data(), as: UTF8.self)
         #expect(!saved.contains("hapticFeedback"))

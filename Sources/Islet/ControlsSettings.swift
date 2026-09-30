@@ -21,7 +21,7 @@ struct GestureSettingsSection: View {
                 Toggle("Swipe sideways over activities to switch between them", isOn: $model.settings.swipeCyclesActivities)
             }
             .disabled(!model.settings.gesturesEnabled)
-            Text("Swipe left for next, right for previous. Follows your scroll direction setting.")
+            Text("Swipe left for next, right for previous. Directions are the way your fingers move, whatever your scroll direction setting.")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -39,7 +39,7 @@ struct BatteryAlertSettingsSection: View {
                 ForEach(Self.levels([10, 15, 20, 25, 30, 40, 50], keeping: low), id: \.self) { Text("\($0)%").tag($0) }
             }
             Picker("Critical warning", selection: $model.settings.batteryCriticalThreshold) {
-                ForEach(Self.levels([3, 5, 8, 10, 15].filter { $0 < low }, keeping: critical), id: \.self) { Text("\($0)%").tag($0) }
+                ForEach(Self.levels(Self.criticalPresets.filter { $0 < low }, keeping: critical), id: \.self) { Text("\($0)%").tag($0) }
             }
             Picker("Tell me when charged to", selection: $model.settings.batteryChargedAlert) {
                 Text("Off").tag(0)
@@ -49,7 +49,15 @@ struct BatteryAlertSettingsSection: View {
                 .font(.caption).foregroundStyle(.secondary)
         }
         .disabled(!model.settings.batteryEnabled)
+        .onChange(of: low) { _, newLow in
+            // The critical warning must stay below the low one (the config file clamps it the same way).
+            if model.settings.batteryCriticalThreshold >= newLow {
+                model.settings.batteryCriticalThreshold = Self.criticalPresets.last { $0 < newLow } ?? max(1, newLow - 1)
+            }
+        }
     }
+
+    static let criticalPresets = [3, 5, 8, 10, 15]
 
     /// The preset levels plus the current value, so a hand-edited config still shows.
     static func levels(_ presets: [Int], keeping current: Int) -> [Int] {

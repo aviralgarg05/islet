@@ -265,8 +265,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         }
         guard let d = try? JSONSerialization.data(withJSONObject: merged),
               var s = try? decoder.decode(IsletSettings.self, from: d) else { return IsletSettings() }
-        // Older configs switched haptics off with `hapticFeedback: false`; `hapticsMode` replaced it.
-        if user["hapticFeedback"] as? Bool == false, user["hapticsMode"] == nil { s.hapticsMode = .off }
+        // Older configs switched haptics off with `hapticFeedback: false`, whatever `hapticsMode` said
+        // (the app wrote both keys). `hapticsMode` replaced it, and the old key isn't written back.
+        if user["hapticFeedback"] as? Bool == false { s.hapticsMode = .off }
         return s.sanitized()
     }
 

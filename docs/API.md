@@ -117,7 +117,7 @@ curl -s -X POST http://127.0.0.1:47831/v1/awake -H "Authorization: Bearer $TOKEN
 
 - A new request replaces the current one; `DELETE` ends it early.
 - While it's on, a live activity with a cup icon counts down (or shows "On" when it has no end), with a **Turn Off** button.
-- On battery below 20% it turns itself off, and it never outlives Islet: quitting releases it.
+- On battery below 20% it turns itself off (and a new request is refused: the reply says `"active": false`). It never outlives Islet: quitting releases it.
 - `minutes` outside 0–1440 gets a `422`.
 
 ### Local-network bridge (iPhone Shortcuts)
