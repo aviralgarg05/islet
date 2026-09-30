@@ -283,7 +283,7 @@ struct TimerChip: View {
         }
         .buttonStyle(ChipButtonStyle(tint: tint))
         .help(help)
-        .accessibilityLabel(label ?? help)
+        .accessibilityLabel(help)
     }
 }
 
