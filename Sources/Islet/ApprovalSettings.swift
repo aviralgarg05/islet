@@ -26,7 +26,7 @@ struct ApprovalSettingsRows: View {
                 Text(status).font(.caption).foregroundStyle(.secondary)
             }
         }
-        Text("Permission requests, questions and plans from Claude Code, Codex and Cursor appear as a card in the notch. Risky commands need a second click. Unanswered cards go back to the terminal. For Codex, add the hook from the docs and trust it once with /hooks.")
+        Text("Permission requests, questions and plans from Claude Code, Codex and Cursor appear as a card in the notch. Risky commands need a second click. Unanswered cards go back to the terminal. After changing the wait, install again so Claude Code waits as long. For Codex, add the hook from the docs and trust it once with /hooks.")
             .font(.caption)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
@@ -55,7 +55,7 @@ struct ApprovalSettingsRows: View {
                 confirming = true
             }
         } catch {
-            status = String(describing: error)
+            status = Self.message(for: error)
         }
     }
 
@@ -64,8 +64,13 @@ struct ApprovalSettingsRows: View {
             let p = try ClaudeHookSetup.install(executable: executable, wait: wait)
             status = p.isUpToDate ? "Already installed." : "Installed. New Claude Code sessions use it."
         } catch {
-            status = String(describing: error)
+            status = Self.message(for: error)
         }
+    }
+
+    /// The installer's own errors read as sentences; anything else (permissions, disk) as the system says it.
+    static func message(for error: Error) -> String {
+        (error as? ClaudeHookInstaller.InstallError)?.description ?? error.localizedDescription
     }
 
     static func label(_ seconds: Double) -> String {

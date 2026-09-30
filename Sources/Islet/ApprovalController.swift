@@ -21,8 +21,12 @@ final class ApprovalController {
     @ObservationIgnored private var showWork: DispatchWorkItem?
     /// Island state to put back when the last card goes; set while cards hold the island open.
     @ObservationIgnored private var restore: (wasOpen: Bool, pinned: Bool)?
+    /// The card on top and when it got there. Clicks just after a card appears are ignored, so
+    /// the second click of a double-click can't answer the next card before it has been seen.
+    @ObservationIgnored private var front: (id: String?, since: Date) = (nil, .distantPast)
 
     static let arrivalDelay: TimeInterval = 0.25
+    static let clickGuard: TimeInterval = 0.5
 
     init(model: AppModel) {
         self.model = model
@@ -67,7 +71,7 @@ final class ApprovalController {
 
     /// The user's answer from the card.
     func decide(_ decision: ApprovalDecision, for entry: ApprovalQueue.Entry) {
-        guard waiters[entry.id] != nil else { return }
+        guard waiters[entry.id] != nil, Date().timeIntervalSince(front.since) >= Self.clickGuard else { return }
         Haptics.play(.tap)
         if decision == .terminal { TerminalJump.jump(entry.request.terminal) }
         if let status = entry.request.statusUpdate(after: decision) { _ = try? model.applyLocal(status) }
@@ -94,17 +98,24 @@ final class ApprovalController {
     }
 
     /// Opens the island (without the hover haptic: nobody asked for it) and keeps it open.
-    /// Where the island is out of the way (a fullscreen app, a per-app rule), the card waits
-    /// for the island to be opened by hand instead.
+    /// Where the island can't be seen (a fullscreen app, a per-app rule, no island display),
+    /// the requests go back to the terminal at once: the hook blocks the agent, and a card
+    /// nobody can see would hold it up for the whole wait.
     private func showCard() {
         showWork = nil
         guard !queue.isEmpty else { return }
         presented = true
+        noteFront()
         if model.expandedScreen == nil {
-            guard let display = Self.islandDisplay(model.settings), model.presentation(for: display) != .hidden else { return }
+            guard let display = Self.islandDisplay(model.settings), model.presentation(for: display) != .hidden else {
+                for id in queue.entries.map(\.id) { finish(id, with: nil) }
+                return
+            }
             if restore == nil { restore = (false, model.pinned) }
             model.pinned = true
             model.expandedScreen = display
+            // The island opens under whatever the pointer is doing: guard against a stray click.
+            front.since = Date()
             NotificationCenter.default.post(name: .isletLayoutChanged, object: nil)
         } else {
             if restore == nil { restore = (true, model.pinned) }
@@ -112,7 +123,14 @@ final class ApprovalController {
         }
     }
 
+    /// Restarts the click guard when a different card comes to the top.
+    private func noteFront() {
+        let id = current?.id
+        if id != front.id { front = (id, Date()) }
+    }
+
     private func queueChanged() {
+        noteFront()
         guard queue.isEmpty else { return }
         showWork?.cancel()
         showWork = nil

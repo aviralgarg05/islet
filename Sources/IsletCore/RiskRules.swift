@@ -106,6 +106,12 @@ public enum RiskRules {
         case "npm", "pnpm", "yarn", "cargo", "twine", "gem":
             let sub = args.first { !$0.hasPrefix("-") }
             return sub == "publish" || sub == "upload" || (name == "gem" && sub == "push") ? ["Publishes a package"] : nil
+        case "cp", "mv", "ln", "install", "rsync":
+            // The destination is the last operand.
+            let operands = args.filter { !$0.hasPrefix("-") }
+            guard operands.count >= 2, let cwd, let target = operands.last, isAbsoluteish(target),
+                  !isInside(target, cwd, home: home), !isTemporary(target, home: home) else { return nil }
+            return [outside]
         case "terraform":
             return args.first == "destroy" ? ["Deletes cloud resources"] : nil
         case "kubectl":
@@ -156,15 +162,18 @@ public enum RiskRules {
         }
     }
 
-    /// Wrappers that run the command after their own options.
+    /// Wrappers that run the command after their own options, and shell keywords that come
+    /// before a command (`for …; do rm -rf …`, `if …; then sudo …`).
     static let wrappers: [String: Set<String>] = [
         "sudo": ["-u", "-g", "-C", "-h", "-p", "-U"], "doas": ["-u", "-C"], "env": ["-u", "-S", "-P"],
         "xargs": ["-I", "-n", "-P", "-L", "-s", "-E", "-d", "-J"], "nice": ["-n"], "nohup": [], "time": [],
         "command": [], "exec": [], "caffeinate": ["-t", "-w"], "watch": ["-n"],
+        "if": [], "then": [], "else": [], "elif": [], "do": [], "while": [], "until": [], "!": [],
     ]
 
     /// Positions in a simple command where a program name stands: the first word after any
-    /// `VAR=value`, after wrappers such as `sudo` or `xargs`, after `sh -c` and after `find -exec`.
+    /// `VAR=value`, after wrappers such as `sudo` or `xargs`, after shell keywords such as `do`,
+    /// after `sh -c` and after `find -exec`.
     static func commandStarts(_ seg: [String]) -> [Int] {
         func isAssignment(_ t: String) -> Bool { t.range(of: #"^[A-Za-z_][A-Za-z0-9_]*="#, options: .regularExpression) != nil }
         var starts: [Int] = []

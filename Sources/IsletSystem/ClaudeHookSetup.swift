@@ -14,7 +14,8 @@ public enum ClaudeHookSetup {
     }
 
     /// Merges the hooks into the file and returns what changed. The previous file is kept as
-    /// `settings.json.bak`. A symlinked file (dotfiles) is written through the link.
+    /// `settings.json.bak`. A symlinked file (dotfiles) is written through the link, and the
+    /// file keeps its permissions (it can hold keys in `env`, so it may be private).
     @discardableResult
     public static func install(at url: URL = settingsURL, executable: String, wait: Int) throws -> ClaudeHookInstaller.Plan {
         let target = url.resolvingSymlinksInPath()
@@ -22,12 +23,30 @@ public enum ClaudeHookSetup {
         guard !plan.isUpToDate else { return plan }
         let fm = FileManager.default
         try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var permissions: NSNumber?
         if fm.fileExists(atPath: target.path) {
+            permissions = try fm.attributesOfItem(atPath: target.path)[.posixPermissions] as? NSNumber
             let backup = target.appendingPathExtension("bak")
             try? fm.removeItem(at: backup)
             try fm.copyItem(at: target, to: backup)
         }
-        try plan.merged.write(to: target, options: .atomic)
+        if let permissions {
+            // An atomic write would replace the file with one made with default permissions, so
+            // write a sibling that already has the old permissions, then rename it into place.
+            let temp = target.deletingLastPathComponent().appendingPathComponent(".\(target.lastPathComponent).\(UUID().uuidString)")
+            guard fm.createFile(atPath: temp.path, contents: nil, attributes: [.posixPermissions: permissions]) else {
+                throw CocoaError(.fileWriteNoPermission, userInfo: [NSFilePathErrorKey: temp.path])
+            }
+            do {
+                try plan.merged.write(to: temp)
+                guard rename(temp.path, target.path) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            } catch {
+                try? fm.removeItem(at: temp)
+                throw error
+            }
+        } else {
+            try plan.merged.write(to: target, options: .atomic)
+        }
         return plan
     }
 

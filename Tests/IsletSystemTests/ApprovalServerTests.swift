@@ -196,6 +196,20 @@ private let permission = #"""
         #expect(try Data(contentsOf: real.appendingPathExtension("bak")) == original)
     }
 
+    @Test func keepsThePermissionsOfAPrivateFile() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("settings.json")
+        let fm = FileManager.default
+        #expect(fm.createFile(atPath: url.path, contents: Data(#"{"env":{"API_KEY":"x"}}"#.utf8), attributes: [.posixPermissions: 0o600]))
+        let plan = try ClaudeHookSetup.install(at: url, executable: "isletctl", wait: 300)
+        #expect(try Data(contentsOf: url) == plan.merged)
+        #expect((try fm.attributesOfItem(atPath: url.path)[.posixPermissions] as? NSNumber)?.intValue == 0o600)
+        #expect((try fm.attributesOfItem(atPath: url.path + ".bak")[.posixPermissions] as? NSNumber)?.intValue == 0o600)
+        // Nothing is left behind next to it.
+        #expect(try fm.contentsOfDirectory(atPath: dir.path).sorted() == ["settings.json", "settings.json.bak"])
+    }
+
     @Test func leavesBrokenFilesAlone() throws {
         let dir = try tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }

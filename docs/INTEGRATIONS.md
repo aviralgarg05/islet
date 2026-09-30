@@ -60,9 +60,9 @@ Claude Code, Codex and Cursor can ask you in the island instead of the terminal:
 | **Deny** | Denied, with a short message so the agent knows you said no |
 | **Terminal** | No answer: the agent asks in the terminal as usual, and Islet brings that terminal forward |
 
-Questions show their options as buttons. When a question takes several answers, tick them and press **Send**. Plans show the Markdown with **Approve** and **Keep planning**. With more requests waiting, the card shows **+N** and they come one at a time. The chevron hides the card; it comes back when you open the island. While the island is hidden for a fullscreen app, the card waits for you to open the island.
+Questions show their options as buttons. When a question takes several answers, tick them and press **Send**. Plans show the Markdown with **Approve** and **Keep planning**. With more requests waiting, the card shows **+N** and they come one at a time. The chevron hides the card; it comes back when you open the island. While the island is hidden (a fullscreen app, or a rule for the app in front), requests go straight back to the terminal instead of waiting where you can't see them.
 
-**Risky commands.** Commands are checked against a list of patterns: `rm -rf`, `sudo`, `git push --force`, `git reset --hard`, `git clean -f`, `curl … | sh`, `chmod 777`, `dd` to a disk, `mkfs`, `diskutil erase…`, `npm publish`, `DROP TABLE`, writes outside the project folder, files that often hold secrets, and a few more. A match is shown in orange above the command, **Allow** then needs a second click (or a press and hold), and **Always** is hidden. The rules only add friction; they never block anything.
+**Risky commands.** Commands are checked against a list of patterns: `rm -rf`, `sudo`, `git push --force`, `git reset --hard`, `git clean -f`, `curl … | sh`, `chmod 777`, `dd` to a disk, `mkfs`, `diskutil erase…`, `npm publish`, `DROP TABLE`, writes, copies and moves outside the project folder, files that often hold secrets, and a few more. A match is shown in orange above the command, **Allow** then needs a second click (or a press and hold), and **Always** is hidden. The rules only add friction; they never block anything.
 
 **Claude Code:** Settings → Integrations → **Install for Claude Code…** lists the hooks it will add to `~/.claude/settings.json` and asks before writing. Your own hooks and settings stay as they are, and the previous file is kept as `settings.json.bak`. Running it again changes nothing. To do it by hand, merge [`integrations/claude-code/settings.json`](../integrations/claude-code/settings.json). Next to the status hooks it adds:
 
@@ -86,7 +86,7 @@ Cards clear themselves when a later event shows the question is settled: the too
 
 **Back to the terminal.** The hook records where the agent runs: `TERM_PROGRAM`, `__CFBundleIdentifier`, the tmux, WezTerm, kitty and Zellij pane variables, and the terminal device. The window button on the card, and **Terminal**, bring that app forward if it's running and select the tmux pane (or WezTerm pane). This needs no Automation permission. Individual iTerm2 and Terminal tabs are not selected.
 
-Settings → Integrations → Coding agents has **Answer agent approvals in the notch** (on by default) and **Hand back to the terminal after** (5 minutes by default).
+Settings → Integrations → Coding agents has **Answer agent approvals in the notch** (on by default) and **Hand back to the terminal after** (5 minutes by default). After changing the wait, press **Install for Claude Code…** again so the hook's `--wait` and `timeout` follow it; until then the shorter of the two applies.
 
 ---
 

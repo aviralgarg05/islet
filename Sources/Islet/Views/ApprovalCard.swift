@@ -110,6 +110,7 @@ struct ToolApproval: View {
                         .foregroundStyle(Color.orange)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
+                        .help(risks.joined(separator: "\n"))
                 }
             }
             ScrollBox(risky: !risks.isEmpty) {
@@ -155,6 +156,8 @@ struct HoldToAllowButton: View {
     @ViewState private var armed = false
     @ViewState private var pressedAt: Date?
     @ViewState private var fill: CGFloat = 0
+    /// A double-click landing as the card appears must not arm it either.
+    @ViewState private var shownAt = Date()
 
     static let hold: TimeInterval = 0.6
 
@@ -183,6 +186,7 @@ struct HoldToAllowButton: View {
                         let held = pressedAt.map { Date().timeIntervalSince($0) } ?? 0
                         pressedAt = nil
                         withAnimation(.easeOut(duration: 0.12)) { fill = 0 }
+                        guard Date().timeIntervalSince(shownAt) >= ApprovalController.clickGuard else { return }
                         if armed || held >= Self.hold { action() } else { armed = true }
                     }
             )
@@ -199,6 +203,11 @@ struct QuestionApproval: View {
     @ViewState private var index = 0
     @ViewState private var answers: [String: String] = [:]
     @ViewState private var picked: [String] = []
+    /// When the next question replaced the last one: its options sit where the old ones were,
+    /// so a double-click must not answer it unseen.
+    @ViewState private var steppedAt = Date.distantPast
+
+    private var justStepped: Bool { Date().timeIntervalSince(steppedAt) < ApprovalController.clickGuard }
 
     var body: some View {
         let q = questions[min(index, questions.count - 1)]
@@ -251,6 +260,7 @@ struct QuestionApproval: View {
     private func optionButton(_ option: AgentQuestion.Option, in q: AgentQuestion) -> some View {
         let on = picked.contains(option.label)
         return Button {
+            guard !justStepped else { return }
             if q.multiSelect {
                 if let i = picked.firstIndex(of: option.label) { picked.remove(at: i) } else { picked.append(option.label) }
             } else {
@@ -280,10 +290,12 @@ struct QuestionApproval: View {
     }
 
     private func answer(_ q: AgentQuestion, with value: String) {
+        guard !justStepped else { return }
         answers[q.question] = value
         picked = []
         if index + 1 < questions.count {
             index += 1
+            steppedAt = Date()
         } else {
             model.approvals.decide(.answer(answers), for: entry)
         }
@@ -365,10 +377,14 @@ struct ScrollBox<Content: View>: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        let overflows = contentHeight > visibleHeight + 2
         let inner = content
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 9)
-            .padding(.vertical, 7)
+            .padding(.top, 7)
+            // Room below the last line for the "More" badge, so scrolling to the end shows
+            // every character instead of leaving the tail of a command under the badge.
+            .padding(.bottom, overflows ? 28 : 7)
             .textSelection(.enabled)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
         Group {
@@ -384,7 +400,7 @@ struct ScrollBox<Content: View>: View {
         .background(shape.fill(Color.white.opacity(0.07)))
         .overlay(shape.strokeBorder(risky ? Color.orange.opacity(0.75) : Color.white.opacity(0.08), lineWidth: 1))
         .overlay(alignment: .bottomTrailing) {
-            if contentHeight > visibleHeight + 2 {
+            if overflows {
                 Label("More", systemImage: "arrow.down")
                     .font(.system(size: 9.5, weight: .semibold))
                     .foregroundStyle(.black)

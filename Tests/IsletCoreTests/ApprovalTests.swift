@@ -402,6 +402,16 @@ enum HookFixtures {
             ("terraform destroy -auto-approve", "Deletes cloud resources"),
             ("sudo shutdown -h now", "Shuts down or restarts the Mac"),
             (":(){ :|:& };:", "Fork bomb: starts processes until the Mac stalls"),
+            // Shell keywords stand before the command they run.
+            ("for d in */; do rm -rf \"$d\"; done", "Deletes files recursively"),
+            ("if [ -d build ]; then sudo rm build; fi", "Runs with administrator rights"),
+            ("while true; do git push -f; done", "Force-pushes and can overwrite remote history"),
+            ("! git reset --hard", "Discards uncommitted changes"),
+            // Copies and moves out of the project.
+            ("cp build/islet ~/bin/islet", "Writes outside the project folder"),
+            ("mv dist /usr/local/lib/islet", "Writes outside the project folder"),
+            ("ln -sf $PWD/isletctl /usr/local/bin/isletctl", "Writes outside the project folder"),
+            ("install -m 755 build/tool /usr/local/bin/", "Writes outside the project folder"),
         ]
         for (command, reason) in cases {
             #expect(reasons(command).contains(reason), "\(command) should be flagged: \(reason)")
@@ -414,6 +424,9 @@ enum HookFixtures {
             "ls -la", "rm build/tmp.o", "rm -f /tmp/islet.sock", "grep -r sudo .", "echo rm -rf /",
             "npm install", "cat README.md > out.txt", "swift build 2>&1 | tee build.log", "make >/dev/null 2>&1",
             "git restore --staged file", "cp .env.example .env.sample", "open https://example.com",
+            "for f in *.swift; do echo \"$f\"; done", "if [ -f x ]; then cat x; fi", "cp a.txt b.txt",
+            "mv Sources/a.swift Sources/b.swift", "cp -R ~/Downloads/assets ./Resources", "cp report.pdf /tmp/",
+            "rsync -av ./site/ me@host:/var/www/",
         ]
         for command in safe {
             #expect(reasons(command).isEmpty, "\(command) flagged as \(reasons(command))")
