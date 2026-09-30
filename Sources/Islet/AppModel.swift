@@ -422,9 +422,8 @@ final class AppModel {
         let fresh = IsletSettings.load(from: IsletPaths.configFile)
         guard fresh != settings else { return }
         settings = fresh
-        media.disabled = Set(fresh.disabledMediaSources)
-        clipboard.limit = fresh.clipboardLimit
-        // The app delegate applies everything else (modules, hotkey, panels) on this notification.
+        // The app delegate applies the rest (modules, media sources, clipboard size, hotkey, panels)
+        // on this notification.
         NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
     }
 
@@ -437,10 +436,9 @@ final class AppModel {
         var suppressed = false
         let frontRule = settings.rule(for: frontBundleID)
         if settings.hideInFullscreen, fullscreenDisplays.contains(display) {
-            let allowed = (frontBundleID.map(settings.fullscreenAllowList.contains) ?? false) || frontRule?.showInFullscreen == true
-            suppressed = !allowed
+            suppressed = frontRule?.showInFullscreen != true
         }
-        if let front = frontBundleID, settings.hideForApps.contains(front) || frontRule?.hideIsland == true { suppressed = true }
+        if frontRule?.hideIsland == true { suppressed = true }
         let inputs = PresenterInputs(
             now: now,
             center: center,
@@ -1039,6 +1037,13 @@ extension AppModel {
             if s.mediaEnabled { startMedia() } else { stopMedia() }
             modules.media = s.mediaEnabled
         }
+        // Sources switched off (in Settings or config.json), and the clipboard size, apply without a restart.
+        if Set(s.disabledMediaSources) != media.disabled {
+            media.disabled = Set(s.disabledMediaSources)
+            let next = media.current(now: Date())
+            if next != nowPlaying { nowPlaying = next }
+        }
+        if clipboard.limit != s.clipboardLimit { clipboard.limit = s.clipboardLimit }
 
         let wantCalendar = s.calendarEnabled && CalendarService.eventAccess == .granted
             || s.remindersEnabled && CalendarService.reminderAccess == .granted

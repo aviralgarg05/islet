@@ -88,6 +88,28 @@ public struct AppRule: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+extension AppRule {
+    /// Rules with the given bundle ids switched on for fullscreen and for hiding the island.
+    /// An id that already has a rule gets the flag on that rule; others get a new rule, once.
+    public static func merging(_ rules: [AppRule], showInFullscreen: [String], hideIsland: [String]) -> [AppRule] {
+        var rules = rules
+        func update(_ bundleID: String, _ change: (inout AppRule) -> Void) {
+            let id = bundleID.trimmingCharacters(in: .whitespaces)
+            guard !id.isEmpty else { return }
+            if let i = rules.firstIndex(where: { $0.bundleID == id }) {
+                change(&rules[i])
+            } else {
+                var rule = AppRule(bundleID: id)
+                change(&rule)
+                rules.append(rule)
+            }
+        }
+        for id in showInFullscreen { update(id) { $0.showInFullscreen = true } }
+        for id in hideIsland { update(id) { $0.hideIsland = true } }
+        return rules
+    }
+}
+
 /// User settings, persisted as human-editable JSON at `~/.config/islet/config.json`
 /// so they can live in a dotfiles repo. Loading is lenient: unknown keys are ignored and
 /// a missing or malformed value falls back to its default without affecting the others.
@@ -99,10 +121,6 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var openDelay: Double = 0.18
     public var closeDelay: Double = 0.35
     public var hideInFullscreen = true
-    /// Bundle ids that keep the island visible even in fullscreen (e.g. a video call app).
-    public var fullscreenAllowList: [String] = []
-    /// Bundle ids in front of which the island always hides (games, presentation apps).
-    public var hideForApps: [String] = []
     /// Exclude the island from screenshots and screen sharing.
     public var hideFromScreenCapture = false
 
@@ -222,15 +240,28 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var claudeUsageEnabled = true
     /// Codex plan limits, from its session logs in `~/.codex/sessions`. Local files only.
     public var codexUsageEnabled = true
+    /// Per-app tint, icon, visibility and notification handling. Replaces the old
+    /// `fullscreenAllowList` and `hideForApps` lists, which are read once and folded in here.
     public var appRules: [AppRule] = []
 
-    public var launchAtLogin = false
     /// Global shortcut that opens or closes the island ("" to disable).
     public var hotkey = "ctrl+option+i"
     /// Global shortcut that opens the Ask box ready to type ("" to disable).
     public var askHotkey = "ctrl+option+a"
 
     public init() {}
+
+    // Allowed ranges, shared by `sanitized()` and the Settings sliders.
+    public static let openDelayRange: ClosedRange<Double> = 0...1
+    public static let closeDelayRange: ClosedRange<Double> = 0...2
+    public static let expandedWidthRange: ClosedRange<Double> = 420...900
+    public static let expandedHeightRange: ClosedRange<Double> = 130...360
+    public static let wingWidthRange: ClosedRange<Double> = 40...140
+    public static let alertDurationRange: ClosedRange<Double> = 1...6
+    public static let hudDurationRange: ClosedRange<Double> = 0.8...4
+    public static let clipboardLimitRange: ClosedRange<Int> = 1...500
+    /// Ports for the local API and the LAN bridge (unprivileged, and never the same one).
+    public static let portRange: ClosedRange<Int> = 1024...65535
 
     /// Effective expanded size and wing width after applying the size preset.
     public var expandedSize: (width: Double, height: Double) {
@@ -245,25 +276,31 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         return appRules.first { $0.bundleID == bundleID }
     }
 
+    private static func clamp<T: Comparable>(_ value: T, _ range: ClosedRange<T>) -> T {
+        min(range.upperBound, max(range.lowerBound, value))
+    }
+
     /// Clamp values into safe ranges.
     public func sanitized() -> IsletSettings {
         var s = self
-        s.expandedWidth = min(1200, max(360, s.expandedWidth))
-        s.expandedHeight = min(600, max(120, s.expandedHeight))
-        s.openDelay = min(2, max(0, s.openDelay))
-        s.closeDelay = min(5, max(0, s.closeDelay))
-        s.clipboardLimit = min(500, max(1, s.clipboardLimit))
-        s.wingWidth = min(200, max(40, s.wingWidth))
+        s.expandedWidth = Self.clamp(s.expandedWidth, Self.expandedWidthRange)
+        s.expandedHeight = Self.clamp(s.expandedHeight, Self.expandedHeightRange)
+        s.openDelay = Self.clamp(s.openDelay, Self.openDelayRange)
+        s.closeDelay = Self.clamp(s.closeDelay, Self.closeDelayRange)
+        s.clipboardLimit = Self.clamp(s.clipboardLimit, Self.clipboardLimitRange)
+        s.wingWidth = Self.clamp(s.wingWidth, Self.wingWidthRange)
         s.maxConcurrent = min(3, max(1, s.maxConcurrent))
-        s.alertDuration = min(10, max(0.5, s.alertDuration))
-        s.hudDuration = min(5, max(0.5, s.hudDuration))
+        s.alertDuration = Self.clamp(s.alertDuration, Self.alertDurationRange)
+        s.hudDuration = Self.clamp(s.hudDuration, Self.hudDurationRange)
         s.batteryLowThreshold = min(50, max(5, s.batteryLowThreshold))
         s.batteryCriticalThreshold = min(s.batteryLowThreshold - 1, max(1, s.batteryCriticalThreshold))
         if s.batteryChargedAlert != 0 { s.batteryChargedAlert = min(100, max(50, s.batteryChargedAlert)) }
         s.approvalWait = min(3600, max(30, s.approvalWait))
         let d = IsletSettings()
-        if !(1024...65535).contains(s.apiPort) { s.apiPort = d.apiPort }
-        if !(1024...65535).contains(s.lanPort) || s.lanPort == s.apiPort { s.lanPort = d.lanPort }
+        if !Self.portRange.contains(s.apiPort) { s.apiPort = d.apiPort }
+        if !Self.portRange.contains(s.lanPort) || s.lanPort == s.apiPort {
+            s.lanPort = s.apiPort == d.lanPort ? d.apiPort : d.lanPort
+        }
         if s.accentColor != "auto", RGBA.parse(s.accentColor) == nil { s.accentColor = "auto" }
         return s
     }
@@ -291,7 +328,20 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         // Older configs switched haptics off with `hapticFeedback: false`, whatever `hapticsMode` said
         // (the app wrote both keys). `hapticsMode` replaced it, and the old key isn't written back.
         if user["hapticFeedback"] as? Bool == false { s.hapticsMode = .off }
+        // Older configs kept two bundle id lists beside `appRules`. They are folded into the
+        // rules and not written back. (`launchAtLogin` is gone too: Login Items is the truth.)
+        s.appRules = AppRule.merging(s.appRules,
+                                     showInFullscreen: user["fullscreenAllowList"] as? [String] ?? [],
+                                     hideIsland: user["hideForApps"] as? [String] ?? [])
         return s.sanitized()
+    }
+
+    /// Why a port can't be used, or nil if it can: in `portRange` and not the other server's.
+    public static func portProblem(_ port: Int?, other: Int) -> String? {
+        guard let port, portRange.contains(port) else {
+            return "Use a number from \(portRange.lowerBound) to \(portRange.upperBound)."
+        }
+        return port == other ? "The local API and the iPhone bridge need different ports." : nil
     }
 
     public static func load(from url: URL) -> IsletSettings {

@@ -256,7 +256,7 @@ import Testing
         let s = IsletSettings.decodeLenient(Data(json.utf8))
         #expect(s.hoverToOpen == false)
         #expect(s.apiPort == IsletSettings().apiPort)
-        #expect(s.expandedWidth == 1200)
+        #expect(s.expandedWidth == IsletSettings.expandedWidthRange.upperBound)
         #expect(s.disabledMediaSources == [.browser])
         #expect(s.clipboardEnabled == false)
         #expect(s.theme == .black)          // unknown enum value falls back

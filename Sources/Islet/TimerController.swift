@@ -180,14 +180,13 @@ final class TimerController {
     }
 
     /// The same rules as the presentation: hidden for the app in front, or over a fullscreen
-    /// app that isn't on the allow list.
+    /// app whose rule doesn't keep the island.
     private func islandHidden(on display: CGDirectDisplayID) -> Bool {
         let s = model.settings
-        let front = model.frontBundleID
-        let rule = s.rule(for: front)
-        if let front, s.hideForApps.contains(front) || rule?.hideIsland == true { return true }
+        let rule = s.rule(for: model.frontBundleID)
+        if rule?.hideIsland == true { return true }
         guard s.hideInFullscreen, model.fullscreenDisplays.contains(display) else { return false }
-        return !((front.map(s.fullscreenAllowList.contains) ?? false) || rule?.showInFullscreen == true)
+        return rule?.showInFullscreen != true
     }
 
     /// Nothing rings any more: let the island close normally when the pointer leaves.

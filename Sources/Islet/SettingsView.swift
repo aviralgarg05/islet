@@ -1,7 +1,6 @@
 import AppKit
 import IsletCore
 import IsletSystem
-import ServiceManagement
 import SwiftUI
 
 struct SettingsView: View {
@@ -15,6 +14,7 @@ struct SettingsView: View {
             AppRulesSettings(model: model).tabItem { Label("Apps", systemImage: "app.badge") }
             IntegrationsSettings(model: model).tabItem { Label("Integrations", systemImage: "point.3.connected.trianglepath.dotted") }
             AISettingsView(model: model).tabItem { Label("AI", systemImage: "sparkles") }
+            PermissionsSettings(model: model).tabItem { Label("Permissions", systemImage: "hand.raised") }
             AboutSettings().tabItem { Label("About", systemImage: "info.circle") }
         }
         .frame(width: 620, height: 540)
@@ -24,7 +24,6 @@ struct SettingsView: View {
 
 struct GeneralSettings: View {
     @Bindable var model: AppModel
-    @ViewState private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
         Form {
@@ -41,8 +40,12 @@ struct GeneralSettings: View {
             Section("Behaviour") {
                 Toggle("Open on hover", isOn: $model.settings.hoverToOpen)
                 LabeledContent("Hover delay") {
-                    Slider(value: $model.settings.openDelay, in: 0...1, step: 0.05) { Text("") }
+                    Slider(value: $model.settings.openDelay, in: IsletSettings.openDelayRange, step: 0.05) { Text("") }
                     Text(String(format: "%.2fs", model.settings.openDelay)).monospacedDigit().frame(width: 44)
+                }
+                LabeledContent("Close delay") {
+                    Slider(value: $model.settings.closeDelay, in: IsletSettings.closeDelayRange, step: 0.05) { Text("") }
+                    Text(String(format: "%.2fs", model.settings.closeDelay)).monospacedDigit().frame(width: 44)
                 }
                 LabeledContent("Shortcut to open or close") {
                     TextField("ctrl+option+i", text: $model.settings.hotkey)
@@ -50,14 +53,7 @@ struct GeneralSettings: View {
                     Text(Hotkey.parse(model.settings.hotkey)?.label ?? (model.settings.hotkey.isEmpty ? "Off" : "Invalid"))
                         .foregroundStyle(.secondary).frame(width: 60)
                 }
-                Toggle("Launch at login", isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { _, on in
-                        do {
-                            if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
-                        } catch {
-                            launchAtLogin = SMAppService.mainApp.status == .enabled
-                        }
-                    }
+                LaunchAtLoginToggle()
             }
             GestureSettingsSection(model: model)
         }
@@ -82,15 +78,15 @@ struct AppearanceSettings: View {
                 .pickerStyle(.segmented)
                 if model.settings.sizePreset == .custom {
                     LabeledContent("Expanded width") {
-                        Slider(value: $model.settings.expandedWidth, in: 420...900, step: 10) { Text("") }
+                        Slider(value: $model.settings.expandedWidth, in: IsletSettings.expandedWidthRange, step: 10) { Text("") }
                         Text("\(Int(model.settings.expandedWidth))").monospacedDigit().frame(width: 44)
                     }
                     LabeledContent("Expanded height") {
-                        Slider(value: $model.settings.expandedHeight, in: 130...360, step: 10) { Text("") }
+                        Slider(value: $model.settings.expandedHeight, in: IsletSettings.expandedHeightRange, step: 10) { Text("") }
                         Text("\(Int(model.settings.expandedHeight))").monospacedDigit().frame(width: 44)
                     }
                     LabeledContent("Closed wing width") {
-                        Slider(value: $model.settings.wingWidth, in: 40...140, step: 2) { Text("") }
+                        Slider(value: $model.settings.wingWidth, in: IsletSettings.wingWidthRange, step: 2) { Text("") }
                         Text("\(Int(model.settings.wingWidth))").monospacedDigit().frame(width: 44)
                     }
                 }
@@ -164,11 +160,11 @@ struct AppearanceSettings: View {
                 }
                 Toggle("Reduce motion", isOn: $model.settings.reduceMotion)
                 LabeledContent("New activity stays open") {
-                    Slider(value: $model.settings.alertDuration, in: 1...6, step: 0.5) { Text("") }
+                    Slider(value: $model.settings.alertDuration, in: IsletSettings.alertDurationRange, step: 0.5) { Text("") }
                     Text(String(format: "%.1fs", model.settings.alertDuration)).monospacedDigit().frame(width: 40)
                 }
                 LabeledContent("Volume/brightness HUD") {
-                    Slider(value: $model.settings.hudDuration, in: 0.8...4, step: 0.2) { Text("") }
+                    Slider(value: $model.settings.hudDuration, in: IsletSettings.hudDurationRange, step: 0.2) { Text("") }
                     Text(String(format: "%.1fs", model.settings.hudDuration)).monospacedDigit().frame(width: 40)
                 }
                 Button("Preview") { AppActions.previewAppearance(model) }
@@ -279,6 +275,7 @@ struct ModulesSettings: View {
         Form {
             Section("Media") {
                 Toggle("Now Playing", isOn: $model.settings.mediaEnabled)
+                MediaSourceToggles(model: model)
                 Toggle("Show paused media in the closed island", isOn: $model.settings.showPausedMedia)
                 LabeledContent("System-wide bridge") {
                     Text(model.systemMedia.isRunning ? "Running" : "Unavailable")
@@ -371,6 +368,7 @@ struct ModulesSettings: View {
                 }
                 Toggle("File shelf & AirDrop", isOn: $model.settings.shelfEnabled)
                 Toggle("Clipboard history (local only, skips passwords)", isOn: $model.settings.clipboardEnabled)
+                if model.settings.clipboardEnabled { ClipboardLimitPicker(model: model) }
                 Toggle("Camera & microphone indicators", isOn: $model.settings.privacyIndicatorsEnabled)
                 Toggle("System stats", isOn: $model.settings.systemStatsEnabled)
             }
@@ -402,6 +400,8 @@ struct IntegrationsSettings: View {
             Section("Local API") {
                 Toggle("Enable local API (127.0.0.1 only, token required)", isOn: $model.settings.apiEnabled)
                 LabeledContent("Status") { Text(model.apiStatus).foregroundStyle(.secondary) }
+                LabeledContent("Port") { PortField(port: $model.settings.apiPort, other: model.settings.lanPort) }
+                LabeledContent("iPhone bridge port") { PortField(port: $model.settings.lanPort, other: model.settings.apiPort) }
                 HStack {
                     Button(copied ? "Copied" : "Copy Token") {
                         AppActions.copyToken()
@@ -428,13 +428,12 @@ struct IntegrationsSettings: View {
             Section("iPhone bridge (local network)") {
                 Toggle("Accept events from iPhone Shortcuts on this network", isOn: $model.settings.lanBridgeEnabled)
                 LabeledContent("Status") { Text(model.lanStatus).foregroundStyle(.secondary) }
-                Text("""
-                In Shortcuts on iPhone, create a Personal Automation (Alarm, Focus, Arrive, Battery Level…) →                 “Get Contents of URL” → POST http://\(ProcessInfo.processInfo.hostName):\(model.settings.lanPort)/v1/notify                 with header Authorization: Bearer <token> and JSON {"title": "…"}. Rate-limited, token required.
-                """)
+                Text(verbatim: "In Shortcuts on iPhone, make a Personal Automation (Alarm, Focus, Arrive, Battery Level…) that runs “Get Contents of URL” with method POST, URL http://\(ProcessInfo.processInfo.hostName):\(model.settings.lanPort)/v1/notify, header Authorization: Bearer <token> and JSON body {\"title\": \"…\"}. Use the token from Copy Token above. Requests are rate-limited.")
                 .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
             Section("Script widgets") {
                 Toggle("Run scripts from the plugins folder", isOn: $model.settings.pluginsEnabled)
+                PluginFolderRow(model: model)
                 HStack {
                     Button("Open Plugins Folder") { AppActions.openPluginsFolder(model) }
                     Button("Install Examples") { AppActions.installExamplePlugins(model) }
