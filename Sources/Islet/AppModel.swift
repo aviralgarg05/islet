@@ -66,6 +66,8 @@ final class AppModel {
     var pinned = false
     /// Snapshot rendering pins the presentation instead of deriving it.
     var forcedPresentation: IslandPresentation?
+    /// Measured closed-island placement per display, for the automatic layout.
+    var closedPlacements: [CGDirectDisplayID: ClosedPlacement] = [:]
 
     // Services
     let shelfService = ShelfService()
@@ -359,6 +361,14 @@ final class AppModel {
     }
 
     var activities: [Activity] { center.ordered(now: Date()) }
+
+    /// How the closed island lays out on a display: the user's choice, or the measured
+    /// automatic placement (drop below the notch until the menu bar has been measured).
+    func placement(for display: CGDirectDisplayID, metrics: IslandMetrics) -> ClosedPlacement {
+        let preference = settings.closedLayout
+        guard preference == .auto else { return .unmeasured(preference, wing: metrics.wingWidth, hasMenuBar: true) }
+        return closedPlacements[display] ?? .unmeasured(.auto, wing: metrics.wingWidth, hasMenuBar: true)
+    }
 
     var upcomingEvent: AgendaItem? { Agenda.upcoming(agenda, now: Date()) }
 

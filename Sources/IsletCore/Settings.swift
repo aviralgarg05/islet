@@ -17,9 +17,9 @@ public enum SizePreset: String, Codable, Sendable, CaseIterable {
     /// (expanded width, expanded height, wing width) in points.
     public var dimensions: (width: Double, height: Double, wing: Double)? {
         switch self {
-        case .compact: return (500, 164, 58)
-        case .standard: return (580, 190, 72)
-        case .large: return (680, 232, 90)
+        case .compact: return (468, 150, 52)
+        case .standard: return (560, 180, 66)
+        case .large: return (660, 224, 84)
         case .custom: return nil
         }
     }
@@ -108,10 +108,12 @@ public struct IsletSettings: Codable, Equatable, Sendable {
 
     // Size
     public var sizePreset: SizePreset = .compact
+    /// Beside the notch, below it, or chosen automatically so menu bar icons stay uncovered.
+    public var closedLayout: ClosedLayoutPreference = .auto
     /// Used when `sizePreset` is `custom`.
-    public var expandedWidth: Double = 500
-    public var expandedHeight: Double = 164
-    public var wingWidth: Double = 58
+    public var expandedWidth: Double = 468
+    public var expandedHeight: Double = 150
+    public var wingWidth: Double = 52
 
     // Look & feel
     public var theme: IslandTheme = .black

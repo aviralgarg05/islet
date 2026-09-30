@@ -210,14 +210,14 @@ import Testing
         #expect(s.clipboardEnabled == false)
         #expect(s.theme == .black)          // unknown enum value falls back
         #expect(s.sizePreset == .large)
-        #expect(s.expandedSize.width == 680)
+        #expect(s.expandedSize.width == 660)
         #expect(s.rule(for: "us.zoom.xos")?.showInFullscreen == true)
         #expect(IsletSettings.decodeLenient(Data("not json".utf8)) == IsletSettings())
     }
 
     @Test func customSizeUsesExplicitValues() {
         var s = IsletSettings()
-        #expect(s.expandedSize.width == 500)       // compact by default
+        #expect(s.expandedSize.width == 468)       // compact by default
         s.sizePreset = .custom
         s.expandedWidth = 720
         s.wingWidth = 100

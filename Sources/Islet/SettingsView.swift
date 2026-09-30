@@ -96,6 +96,28 @@ struct AppearanceSettings: View {
                     }
                 }
             }
+            Section("Menu bar") {
+                Picker("Closed island", selection: $model.settings.closedLayout) {
+                    Text("Automatic").tag(ClosedLayoutPreference.auto)
+                    Text("Beside the notch").tag(ClosedLayoutPreference.wings)
+                    Text("Below the notch").tag(ClosedLayoutPreference.drop)
+                }
+                .pickerStyle(.segmented)
+                Text(model.settings.closedLayout == .auto
+                     ? "Islet measures the menu bar and only sits beside the notch when that won't cover any icons. Otherwise it hangs just below the notch."
+                     : model.settings.closedLayout == .wings
+                        ? "May cover menu bar icons that sit close to the notch."
+                        : "The menu bar row is never covered.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if model.settings.closedLayout == .auto && !MenuBarInspector.isAvailable {
+                    HStack {
+                        Text("Measuring the menu bar needs Accessibility. Until then Islet stays below the notch.")
+                            .font(.caption)
+                        Spacer()
+                        Button("Allow…") { MediaKeyInterceptor.requestAccessibility() }
+                    }
+                }
+            }
             Section("Look") {
                 Picker("Theme", selection: $model.settings.theme) {
                     Text("Black").tag(IslandTheme.black)

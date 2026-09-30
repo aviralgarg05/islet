@@ -54,6 +54,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 MainActor.assumeIsolated { self?.scheduleRebuild() }
             }
         }
+        // The space beside the notch changes when app menus change (switching apps) or when
+        // status items come and go (apps launching and quitting).
+        for name in [NSWorkspace.didActivateApplicationNotification, NSWorkspace.didLaunchApplicationNotification,
+                     NSWorkspace.didTerminateApplicationNotification] {
+            wnc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.scheduleMenuBarMeasure() }
+            }
+        }
         NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleURL(_:reply:)),
                                                      forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
     }
@@ -92,6 +100,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
 
+    private var measureWork: DispatchWorkItem?
+
+    /// Re-measure the menu bar shortly after a change settles (menus redraw after activation).
+    func scheduleMenuBarMeasure(after delay: TimeInterval = 0.35) {
+        measureWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated { self?.controllers.forEach { $0.measureMenuBar() } }
+        }
+        measureWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
     private func rebuildPanels() {
         let screens = targetScreens()
         let current = controllers.map { ($0.display, $0.descriptor) }
@@ -103,6 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controllers.forEach { $0.close() }
         controllers = screens.map { IslandWindowController(model: model, screen: $0) }
         pointer.controllers = controllers
+        scheduleMenuBarMeasure(after: 0.1)
     }
 
     private func settingsChanged() {

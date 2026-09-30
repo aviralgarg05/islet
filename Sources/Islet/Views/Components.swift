@@ -3,37 +3,81 @@ import CoreImage
 import IsletCore
 import SwiftUI
 
-/// SwiftUI's `State` property wrapper under another name. The macOS 27 SDK turns `@ViewState`
+/// SwiftUI's `State` property wrapper under another name. The macOS 27 SDK turns `@State`
 /// into a macro whose plugin ships only with Xcode; using the wrapper type directly keeps
 /// Islet buildable with the Command Line Tools alone.
 typealias ViewState<Value> = SwiftUICore.State<Value>
 
-/// The island silhouette: a rectangle hanging from the top edge whose top corners flare
-/// outward (like the hardware notch) and whose bottom corners are rounded.
+/// The island silhouette, hanging from the top edge of the screen.
+///
+/// Classic: a rectangle whose top corners flare outward like the hardware notch and whose
+/// bottom corners are rounded. With a `stemWidth` narrower than the body, the part in the menu
+/// bar row stays that narrow (the notch) and the body opens out below the menu bar, joined by
+/// soft shoulders. That keeps menu bar icons beside the notch uncovered. One shape covers both,
+/// so switching between them animates as a morph.
 struct IslandShape: Shape {
     var topRadius: CGFloat
     var bottomRadius: CGFloat
+    /// Width of the part inside the menu bar row. 0 (or ≥ body width) means classic.
+    var stemWidth: CGFloat = 0
+    /// Height of the menu bar row part.
+    var stemHeight: CGFloat = 0
 
-    var animatableData: AnimatablePair<CGFloat, CGFloat> {
-        get { AnimatablePair(topRadius, bottomRadius) }
+    var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
+        get { AnimatablePair(AnimatablePair(topRadius, bottomRadius), AnimatablePair(stemWidth, stemHeight)) }
         set {
-            topRadius = newValue.first
-            bottomRadius = newValue.second
+            topRadius = newValue.first.first
+            bottomRadius = newValue.first.second
+            stemWidth = newValue.second.first
+            stemHeight = newValue.second.second
         }
     }
 
     func path(in rect: CGRect) -> Path {
         let t = min(topRadius, rect.width / 4)
-        let b = min(bottomRadius, (rect.width - 2 * t) / 2, rect.height / 2)
+        let bodyL = rect.minX + t, bodyR = rect.maxX - t
+        let bodyW = bodyR - bodyL
+        let stem = stemWidth <= 0 ? bodyW : min(stemWidth, bodyW)
+        let stemH = min(max(0, stemHeight), rect.height)
         var p = Path()
-        p.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        p.addQuadCurve(to: CGPoint(x: rect.minX + t, y: rect.minY + t), control: CGPoint(x: rect.minX + t, y: rect.minY))
-        p.addLine(to: CGPoint(x: rect.minX + t, y: rect.maxY - b))
-        p.addQuadCurve(to: CGPoint(x: rect.minX + t + b, y: rect.maxY), control: CGPoint(x: rect.minX + t, y: rect.maxY))
-        p.addLine(to: CGPoint(x: rect.maxX - t - b, y: rect.maxY))
-        p.addQuadCurve(to: CGPoint(x: rect.maxX - t, y: rect.maxY - b), control: CGPoint(x: rect.maxX - t, y: rect.maxY))
-        p.addLine(to: CGPoint(x: rect.maxX - t, y: rect.minY + t))
-        p.addQuadCurve(to: CGPoint(x: rect.maxX, y: rect.minY), control: CGPoint(x: rect.maxX - t, y: rect.minY))
+
+        guard stem < bodyW - 1, stemH > 0, rect.height - stemH > 4 else {
+            let b = min(bottomRadius, bodyW / 2, rect.height / 2)
+            p.move(to: CGPoint(x: rect.minX, y: rect.minY))
+            p.addQuadCurve(to: CGPoint(x: bodyL, y: rect.minY + t), control: CGPoint(x: bodyL, y: rect.minY))
+            p.addLine(to: CGPoint(x: bodyL, y: rect.maxY - b))
+            p.addQuadCurve(to: CGPoint(x: bodyL + b, y: rect.maxY), control: CGPoint(x: bodyL, y: rect.maxY))
+            p.addLine(to: CGPoint(x: bodyR - b, y: rect.maxY))
+            p.addQuadCurve(to: CGPoint(x: bodyR, y: rect.maxY - b), control: CGPoint(x: bodyR, y: rect.maxY))
+            p.addLine(to: CGPoint(x: bodyR, y: rect.minY + t))
+            p.addQuadCurve(to: CGPoint(x: rect.maxX, y: rect.minY), control: CGPoint(x: bodyR, y: rect.minY))
+            p.closeSubpath()
+            return p
+        }
+
+        let sL = rect.midX - stem / 2, sR = rect.midX + stem / 2
+        let bodyH = rect.maxY - (rect.minY + stemH)
+        let shoulder = min(8, (bodyW - stem) / 2, stemH / 2)
+        let corner = min(bottomRadius * 0.6, bodyH / 3, (bodyW - stem) / 2 - shoulder)
+        let b = min(bottomRadius, bodyW / 2, bodyH / 2)
+        let top = rect.minY, row = rect.minY + stemH
+
+        p.move(to: CGPoint(x: sL - t, y: top))
+        p.addQuadCurve(to: CGPoint(x: sL, y: top + t), control: CGPoint(x: sL, y: top))
+        p.addLine(to: CGPoint(x: sL, y: row - shoulder))
+        p.addQuadCurve(to: CGPoint(x: sL - shoulder, y: row), control: CGPoint(x: sL, y: row))
+        p.addLine(to: CGPoint(x: bodyL + max(0, corner), y: row))
+        p.addQuadCurve(to: CGPoint(x: bodyL, y: row + max(0, corner)), control: CGPoint(x: bodyL, y: row))
+        p.addLine(to: CGPoint(x: bodyL, y: rect.maxY - b))
+        p.addQuadCurve(to: CGPoint(x: bodyL + b, y: rect.maxY), control: CGPoint(x: bodyL, y: rect.maxY))
+        p.addLine(to: CGPoint(x: bodyR - b, y: rect.maxY))
+        p.addQuadCurve(to: CGPoint(x: bodyR, y: rect.maxY - b), control: CGPoint(x: bodyR, y: rect.maxY))
+        p.addLine(to: CGPoint(x: bodyR, y: row + max(0, corner)))
+        p.addQuadCurve(to: CGPoint(x: bodyR - max(0, corner), y: row), control: CGPoint(x: bodyR, y: row))
+        p.addLine(to: CGPoint(x: sR + shoulder, y: row))
+        p.addQuadCurve(to: CGPoint(x: sR, y: row - shoulder), control: CGPoint(x: sR, y: row))
+        p.addLine(to: CGPoint(x: sR, y: top + t))
+        p.addQuadCurve(to: CGPoint(x: sR + t, y: top), control: CGPoint(x: sR, y: top))
         p.closeSubpath()
         return p
     }

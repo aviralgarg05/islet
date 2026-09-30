@@ -1,5 +1,6 @@
 import AppKit
 import IsletCore
+import IsletSystem
 import SwiftUI
 
 /// Borderless, non-activating panel that sits above the menu bar on every Space.
@@ -84,28 +85,79 @@ final class IslandWindowController {
             trigger.orderOut(nil)
             return
         }
-        var rect = hoverZone
+        // Idle: exactly the notch, never the menu bar beside it. On displays without a notch,
+        // a thin strip at the very top edge.
+        var zones = [notchRect]
         if metrics.isSynthetic, !IslandLayout.isVisible(p) {
-            rect = CGRect(x: rect.minX, y: descriptor.frame.maxY - 4, width: rect.width, height: 4)
+            zones = [CGRect(x: notchRect.minX, y: descriptor.frame.maxY - 4, width: notchRect.width, height: 4)]
         }
-        if IslandLayout.isVisible(p) { rect = rect.union(islandRect) }
-        if trigger.frame != rect { trigger.setFrame(rect, display: false) }
+        zones += hitRects
+        let frame = zones.reduce(CGRect.null) { $0.union($1) }.integral
+        if trigger.frame != frame { trigger.setFrame(frame, display: false) }
+        trigger.view.setActiveRegions(zones.map { $0.offsetBy(dx: -frame.minX, dy: -frame.minY) })
         if !trigger.isVisible { trigger.orderFrontRegardless() }
     }
 
-    /// Current island rectangle in global coordinates (including the flared top corners).
-    var islandRect: CGRect {
+    /// The notch (or synthetic pill) in global coordinates.
+    var notchRect: CGRect { NotchGeometry.visibleRect(for: descriptor, size: metrics.notch) }
+
+    /// Regions the island actually occupies right now, in global coordinates: the part in the
+    /// menu bar row, the body (below the row when dropped) and any bubbles. Everything else
+    /// on the panel is transparent and passes clicks through.
+    var hitRects: [CGRect] {
         let p = model.presentation(for: display)
-        let size = IslandLayout.size(for: p, metrics: metrics)
-        let r = IslandLayout.radii(for: p, metrics: metrics)
-        var width = size.width + 2 * r.top
-        // The second-activity bubble sits beside the island (balanced by an invisible spacer).
-        let bubbles = model.bubbles(for: p).items.count
-        width += CGFloat(2 * bubbles) * (metrics.notch.height + IslandLayout.bubbleGap)
-        return NotchGeometry.visibleRect(for: descriptor, size: CGSize(width: width, height: size.height))
+        guard IslandLayout.isVisible(p) else { return [] }
+        let placement = model.placement(for: display, metrics: metrics)
+        let g = IslandLayout.geometry(for: p, metrics: metrics, layout: placement.layout)
+        let top = descriptor.frame.maxY
+        let midX = descriptor.frame.midX
+        var rects: [CGRect] = []
+        if g.stemWidth > 0 {
+            let stem = g.stemWidth + 2 * g.top
+            rects.append(CGRect(x: midX - stem / 2, y: top - g.stemHeight, width: stem, height: g.stemHeight))
+            rects.append(CGRect(x: midX - g.size.width / 2, y: top - g.size.height, width: g.size.width, height: g.size.height - g.stemHeight))
+        } else {
+            rects.append(CGRect(x: midX - g.outerWidth / 2, y: top - g.size.height, width: g.outerWidth, height: g.size.height))
+        }
+        let bubbles = model.bubbles(for: p)
+        if !bubbles.items.isEmpty {
+            let left = model.settings.bubblePlacement == .left
+            let bp = IslandLayout.bubblePlacement(geometry: g, metrics: metrics, placement: placement, count: bubbles.items.count, left: left)
+            let span = CGFloat(bubbles.items.count) * (bp.diameter + IslandLayout.bubbleGap)
+            let x = left ? midX - g.outerWidth / 2 - span : midX + g.outerWidth / 2
+            rects.append(CGRect(x: x, y: top - bp.top - bp.diameter, width: span, height: bp.diameter))
+        }
+        return rects
     }
 
-    var hoverZone: CGRect { NotchGeometry.hoverZone(for: descriptor, metrics: metrics) }
+    /// Bounding box of `hitRects` (empty when nothing is drawn).
+    var islandRect: CGRect { hitRects.reduce(CGRect.null) { $0.union($1) } }
+
+    /// Measure the menu bar beside the notch and store the automatic placement.
+    func measureMenuBar() {
+        guard model.settings.closedLayout == .auto else { return }
+        let wing = metrics.wingWidth
+        let notch = notchRect
+        let display = display
+        guard descriptor.menuBarHeight > 0 else {
+            model.closedPlacements[display] = .unmeasured(.auto, wing: wing, hasMenuBar: false)
+            return
+        }
+        MenuBarInspector.measure(notch: notch, screenFrame: descriptor.frame) { [weak self] occupancy in
+            guard let self else { return }
+            let layout = MenuBarLayoutEngine.decide(preference: .auto, notch: notch, preferredWing: wing, occupancy: occupancy, hasMenuBar: true)
+            var placement = ClosedPlacement(layout: layout, leftSlack: 0, rightSlack: 0)
+            if case .wings(let l, _) = layout, let occupancy {
+                let slack = MenuBarLayoutEngine.slack(notch: notch, occupancy: occupancy, wing: l)
+                placement.leftSlack = slack.left
+                placement.rightSlack = slack.right
+            }
+            if self.model.closedPlacements[display] != placement { self.model.closedPlacements[display] = placement }
+        }
+    }
+
+    /// Hovering here arms the island: the notch itself, nothing beside it.
+    var hoverZone: CGRect { NotchGeometry.hoverZone(for: descriptor, metrics: metrics, slop: 0) }
 
     var expandedRect: CGRect {
         NotchGeometry.visibleRect(for: descriptor, size: CGSize(width: metrics.expanded.width + 20, height: metrics.expanded.height))
@@ -149,12 +201,27 @@ final class TriggerView: NSView {
     var onDrop: (([URL]) -> Void)?
     private var area: NSTrackingArea?
 
+    private let fill = CAShapeLayer()
+
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        // Nearly-transparent fill so the window receives events over its whole area.
-        layer?.backgroundColor = NSColor(white: 0, alpha: 0.004).cgColor
+        // A nearly transparent fill marks where the window takes clicks. Fully transparent
+        // pixels pass clicks through to the menu bar, so only the active regions are filled.
+        fill.fillColor = NSColor(white: 0, alpha: 0.004).cgColor
+        layer?.addSublayer(fill)
         registerForDraggedTypes([.fileURL])
+    }
+
+    /// Regions (in view coordinates) that should receive the pointer.
+    func setActiveRegions(_ rects: [CGRect]) {
+        let path = CGMutablePath()
+        rects.forEach { path.addRect($0) }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        fill.frame = bounds
+        fill.path = path
+        CATransaction.commit()
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -305,7 +372,7 @@ final class PointerCoordinator {
             return
         }
         let expandedHere = model.expandedScreen == c.display
-        let inIsland = c.islandRect.contains(p) && IslandLayout.isVisible(model.presentation(for: c.display))
+        let inIsland = c.hitRects.contains { $0.contains(p) }
         c.setInteractive(inIsland || expandedHere && c.expandedRect.contains(p) || model.isDraggingFile)
         for other in controllers where other !== c { other.setInteractive(model.isDraggingFile && model.expandedScreen == other.display) }
 

@@ -53,12 +53,13 @@ struct ExpandedView: View {
 
             Color.clear.frame(width: metrics.notch.width + 12)
 
-            HStack(spacing: 8) {
+            HStack(spacing: 7) {
                 if model.cameraInUse { Circle().fill(.green).frame(width: 6, height: 6).help("Camera in use") }
                 if model.micInUse { Circle().fill(.orange).frame(width: 6, height: 6).help("Microphone in use") }
                 if let b = model.battery {
                     HStack(spacing: 3) {
                         Text("\(b.level)%").font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit()
+                            .lineLimit(1).fixedSize()
                         Image(systemName: BatteryGlyph.symbol(b)).font(.system(size: 12))
                     }
                     .foregroundStyle(b.level <= 20 && !b.isPluggedIn ? Color.red : Color.islandSecondary)

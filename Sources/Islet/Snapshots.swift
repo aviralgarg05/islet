@@ -81,6 +81,16 @@ enum Snapshots {
             shoot(name)
         }
 
+        // The same closed states beside the notch, as used when the menu bar has room.
+        model.closedPlacements[1] = ClosedPlacement(layout: .wings(left: metrics.wingWidth, right: metrics.wingWidth),
+                                                    leftSlack: .infinity, rightSlack: .infinity)
+        for (name, presentation, tab) in states where !name.contains("expanded") {
+            model.forcedPresentation = presentation
+            model.tab = tab
+            shoot("w" + name)
+        }
+        model.closedPlacements[1] = nil
+
         // A call with a live count-up timer, and the urgent glow on a failed deploy.
         let call = activity(ActivitySpec(id: "call", source: "com.apple.FaceTime", title: "FaceTime", subtitle: "Mom",
                                          icon: .symbol("phone.fill"), state: .running, tint: "green", startedAt: now.addingTimeInterval(-754)))
