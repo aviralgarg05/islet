@@ -59,7 +59,8 @@ public struct ActivityCenter: Sendable {
     /// back from the API finds the same activity. Accents are dropped ("café" gives "cafe"), and
     /// when anything else had to change, a short hash of the text keeps different ids apart.
     public static func namespacedID(_ raw: String, prefix: String) -> String {
-        let text = raw.hasPrefix(prefix) ? String(raw.dropFirst(prefix.count)) : raw
+        // Composed first: "é" typed and "é" from a file name compare equal but differ in bytes.
+        let text = (raw.hasPrefix(prefix) ? String(raw.dropFirst(prefix.count)) : raw).precomposedStringWithCanonicalMapping
         let folded = text.folding(options: [.diacriticInsensitive, .widthInsensitive], locale: nil)
         var body = String(String.UnicodeScalarView(folded.unicodeScalars.filter(isIDCharacter)))
         let limit = 100

@@ -66,6 +66,9 @@ let t0 = Date(timeIntervalSince1970: 1_800_000_000)
         #expect(id("构建").hasPrefix("mcp-task-"))
         #expect(id("构建") != id("部署"))
         #expect(id("café") != id("cafe"))
+        // The same text whether its accents come composed or as combining marks.
+        #expect(id("caf\u{E9}") == id("cafe\u{301}"))
+        #expect(id("mcp-caf\u{E9}") == id("cafe\u{301}"))
         #expect(id(String(repeating: "x", count: 150)) != id(String(repeating: "x", count: 151)))
     }
 
