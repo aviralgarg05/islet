@@ -32,10 +32,17 @@ public struct ClipboardHistory: Codable, Equatable, Sendable {
     ]
 
     /// Apps whose copies are never recorded, regardless of types.
+    /// Bundle identifiers of password managers (identifiers, not credentials).
     public static let ignoredApps: Set<String> = [
-        "com.1password.1password", "com.agilebits.onepassword7", "com.bitwarden.desktop",
-        "com.apple.keychainaccess", "com.apple.Passwords", "com.apple.Passwords.MenuBarExtra",
-        "org.keepassxc.keepassxc", "com.lastpass.LastPass", "com.dashlane.Dashlane",
+        "com.1password.1password",
+        "com.agilebits.onepassword7",
+        "com.bitwarden.desktop",
+        "com.apple.keychainaccess",
+        "com.apple.Passwords",
+        "com.apple.Passwords.MenuBarExtra",
+        "org.keepassxc.keepassxc",
+        "com.lastpass.LastPass",
+        "com.dashlane.Dashlane",
     ]
 
     public static let maxTextLength = 100_000
