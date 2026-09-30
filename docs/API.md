@@ -289,7 +289,17 @@ No endpoint accepts a decision. Answers come only from clicks on the card, so a 
 
 ### Local-network bridge (iPhone Shortcuts)
 
-Off by default. When enabled (Settings → Integrations), the same API is also served on the local network at port `47832` and advertised over Bonjour as `_islet._tcp`. The token is still required, browser origins are still refused, and each client is limited to 30 requests per 10 seconds. See [iPhone recipes](INTEGRATIONS.md#iphone).
+Off by default. When enabled (Settings → Integrations), a second listener serves a small part of the API on the local network at port `47832`, advertised over Bonjour as `_islet._tcp` under the name "Islet". It is plain HTTP, so anyone on the same network can read requests, token included. It only takes what a Shortcut needs to put something in the island:
+
+| Route | Limits |
+|---|---|
+| `GET /v1/health` | No token needed. |
+| `POST /v1/notify`, `POST /v1/timer`, `POST /v1/focus` | Priority tops out at `high`. Timer ids get a `lan-` prefix. |
+| `POST /v1/activities`, `PUT /v1/activities/{id}` | Ids get a `lan-` prefix (a new id when none is given). `url` and `actions` are dropped. `icon`, `trackerIcon` and `stageSymbols` keep only symbols, emoji and app icons. Priority tops out at `high`. |
+
+Everything else is `403`: the bridge can't read activities or state, remove anything, send agent hooks, or control media, the HUD, keep awake or the island.
+
+The bridge has its own token, shown in Settings with **Copy Token** and **New Token**, and kept in `~/Library/Application Support/Islet/lan.json` (mode `0600`). The local API's token is refused on the bridge, and the bridge's token is refused on the local API. A missing or wrong token gets `401` as soon as the headers arrive, before the body is read. Bodies are limited to 16 KB (`413`), 8 connections are served at once (`503`), and each client gets 30 requests per 10 seconds (`429`; an IPv6 /64 counts as one client). Browser origins are refused. See [iPhone recipes](INTEGRATIONS.md#iphone).
 
 ---
 
