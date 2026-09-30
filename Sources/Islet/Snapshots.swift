@@ -71,8 +71,10 @@ enum Snapshots {
         ]
 
         func shoot(_ name: String) {
+            // The open island has its page switcher floating underneath.
+            let extra: CGFloat = model.forcedPresentation == .expanded ? 30 + PageSwitcher.band : 30
             let view = IslandView(model: model, display: 1, metrics: metrics)
-                .frame(width: 760, height: metrics.expanded.height + 30)
+                .frame(width: 760, height: metrics.expanded.height + extra)
                 .background(Snapshots.backdrop(metrics: metrics))
             write(view, to: dir.appendingPathComponent("\(name).png"))
         }
@@ -190,6 +192,7 @@ enum Snapshots {
         shoot("25-compact-usage-alert")
         TemplateSnapshots.render(to: dir, model: model)
         renderApprovals(model: model, shoot: shoot)
+        renderWings(to: dir)
         print("Rendered snapshots to \(dir.path)")
     }
 

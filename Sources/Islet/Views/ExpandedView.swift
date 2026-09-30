@@ -3,288 +3,442 @@ import IsletCore
 import IsletSystem
 import SwiftUI
 
+/// The open island: a quiet menu bar row, then one page. Pages are picked with the switcher
+/// that floats under the island (`PageSwitcher`), so the row beside the notch stays almost empty.
 struct ExpandedView: View {
     let model: AppModel
     let metrics: IslandMetrics
     var dropTargeted: Bool
 
     var body: some View {
+        let layout = ExpandedLayout(metrics: metrics)
         VStack(spacing: 0) {
-            topStrip
-            Group {
-                switch model.tab {
-                case .home: HomeTab(model: model, width: metrics.expanded.width - 36, height: metrics.expanded.height - max(metrics.notch.height, 28) - 20)
-                case .today: TodayTab(model: model)
-                case .shelf: ShelfTab(model: model, dropTargeted: dropTargeted)
-                case .widgets: WidgetsTab(model: model)
-                case .clipboard: ClipboardTab(model: model)
-                case .stats: StatsTab(model: model)
-                case .ask: AskView(model: model)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(.horizontal, 18)
-            .padding(.top, 4)
-            .padding(.bottom, 14)
-            .clipped()
+            MenuBarRow(model: model, metrics: metrics)
+                .frame(height: layout.row)
+            page(layout.content)
+                .frame(width: layout.content.width, height: layout.content.height, alignment: .topLeading)
+                .padding(.top, ExpandedLayout.top)
         }
         .frame(width: metrics.expanded.width, height: metrics.expanded.height, alignment: .top)
     }
 
-    /// The row level with the hardware notch: tabs on the left, status on the right.
-    private var topStrip: some View {
+    @ViewBuilder
+    private func page(_ size: CGSize) -> some View {
+        switch model.tab {
+        case .home: HomeTab(model: model, size: size)
+        case .today: TodayTab(model: model)
+        case .shelf: ShelfTab(model: model, dropTargeted: dropTargeted)
+        case .widgets: WidgetsTab(model: model)
+        case .clipboard: ClipboardTab(model: model)
+        case .stats: StatsTab(model: model)
+        case .ask: AskView(model: model)
+        }
+    }
+}
+
+/// The row level with the hardware notch. It holds at most two quiet things: what the Mac is
+/// doing on the left (camera, microphone, keep awake), and the pin on the right.
+struct MenuBarRow: View {
+    let model: AppModel
+    let metrics: IslandMetrics
+
+    var body: some View {
         HStack(spacing: 0) {
-            HStack(spacing: 2) {
-                let strip = TabStripFit.split(visibleTabs, width: TabStripFit.regionWidth(metrics))
-                ForEach(strip.shown) { tab in
-                    Button {
-                        Haptics.play(.tap)
-                        model.select(tab: tab)
-                    } label: {
-                        Image(systemName: tab.symbol)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(model.tab == tab ? Color.white : Color.islandTertiary)
-                            .frame(width: 28, height: 22)
-                            .background(RoundedRectangle(cornerRadius: 7).fill(model.tab == tab ? Color.islandFill : .clear))
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help(tab.title)
-                }
-                if !strip.more.isEmpty { TabOverflowMenu(model: model, tabs: strip.more) }
+            HStack(spacing: Space.s) {
+                if model.cameraInUse { privacyDot(.green, help: "Camera in use") }
+                if model.micInUse { privacyDot(.orange, help: "Microphone in use") }
+                if model.controls.awake != nil { KeepAwakeButton(model: model) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Color.clear.frame(width: metrics.notch.width + 12)
+            Color.clear.frame(width: metrics.notch.width + Space.m)
 
-            HStack(spacing: 7) {
-                if model.cameraInUse { Circle().fill(.green).frame(width: 6, height: 6).help("Camera in use") }
-                if model.micInUse { Circle().fill(.orange).frame(width: 6, height: 6).help("Microphone in use") }
-                if let b = model.battery {
-                    HStack(spacing: 3) {
-                        // The narrowest island has no room for the number next to the keep-awake cup.
-                        if metrics.expanded.width >= 500 || b.level <= model.settings.batteryLowThreshold {
-                            Text("\(b.level)%").font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit()
-                                .lineLimit(1).fixedSize()
-                        }
+            HStack(spacing: Space.xs) {
+                if let b = model.battery, b.level <= model.settings.batteryLowThreshold, !b.isPluggedIn {
+                    HStack(spacing: Space.xs) {
+                        Text("\(b.level)%").textStyle(.caption, emphasized: true, numeric: true)
                         Image(systemName: BatteryGlyph.symbol(b)).font(.system(size: 12))
                     }
-                    .foregroundStyle(b.level <= model.settings.batteryLowThreshold && !b.isPluggedIn ? Color.red : Color.islandSecondary)
+                    .foregroundStyle(Color.red)
+                    .help("Low battery")
                 }
-                KeepAwakeButton(model: model)
-                AskStripButton(model: model)
-                Button {
-                    Haptics.play(.snap)
+                IconButton(symbol: model.pinned ? "pin.fill" : "pin", help: model.pinned ? "Stop keeping open" : "Keep open",
+                           size: 24, glyph: 11, ink: model.pinned ? Ink.primary : Ink.tertiary) {
                     model.pinned.toggle()
-                } label: {
-                    Image(systemName: model.pinned ? "pin.fill" : "pin")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(model.pinned ? Color.white : Color.islandTertiary)
                 }
-                .buttonStyle(.plain)
-                .help("Keep open")
-                Button { AppActions.openSettings() } label: {
-                    Image(systemName: "gearshape.fill").font(.system(size: 12)).foregroundStyle(Color.islandTertiary)
-                }
-                .buttonStyle(.plain)
-                .help("Settings")
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .padding(.horizontal, 16)
-        .frame(height: max(metrics.notch.height, 28))
+        // Glyph edges line up with the content below (the buttons carry 6–7 pt of hit area).
+        .padding(.horizontal, ExpandedLayout.inset - 6)
     }
 
-    private var visibleTabs: [IslandTab] {
-        IslandTab.allCases.filter { tab in
-            switch tab {
-            case .today: return model.settings.calendarEnabled || model.settings.remindersEnabled
-            case .shelf: return model.settings.shelfEnabled
-            case .widgets: return model.settings.pluginsEnabled
-            case .stats: return model.settings.systemStatsEnabled
-            case .ask: return false  // reached from the sparkles button on the right
-            default: return true
-            }
-        }
+    private func privacyDot(_ color: Color, help: String) -> some View {
+        Circle().fill(color).frame(width: 6, height: 6).help(help).accessibilityLabel(help)
     }
 }
 
 // MARK: - Home
 
+/// What Home shows: one primary thing, and the rest as a quiet column of glances.
+@MainActor
+struct HomePlan {
+    enum Primary {
+        case ringing(TimerItem)
+        case media(NowPlaying)
+        case timer(TimerItem)
+        case activity(Activity)
+        case clock
+
+        /// Now Playing uses the whole column; the others are shorter than it.
+        var fills: Bool {
+            if case .media = self { return true }
+            return false
+        }
+    }
+
+    enum Glance: Identifiable {
+        case timer(TimerItem)
+        case event(AgendaItem)
+        case activity(Activity)
+        case usage(AgentUsage)
+
+        var id: String {
+            switch self {
+            case .timer(let t): return "timer-\(t.id)"
+            case .event(let e): return "event-\(e.id)"
+            case .activity(let a): return "activity-\(a.id)"
+            case .usage(let u): return "usage-\(u.id)"
+            }
+        }
+
+        /// About how tall the glance is, to show only what fits without scrolling.
+        var height: CGFloat {
+            if case .usage(let u) = self { return 18 + CGFloat(u.windows.count) * 16 }
+            return 32
+        }
+    }
+
+    var primary: Primary
+    var glances: [Glance]
+
+    init(model: AppModel, now: Date = Date()) {
+        let timers = model.timers.timers
+        let activities = model.activities.filter { !model.timers.owns($0) }
+        var shownTimer: String?
+        var shownActivity: String?
+        if let ringing = timers.first(where: { $0.status == .ringing }) {
+            primary = .ringing(ringing)
+            shownTimer = ringing.id
+        } else if let np = model.nowPlaying, model.settings.mediaEnabled {
+            primary = .media(np)
+        } else if let t = timers.first {
+            primary = .timer(t)
+            shownTimer = t.id
+        } else if let a = activities.first {
+            primary = .activity(a)
+            shownActivity = a.id
+        } else {
+            primary = .clock
+        }
+
+        let rest = activities.filter { $0.id != shownActivity }
+        var glances: [Glance] = rest.filter(Self.needsYou).map(Glance.activity)
+        glances += timers.filter { $0.id != shownTimer }.map(Glance.timer)
+        if let e = model.upcomingEvent { glances.append(.event(e)) }
+        glances += rest.filter { !Self.needsYou($0) }.map(Glance.activity)
+        glances += model.agentUsage.visible(now: now).map(Glance.usage)
+        self.glances = glances
+    }
+
+    /// Waiting on you, or failing loudly: these lead the column.
+    static func needsYou(_ a: Activity) -> Bool {
+        a.state == .waiting || a.priority == .critical || (a.state == .failure && a.priority >= .high)
+    }
+}
+
 struct HomeTab: View {
     let model: AppModel
-    /// Size available for the tab's content.
-    var width: CGFloat
-    var height: CGFloat
-    @Environment(\.snapshotMode) private var snapshotMode
+    /// The page's content area.
+    let size: CGSize
 
     var body: some View {
-        let cardWidth = min(260, (width - 16) * 0.5)
-        let event = model.upcomingEvent
-        let acts = model.activities.filter { !model.timers.owns($0) }
-        // Room under the Timer card, and the rows that fit there without scrolling (event row
-        // and activity rows are ~44 pt with spacing). When they don't, the whole column scrolls.
-        // The scroll view is always there (only switched off) so the Timer card, and a custom
-        // timer being typed into it, isn't rebuilt when an activity comes or goes.
-        let room = height - TimerCard.height(model.timers.timers)
-        let rowsThatFit = max(0, Int((room - (event == nil ? 0 : 48)) / 48))
-        let agents = AgentUsageSection.isShown(model)
-        let overflows = acts.count > rowsThatFit || event != nil && room < 42 || agents
-        HStack(alignment: .top, spacing: 16) {
-            if let np = model.nowPlaying, model.settings.mediaEnabled {
-                NowPlayingCard(model: model, media: np, height: height)
-                    .frame(width: cardWidth)
-            } else {
-                TodayCard(model: model).frame(width: cardWidth)
+        if model.timers.isEntering {
+            TimerComposer(model: model)
+        } else {
+            let plan = HomePlan(model: model)
+            let split = !plan.glances.isEmpty
+            // The primary thing gets the larger share; the glances the rest, past a hairline.
+            let share: CGFloat = size.width < 480 ? 0.47 : 0.56
+            let primaryWidth = split ? (size.width * share).rounded() : size.width
+            HStack(alignment: .top, spacing: 0) {
+                // Media fills its column; anything else sits centred in it.
+                primary(plan.primary, width: primaryWidth)
+                    .frame(width: primaryWidth, height: size.height, alignment: plan.primary.fills ? .topLeading : .leading)
+                if split {
+                    ColumnRule()
+                        .frame(height: size.height)
+                        .padding(.horizontal, Space.l)
+                    GlanceColumn(model: model, glances: plan.glances, height: size.height)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
             }
-            AdaptiveScroll {
-                VStack(alignment: .leading, spacing: 6) {
-                    TimerCard(model: model)
-                    // Snapshots can't scroll, so they show only what fits (like the rows below).
-                    if let event, !snapshotMode || room >= 42 { EventRow(item: event, theme: model.settings.theme) }
-                    if acts.isEmpty && event == nil && !agents {
-                        // The hint only where it fits under the timers.
-                        if room >= 56 {
-                            EmptyHint(symbol: "sparkles", text: "Live activities from scripts, agents and CI appear here.",
-                                      detail: room >= 84 ? "Try: isletctl notify \"Hello\"" : nil)
+        }
+    }
+
+    @ViewBuilder
+    private func primary(_ p: HomePlan.Primary, width: CGFloat) -> some View {
+        switch p {
+        case .media(let np): NowPlayingHero(model: model, media: np, size: CGSize(width: width, height: size.height))
+        case .ringing(let t), .timer(let t): TimerHero(model: model, timer: t)
+        case .activity(let a): ActivityHero(activity: a, model: model)
+        case .clock: ClockHero(model: model)
+        }
+    }
+}
+
+/// Home with nothing playing and nothing going on: the time, large, and the day.
+struct ClockHero: View {
+    let model: AppModel
+
+    var body: some View {
+        TimelineView(.everyMinute) { ctx in
+            VStack(alignment: .leading, spacing: Space.hair) {
+                Text(ctx.date.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+                    .textStyle(.body)
+                    .foregroundStyle(Ink.secondary)
+                Text(ctx.date.formatted(date: .omitted, time: .shortened))
+                    .textStyle(.display)
+                    .foregroundStyle(Ink.primary)
+                if let b = model.battery {
+                    HStack(spacing: Space.xs) {
+                        Image(systemName: BatteryGlyph.symbol(b))
+                        Text([String("\(b.level)%"), b.detail].compactMap { $0 }.joined(separator: " · "))
+                            .lineLimit(1)
+                    }
+                    .textStyle(.caption)
+                    .foregroundStyle(Ink.tertiary)
+                    .padding(.top, Space.xs)
+                }
+            }
+        }
+    }
+}
+
+/// The most important activity when nothing is playing: its template's row, a little larger.
+struct ActivityHero: View {
+    let activity: Activity
+    let model: AppModel
+
+    var body: some View {
+        let tint = model.tint(for: activity)
+        let showsBar = activity.state == .running && activity.clampedProgress != nil
+        if let t = model.visualTemplate(for: activity) {
+            VStack(alignment: .leading, spacing: Space.m) {
+                TemplateRow(activity: activity, model: model)
+                // Rows that draw only their data (a score, a flight) leave the news underneath.
+                if t == .score || t == .flight, let sub = activity.subtitle {
+                    Text(sub).textStyle(.body).foregroundStyle(Ink.secondary).lineLimit(2)
+                }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: Space.m) {
+                HStack(alignment: .top, spacing: Space.m) {
+                    IconView(icon: model.icon(for: activity), size: 24, tint: tint)
+                    VStack(alignment: .leading, spacing: Space.hair) {
+                        Text(activity.title).textStyle(.title).foregroundStyle(Ink.primary).lineLimit(1)
+                        if let sub = activity.subtitle {
+                            Text(sub).textStyle(.body).foregroundStyle(Ink.secondary).lineLimit(2)
                         }
-                    } else {
-                        let shown = snapshotMode ? Array(acts.prefix(rowsThatFit)) : acts
-                        ForEach(shown) { a in TemplateRow(activity: a, model: model) }
-                        if agents { AgentUsageSection(model: model) }
+                    }
+                    Spacer(minLength: Space.s)
+                    // A bar below says the progress already; a ring beside it would say it twice.
+                    if !showsBar || activity.trailing != nil {
+                        ActivityTrailing(activity: activity, tint: tint)
                     }
                 }
-                .frame(minHeight: height, alignment: .topLeading)
+                if showsBar {
+                    ActivityProgress(activity: activity, tint: tint, height: 4)
+                }
+                ActivityActions(activity: activity, model: model, tint: tint)
             }
-            .scrollDisabled(!overflows)
+        }
+    }
+}
+
+/// An activity's own buttons (at most two), filled with its tint.
+struct ActivityActions: View {
+    let activity: Activity
+    let model: AppModel
+    let tint: Color
+
+    var body: some View {
+        if !activity.actions.isEmpty {
+            HStack(spacing: Space.s) {
+                ForEach(Array(activity.actions.prefix(2).enumerated()), id: \.offset) { _, action in
+                    Button(action.title) { model.perform(action, activityID: activity.id) }
+                        .buttonStyle(CapsuleButtonStyle(tint: tint, filled: true))
+                }
+            }
+        }
+    }
+}
+
+/// The quiet column beside the primary thing: timers, the next event, activities and usage,
+/// one glance each. It scrolls when there are more than fit.
+struct GlanceColumn: View {
+    let model: AppModel
+    let glances: [HomePlan.Glance]
+    let height: CGFloat
+    @Environment(\.snapshotMode) private var snapshotMode
+
+    private static let spacing: CGFloat = Space.m
+
+    var body: some View {
+        let fitting = Self.fitting(glances, in: height)
+        AdaptiveScroll(scrolls: fitting < glances.count) {
+            VStack(alignment: .leading, spacing: Self.spacing) {
+                // Snapshots can't scroll, so they show what fits.
+                ForEach(snapshotMode ? Array(glances.prefix(fitting)) : glances) { g in
+                    glance(g)
+                }
+            }
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
     }
-}
 
-struct TodayCard: View {
-    let model: AppModel
+    static func fitting(_ glances: [HomePlan.Glance], in height: CGFloat) -> Int {
+        var used: CGFloat = 0
+        for (i, g) in glances.enumerated() {
+            used += g.height + (i == 0 ? 0 : spacing)
+            if used > height + 2 { return i }
+        }
+        return glances.count
+    }
 
-    var body: some View {
-        TimelineView(.everyMinute) { ctx in
-            VStack(alignment: .leading, spacing: 4) {
-                Text(ctx.date.formatted(.dateTime.weekday(.wide).month().day()))
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.islandSecondary)
-                Text(ctx.date.formatted(date: .omitted, time: .shortened))
-                    .font(.system(size: 28, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .monospacedDigit()
-                if let b = model.battery {
-                    HStack(spacing: 6) {
-                        Image(systemName: BatteryGlyph.symbol(b))
-                        Text("\(b.level)%")
-                        if let detail = b.detail {
-                            Text("· " + detail).foregroundStyle(Color.islandTertiary).lineLimit(1)
-                        }
-                    }
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.islandSecondary)
-                }
-                Text("Nothing playing").font(.system(size: 11)).foregroundStyle(Color.islandTertiary).padding(.top, 4)
-            }
+    @ViewBuilder
+    private func glance(_ g: HomePlan.Glance) -> some View {
+        switch g {
+        case .timer(let t): TimerGlance(timer: t, model: model)
+        case .event(let e): EventGlance(item: e)
+        case .activity(let a): ActivityGlance(activity: a, model: model)
+        case .usage(let u):
+            TimelineView(.everyMinute) { _ in AgentUsageGlance(usage: u, now: Date()) }
         }
     }
 }
 
-struct EventRow: View {
+/// A glance: a mark, a title with its value, and one line of detail.
+struct GlanceRow<Lead: View, Trailing: View, Detail: View>: View {
+    let title: String
+    let lead: Lead
+    let trailing: Trailing
+    let detail: Detail
+
+    init(title: String, @ViewBuilder lead: () -> Lead, @ViewBuilder trailing: () -> Trailing, @ViewBuilder detail: () -> Detail) {
+        self.title = title
+        self.lead = lead()
+        self.trailing = trailing()
+        self.detail = detail()
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Space.s) {
+            lead.frame(width: 18, height: 16)
+            VStack(alignment: .leading, spacing: Space.hair) {
+                HStack(spacing: Space.s) {
+                    Text(title)
+                        .textStyle(.body, emphasized: true)
+                        .foregroundStyle(Ink.primary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    trailing.fixedSize()
+                }
+                .frame(height: 16)
+                detail
+                    .textStyle(.caption)
+                    .foregroundStyle(Ink.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+}
+
+struct EventGlance: View {
     let item: AgendaItem
-    var theme: IslandTheme = .black
 
     var body: some View {
         TimelineView(.everyMinute) { ctx in
-            HStack(spacing: 10) {
-                RoundedRectangle(cornerRadius: 2).fill(Color(tint: item.calendarColor, fallback: .blue)).frame(width: 4, height: 30)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(item.title).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
-                    Text(item.isOngoing(at: ctx.date) ? "Now · until \(item.end.formatted(date: .omitted, time: .shortened))"
-                         : "\(Format.relative(to: item.start, now: ctx.date)) · \(item.start.formatted(date: .omitted, time: .shortened))")
-                        .font(.system(size: 11)).foregroundStyle(Color.islandSecondary)
-                }
-                Spacer(minLength: 0)
+            GlanceRow(title: item.title) {
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(Color(tint: item.calendarColor, fallback: .blue))
+                    .frame(width: 3, height: 30)
+                    .frame(height: 16, alignment: .top)
+            } trailing: {
                 if let url = item.meetingURL {
                     Button("Join") { NSWorkspace.shared.open(url) }
                         .buttonStyle(CapsuleButtonStyle(tint: .green))
                 }
+            } detail: {
+                Text(item.isOngoing(at: ctx.date) ? "Now · until \(item.end.formatted(date: .omitted, time: .shortened))"
+                     : "\(Format.relative(to: item.start, now: ctx.date)) · \(item.start.formatted(date: .omitted, time: .shortened))")
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .islandCard(theme)
         }
     }
 }
 
-struct ActivityRow: View {
+struct ActivityGlance: View {
     let activity: Activity
     let model: AppModel
     @ViewState private var hovering = false
 
     var body: some View {
-        let tint = model.tint(for: activity)
-        HStack(spacing: 10) {
-            IconView(icon: model.icon(for: activity), size: 18, tint: tint)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(activity.title).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
-                if let sub = activity.subtitle {
-                    Text(sub).font(.system(size: 11)).foregroundStyle(Color.islandSecondary).lineLimit(1)
-                }
-                if activity.state == .running, activity.clampedProgress != nil {
-                    ActivityProgress(activity: activity, tint: tint, height: 3)
-                }
-            }
-            Spacer(minLength: 0)
-            ForEach(Array(activity.actions.prefix(2).enumerated()), id: \.offset) { _, action in
-                Button(action.title) { model.perform(action, activityID: activity.id) }
-                    .buttonStyle(CapsuleButtonStyle(tint: tint))
-            }
-            ActivityTrailing(activity: activity, tint: tint)
+        let a = activity
+        let tint = model.tint(for: a)
+        GlanceRow(title: a.title) {
+            TemplateLeading(activity: a, model: model, tint: tint, size: 14, compact: true)
+        } trailing: {
             if hovering {
-                Button { model.remove(activityID: activity.id) } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(Color.islandTertiary)
+                Button { model.remove(activityID: a.id) } label: {
+                    Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundStyle(Ink.tertiary)
+                        .frame(width: 16, height: 16).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help("Dismiss")
+            } else if let action = a.actions.first {
+                Button(action.title) { model.perform(action, activityID: a.id) }
+                    .buttonStyle(CapsuleButtonStyle(tint: tint))
+            } else {
+                TemplateTrailing(activity: a, model: model, tint: tint, compact: true)
+                    .environment(\.wingRoom, 60)
+            }
+        } detail: {
+            if a.state == .running, a.clampedProgress != nil, a.subtitle == nil {
+                ActivityProgress(activity: a, tint: tint, height: 3).padding(.top, Space.xs)
+            } else {
+                Text(a.subtitle ?? a.phase ?? Self.stateText(a.state))
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .islandCard(model.settings.theme)
         .onHover { hovering = $0 }
-    }
-}
-
-struct CapsuleButtonStyle: ButtonStyle {
-    var tint: Color
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(Capsule().fill(tint.opacity(configuration.isPressed ? 0.6 : 0.85)))
-    }
-}
-
-struct EmptyHint: View {
-    let symbol: String
-    let text: String
-    var detail: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Image(systemName: symbol).font(.system(size: 18)).foregroundStyle(Color.islandTertiary)
-            Text(text).font(.system(size: 12)).foregroundStyle(Color.islandSecondary).fixedSize(horizontal: false, vertical: true)
-            if let detail {
-                Text(detail).font(.system(size: 11, design: .monospaced)).foregroundStyle(Color.islandTertiary).textSelection(.enabled)
-            }
+        .onTapGesture { if model.canOpen(a) { model.openActivity(a) } }
+        .contextMenu {
+            if model.canOpen(a) { Button("Open") { model.openActivity(a) } }
+            Button("Dismiss") { model.remove(activityID: a.id) }
+            Button("Mute “\(a.source)”") { model.mute(source: a.source) }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+
+    static func stateText(_ s: ActivityState) -> String {
+        switch s {
+        case .running: return "In progress"
+        case .waiting: return "Waiting for you"
+        case .success: return "Done"
+        case .failure: return "Failed"
+        case .warning: return "Needs a look"
+        case .info: return ""
+        }
     }
 }
 
@@ -294,60 +448,79 @@ struct TodayTab: View {
     let model: AppModel
     @Environment(\.snapshotMode) private var snapshotMode
 
+    /// Height of one event or reminder line, and of the shared all-day line.
+    static let rowHeight: CGFloat = 30
+    static let allDayHeight: CGFloat = 14
+    private static let labelHeight: CGFloat = 16
+
+    /// Lines of `rowHeight` that fit under the label, after `taken` points of other lines.
+    static func rows(in height: CGFloat, taken: CGFloat = 0) -> Int {
+        max(1, Int((height - labelHeight - Space.xs - taken + Space.s) / (rowHeight + Space.s)))
+    }
+
     var body: some View {
         let now = Date()
         let rest = Agenda.restOfToday(model.visibleAgenda, now: now)
         let reminders = model.dueReminders
-        HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                header("Calendar", count: rest.timed.count)
-                if !model.settings.calendarEnabled || CalendarService.eventAccess != .granted && !snapshotMode {
-                    accessHint("Show today's events and a Join button for calls.", action: "Allow Calendar") { model.requestCalendarAccess() }
-                } else if rest.timed.isEmpty && rest.allDay.isEmpty {
-                    Text("Nothing else today").font(.system(size: 11)).foregroundStyle(Color.islandTertiary)
-                } else {
-                    AdaptiveScroll(scrolls: rest.timed.count > 3) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            ForEach(rest.allDay) { e in
-                                Text(e.title).font(.system(size: 10.5, weight: .medium)).lineLimit(1)
-                                    .padding(.horizontal, 6).padding(.vertical, 1.5)
-                                    .background(Capsule().fill(Color(tint: e.calendarColor, fallback: .blue).opacity(0.3)))
+        GeometryReader { geo in
+            let h = geo.size.height
+            let events = Self.rows(in: h, taken: rest.allDay.isEmpty ? 0 : Self.allDayHeight + Space.s)
+            let todos = Self.rows(in: h)
+            HStack(alignment: .top, spacing: 0) {
+                VStack(alignment: .leading, spacing: Space.xs) {
+                    SectionLabel(title: "Calendar", count: rest.timed.count).frame(height: Self.labelHeight)
+                    if !model.settings.calendarEnabled || CalendarService.eventAccess != .granted && !snapshotMode {
+                        accessHint("Today's events, with a Join button for calls.", action: "Allow Calendar") { model.requestCalendarAccess() }
+                    } else if rest.timed.isEmpty && rest.allDay.isEmpty {
+                        quiet("Nothing else today")
+                    } else {
+                        // Snapshots can't scroll, so they show the lines that fit.
+                        AdaptiveScroll(scrolls: rest.timed.count > events) {
+                            VStack(alignment: .leading, spacing: Space.s) {
+                                if !rest.allDay.isEmpty { allDay(rest.allDay) }
+                                ForEach(rest.timed.prefix(snapshotMode ? events : 20)) { e in AgendaLine(item: e, now: now) }
                             }
-                            ForEach(rest.timed.prefix(snapshotMode ? 3 : 20)) { e in AgendaLine(item: e, now: now) }
                         }
                     }
                 }
-            }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            VStack(alignment: .leading, spacing: 4) {
-                header("Reminders", count: reminders.count)
-                if !model.settings.remindersEnabled || CalendarService.reminderAccess != .granted && !snapshotMode {
-                    accessHint("Reminders due today, with an alert when they're due.", action: "Allow Reminders") { model.requestReminderAccess() }
-                } else if reminders.isEmpty {
-                    Text("All done").font(.system(size: 11)).foregroundStyle(Color.islandTertiary)
-                } else {
-                    AdaptiveScroll(scrolls: reminders.count > 4) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            ForEach(reminders.prefix(snapshotMode ? 4 : 30)) { r in ReminderLine(item: r, now: now) { model.completeReminder(r.id) } }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                ColumnRule().frame(height: h).padding(.horizontal, Space.l)
+                VStack(alignment: .leading, spacing: Space.xs) {
+                    SectionLabel(title: "Reminders", count: reminders.count).frame(height: Self.labelHeight)
+                    if !model.settings.remindersEnabled || CalendarService.reminderAccess != .granted && !snapshotMode {
+                        accessHint("Reminders due today, with an alert when they're due.", action: "Allow Reminders") { model.requestReminderAccess() }
+                    } else if reminders.isEmpty {
+                        quiet("All done")
+                    } else {
+                        AdaptiveScroll(scrolls: reminders.count > todos) {
+                            VStack(alignment: .leading, spacing: Space.s) {
+                                ForEach(reminders.prefix(snapshotMode ? todos : 30)) { r in ReminderLine(item: r, now: now) { model.completeReminder(r.id) } }
+                            }
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
     }
 
-    private func header(_ title: String, count: Int) -> some View {
-        HStack(spacing: 4) {
-            Text(title.uppercased()).font(.system(size: 9.5, weight: .bold)).foregroundStyle(Color.islandTertiary)
-            if count > 0 { Text("\(count)").font(.system(size: 9.5, weight: .bold)).foregroundStyle(Color.islandSecondary) }
+    /// All-day events share one quiet line.
+    private func allDay(_ items: [AgendaItem]) -> some View {
+        HStack(spacing: Space.s) {
+            Circle().fill(Color(tint: items[0].calendarColor, fallback: .blue)).frame(width: 5, height: 5).frame(width: 3)
+            Text(items.map(\.title).joined(separator: ", ")).textStyle(.caption).foregroundStyle(Ink.secondary).lineLimit(1)
         }
+        .frame(height: Self.allDayHeight)
+    }
+
+    private func quiet(_ text: String) -> some View {
+        Text(text).textStyle(.body).foregroundStyle(Ink.tertiary)
     }
 
     private func accessHint(_ text: String, action: String, _ perform: @escaping () -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(text).font(.system(size: 11)).foregroundStyle(Color.islandSecondary).fixedSize(horizontal: false, vertical: true)
-            Button(action, action: perform).buttonStyle(CapsuleButtonStyle(tint: .blue))
+        VStack(alignment: .leading, spacing: Space.s) {
+            Text(text).textStyle(.body).foregroundStyle(Ink.secondary).fixedSize(horizontal: false, vertical: true)
+            Button(action, action: perform).buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
         }
     }
 }
@@ -357,13 +530,17 @@ struct AgendaLine: View {
     let now: Date
 
     var body: some View {
-        HStack(spacing: 6) {
-            RoundedRectangle(cornerRadius: 1.5).fill(Color(tint: item.calendarColor, fallback: .blue)).frame(width: 3, height: 22)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(item.title).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
-                Text(item.isOngoing(at: now) ? "Now · until \(item.end.formatted(date: .omitted, time: .shortened))"
+        let ongoing = item.isOngoing(at: now)
+        HStack(spacing: Space.s) {
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                .fill(Color(tint: item.calendarColor, fallback: .blue))
+                .frame(width: 3, height: 28)
+            VStack(alignment: .leading, spacing: Space.hair) {
+                Text(item.title).textStyle(.body, emphasized: true).foregroundStyle(Ink.primary).lineLimit(1)
+                Text(ongoing ? "Now · until \(item.end.formatted(date: .omitted, time: .shortened))"
                      : item.start.formatted(date: .omitted, time: .shortened))
-                    .font(.system(size: 10)).foregroundStyle(item.isOngoing(at: now) ? Color.green : Color.islandTertiary)
+                    .textStyle(.caption, numeric: true)
+                    .foregroundStyle(ongoing ? Color.green : Ink.tertiary)
             }
             Spacer(minLength: 0)
             if let url = item.meetingURL {
@@ -380,20 +557,22 @@ struct ReminderLine: View {
     @ViewState private var hovering = false
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Space.s) {
             Button(action: onComplete) {
                 Image(systemName: hovering ? "checkmark.circle" : "circle")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Color(tint: item.listColor, fallback: .orange))
+                    .frame(width: 16, height: 28)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help("Mark as done")
-            VStack(alignment: .leading, spacing: 0) {
-                Text(item.title).font(.system(size: 11.5, weight: .medium)).foregroundStyle(.white).lineLimit(1)
+            VStack(alignment: .leading, spacing: Space.hair) {
+                Text(item.title).textStyle(.body, emphasized: true).foregroundStyle(Ink.primary).lineLimit(1)
                 if let due = item.due {
                     Text(item.isAllDay ? "Today" : due.formatted(date: .omitted, time: .shortened))
-                        .font(.system(size: 10))
-                        .foregroundStyle(item.isOverdue(at: now) ? Color.red : Color.islandTertiary)
+                        .textStyle(.caption, numeric: true)
+                        .foregroundStyle(item.isOverdue(at: now) ? Color.red : Ink.tertiary)
                 }
             }
             Spacer(minLength: 0)
@@ -410,37 +589,42 @@ struct ShelfTab: View {
 
     var body: some View {
         let items = model.shelf.items
+        let zone = RoundedRectangle(cornerRadius: Radius.m, style: .continuous)
         if items.isEmpty {
-            VStack(spacing: 8) {
-                Image(systemName: "tray.and.arrow.down.fill").font(.system(size: 26)).foregroundStyle(dropTargeted ? .white : Color.islandTertiary)
-                Text("Drop files here to keep them handy").font(.system(size: 12)).foregroundStyle(Color.islandSecondary)
-                Text("Drag them out again, or AirDrop them in one click.").font(.system(size: 11)).foregroundStyle(Color.islandTertiary)
+            VStack(spacing: Space.s) {
+                Image(systemName: "tray.and.arrow.down")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(dropTargeted ? Ink.primary : Ink.tertiary)
+                VStack(spacing: Space.hair) {
+                    Text("Drop files here to keep them handy").textStyle(.body, emphasized: true).foregroundStyle(Ink.primary)
+                    Text("Drag them out again, or AirDrop them in one click.").textStyle(.caption).foregroundStyle(Ink.tertiary)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(RoundedRectangle(cornerRadius: 14).strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [5]))
-                .foregroundStyle(dropTargeted ? Color.white.opacity(0.7) : Color.islandTertiary))
+            .background(zone.fill(dropTargeted ? Wash.subtle : .clear))
+            .overlay(zone.strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                .foregroundStyle(dropTargeted ? Ink.secondary : Ink.quaternary))
         } else {
-            HStack(spacing: 12) {
-                AdaptiveScroll(axis: .horizontal, scrolls: items.count > 5) {
-                    HStack(spacing: 10) {
+            HStack(alignment: .top, spacing: Space.l) {
+                AdaptiveScroll(axis: .horizontal, scrolls: items.count > 4) {
+                    HStack(alignment: .top, spacing: Space.s) {
                         ForEach(items) { item in FileTile(item: item, model: model) }
                     }
-                    .padding(.vertical, 4)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .trailing, spacing: Space.s) {
                     Button { ShelfService.airDrop(model.shelfService.urls()) } label: {
                         Label("AirDrop", systemImage: "dot.radiowaves.left.and.right")
                     }
-                    .buttonStyle(CapsuleButtonStyle(tint: .blue)).help("AirDrop everything on the shelf")
-                    Button { model.clearShelf() } label: {
-                        Label("Clear", systemImage: "trash")
-                    }
-                    .buttonStyle(CapsuleButtonStyle(tint: Color.white.opacity(0.25))).help("Clear shelf")
+                    .buttonStyle(CapsuleButtonStyle(tint: .blue))
+                    .help("AirDrop everything on the shelf")
+                    Button { model.clearShelf() } label: { Label("Clear", systemImage: "trash") }
+                        .buttonStyle(CapsuleButtonStyle())
+                        .help("Clear shelf")
                 }
                 .fixedSize()
             }
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.white.opacity(dropTargeted ? 0.6 : 0), lineWidth: 1.5))
+            .overlay(zone.strokeBorder(Ink.secondary.opacity(dropTargeted ? 1 : 0), lineWidth: 1))
         }
     }
 }
@@ -452,19 +636,19 @@ struct FileTile: View {
 
     var body: some View {
         let url = URL(fileURLWithPath: item.path)
-        VStack(spacing: 4) {
+        VStack(spacing: Space.xs) {
             Image(nsImage: IconCache.file(item.path, size: 48))
                 .resizable()
                 .frame(width: 48, height: 48)
             Text(item.name)
-                .font(.system(size: 10.5))
-                .foregroundStyle(Color.islandSecondary)
+                .textStyle(.caption)
+                .foregroundStyle(Ink.secondary)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
-                .frame(width: 76)
+                .frame(width: 72)
         }
-        .padding(6)
-        .background(RoundedRectangle(cornerRadius: 10).fill(hovering ? Color.islandFill : .clear))
+        .padding(Space.xs)
+        .background(RoundedRectangle(cornerRadius: Radius.s, style: .continuous).fill(hovering ? Wash.subtle : .clear))
         .overlay(alignment: .topTrailing) {
             if hovering {
                 Button { model.removeFromShelf(item.id) } label: {
@@ -491,6 +675,38 @@ struct FileTile: View {
     }
 }
 
+/// A calm empty state: a glyph, one line, an optional detail and buttons.
+struct EmptyHint<Actions: View>: View {
+    let symbol: String
+    let text: String
+    var detail: String?
+    @ViewBuilder var actions: Actions
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Space.m) {
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Ink.tertiary)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: Space.s) {
+                Text(text).textStyle(.body).foregroundStyle(Ink.secondary).fixedSize(horizontal: false, vertical: true)
+                if let detail {
+                    Text(detail).font(.system(size: TextStyle.caption.size, design: .monospaced)).foregroundStyle(Ink.tertiary)
+                        .textSelection(.enabled)
+                }
+                HStack(spacing: Space.s) { actions }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+}
+
+extension EmptyHint where Actions == EmptyView {
+    init(symbol: String, text: String, detail: String? = nil) {
+        self.init(symbol: symbol, text: text, detail: detail) { EmptyView() }
+    }
+}
+
 // MARK: - Widgets (script plugins)
 
 struct WidgetsTab: View {
@@ -499,18 +715,17 @@ struct WidgetsTab: View {
     var body: some View {
         let results = model.plugins.values.sorted { $0.name < $1.name }
         if results.isEmpty {
-            HStack(alignment: .top, spacing: 16) {
-                EmptyHint(symbol: "square.grid.2x2", text: "Script widgets: drop an executable into the plugins folder. xbar/SwiftBar plugins work as-is.",
-                          detail: "~/.config/islet/plugins/cpu.10s.sh")
-                VStack(alignment: .leading, spacing: 8) {
-                    Button("Open Plugins Folder") { AppActions.openPluginsFolder(model) }.buttonStyle(CapsuleButtonStyle(tint: .blue))
-                    Button("Install Examples") { AppActions.installExamplePlugins(model) }.buttonStyle(CapsuleButtonStyle(tint: .gray))
-                }
+            EmptyHint(symbol: "square.grid.2x2", text: "Script widgets: drop an executable into the plugins folder. xbar and SwiftBar plugins work as they are.",
+                      detail: "~/.config/islet/plugins/cpu.10s.sh") {
+                Button("Open Plugins Folder") { AppActions.openPluginsFolder(model) }.buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
+                Button("Install Examples") { AppActions.installExamplePlugins(model) }.buttonStyle(CapsuleButtonStyle())
             }
         } else {
-            AdaptiveScroll(scrolls: results.count > 4) {
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10, alignment: .top), GridItem(.flexible(), spacing: 10, alignment: .top)],
-                          alignment: .leading, spacing: 10) {
+            // Up to three side by side, split by hairlines; more scroll.
+            let columns = min(3, results.count)
+            AdaptiveScroll(scrolls: results.count > 3) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Space.xl, alignment: .top), count: columns),
+                          alignment: .leading, spacing: Space.l) {
                     ForEach(results) { r in PluginCard(result: r, model: model) }
                 }
             }
@@ -521,36 +736,44 @@ struct WidgetsTab: View {
 struct PluginCard: View {
     let result: PluginResult
     let model: AppModel
+    @ViewState private var hovering = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack {
-                Text(result.name.uppercased()).font(.system(size: 9.5, weight: .bold)).foregroundStyle(Color.islandTertiary)
-                Spacer()
-                Button { model.runPlugin(result.path) } label: {
-                    Image(systemName: "arrow.clockwise").font(.system(size: 10, weight: .bold)).foregroundStyle(Color.islandTertiary)
+        VStack(alignment: .leading, spacing: Space.xs) {
+            HStack(spacing: Space.xs) {
+                Text(result.name.prefix(1).uppercased() + result.name.dropFirst())
+                    .textStyle(.caption, emphasized: true)
+                    .foregroundStyle(Ink.tertiary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                if hovering {
+                    Button { model.runPlugin(result.path) } label: {
+                        Image(systemName: "arrow.clockwise").font(.system(size: 10, weight: .bold)).foregroundStyle(Ink.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Refresh")
                 }
-                .buttonStyle(.plain)
             }
+            .frame(height: 16)
             if let error = result.error {
-                Text(error).font(.system(size: 11)).foregroundStyle(.orange).lineLimit(2)
+                Text(error).textStyle(.caption).foregroundStyle(.orange).lineLimit(2)
             }
             switch result.output {
             case .text(let header, let items):
                 if let h = header.first { PluginLineView(line: h, prominent: true, model: model, plugin: result) }
-                ForEach(Array(items.filter { $0.depth == 0 && $0.text != "---" }.prefix(4).enumerated()), id: \.offset) { _, line in
+                ForEach(Array(items.filter { $0.depth == 0 && $0.text != "---" }.prefix(3).enumerated()), id: \.offset) { _, line in
                     PluginLineView(line: line, prominent: false, model: model, plugin: result)
                 }
             case .activity(let spec):
-                Text(spec.title ?? "").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
-                if let s = spec.subtitle { Text(s).font(.system(size: 11)).foregroundStyle(Color.islandSecondary) }
+                Text(spec.title ?? "").textStyle(.headline).foregroundStyle(Ink.primary)
+                if let s = spec.subtitle { Text(s).textStyle(.caption).foregroundStyle(Ink.secondary) }
             case .empty:
-                Text("No output").font(.system(size: 11)).foregroundStyle(Color.islandTertiary)
+                Text("No output").textStyle(.caption).foregroundStyle(Ink.tertiary)
             }
         }
-        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .islandCard(model.settings.theme)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
     }
 }
 
@@ -561,12 +784,12 @@ struct PluginLineView: View {
     let plugin: PluginResult
 
     var body: some View {
-        let label = HStack(spacing: 5) {
+        let label = HStack(spacing: Space.xs) {
             if let sf = line.sfSymbol { Image(systemName: sf) }
             Text(line.text).lineLimit(1)
         }
-        .font(.system(size: prominent ? 13 : 11.5, weight: prominent ? .semibold : .regular))
-        .foregroundStyle(Color(tint: line.color, fallback: prominent ? .white : .islandSecondary))
+        .textStyle(prominent ? .body : .caption, emphasized: prominent)
+        .foregroundStyle(Color(tint: line.color, fallback: prominent ? Ink.primary : Ink.secondary))
 
         if line.href != nil || line.shellCommand != nil || line.refreshOnClick {
             Button { AppActions.runPluginLine(line, plugin: plugin, model: model) } label: { label }
@@ -585,18 +808,19 @@ struct ClipboardTab: View {
 
     var body: some View {
         if !model.settings.clipboardEnabled {
-            HStack(alignment: .top, spacing: 16) {
-                EmptyHint(symbol: "doc.on.clipboard", text: "Clipboard history is off. It stays on this Mac, skips passwords from password managers, and holds \(model.settings.clipboardLimit) items.")
-                Button("Turn On") { AppActions.setClipboard(model, enabled: true) }.buttonStyle(CapsuleButtonStyle(tint: .blue))
+            EmptyHint(symbol: "doc.on.clipboard",
+                      text: "Clipboard history is off. It stays on this Mac, skips passwords from password managers, and holds \(model.settings.clipboardLimit) items.") {
+                Button("Turn On") { AppActions.setClipboard(model, enabled: true) }.buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
             }
         } else if model.clipboard.entries.isEmpty {
-            EmptyHint(symbol: "doc.on.clipboard", text: "Copy some text and it will show up here.")
+            EmptyHint(symbol: "doc.on.clipboard", text: "Copy some text and it shows up here.")
         } else {
-            AdaptiveScroll(scrolls: model.clipboard.entries.count > 5) {
-                VStack(spacing: 4) {
+            AdaptiveScroll(scrolls: model.clipboard.entries.count > 4) {
+                VStack(spacing: 0) {
                     ForEach(model.clipboard.entries) { e in ClipRow(entry: e, model: model) }
                 }
             }
+            .padding(.horizontal, -Space.s)
         }
     }
 }
@@ -607,27 +831,32 @@ struct ClipRow: View {
     @ViewState private var hovering = false
 
     var body: some View {
-        HStack(spacing: 8) {
-            if let b = entry.sourceBundleID { AppIconView(bundleID: b, size: 14) }
+        HStack(spacing: Space.s) {
+            Group {
+                if let b = entry.sourceBundleID { AppIconView(bundleID: b, size: 16) } else { Color.clear }
+            }
+            .frame(width: 16, height: 16)
             Text(entry.text.replacingOccurrences(of: "\n", with: " ⏎ "))
-                .font(.system(size: 12))
-                .foregroundStyle(.white)
+                .textStyle(.body)
+                .foregroundStyle(Ink.primary)
                 .lineLimit(1)
             Spacer(minLength: 0)
             if hovering || entry.pinned {
                 Button { model.togglePinClip(entry.id) } label: {
-                    Image(systemName: entry.pinned ? "pin.fill" : "pin").font(.system(size: 10))
+                    Image(systemName: entry.pinned ? "pin.fill" : "pin").font(.system(size: 10, weight: .semibold))
                 }
-                .buttonStyle(.plain).foregroundStyle(Color.islandSecondary)
+                .buttonStyle(.plain).foregroundStyle(Ink.tertiary)
+                .help(entry.pinned ? "Unpin" : "Pin")
             }
             if hovering {
-                Button { model.removeClip(entry.id) } label: { Image(systemName: "xmark").font(.system(size: 10)) }
-                    .buttonStyle(.plain).foregroundStyle(Color.islandSecondary)
+                Button { model.removeClip(entry.id) } label: { Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)) }
+                    .buttonStyle(.plain).foregroundStyle(Ink.tertiary)
+                    .help("Remove")
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: 8).fill(hovering ? Color.islandFill : .clear))
+        .padding(.horizontal, Space.s)
+        .frame(height: 28)
+        .background(RoundedRectangle(cornerRadius: Radius.s, style: .continuous).fill(hovering ? Wash.subtle : .clear))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .onTapGesture { model.copyClip(entry) }
@@ -641,7 +870,7 @@ struct StatsTab: View {
     let model: AppModel
 
     var body: some View {
-        HStack(spacing: 24) {
+        HStack(alignment: .top, spacing: Space.xxl) {
             Gauge(title: "CPU", value: model.stats?.cpu ?? 0, detail: "\(ProcessInfo.processInfo.activeProcessorCount) cores", tint: .blue)
             Gauge(title: "Memory", value: model.stats?.memoryFraction ?? 0,
                   detail: model.stats.map { "\(Format.bytes(Int64($0.memoryUsed))) of \(Format.bytes(Int64($0.memoryTotal)))" } ?? "–", tint: .purple)
@@ -650,9 +879,8 @@ struct StatsTab: View {
                       detail: b.detail ?? "\(b.level)%",
                       tint: b.level <= model.settings.batteryLowThreshold && !b.isPluggedIn ? .red : .green)
             }
-            Spacer()
         }
-        .padding(.top, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -663,14 +891,16 @@ struct Gauge: View {
     let tint: Color
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: Space.s) {
             ZStack {
-                ProgressRing(progress: value, tint: tint, size: 64, lineWidth: 7)
-                Text("\(Int((value * 100).rounded()))%").font(.system(size: 14, weight: .semibold, design: .rounded)).monospacedDigit()
+                ProgressRing(progress: value, tint: tint, size: 56, lineWidth: 5)
+                Text("\(Int((value * 100).rounded()))%").textStyle(.headline, numeric: true).foregroundStyle(Ink.primary)
             }
-            Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.white)
-            Text(detail).font(.system(size: 10)).foregroundStyle(Color.islandTertiary).lineLimit(1)
+            VStack(spacing: Space.hair) {
+                Text(title).textStyle(.body, emphasized: true).foregroundStyle(Ink.primary)
+                Text(detail).textStyle(.caption).foregroundStyle(Ink.tertiary).lineLimit(1)
+            }
         }
-        .frame(width: 120)
+        .frame(width: 112)
     }
 }

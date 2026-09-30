@@ -68,7 +68,7 @@ final class IslandWindowController {
             expandedSize: CGSize(width: size.width, height: size.height),
             wingWidth: model.settings.effectiveWingWidth
         )
-        panel = IslandPanel(frame: NotchGeometry.windowFrame(for: descriptor, metrics: metrics))
+        panel = IslandPanel(frame: IslandLayout.windowFrame(for: descriptor, metrics: metrics))
         panel.sharingType = model.settings.hideFromScreenCapture ? .none : .readOnly
         let host = IslandHostingView(rootView: IslandView(model: model, display: display, metrics: metrics))
         host.sizingOptions = []
@@ -140,6 +140,9 @@ final class IslandWindowController {
             rects.append(CGRect(x: midX - g.size.width / 2, y: top - g.size.height, width: g.size.width, height: g.size.height - g.stemHeight))
         } else {
             rects.append(CGRect(x: midX - g.outerWidth / 2, y: top - g.size.height, width: g.outerWidth, height: g.size.height))
+        }
+        if let band = IslandLayout.switcherRect(for: p, geometry: g, showsApproval: model.approvals.current != nil) {
+            rects.append(band.offsetBy(dx: midX, dy: top))
         }
         let bubbles = model.bubbles(for: p)
         if !bubbles.items.isEmpty {
@@ -221,8 +224,10 @@ final class IslandWindowController {
     /// Hovering here arms the island: the notch itself, nothing beside it.
     var hoverZone: CGRect { NotchGeometry.hoverZone(for: descriptor, metrics: metrics, slop: 0) }
 
+    /// The open island and the page switcher under it.
     var expandedRect: CGRect {
-        NotchGeometry.visibleRect(for: descriptor, size: CGSize(width: metrics.expanded.width + 20, height: metrics.expanded.height))
+        NotchGeometry.visibleRect(for: descriptor, size: CGSize(width: metrics.expanded.width + 20,
+                                                               height: metrics.expanded.height + PageSwitcher.gap + PageSwitcher.height))
     }
 
     func setInteractive(_ interactive: Bool) {

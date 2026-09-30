@@ -3,50 +3,56 @@ import IsletCore
 import IsletSystem
 import SwiftUI
 
-/// Now Playing on the Home tab: artwork and titles, a scrubber you can drag, transport
-/// controls, and the system volume with an output picker.
-struct NowPlayingCard: View {
+/// Now Playing, the primary thing on Home: large artwork and titles, a scrubber you can drag,
+/// and the transport. The volume row is always there when the island is tall enough; otherwise
+/// the speaker button swaps it with the transport.
+struct NowPlayingHero: View {
     let model: AppModel
     let media: NowPlaying
-    /// Height available to the card. Tall cards keep the volume row in view; short ones swap
-    /// it with the transport controls behind the speaker button.
-    var height: CGFloat = 100
+    /// The space the hero may use.
+    let size: CGSize
 
-    static let roomyHeight: CGFloat = 124
+    /// Tall enough for artwork, transport and the volume row together.
+    static let roomyHeight: CGFloat = 150
 
     var body: some View {
         let accent = model.mediaAccent(media)
-        let roomy = height >= Self.roomyHeight
+        let roomy = size.height >= Self.roomyHeight
+        let art: CGFloat = roomy ? 72 : size.height >= 110 ? 56 : 40
         let showsSound = !roomy && model.controls.soundRowShown
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                ArtworkView(media: media, size: 48, corner: 10)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: Space.m) {
+                ArtworkView(media: media, size: art, corner: art >= 56 ? Radius.m : Radius.s)
+                    .shadow(color: media.artworkData == nil ? .clear : accent.opacity(0.35), radius: 10, y: 2)
                     .onTapGesture { model.openPlayer() }
                     .help("Open \(media.appName ?? "player")")
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(media.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
-                    Text(media.artist ?? media.appName ?? "").font(.system(size: 11.5)).foregroundStyle(Color.islandSecondary).lineLimit(1)
+                VStack(alignment: .leading, spacing: Space.hair) {
+                    Text(media.title).textStyle(.title).foregroundStyle(Ink.primary).lineLimit(1)
+                    Text(media.artist ?? media.appName ?? "").textStyle(.body).foregroundStyle(Ink.secondary).lineLimit(1)
                 }
                 Spacer(minLength: 0)
                 if !roomy {
-                    SmallIconButton(symbol: showsSound ? "playpause.fill" : "speaker.wave.2.fill",
-                                    label: showsSound ? "Show playback controls" : "Show volume and output") {
+                    IconButton(symbol: showsSound ? "playpause.fill" : "speaker.wave.2.fill",
+                               help: showsSound ? "Show playback controls" : "Show volume and output",
+                               size: 24, glyph: 11, ink: Ink.tertiary) {
                         model.controls.soundRowShown.toggle()
                     }
                 }
             }
+            Spacer(minLength: Space.xs)
             if media.duration != nil {
                 MediaScrubber(model: model, media: media, accent: accent)
             }
             if showsSound {
-                SoundControls(model: model).frame(height: 33)
+                SoundControls(model: model).frame(height: TransportControls.height)
             } else {
-                TransportControls(model: model, media: media, accent: accent)
+                TransportControls(model: model, media: media, accent: accent, wide: size.width >= 330)
             }
             if roomy {
-                SoundControls(model: model).padding(.top, -2)
+                SoundControls(model: model).padding(.top, Space.xs)
             }
         }
+        .frame(height: size.height, alignment: .top)
     }
 }
 
@@ -64,9 +70,9 @@ struct MediaScrubber: View {
             let pos = preview.map { MediaSeek.position(fraction: $0, duration: duration) }
                 ?? model.displayPosition(media, now: ctx.date) ?? 0
             let remaining = model.settings.mediaShowsRemainingTime
-            HStack(spacing: 6) {
+            HStack(spacing: Space.s) {
                 Text(Format.clock(pos))
-                    .foregroundStyle(preview == nil ? Color.islandTertiary : Color.white)
+                    .foregroundStyle(preview == nil ? Ink.tertiary : Ink.primary)
                 ScrubBar(value: duration > 0 ? pos / duration : 0, tint: accent) { f in
                     model.controls.holdsOpen = true
                     preview = f
@@ -87,9 +93,8 @@ struct MediaScrubber: View {
                 .buttonStyle(.plain)
                 .help(remaining ? "Show track length" : "Show time left")
             }
-            .font(.system(size: 9.5, weight: .medium, design: .rounded))
-            .monospacedDigit()
-            .foregroundStyle(Color.islandTertiary)
+            .textStyle(.caption, numeric: true)
+            .foregroundStyle(Ink.tertiary)
         }
     }
 }
@@ -142,30 +147,29 @@ struct ScrubBar: View {
     }
 }
 
-/// -15 s, previous, play/pause, next, +15 s, with shuffle and repeat at the edges when the
-/// player reports them.
+/// Previous, play/pause and next in the middle; shuffle and repeat at the edges when the player
+/// reports them; ±15 s beside the middle only when there is room (the scrubber seeks too).
 struct TransportControls: View {
     let model: AppModel
     let media: NowPlaying
     let accent: Color
+    var wide = false
+
+    static let height: CGFloat = 32
 
     var body: some View {
-        let canSkip = media.duration != nil && media.elapsed != nil
+        let canSkip = wide && media.duration != nil && media.elapsed != nil
         ZStack {
-            HStack(spacing: canSkip ? 2 : 14) {
+            HStack(spacing: Space.xs) {
                 if canSkip {
-                    PillButton(symbol: "gobackward.15", size: 11) { model.send(.skipBackward) }
-                        .help("Back 15 seconds").accessibilityLabel("Back 15 seconds")
+                    IconButton(symbol: "gobackward.15", help: "Back 15 seconds", size: 28, glyph: 12, ink: Ink.secondary) { model.send(.skipBackward) }
                 }
-                PillButton(symbol: "backward.fill", size: 12) { model.send(.previous) }
-                    .help("Previous").accessibilityLabel("Previous track")
-                PillButton(symbol: media.isPlaying ? "pause.fill" : "play.fill", size: 15) { model.send(.togglePlayPause) }
-                    .accessibilityLabel(media.isPlaying ? "Pause" : "Play")
-                PillButton(symbol: "forward.fill", size: 12) { model.send(.next) }
-                    .help("Next").accessibilityLabel("Next track")
+                IconButton(symbol: "backward.fill", help: "Previous track", size: 30, glyph: 14, ink: Ink.primary) { model.send(.previous) }
+                IconButton(symbol: media.isPlaying ? "pause.fill" : "play.fill", help: media.isPlaying ? "Pause" : "Play",
+                           size: 32, glyph: 18, ink: Ink.primary) { model.send(.togglePlayPause) }
+                IconButton(symbol: "forward.fill", help: "Next track", size: 30, glyph: 14, ink: Ink.primary) { model.send(.next) }
                 if canSkip {
-                    PillButton(symbol: "goforward.15", size: 11) { model.send(.skipForward) }
-                        .help("Forward 15 seconds").accessibilityLabel("Forward 15 seconds")
+                    IconButton(symbol: "goforward.15", help: "Forward 15 seconds", size: 28, glyph: 12, ink: Ink.secondary) { model.send(.skipForward) }
                 }
             }
             HStack(spacing: 0) {
@@ -184,6 +188,7 @@ struct TransportControls: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .frame(height: Self.height)
     }
 }
 
@@ -201,9 +206,9 @@ struct ModeToggle: View {
             action()
         } label: {
             Image(systemName: symbol)
-                .font(.system(size: 10.5, weight: .semibold))
-                .foregroundStyle(on ? tint : Color.islandTertiary)
-                .frame(width: 22, height: 22)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(on ? tint : Ink.tertiary)
+                .frame(width: 24, height: 24)
                 .background(Circle().fill(on ? tint.opacity(0.16) : .clear))
                 .contentShape(Circle())
         }
@@ -220,12 +225,12 @@ struct SoundControls: View {
 
     var body: some View {
         let c = model.controls
-        HStack(spacing: 8) {
+        HStack(spacing: Space.s) {
             Button { model.toggleMute() } label: {
                 Image(systemName: Self.speakerSymbol(volume: c.volume, muted: c.muted))
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.islandSecondary)
-                    .frame(width: 18, height: 18)
+                    .foregroundStyle(Ink.secondary)
+                    .frame(width: 24, height: 24)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -260,8 +265,9 @@ struct OutputPickerButton: View {
 
     var body: some View {
         let current = model.currentOutput
-        SmallIconButton(symbol: current.map(Self.symbol) ?? "hifispeaker.fill",
-                        label: current.map { "Output: \($0.name)" } ?? "Choose output") {
+        IconButton(symbol: current.map(Self.symbol) ?? "hifispeaker.fill",
+                   help: current.map { "Output: \($0.name)" } ?? "Choose output",
+                   size: 24, glyph: 11, ink: Ink.secondary) {
             showMenu()
         }
     }
@@ -291,31 +297,7 @@ struct OutputPickerButton: View {
     }
 }
 
-/// A small borderless icon button for the island's secondary controls.
-struct SmallIconButton: View {
-    let symbol: String
-    let label: String
-    var tint: Color = .islandTertiary
-    var action: () -> Void
-
-    var body: some View {
-        Button {
-            Haptics.play(.tap)
-            action()
-        } label: {
-            Image(systemName: symbol)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 22, height: 22)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(HoverButtonStyle())
-        .help(label)
-        .accessibilityLabel(label)
-    }
-}
-
-/// The cup in the expanded island's header: keep the Mac awake for a while or until turned off.
+/// The cup in the menu bar row while keep awake is on: click for the durations or to turn it off.
 struct KeepAwakeButton: View {
     let model: AppModel
 
@@ -324,7 +306,8 @@ struct KeepAwakeButton: View {
         Button { showMenu() } label: {
             Image(systemName: session == nil ? "cup.and.saucer" : "cup.and.saucer.fill")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(session == nil ? Color.islandTertiary : Color(tint: KeepAwake.tint))
+                .foregroundStyle(session == nil ? Ink.tertiary : Color(tint: KeepAwake.tint))
+                .frame(width: 24, height: 24)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

@@ -81,7 +81,7 @@ struct TemplateClock<Content: View>: View {
 struct TemplateValueText: View {
     let activity: Activity
     let model: AppModel
-    var size: CGFloat = 12.5
+    var size: CGFloat = TextStyle.body.size
     var tint: Color?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.wingRoom) private var room
@@ -574,7 +574,7 @@ struct TemplateTrailing: View {
     var compact = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var size: CGFloat { compact ? 11.5 : 12.5 }
+    private var size: CGFloat { compact ? TextStyle.caption.size : TextStyle.body.size }
 
     var body: some View {
         let a = activity
@@ -618,8 +618,8 @@ struct TemplateDropCenter: View {
         switch model.visualTemplate(for: a) {
         case .score? where a.teams?.count == 2:
             Text(a.period ?? a.title)
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color.islandSecondary)
+                .textStyle(.caption, emphasized: true, numeric: true)
+                .foregroundStyle(Ink.secondary)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity)
         case .flight?:
@@ -634,7 +634,7 @@ struct TemplateDropCenter: View {
     }
 
     private func title(_ text: String) -> some View {
-        Text(text).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+        Text(text).textStyle(.body, emphasized: true).foregroundStyle(Ink.primary).lineLimit(1)
     }
 }
 
@@ -794,7 +794,7 @@ struct TemplateDetail<Fallback: View>: View {
                              dot: 6, animate: motion.perpetual)
             }
         case .flight? where a.flight != nil:
-            FlightBoard(activity: a, tint: tint, size: 11.5)
+            FlightBoard(activity: a, tint: tint, size: TextStyle.body.size)
         case .route? where a.route != nil:
             HStack(spacing: 6) {
                 if a.route?.line != nil { Image(systemName: a.route!.symbol).font(.system(size: 10, weight: .semibold)).foregroundStyle(tint) }
@@ -814,7 +814,7 @@ struct TemplateDetail<Fallback: View>: View {
         case .timer?:
             if let line = a.subtitle ?? timeLine(a) { secondary(line) }
         case .workout? where a.metrics != nil:
-            MetricsLine(metrics: a.metrics ?? [], size: 12.5, motion: motion)
+            MetricsLine(metrics: a.metrics ?? [], size: TextStyle.headline.size, motion: motion)
         case .gauge? where a.clampedProgress != nil:
             TemplateClock(activity: a) { now in
                 HStack(spacing: 7) {
@@ -841,7 +841,7 @@ struct TemplateDetail<Fallback: View>: View {
     }
 
     private func secondary(_ text: String) -> some View {
-        Text(text).font(.system(size: 11)).foregroundStyle(Color.islandSecondary).lineLimit(1)
+        Text(text).textStyle(.caption).foregroundStyle(Ink.secondary).lineLimit(1)
     }
 }
 
@@ -939,23 +939,14 @@ struct TemplateRow: View {
     var body: some View {
         if let t = model.visualTemplate(for: activity), t != .media, t != .agent, hasData(t) {
             let tint = model.tint(for: activity)
-            HStack(spacing: 10) {
+            HStack(spacing: Space.m) {
                 card(t, tint: tint, motion: TemplateMotion(model, systemReduceMotion: reduceMotion))
-                ForEach(Array(activity.actions.prefix(2).enumerated()), id: \.offset) { _, action in
-                    Button(action.title) { model.perform(action, activityID: activity.id) }
-                        .buttonStyle(CapsuleButtonStyle(tint: tint))
-                }
+                ActivityActions(activity: activity, model: model, tint: tint)
                 if hovering {
-                    Button { model.remove(activityID: activity.id) } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(Color.islandTertiary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Dismiss")
+                    DismissButton { model.remove(activityID: activity.id) }
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .islandCard(model.settings.theme)
+            .contentShape(Rectangle())
             .onHover { hovering = $0 }
         } else {
             ActivityRow(activity: activity, model: model)
@@ -1004,7 +995,7 @@ struct TemplateRow: View {
                 if let metrics = a.metrics {
                     VStack(alignment: .trailing, spacing: 1) {
                         ForEach(Array(metrics.prefix(2).enumerated()), id: \.offset) { _, m in
-                            RollingNumber(text: m.text, size: 11.5, weight: .semibold, animation: motion.value)
+                            RollingNumber(text: m.text, size: TextStyle.body.size, weight: .semibold, animation: motion.value)
                         }
                     }
                     .fixedSize()
@@ -1016,7 +1007,7 @@ struct TemplateRow: View {
             HStack(spacing: 10) {
                 leadingMark(t, tint: tint)
                 VStack(alignment: .leading, spacing: 3) {
-                    let title = Text(rowTitle(t)).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+                    let title = Text(rowTitle(t)).textStyle(.body, emphasized: true).foregroundStyle(Ink.primary).lineLimit(1)
                     if t == .stages, let label = activity.currentStageLabel {
                         // The stage label only when both fit: a squeezed title ("Swi…") loses the identity.
                         ViewThatFits(in: .horizontal) {
@@ -1038,10 +1029,10 @@ struct TemplateRow: View {
     }
 
     private func titles(_ title: String, _ subtitle: String?) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+        VStack(alignment: .leading, spacing: Space.hair) {
+            Text(title).textStyle(.body, emphasized: true).foregroundStyle(Ink.primary).lineLimit(1)
             if let subtitle {
-                Text(subtitle).font(.system(size: 11)).foregroundStyle(Color.islandSecondary).lineLimit(1)
+                Text(subtitle).textStyle(.caption).foregroundStyle(Ink.secondary).lineLimit(1)
             }
         }
     }
@@ -1078,7 +1069,7 @@ struct TemplateRow: View {
             if let metrics = a.metrics, !metrics.isEmpty {
                 ViewThatFits(in: .horizontal) {
                     ForEach((1...min(metrics.count, TemplateLimits.metrics)).reversed(), id: \.self) { n in
-                        MetricsLine(metrics: Array(metrics.prefix(n)), size: 11.5, motion: motion)
+                        MetricsLine(metrics: Array(metrics.prefix(n)), size: TextStyle.body.size, motion: motion)
                     }
                 }
             } else if let sub = a.subtitle {
@@ -1100,7 +1091,7 @@ struct TemplateRow: View {
         case .liveAudio:
             HStack(spacing: 7) {
                 VoiceWave(tint: tint, active: activity.state == .running && motion.perpetual, width: 22, height: 14)
-                if activity.templateTrailing(now: Date()) != nil { TemplateValueText(activity: activity, model: model, size: 12.5, tint: tint) }
+                if activity.templateTrailing(now: Date()) != nil { TemplateValueText(activity: activity, model: model, size: TextStyle.body.size, tint: tint) }
             }
         case .eta where activity.trailing == nil && activity.phase == "arrived":
             TemplateTrailing(activity: activity, model: model, tint: tint)
@@ -1112,6 +1103,49 @@ struct TemplateRow: View {
         default:
             TemplateValueText(activity: activity, model: model, size: 13, tint: tint)
         }
+    }
+}
+
+/// The generic row: icon, title and subtitle, progress, the activity's buttons and its value.
+struct ActivityRow: View {
+    let activity: Activity
+    let model: AppModel
+    @ViewState private var hovering = false
+
+    var body: some View {
+        let tint = model.tint(for: activity)
+        HStack(spacing: Space.m) {
+            IconView(icon: model.icon(for: activity), size: 18, tint: tint)
+            VStack(alignment: .leading, spacing: Space.hair) {
+                Text(activity.title).textStyle(.body, emphasized: true).foregroundStyle(Ink.primary).lineLimit(1)
+                if let sub = activity.subtitle {
+                    Text(sub).textStyle(.caption).foregroundStyle(Ink.secondary).lineLimit(1)
+                }
+                if activity.state == .running, activity.clampedProgress != nil {
+                    ActivityProgress(activity: activity, tint: tint, height: 3).padding(.top, Space.hair)
+                }
+            }
+            Spacer(minLength: 0)
+            ActivityActions(activity: activity, model: model, tint: tint)
+            ActivityTrailing(activity: activity, tint: tint)
+            if hovering { DismissButton { model.remove(activityID: activity.id) } }
+        }
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+    }
+}
+
+/// The quiet × that appears on a row under the pointer.
+struct DismissButton: View {
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundStyle(Ink.tertiary)
+                .frame(width: 16, height: 16).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Dismiss")
     }
 }
 
