@@ -327,7 +327,10 @@ if args.contains("--snapshot") || args.contains("--demo") {
 
 if let i = args.firstIndex(of: "--snapshot") {
     let dir = i + 1 < args.count ? args[i + 1] : "snapshots"
-    MainActor.assumeIsolated { Snapshots.render(to: URL(fileURLWithPath: dir)) }
+    MainActor.assumeIsolated {
+        Snapshots.render(to: URL(fileURLWithPath: dir))
+        Snapshots.renderReadme(to: URL(fileURLWithPath: dir))
+    }
     try? FileManager.default.removeItem(at: scratch)
     exit(0)
 }
