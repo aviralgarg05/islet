@@ -14,10 +14,10 @@ Ready-made files live in [`integrations/`](../integrations/). For recipes coveri
 
 | Source | What you see | Needs |
 |---|---|---|
-| Any app that reports Now Playing (Music, Spotify, Podcasts, TV, Safari/Chrome/Arc/Firefox tabs, VLC, IINA, Plexamp, Tidal, Cider…) | Artwork + equalizer in the closed island; controls, scrubber and times when open | nothing |
+| Any app that reports Now Playing (Music, Spotify, Podcasts, TV, Safari/Chrome/Arc/Firefox tabs, VLC, IINA, Plexamp, Tidal, Cider…) | Artwork + equalizer in the closed island; when open, a scrubber you can drag, ±15 s, shuffle and repeat (when the player reports them), system volume and an output picker | nothing |
 | FaceTime, Zoom, Teams, Slack huddles, Discord, WhatsApp, Webex, Skype, Telegram, Signal, Meet in a browser | Green call pill with a live timer; video icon when the camera is on | nothing |
 | Calendar (iCloud, Google and Exchange accounts added to macOS) | "Starting soon" 5 minutes before with a **Join** button for Zoom/Meet/Teams/Webex links | Calendar access |
-| Battery | Charging splash, low-battery warning with a Battery Settings button, Low Power Mode on/off | nothing |
+| Battery | Charging splash with the adapter's watts, low and critical warnings at levels you choose, an optional "charged to 80%" alert, Low Power Mode on/off | nothing |
 | Volume, brightness, keyboard backlight | HUD in the notch (optionally replacing the system one) | nothing (Accessibility to replace) |
 | AirPods / headphones / displays / speakers | "Connected" card when the output device changes | nothing |
 | Safari, Chrome, Firefox, Edge, Brave, Arc downloads | Progress (real % for Safari), then "Downloaded" with Open/Show | Downloads folder access |
@@ -87,6 +87,36 @@ isletctl set upload --state success --subtitle "All done"
 | **Home Assistant** | [`integrations/home-assistant/islet.yaml`](../integrations/home-assistant/islet.yaml): a `rest_command` to the LAN bridge, plus a doorbell automation. |
 | **Makefiles, npm scripts, git hooks** | `isletctl run -- <cmd>` or `isletctl notify`. For example, a `post-merge` hook: `isletctl notify "Pulled $(git rev-parse --short HEAD)" --icon sf:arrow.down.circle`. |
 | **CI (GitHub Actions)** | Watch a run from your Mac: `isletctl run --title "CI main" -- gh run watch --exit-status`. |
+
+---
+
+## Gestures
+
+Two-finger swipes on the island work without any permission: Islet reads the scroll events its own windows already receive, and never watches the trackpad elsewhere.
+
+| Swipe | Where | Does |
+|---|---|---|
+| Down | closed island | open it (handy with *Open on hover* off) |
+| Up | open island | close it (it stays closed until the pointer leaves the notch) |
+| Left / right | music, closed or on the Home tab | next / previous track, or 10 s forward / back |
+| Left / right | a closed activity | show the next / previous activity, from the bubbles beside the notch |
+
+A swipe fires once per flick, after about 24 pt of travel within a quarter of a second, so scrolling past the notch or the momentum of an earlier scroll doesn't trigger it. Directions follow your *Natural scrolling* setting. Each swipe can be turned off in *Settings → General → Gestures*.
+
+---
+
+## Keep awake
+
+The cup in the open island's header keeps the Mac awake for 15 minutes, 1 or 2 hours, or until you turn it off. A live activity counts down in the notch. It turns itself off on battery below 20%.
+
+| From | Use |
+|---|---|
+| Terminal | `isletctl awake 2h`, `isletctl awake off`, `isletctl awake status` |
+| A long job | `isletctl awake on && make release; isletctl awake off` |
+| Shortcuts, Raycast, Alfred, Stream Deck | Open URL `islet://awake?for=1h` or `islet://awake/off` |
+| HTTP | `POST /v1/awake {"minutes": 60}`, `DELETE /v1/awake` (see [API.md](API.md#keep-awake)) |
+
+Media keys for launchers work the same way: `islet://media/forward`, `islet://media/rewind`, `islet://media/shuffle`, `islet://media/repeat`, or `isletctl media seek 2m`.
 
 ---
 

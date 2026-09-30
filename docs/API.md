@@ -79,7 +79,10 @@ An activity is identified by `id`. Sending the same `id` again **updates** it (f
 | `POST /v1/focus` | `{name, on}` | iPhone-style Focus pill |
 | `POST /v1/media` | `{title, artist?, album?, isPlaying?, duration?, elapsed?, bundleID?, appName?, artworkURL?}` | report playback from any player |
 | `DELETE /v1/media` | — | clear it |
-| `POST /v1/media/command` | `{command: play\|pause\|togglePlayPause\|next\|previous\|seek, position?}` | controls whatever is playing |
+| `POST /v1/media/command` | `{command: play\|pause\|togglePlayPause\|next\|previous\|seek\|skipForward\|skipBackward\|toggleShuffle\|toggleRepeat, position?}` | controls whatever is playing (see [Media commands](#media-commands)) |
+| `GET /v1/awake` | — | keep-awake status |
+| `POST /v1/awake` | `{minutes?}` (omitted or `0` = until turned off, up to `1440`) | keeps the Mac awake; returns the status |
+| `DELETE /v1/awake` | — | lets the Mac sleep again; returns the status |
 | `POST /v1/island/open`, `/v1/island/close` | — | expand / collapse |
 | `POST /v1/hooks/{provider}` | the agent's own hook payload | see [Coding agents](INTEGRATIONS.md#coding-agents) |
 
@@ -91,6 +94,31 @@ curl -s -X POST http://127.0.0.1:47831/v1/activities \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"id":"backup","title":"Backing up","progress":0.3}'
 ```
+
+### Media commands
+
+| `command` | What it does |
+|---|---|
+| `play`, `pause`, `togglePlayPause`, `next`, `previous` | The usual transport controls. |
+| `seek` | Jump to `position` (seconds). |
+| `skipForward`, `skipBackward` | 15 s forward or back, worked out from the current position so it works with any player. If Islet doesn't know the position, the player's own 15 s skip is used. |
+| `toggleShuffle`, `toggleRepeat` | Shuffle on or off; repeat cycles off → all → one. Players that don't report shuffle or repeat may ignore them, and the island only shows these buttons for players that do. |
+
+A `503` means no player is available for the command.
+
+### Keep awake
+
+`POST /v1/awake` stops the display (and so the Mac) from going to sleep while idle, like `caffeinate -d`. It uses a public power assertion and needs no permission.
+
+```bash
+curl -s -X POST http://127.0.0.1:47831/v1/awake -H "Authorization: Bearer $TOKEN" -d '{"minutes": 60}'
+# {"active":true,"since":"2026-09-30T20:00:00Z","until":"2026-09-30T21:00:00Z","minutesLeft":60}
+```
+
+- A new request replaces the current one; `DELETE` ends it early.
+- While it's on, a live activity with a cup icon counts down (or shows "On" when it has no end), with a **Turn Off** button.
+- On battery below 20% it turns itself off, and it never outlives Islet: quitting releases it.
+- `minutes` outside 0–1440 gets a `422`.
 
 ### Local-network bridge (iPhone Shortcuts)
 
@@ -118,7 +146,9 @@ isletctl ls                           list activities (JSON)
 isletctl timer <90s|5m|1h> [--title T]
 isletctl run [--title T] -- <command…>   mirror a command in the notch; exit code passes through
 isletctl hud <volume|brightness|keyboardBrightness> <0-1>
-isletctl media <play|pause|playpause|next|previous>
+isletctl media <play|pause|playpause|next|previous|forward|rewind|shuffle|repeat>
+isletctl media seek <90s|2m>           jump to a position in the track
+isletctl awake [15m|1h|2h|on|off|status]   keep the Mac awake (default: until turned off; up to 24h)
 isletctl focus <name> [on|off]
 isletctl open | close                  (or press ⌃⌥I; change it in Settings → General)
 isletctl hook <claude|codex|AGENT> [JSON]   forward an agent hook payload (stdin or last argument)
@@ -138,7 +168,9 @@ islet://activity?id=pizza&title=Pizza&endsIn=1200&url=https://…&actionTitle=Tr
 islet://dismiss?id=deploy
 islet://timer?minutes=25&title=Focus
 islet://hud?kind=volume&value=0.5
-islet://media/playpause     (play, pause, next, previous)
+islet://media/playpause     (play, pause, next, previous, forward, rewind, shuffle, repeat)
+islet://awake?for=1h        (15m, 2h, 1h30m or a number of minutes; islet://awake alone = until turned off)
+islet://awake/off
 islet://focus?name=Work&state=on
 islet://open   islet://close   islet://toggle   islet://settings
 ```
@@ -174,3 +206,19 @@ Everything in Settings lives in `~/.config/islet/config.json` (or `$XDG_CONFIG_H
   ]
 }
 ```
+
+Now Playing, gestures and battery keys:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `mediaShowsRemainingTime` | `true` | Time left (rather than the track length) right of the scrubber. Tapping the label switches it. |
+| `gesturesEnabled` | `true` | Two-finger swipes on the island. |
+| `swipeDownToOpen`, `swipeUpToClose` | `true` | Open and close by swiping. |
+| `swipeMedia` | `true` | Swipe sideways over music. |
+| `swipeMediaAction` | `"track"` | `"track"` (next or previous) or `"seek"` (10 s). |
+| `swipeCyclesActivities` | `true` | Swipe sideways over a closed activity to show the next one. |
+| `batteryLowThreshold` | `20` | Low battery warning, 5–50%. |
+| `batteryCriticalThreshold` | `10` | Second, urgent warning; always below the low one. |
+| `batteryChargedAlert` | `0` | Tell me when charging reaches this level (50–100; `0` = off). |
+
+The old `hapticFeedback: false` is read as `"hapticsMode": "off"`; use `hapticsMode` from now on.
