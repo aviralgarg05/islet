@@ -189,6 +189,8 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var batteryCriticalThreshold = 10
     /// Tell me when charging reaches this level (0 = off), e.g. 80 to match a charge limit.
     public var batteryChargedAlert = 0
+    /// The Ask box: default provider, models, effort, follow-ups. API keys live in the Keychain.
+    public var ask = AskSettings()
 
     // Integrations
     public var apiEnabled = true

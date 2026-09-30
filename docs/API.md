@@ -354,6 +354,7 @@ islet://media/playpause     (play, pause, next, previous, forward, rewind, shuff
 islet://awake?for=1h        (15m, 2h, 1h30m or a number of minutes; islet://awake alone = until turned off)
 islet://awake/off
 islet://focus?name=Work&state=on
+islet://ask?q=What%20is%20a%20monad&provider=claude
 islet://open   islet://close   islet://toggle   islet://settings
 ```
 
@@ -366,6 +367,7 @@ Any app or web page can open these URLs, and they carry no token, so they are li
 
 Use the local API or `isletctl` when you need more.
 Siri can open these links through a shortcut: see [Siri and Shortcuts](SHORTCUTS.md).
+`islet://ask` opens the Ask box in the island with the question filled in and the field focused. It **never sends**: you press Return. `q` is optional (up to 4,000 characters). `provider` is optional and picks the provider for this session: `on-device`, `claude` (or `anthropic`), `chatgpt` (or `openai`), `claude-code`, `codex`; an unknown name is an error. There is no HTTP or `isletctl` equivalent, by design: nothing outside the Ask box can spend money on your API keys. See [AI.md](AI.md).
 
 ---
 

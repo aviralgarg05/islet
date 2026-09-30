@@ -15,6 +15,7 @@ import Foundation
 ///     islet://media/playpause   (also play, pause, next, previous, forward, rewind, shuffle, repeat)
 ///     islet://awake?for=1h      (also 15m, on, off; islet://awake/off)
 ///     islet://focus?name=Work&state=on   (from a Shortcuts Focus automation)
+///     islet://ask?q=What%20is%20a%20monad&provider=claude   (fills in the Ask box; never sends)
 ///     islet://open  islet://close  islet://toggle  islet://settings
 ///
 /// Any app or web page can open these URLs, and no token is involved, so what they can do is
@@ -31,6 +32,8 @@ public enum URLCommand: Equatable, Sendable {
     case media(PlaybackCommand)
     case focus(name: String, on: Bool)
     case awake(KeepAwakeChange)
+    /// Open the Ask box with this question filled in. Never sends it: a link must not spend money.
+    case ask(query: String?, provider: AskProviderKind?)
     case open, close, toggle, settings
 
     /// Activities created or dismissed through the URL scheme live under this id prefix.
@@ -172,6 +175,14 @@ public enum URLCommand: Equatable, Sendable {
             let raw = path.first ?? q["for"] ?? q["minutes"] ?? ""
             guard let change = KeepAwake.parse(raw) else { throw ParseError.invalid("for", raw) }
             return .awake(change)
+        case "ask":
+            var provider: AskProviderKind?
+            if let p = q["provider"], !p.isEmpty {
+                guard let kind = AskProviderKind(alias: p) else { throw ParseError.invalid("provider", p) }
+                provider = kind
+            }
+            let text = (q["q"] ?? q["text"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return .ask(query: text.isEmpty ? nil : String(text.prefix(AskLimits.questionCharacters)), provider: provider)
         case "open", "expand": return .open
         case "close", "collapse": return .close
         case "toggle": return .toggle

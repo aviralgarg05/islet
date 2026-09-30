@@ -6,6 +6,7 @@ import Observation
 
 enum IslandTab: String, CaseIterable, Identifiable {
     case home, today, shelf, widgets, clipboard, stats
+    case ask
     var id: String { rawValue }
 
     var symbol: String {
@@ -16,6 +17,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
         case .widgets: return "square.grid.2x2.fill"
         case .clipboard: return "doc.on.clipboard.fill"
         case .stats: return "gauge.with.dots.needle.33percent"
+        case .ask: return "sparkles"
         }
     }
 
@@ -27,6 +29,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
         case .widgets: return "Widgets"
         case .clipboard: return "Clipboard"
         case .stats: return "System"
+        case .ask: return "Ask"
         }
     }
 }
@@ -94,6 +97,7 @@ final class AppModel {
     @ObservationIgnored lazy var timers = TimerController(model: self)
     /// Coding-agent approval cards (ApprovalController.swift).
     @ObservationIgnored lazy var approvals = ApprovalController(model: self)
+    let ask = AskController()
     private var mirroredKeys: Set<String> = []
     private var mirrorClock = LiveActivityClock()
     /// Mirrored activity id → the menu bar item it came from. Clicking one presses that item;
@@ -230,6 +234,7 @@ final class AppModel {
 
     func stop() {
         releaseKeepAwake()
+        ask.stop()  // Quitting stops a running claude/codex rather than leaving it behind.
         guard server != nil else { return }
         server?.stop()
         APIDiscoveryStore.remove()
@@ -483,6 +488,7 @@ final class AppModel {
         } else {
             statsSampler.stop()
             pinned = false
+            ask.islandDidCollapse()
         }
     }
 

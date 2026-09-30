@@ -19,6 +19,7 @@ struct ExpandedView: View {
                 case .widgets: WidgetsTab(model: model)
                 case .clipboard: ClipboardTab(model: model)
                 case .stats: StatsTab(model: model)
+                case .ask: AskView(model: model)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -34,7 +35,8 @@ struct ExpandedView: View {
     private var topStrip: some View {
         HStack(spacing: 0) {
             HStack(spacing: 2) {
-                ForEach(visibleTabs) { tab in
+                let strip = TabStripFit.split(visibleTabs, width: TabStripFit.regionWidth(metrics))
+                ForEach(strip.shown) { tab in
                     Button {
                         Haptics.play(.tap)
                         model.select(tab: tab)
@@ -49,6 +51,7 @@ struct ExpandedView: View {
                     .buttonStyle(.plain)
                     .help(tab.title)
                 }
+                if !strip.more.isEmpty { TabOverflowMenu(model: model, tabs: strip.more) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -69,6 +72,7 @@ struct ExpandedView: View {
                     .foregroundStyle(b.level <= model.settings.batteryLowThreshold && !b.isPluggedIn ? Color.red : Color.islandSecondary)
                 }
                 KeepAwakeButton(model: model)
+                AskStripButton(model: model)
                 Button {
                     Haptics.play(.snap)
                     model.pinned.toggle()
@@ -98,6 +102,7 @@ struct ExpandedView: View {
             case .shelf: return model.settings.shelfEnabled
             case .widgets: return model.settings.pluginsEnabled
             case .stats: return model.settings.systemStatsEnabled
+            case .ask: return false  // reached from the sparkles button on the right
             default: return true
             }
         }

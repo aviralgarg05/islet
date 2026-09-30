@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         AppActions.openSettingsHandler = { [weak self] in self?.showSettings() }
+        EditMenu.install()
         model.start()
         if demo { model.loadDemo() }
         setUpHUD()

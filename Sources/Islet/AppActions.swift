@@ -102,12 +102,14 @@ enum AppActions {
             case .focus(let name, let on): try model.applyLocal(FocusPill.activity(name: name, on: on))
             case .open: model.setExpanded(model.targetDisplay())
             case .awake(let change): model.setKeepAwake(change, announce: true)
+            case .ask(let query, let provider): openAsk(model, query: query, provider: provider)
             case .close: model.setExpanded(nil)
             case .toggle: model.setExpanded(model.expandedScreen == nil ? model.targetDisplay() : nil)
             case .settings: openSettings()
             }
         } catch {
-            NSLog("Islet: bad URL %@: %@", url.absoluteString, String(describing: error))
+            // The command only, not the query: islet://ask carries the user's question.
+            NSLog("Islet: bad URL %@://%@%@: %@", url.scheme ?? "", url.host ?? "", url.path, String(describing: error))
         }
     }
 }
