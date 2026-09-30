@@ -79,6 +79,7 @@ isletctl set upload --state success --subtitle "All done"
 | App | Recipe |
 |---|---|
 | **Shortcuts (Mac)** | "Open URL" `islet://notify?title=…`, or "Run Shell Script" with `isletctl …`. Focus: Automation → *When Work turns on* → Open URL `islet://focus?name=Work&state=on`. |
+| **Siri** | Name a shortcut and say it: "Hey Siri, notch timer". Recipes for timers, the Pomodoro and asking Apple Intelligence with the answer in the notch: [Siri and Shortcuts](SHORTCUTS.md). |
 | **Raycast** | Script commands in [`integrations/raycast/`](../integrations/raycast/) (timer, toggle). Any Raycast deeplink can be an activity `url`. |
 | **Alfred** | Workflow → *Open URL* `islet://timer?minutes={query}`, or *Run Script* `isletctl notify "{query}"`. |
 | **Hammerspoon** | [`integrations/hammerspoon/islet.lua`](../integrations/hammerspoon/islet.lua) posts to the API, with a Wi-Fi-change example. |
