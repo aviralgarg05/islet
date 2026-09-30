@@ -71,7 +71,15 @@ enum TemplateSnapshots {
             ("progress", spec("progress", "ci", "Release build", "Compiling 142/310", "hammer.fill", "orange", .progress) {
                 $0.progress = 0.46
             }, now),
+            // Mirrored from the menu bar: a template from the catalogue, but only text to fill it.
+            ("mirrored-uber", mirrored("Uber", "Arriving · 4 min"), now),
+            ("mirrored-espn", mirrored("ESPN", "IND 245/3 · AUS 198"), now),
         ]
+    }
+
+    private static func mirrored(_ app: String, _ detail: String) -> ActivitySpec {
+        let m = MirroredLiveActivity(key: "snapshot-" + app, appName: app, detail: detail)
+        return MenuBarLiveActivities.activity(for: m, look: LiveActivityCatalog.look(for: app).map { ($0.symbol, $0.tint) }, isNew: false)
     }
 
     static func render(to dir: URL, model: AppModel) {

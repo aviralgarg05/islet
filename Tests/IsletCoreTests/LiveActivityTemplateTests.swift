@@ -388,6 +388,88 @@ import Testing
         #expect(call.templateRefresh(now: t0)?.anchor == t0.addingTimeInterval(-30))
     }
 
+    /// Every example in docs/API.md's Templates section is valid and draws with its template.
+    @Test func documentedExamplesAreValid() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("docs/API.md")
+        let doc = try String(contentsOf: url, encoding: .utf8)
+        let start = try #require(doc.range(of: "### Templates"))
+        let end = try #require(doc.range(of: "## HTTP API", range: start.upperBound..<doc.endIndex))
+        let blocks = doc[start.upperBound..<end.lowerBound].components(separatedBy: "```json\n").dropFirst()
+            .map { $0.components(separatedBy: "\n```")[0] }
+        #expect(blocks.count == ActivityTemplate.allCases.count)
+        var seen: Set<ActivityTemplate> = []
+        for json in blocks {
+            var c = ActivityCenter()
+            let spec = try APIJSON.decoder.decode(ActivitySpec.self, from: Data(json.utf8))
+            let a = try c.apply(spec, now: t0)
+            #expect(a.resolvedTemplate.rawValue == spec.template, "\(json)")
+            seen.insert(a.resolvedTemplate)
+        }
+        #expect(seen.count == ActivityTemplate.allCases.count)
+    }
+
+    @Test func templateMomentsSneakAndTicksStayQuiet() throws {
+        var c = ActivityCenter()
+        func sneaks(_ spec: ActivitySpec) throws -> Bool {
+            c.cancelSneak()
+            try c.apply(spec, now: t0)
+            return c.currentSneak(now: t0) != nil
+        }
+        var ride = ActivitySpec(id: "r", title: "Ride", endsAt: t0.addingTimeInterval(300), sneak: false)
+        ride.template = "eta"
+        ride.phase = "enroute"
+        try c.apply(ride, now: t0)
+        #expect(try !sneaks(ActivitySpec(id: "r", endsAt: t0.addingTimeInterval(240))))
+        var arrived = ActivitySpec(id: "r")
+        arrived.phase = "arrived"
+        #expect(try sneaks(arrived))
+        #expect(try !sneaks(arrived))
+        arrived.phase = "delivered"
+        arrived.sneak = false
+        #expect(try !sneaks(arrived))
+
+        var order = ActivitySpec(id: "o", title: "Order", steps: 4, step: 1, sneak: false)
+        order.stageLabels = ["A", "B", "C", "D"]
+        try c.apply(order, now: t0)
+        #expect(try sneaks(ActivitySpec(id: "o", step: 2)))
+        #expect(try !sneaks(ActivitySpec(id: "o", subtitle: "Still cooking")))
+
+        var game = ActivitySpec(id: "g", title: "Game", sneak: false)
+        game.teams = [ActivityTeam(abbr: "A", score: "0"), ActivityTeam(abbr: "B", score: "0")]
+        try c.apply(game, now: t0)
+        var goal = ActivitySpec(id: "g")
+        goal.teams = [ActivityTeam(score: "1"), ActivityTeam(score: "0")]
+        #expect(try sneaks(goal))
+        var clock = ActivitySpec(id: "g")
+        clock.period = "Q2"
+        #expect(try !sneaks(clock))
+
+        var flight = ActivitySpec(id: "f", title: "UA 1", sneak: false)
+        flight.flight = ActivityFlight(gate: "B22", status: "On time")
+        try c.apply(flight, now: t0)
+        var gate = ActivitySpec(id: "f")
+        gate.flight = ActivityFlight(gate: "C4")
+        #expect(try sneaks(gate))
+        var delayed = ActivitySpec(id: "f")
+        delayed.flight = ActivityFlight(status: "Delayed 20 min")
+        #expect(try sneaks(delayed))
+        delayed.flight = ActivityFlight(status: "Delayed 25 min")
+        #expect(try !sneaks(delayed))
+
+        var trip = ActivitySpec(id: "t", title: "N", sneak: false)
+        trip.route = ActivityRoute(line: "N", stopsLeft: 4)
+        try c.apply(trip, now: t0)
+        trip.sneak = nil
+        trip.route = ActivityRoute(stopsLeft: 3)
+        #expect(try !sneaks(trip))
+        trip.route = ActivityRoute(stopsLeft: 2)
+        #expect(try sneaks(trip))
+        trip.route = ActivityRoute(stopsLeft: 0)
+        #expect(try sneaks(trip))
+    }
+
     @Test func detectedCallsUseLiveAudio() {
         var d = CallDetector()
         guard case .started(let s) = d.update(micUsers: ["us.zoom.xos"], cameraOn: false, now: t0).first else {

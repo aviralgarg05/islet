@@ -393,6 +393,29 @@ extension Activity {
         trackSpan = done >= 1 ? remaining : max(span, remaining / (1 - done))
     }
 
+    /// Whether an update is a moment worth a sneak peek for the template: the ride arrives, an
+    /// order moves to its next stage, a score changes, a gate or flight status changes, or a
+    /// transit trip is two stops away or at its stop. Ordinary ticks stay quiet.
+    public func isTemplateMoment(after old: Activity) -> Bool {
+        switch resolvedTemplate {
+        case .eta:
+            return phase != old.phase && (phase == "arrived" || phase == "delivered")
+        case .stages:
+            return (currentStage ?? 0) > (old.currentStage ?? 0)
+        case .score:
+            return teams?.map(\.score) != old.teams?.map(\.score) && old.teams != nil
+        case .flight:
+            guard let f = flight, let o = old.flight else { return false }
+            return (f.gate != o.gate && o.gate != nil) || f.statusKind != o.statusKind
+                || (phase != old.phase && phase == "boarding")
+        case .route:
+            guard let n = route?.stopsLeft, n != old.route?.stopsLeft else { return false }
+            return n == 2 || n == 0
+        default:
+            return false
+        }
+    }
+
     /// Where the ETA tracker sits, 0...1: explicit progress, else time along the fixed span.
     public func trackProgress(now: Date) -> Double? {
         if let p = clampedProgress { return p }

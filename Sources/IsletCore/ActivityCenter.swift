@@ -71,6 +71,7 @@ public struct ActivityCenter: Sendable {
 
         if var existing = activities[id] {
             let previousState = existing.state
+            let before = existing
             existing.stretchTrack(to: spec.endsAt, now: now)
             if let v = spec.source { existing.source = v }
             if let v = spec.title { existing.title = v }
@@ -94,7 +95,7 @@ public struct ActivityCenter: Sendable {
             existing.updatedAt = now
             activities[id] = existing
             let becameTerminal = existing.state != previousState && (existing.state == .success || existing.state == .failure)
-            if spec.sneak == true || (spec.sneak != false && becameTerminal) {
+            if spec.sneak == true || (spec.sneak != false && (becameTerminal || existing.isTemplateMoment(after: before))) {
                 sneak = (id, now.addingTimeInterval(sneakDuration))
             }
             return existing

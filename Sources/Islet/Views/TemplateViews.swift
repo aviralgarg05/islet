@@ -13,9 +13,6 @@ extension AppModel {
         let t = a.resolvedTemplate
         return t == .progress ? nil : t
     }
-
-    /// The activity's tint, lifted until it reads on black.
-    func templateTint(for a: Activity) -> Color { tint(for: a).readableOnBlack }
 }
 
 extension Color {
@@ -96,7 +93,7 @@ struct TemplateValueText: View {
             Text(text)
                 .font(.system(size: size, weight: .semibold, design: .rounded))
                 .monospacedDigit()
-                .foregroundStyle(tint ?? model.templateTint(for: activity))
+                .foregroundStyle(tint ?? model.tint(for: activity))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .contentTransition(.numericText(countsDown: activity.endsAt != nil))
@@ -496,7 +493,7 @@ struct TemplateLeading: View {
     /// The caller's tint, used as is by the generic look and lifted for templates.
     var tint: Color
     var size: CGFloat = 15
-    /// Dropped pill and sneak header: slightly smaller, fixed width for the score.
+    /// Dropped pill and sneak header: both score sides get the same width.
     var compact = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -537,12 +534,12 @@ struct TemplateLeading: View {
             } else {
                 IconView(icon: model.icon(for: a), size: size, tint: tint)
             }
-        case .timer?:
+        case .timer? where a.endsAt != nil || a.startedAt != nil:
             ZStack {
                 TimerRing(activity: a, tint: tint, size: size + 4, lineWidth: 1.8, motion: motion)
                 IconView(icon: model.icon(for: a), size: size - 6, tint: tint)
             }
-        case .gauge?:
+        case .gauge? where a.clampedProgress != nil:
             GaugeRing(level: a.clampedProgress, tint: tint, size: size + 5, lineWidth: 2, showsValue: size + 5 >= 19, animation: motion.value)
         case nil:
             IconView(icon: model.icon(for: a), size: size, tint: base)
@@ -636,34 +633,47 @@ struct TemplateBubble: View {
 
     var body: some View {
         let a = activity
-        let tint = model.templateTint(for: a)
+        let tint = model.tint(for: a)
         let motion = TemplateMotion(model, systemReduceMotion: reduceMotion)
         let ring = diameter - 8
         let glyph = diameter - 17
+        let plain = IconView(icon: model.icon(for: a), size: diameter - 13, tint: tint)
         TemplateClock(activity: a) { now in
             let text = a.minimalText(now: now)
             switch model.visualTemplate(for: a) {
-            case .eta?:
+            case .eta? where a.trackProgress(now: now) != nil:
                 ZStack {
-                    ProgressRing(progress: a.trackProgress(now: now) ?? 0, tint: tint, size: ring, lineWidth: 2.2)
+                    ProgressRing(progress: a.trackProgress(now: now), tint: tint, size: ring, lineWidth: 2.2)
                         .animation(motion.value, value: a.trackProgress(now: now))
                     if let text { label(text, color: .white) } else { IconView(icon: a.trackerIcon ?? model.icon(for: a), size: glyph, tint: tint) }
                 }
-            case .stages?:
+            case .stages? where a.stageCount != nil:
                 ZStack {
                     ProgressRing(progress: stageFraction(a), tint: tint, size: ring, lineWidth: 2.2)
                     IconView(icon: a.currentStageSymbol ?? model.icon(for: a), size: glyph, tint: tint)
                 }
-            case .flight?:
+            case .flight? where a.flight != nil:
                 ZStack {
                     ProgressRing(progress: a.flight?.progress(now: now) ?? 0, tint: tint, size: ring, lineWidth: 2.2)
                     Image(systemName: "airplane").font(.system(size: glyph * 0.8, weight: .semibold)).foregroundStyle(tint)
                 }
             case .route?:
-                if let text { ringed(label(text, color: tint), tint: tint, ring: ring) } else if let route = a.route { RouteMark(route: route, height: glyph, tint: tint) }
+                if let text {
+                    ringed(label(text, color: tint), tint: tint, ring: ring)
+                } else if let route = a.route {
+                    RouteMark(route: route, height: glyph, tint: tint)
+                } else {
+                    plain
+                }
             case .score?:
-                if let text { label(text, color: .white) } else if let team = a.teams?.first { TeamBadge(team: team, height: ring - 2, round: true) }
-            case .timer?:
+                if let text {
+                    label(text, color: .white)
+                } else if let team = a.teams?.first {
+                    TeamBadge(team: team, height: ring - 2, round: true)
+                } else {
+                    plain
+                }
+            case .timer? where a.endsAt != nil || a.startedAt != nil:
                 ZStack {
                     TimerRing(activity: a, tint: tint, size: ring, lineWidth: 2.2, motion: motion)
                     if let text { label(text, color: .white) }
@@ -677,9 +687,9 @@ struct TemplateBubble: View {
                 } else if let text {
                     ringed(label(text, color: tint), tint: tint, ring: ring)
                 } else {
-                    IconView(icon: model.icon(for: a), size: diameter - 13, tint: tint)
+                    plain
                 }
-            case .gauge?:
+            case .gauge? where a.clampedProgress != nil:
                 GaugeRing(level: a.clampedProgress, tint: tint, size: ring, lineWidth: 2.2, animation: motion.value)
             case .liveAudio?:
                 if let text {
@@ -694,7 +704,7 @@ struct TemplateBubble: View {
                             .overlay(Circle().stroke(Color.black, lineWidth: 1.2))
                     }
             default:
-                if let text { label(text, color: tint) } else { IconView(icon: model.icon(for: a), size: diameter - 13, tint: tint) }
+                if let text { ringed(label(text, color: tint), tint: tint, ring: ring) } else { plain }
             }
         }
     }
@@ -744,7 +754,7 @@ struct TemplateDetail<Fallback: View>: View {
 
     var body: some View {
         let a = activity
-        let tint = model.templateTint(for: a)
+        let tint = model.tint(for: a)
         let motion = TemplateMotion(model, systemReduceMotion: reduceMotion)
         switch model.visualTemplate(for: a) {
         case .eta?:
@@ -825,9 +835,9 @@ struct FlightBoard: View {
         let delayed = f.statusKind == .delayed
         TemplateClock(activity: activity) { now in
             HStack(spacing: 6) {
-                AirportColumn(code: f.from ?? "—", time: f.departs, delayed: delayed, alignment: .leading, size: size)
+                if let from = f.from { AirportColumn(code: from, time: f.departs, delayed: delayed, alignment: .leading, size: size) }
                 FlightLine(progress: f.progress(now: now), tint: tint, number: f.number)
-                AirportColumn(code: f.to ?? "—", time: f.arrives, delayed: delayed, alignment: .trailing, size: size)
+                if let to = f.to { AirportColumn(code: to, time: f.arrives, delayed: delayed, alignment: .trailing, size: size) }
                 if let status = f.status { StatusChip(text: status, kind: f.statusKind).fixedSize() }
             }
         }
@@ -907,7 +917,7 @@ struct TemplateRow: View {
 
     var body: some View {
         if let t = model.visualTemplate(for: activity), t != .media, t != .agent, hasData(t) {
-            let tint = model.templateTint(for: activity)
+            let tint = model.tint(for: activity)
             HStack(spacing: 10) {
                 card(t, tint: tint, motion: TemplateMotion(model, systemReduceMotion: reduceMotion))
                 ForEach(Array(activity.actions.prefix(2).enumerated()), id: \.offset) { _, action in
