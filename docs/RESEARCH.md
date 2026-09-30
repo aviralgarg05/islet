@@ -4,11 +4,13 @@
 
 | Report | What it covers |
 |---|---|
-| [01 — Market analysis](research/01-market-analysis.md) | ~60 apps and libraries, pricing, licenses, activity, a 12-app × 35-feature matrix |
-| [02 — Pain points](research/02-pain-points.md) | GitHub issues, Reddit, HN and press, ranked by frequency and severity |
-| [03 — Integration feasibility](research/03-integrations-feasibility.md) | 17 integrations, exact APIs, permissions, graded A–D, several verified on macOS 27 |
-| [04 — Dynamic Island feature catalogue](research/04-dynamic-island-feature-catalog.md) | iPhone (through iOS 27), Mac menu-bar Live Activities, Android equivalents, prioritized synthesis |
-| [05 — App integration catalogue](research/05-app-integration-catalogue.md) | ~50 Mac apps: what each exposes (notifications, AppleScript, URL schemes, CLIs, webhooks), a recipe, and what Islet shows; 42 hooks verified on this Mac |
+| [01: Market analysis](research/01-market-analysis.md) | ~60 apps and libraries, pricing, licenses, activity, a 12-app × 35-feature matrix |
+| [02: Pain points](research/02-pain-points.md) | GitHub issues, Reddit, HN and press, ranked by frequency and severity |
+| [03: Integration feasibility](research/03-integrations-feasibility.md) | 17 integrations, exact APIs, permissions, graded A–D, several verified on macOS 27 |
+| [04: Dynamic Island feature catalogue](research/04-dynamic-island-feature-catalog.md) | iPhone (through iOS 27), Mac menu-bar Live Activities, Android equivalents, prioritized synthesis |
+| [05: App integration catalogue](research/05-app-integration-catalogue.md) | ~50 Mac apps: what each exposes (notifications, AppleScript, URL schemes, CLIs, webhooks), a recipe, and what Islet shows; 42 hooks verified on this Mac |
+
+A second round (section 8) looked at feature parity with 22 notch apps, Live Activities on the Mac, AI integrations, Liquid Glass and the macOS 27 menu bar. Its findings are summarised there rather than committed as full reports.
 
 ---
 
@@ -42,7 +44,7 @@
 | 7 | **Sleep/wake instability** | disappears after sleep (boring.notch #336) | Rebuild on wake; single-instance guard; discovery file owned per process. |
 | 8 | **Trust and permission friction** | unsigned builds, over-asking | Nothing is requested at launch. Every permission is opt-in from Settings, with a sentence on why. Local build is signed with a stable identity so grants survive rebuilds. |
 | 9 | **Janky animations, bloat** | "wobbly" animation toggle ≈83 👍 | Five motion styles including Minimal and Off, Reduce Motion honoured, every "wow" has an off switch; modules toggle individually. |
-| 10 | **Menu-bar overlap** | covers menu items, fights menu-bar managers | Idle island is invisible (the hardware notch is already there); everything outside the island is click-through; bubbles avoid Apple's Live Activity pill area by placement setting. |
+| 10 | **Menu-bar overlap** | covers menu items, fights menu-bar managers | Idle island is invisible (the hardware notch is already there). With Accessibility, Islet measures the menu bar and sizes the wings to the free space or drops the content below the notch; without it, it drops. Only drawn pixels take clicks (section 8). |
 | 11–12 | Shelf and calendar bugs | file promises, all-day date shifts | Bookmarked shelf items survive renames; all-day events never raise alerts. |
 
 ## 3. What people want most (report 02 §2, report 04 §4)
@@ -77,7 +79,7 @@ Islet adopts the same contract so it feels familiar and could bridge to a Mac Ac
 | Spring morphing, blur-crossfade, numeric text | Per-style springs (expand ≈0.42 s/0.78, collapse ≈0.34 s/0.92), blur-replace transitions, numeric-text countdowns, arrival bounce |
 | Haptics | Trackpad haptics for direct actions only by default (open, press, drop); optional for important alerts |
 
-**Reading the iPhone's own island on the Mac is not possible.** No API exposes other apps' Live Activities, and macOS 26+ already shows them in the menu bar. Islet coexists with that pill and covers the iPhone in two ways:
+**No API exposes the iPhone's Live Activities on the Mac.** ActivityKit is marked unavailable on macOS. macOS 26 and later show them in the menu bar, though, and since 0.2 Islet mirrors whatever MenuBarAgent draws there through Accessibility (section 8). It also covers the iPhone in two other ways:
 - It mirrors the iPhone notifications macOS forwards.
 - It accepts events from **iPhone Shortcuts automations** (alarm, Focus, arrive/leave, battery level) over an opt-in, token-protected local-network bridge.
 
@@ -120,8 +122,51 @@ It also records dead ends:
 
 ## 7. What's next
 
-- **Metaball split animation** between the island and its bubbles; long-press/Force-Click expanded detail; two-finger swipe to cycle activities.
-- **Per-bud AirPods battery** (private IOBluetooth keys, opt-in).
-- **Lyrics** line for Now Playing; external-display brightness via DDC.
-- **Signed and notarized releases** (Developer ID) and a Homebrew cask.
+- **Signed and notarised releases.** This needs a paid Apple Developer ID. Until then, builds are ad-hoc signed with the hardened runtime.
+- **Siri through App Intents.** The Command Line Tools can compile intents but can't produce the metadata the system reads (Xcode's `appintentsmetadataprocessor`). A CI job with Xcode could. Until then, Siri reaches Islet through Shortcuts.
+- **Per-bud AirPods battery**, **lyrics**, **weather**, **external-display brightness** and a **notification inbox**.
 - **Remote channels** (ntfy/SSE subscriptions) so CI and servers can push without being on the same Mac.
+
+## 8. Second round: parity, Live Activities, AI, glass and the menu bar (30 September 2026)
+
+### The macOS 27 menu bar
+
+Measured on a 14" MacBook Pro running macOS 27.0.1 [local]:
+- The notch spans x 663.5–848.5 pt. The Window Server draws the whole bar as one window, so status items can only be located through Accessibility.
+- `MenuBarAgent` owns the system items and the overflow chevron that macOS 27 adds when items don't fit beside the notch. Collapsed items keep reporting frames stacked on the chevron (x 873–915 here), so a naive reading makes the right-hand side look full. Ignoring them leaves 48.5 pt free to the right of the notch.
+- Free space on the left depends on the frontmost app's menus: 40.5 pt with Chrome, 191.5 pt with WhatsApp, 340.5 pt with Discord.
+- MenuBarAgent's own menu bar window lists every item, overflow included, with its frame, and reading it takes a few milliseconds. Asking every app for its status items took over a second and woke each one.
+
+What Islet does: it reads that window only while the closed island is visible, sizes the wings to the free space (at least 34 pt) or drops the content below the notch, never covers the chevron, and switches layout at most once a second. Panels use the transient collection behaviour, so Mission Control hides them. Sources: [Badgeify](https://badgeify.app/macos-27-golden-gate-menu-bar-changes/), [Michael Tsai](https://mjtsai.com/blog/2026/09/25/golden-gate-and-the-notch/), [boring.notch #1513](https://github.com/TheBoredTeam/boring.notch/issues/1513) and [#1059](https://github.com/TheBoredTeam/boring.notch/issues/1059).
+
+### iPhone Live Activities on the Mac
+
+- They reach the Mac through `replicatord` and are drawn by `WidgetRenderer_Activities`; no iPhone app code runs on the Mac [local]. Apple's support note is [120684](https://support.apple.com/en-us/120684). Timers and stopwatches from the iPhone don't appear on the Mac ([iDownloadBlog](https://www.idownloadblog.com/2025/06/28/how-to-use-live-activities-mac/)).
+- On macOS 27 the pill is a MenuBarAgent item whose accessibility label is "Live Activity", translated into 41 languages in `MenuBarCore.loctable`; its menu has "End Live Activity" ([ipsw-diffs](https://github.com/blacktop/ipsw-diffs/blob/main/macOS/27_0_26A428_vs_27_2_26B5086k_Mac18,5/LOCALIZATIONS/FileSystem/System/Library/CoreServices/MenuBarAgent.app/Contents/Resources/MenuBarCore.loctable.md)). Every other system item has a `com.apple.menuextra.*` identifier.
+- `liveactivitiesd` posts Darwin notifications when activity records change, which gives a trigger without polling [local].
+- On macOS 26 Control Center hosted each activity as its own status item ([Thaw #722](https://github.com/thaw-app/Thaw/issues/722), [Ice #656](https://github.com/jordanbaird/Ice/issues/656)). Islet 0.2 targets macOS 27 and hasn't been tested on 26.
+
+Islet recognises activities by that label in every language, the identifier, the menu command or the renderer process; keys each one by its element; reads its text; works out whether a clock counts up or down; and opens the original only when you click it. How much text a pill exposes varies by app, and that hasn't been checked against every app yet.
+
+A catalogue of 119 apps that publish Live Activities gives each an icon, a colour and one of twelve layouts: ride or delivery ETA, stages, flight, route, score, timer, workout, gauge, live audio, media, agent and progress. Parcels are a gap: none of the big carriers ship one.
+
+### AI
+
+- **Apple Intelligence.** Foundation Models work from a Command Line Tools build, including structured output and tool calling without the `@Generable` macro [local]. The on-device model on the test Mac reported `modelNotReady`, so every AI feature has a plain fallback. Context is 4,096 tokens on-device ([WWDC26 session 319](https://developer.apple.com/videos/play/wwdc2026/319/)).
+- **Siri.** App Intents compile, but the system only finds them through metadata that Xcode generates ([Apple forums](https://developer.apple.com/forums/thread/759160?page=2), [WWDC26 session 345](https://developer.apple.com/videos/play/wwdc2026/345/)). Shortcuts can already run anything Islet exposes, and "Use Model" in Shortcuts gives Apple Intelligence answers with no model code in Islet.
+- **Claude and ChatGPT.** Both stream over plain HTTPS. OpenAI's Responses API stores responses unless told not to, so Islet sends `store: false` ([OpenAI reference](https://developers.openai.com/api/reference/resources/responses/methods/create)). Claude Code and Codex can answer with their own login when run headless ([Claude Code](https://code.claude.com/docs/en/headless), [Codex](https://learn.chatgpt.com/docs/non-interactive-mode)).
+- **Approvals from the notch.** Claude Code's `PermissionRequest` hook takes an allow or deny decision and falls back to the terminal prompt on timeout ([hooks reference](https://code.claude.com/docs/en/hooks)); Codex and Cursor have equivalents ([Codex](https://learn.chatgpt.com/docs/hooks), [Cursor](https://cursor.com/docs/agent/hooks)).
+- **Usage limits.** Claude Code gives its status-line command the 5-hour and weekly percentages ([status line](https://code.claude.com/docs/en/statusline)); Codex writes them into its session logs [local]. Other notch apps read these tools' login tokens and call private endpoints instead, which Anthropic's consumer terms don't allow, so Islet doesn't.
+
+### Liquid Glass
+
+- All the glass APIs (`glassEffect`, `GlassEffectContainer`, `NSGlassEffectView`) build with the Command Line Tools on macOS 26 and later [local].
+- Apple keeps the iPhone island black and puts glass on floating controls, not status chrome ([HIG: materials](https://developer.apple.com/design/human-interface-guidelines/materials), [WWDC25 session 219](https://developer.apple.com/videos/play/wwdc2025/219/)). Glass beside the hardware notch shows the wallpaper at its edges.
+- Glass can't sample glass behind it, so cards inside a glass panel should be plain fills ([Apple](https://developer.apple.com/documentation/swiftui/applying-liquid-glass-to-custom-views)).
+- Another notch app saw glass freeze in a window that never becomes key ([Atoll #304](https://github.com/Ebullioscopic/Atoll/issues/304)), so Islet uses it only while expanded.
+
+What Islet does: the Glass theme keeps the menu bar row black, fades glass in below it once the island has grown, and uses plain fills for cards.
+
+### Parity with 22 notch apps
+
+Islet already led on extensibility (API, CLI, URL scheme, script widgets, agent hooks), idle cost and a Now Playing bridge that works on macOS 27. It trailed on everyday depth: a scrubber that seeks, an output picker, timers you can run from the island, an agenda with reminders, gestures, approvals and usage limits, which 0.2 adds. Still missing: a notification inbox, weather, lyrics, Bluetooth device batteries, and signed builds with automatic updates.

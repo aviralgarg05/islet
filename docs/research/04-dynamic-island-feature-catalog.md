@@ -16,7 +16,7 @@
 
 | Tag | Meaning |
 |---|---|
-| **[V]** | Checked this session against the cited page (Apple HIG and DocC, WWDC session pages, Apple Support, press articles). |
+| **[V]** | Checked on 30 September 2026 against the cited page (Apple HIG and DocC, WWDC session pages, Apple Support, press articles). |
 | **[S]** | Seen only in a search-engine result summary; the page itself was not opened. |
 | **[U]** | **Unverified.** From prior knowledge (to mid-2026) or one weak secondary source. Re-check before publishing. |
 
