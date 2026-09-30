@@ -44,6 +44,30 @@ public enum AgentHooks {
         return oneLine.count > n ? String(oneLine.prefix(n - 1)) + "…" : oneLine
     }
 
+    /// Hide values that look like credentials before a command is shown in the notch, where
+    /// screen recordings and the API can see it: `API_KEY=…`, `--token …`, `Bearer …`, and
+    /// well-known key prefixes.
+    public static func redactSecrets(_ command: String) -> String {
+        var s = command
+        let patterns = [
+            #"(?i)\b([A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASS|AUTH)[A-Z0-9_]*=)("[^"]*"|'[^']*'|\S+)"#,
+            #"(?i)(--?(?:api-?key|token|password|secret|auth)[= ])("[^"]*"|'[^']*'|\S+)"#,
+            #"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}"#,
+            #"\b(?:sk-(?:ant-)?[A-Za-z0-9_-]{8,}|gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,}|xox[abprs]-[A-Za-z0-9-]{8,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{20,})"#,
+        ]
+        for (i, p) in patterns.enumerated() {
+            guard let re = try? NSRegularExpression(pattern: p) else { continue }
+            let template: String
+            switch i {
+            case 0, 1: template = "$1•••"
+            case 2: template = "$1 •••"
+            default: template = "•••"
+            }
+            s = re.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: template)
+        }
+        return s
+    }
+
     /// Describe a tool call in a few words ("Editing App.swift", "Running swift test").
     static func describeTool(_ name: String, input: [String: Any]?) -> String {
         let input = input ?? [:]
@@ -52,7 +76,7 @@ public enum AgentHooks {
         }
         switch name {
         case "Bash":
-            if let cmd = input["command"] as? String { return "Running " + truncate(cmd, 44) }
+            if let cmd = input["command"] as? String { return "Running " + truncate(redactSecrets(cmd), 44) }
             return "Running a command"
         case "Edit", "MultiEdit", "NotebookEdit": return "Editing " + (file("file_path") ?? file("notebook_path") ?? "a file")
         case "Write": return "Writing " + (file("file_path") ?? "a file")

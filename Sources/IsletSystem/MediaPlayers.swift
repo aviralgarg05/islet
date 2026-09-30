@@ -232,6 +232,7 @@ public final class SpotifyProvider: ScriptablePlayerProvider {
                   let thumb = (obj["thumbnail_url"] as? String).flatMap(URL.init(string:)) else { return }
             DispatchQueue.main.async {
                 guard let self else { return }
+                if self.artworkCache.count >= 100 { self.artworkCache.removeAll() }
                 self.artworkCache[id] = thumb
                 var enriched = np
                 enriched.artworkURL = thumb

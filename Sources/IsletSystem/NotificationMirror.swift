@@ -28,7 +28,7 @@ public final class NotificationMirror {
     @discardableResult
     public func start() -> Bool {
         guard Self.isTrusted else { return false }
-        attach()
+        if observer == nil { attach() }
         if launchObserver == nil {
             // Notification Center restarts occasionally; re-attach when it does.
             launchObserver = NSWorkspace.shared.notificationCenter.addObserver(

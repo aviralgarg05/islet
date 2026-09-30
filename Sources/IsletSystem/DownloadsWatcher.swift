@@ -3,7 +3,8 @@ import IsletCore
 
 /// Watches a downloads folder for in-progress browser downloads (`.crdownload`, `.download`,
 /// `.part`…) and reports progress and completion. Event-driven on folder changes; while a
-/// download is running it also checks once a second (file growth doesn't change the folder).
+/// download is growing it also checks once a second (file growth doesn't change the folder),
+/// less often once it stops growing, and not at all after ten quiet minutes.
 public final class DownloadsWatcher {
     public var onEvent: ((DownloadTracker.Event) -> Void)?
     public let directory: URL
@@ -61,15 +62,20 @@ public final class DownloadsWatcher {
     public func scan() {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
         let partials = names.filter(PartialDownload.isPartial).compactMap { Self.partial(at: directory.appendingPathComponent($0)) }
-        for e in tracker.scan(partials: partials, existing: Set(names), now: Date()) { onEvent?(e) }
-        if partials.isEmpty {
+        let now = Date()
+        for e in tracker.scan(partials: partials, existing: Set(names), now: now) { onEvent?(e) }
+        // File growth doesn't touch the folder, so look again while something is downloading;
+        // back off once nothing has grown for a while and stop after that (folder events remain).
+        let interval = tracker.recheckInterval(now: now)
+        if interval != ticker?.timeInterval {
             ticker?.invalidate()
             ticker = nil
-        } else if ticker == nil {
-            let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.scan() }
-            t.tolerance = 0.3
-            RunLoop.main.add(t, forMode: .common)
-            ticker = t
+            if let interval {
+                let t = Timer(timeInterval: interval, repeats: true) { [weak self] _ in self?.scan() }
+                t.tolerance = interval * 0.3
+                RunLoop.main.add(t, forMode: .common)
+                ticker = t
+            }
         }
     }
 }

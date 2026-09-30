@@ -3,6 +3,14 @@ import Testing
 @testable import IsletCore
 
 @Suite struct AgentHookTests {
+    @Test func commandsShownInTheNotchHideSecrets() {
+        #expect(AgentHooks.redactSecrets("export OPENAI_API_KEY=sk-proj-abcdef123456 && run") == "export OPENAI_API_KEY=••• && run")
+        #expect(AgentHooks.redactSecrets(#"curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.x" https://x"#).contains("Bearer •••"))
+        #expect(AgentHooks.redactSecrets("gh auth login --with-token ghp_abcdefghijklmnopqrstuvwx") == "gh auth login --with-token •••")
+        #expect(AgentHooks.redactSecrets("mysql --password=hunter22 db") == "mysql --password=••• db")
+        #expect(AgentHooks.redactSecrets("swift test --filter Foo") == "swift test --filter Foo")
+    }
+
     func map(_ provider: String, _ json: String) throws -> AgentHooks.Result {
         try AgentHooks.map(provider: provider, payload: Data(json.utf8))
     }

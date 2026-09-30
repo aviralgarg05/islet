@@ -47,6 +47,7 @@ public final class AIAssist {
                 completion(nil)
                 return
             }
+            if self.symbolCache.count >= 256 { self.symbolCache.removeAll() }
             self.symbolCache[key] = name
             completion(name)
         }

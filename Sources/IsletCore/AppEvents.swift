@@ -208,7 +208,11 @@ public struct PartialDownload: Equatable, Sendable {
 
 /// Tracks partial files across scans and reports progress and completion.
 public struct DownloadTracker: Sendable {
-    public private(set) var inFlight: [String: (started: Date, last: PartialDownload)] = [:]
+    public private(set) var inFlight: [String: (started: Date, last: PartialDownload, grewAt: Date)] = [:]
+    private var reportedStalled: Set<String> = []
+
+    /// A partial that hasn't grown for this long is shown as paused and checked less often.
+    public static let stallAfter: TimeInterval = 15
 
     public init() {}
 
@@ -216,6 +220,16 @@ public struct DownloadTracker: Sendable {
         case progress(ActivitySpec)
         case finished(ActivitySpec, finalName: String)
         case vanished(id: String)
+    }
+
+    /// How often the watcher should look again: every second while something grows, every
+    /// 30 s while downloads are paused, and not at all (folder events only) after 10 minutes.
+    public func recheckInterval(now: Date) -> TimeInterval? {
+        guard let newest = inFlight.values.map(\.grewAt).max() else { return nil }
+        let quiet = now.timeIntervalSince(newest)
+        if quiet < Self.stallAfter { return 1 }
+        if quiet < 600 { return 30 }
+        return nil
     }
 
     public static func activityID(_ finalName: String) -> String {
@@ -231,24 +245,41 @@ public struct DownloadTracker: Sendable {
         var events: [Event] = []
         let byName = Dictionary(partials.map { ($0.fileName, $0) }, uniquingKeysWith: { a, _ in a })
         for p in partials.sorted(by: { $0.fileName < $1.fileName }) {
-            let isNew = inFlight[p.fileName] == nil
-            let started = inFlight[p.fileName]?.started ?? now
-            inFlight[p.fileName] = (started, p)
+            let previous = inFlight[p.fileName]
+            let isNew = previous == nil
+            let grew = isNew || previous?.last.bytes != p.bytes || previous?.last.totalBytes != p.totalBytes
+            let grewAt = grew ? now : previous!.grewAt
+            inFlight[p.fileName] = (previous?.started ?? now, p, grewAt)
+            let stalled = now.timeIntervalSince(grewAt) >= Self.stallAfter
+            // Report only changes: an unchanged file would otherwise redraw the island every second.
+            if grew {
+                reportedStalled.remove(p.fileName)
+            } else if !stalled || reportedStalled.contains(p.fileName) {
+                continue
+            } else {
+                reportedStalled.insert(p.fileName)
+            }
             var progress: Double = -1
             var trailing = Format.bytes(p.bytes)
             if let total = p.totalBytes, total > 0 {
                 progress = min(1, Double(p.bytes) / Double(total))
                 trailing = "\(Int((progress * 100).rounded()))%"
             }
-            events.append(.progress(ActivitySpec(
+            var spec = ActivitySpec(
                 id: Self.activityID(p.finalName), source: "downloads", title: p.finalName,
                 subtitle: p.totalBytes.map { "\(Format.bytes(p.bytes)) of \(Format.bytes($0))" } ?? "Downloading…",
                 icon: .symbol("arrow.down.circle.fill"), trailing: trailing, progress: progress,
                 state: .running, tint: "blue", priority: .normal, ttl: 0, sneak: isNew
-            )))
+            )
+            if stalled {
+                spec.subtitle = "Paused · " + Format.bytes(p.bytes)
+                spec.staleAt = now
+            }
+            events.append(.progress(spec))
         }
         for (name, entry) in inFlight.sorted(by: { $0.key < $1.key }) where byName[name] == nil {
             inFlight[name] = nil
+            reportedStalled.remove(name)
             let final = entry.last.finalName
             let id = Self.activityID(final)
             if existing.contains(final) {

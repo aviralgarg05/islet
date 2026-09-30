@@ -8,27 +8,66 @@ import IsletCore
 // MARK: - Clipboard
 
 /// Watches the general pasteboard. macOS has no change notification, so this polls
-/// `changeCount` (a cheap integer read) with a tolerant timer, and only while enabled.
+/// `changeCount` (a cheap integer read) with a tolerant timer, only while enabled, and not
+/// while the screen is locked or the displays sleep (nothing can be copied then).
 public final class ClipboardMonitor {
     public var onCopy: ((_ text: String, _ types: [String], _ sourceBundleID: String?) -> Void)?
     private var timer: Timer?
     private var lastChange = NSPasteboard.general.changeCount
+    private var interval: TimeInterval = 1
+    private var paused = false
+    private var observers: [NSObjectProtocol] = []
 
     public init() {}
     deinit { stop() }
 
-    public func start(interval: TimeInterval = 0.75) {
-        guard timer == nil else { return }
+    public var isRunning: Bool { timer != nil || paused }
+
+    public func start(interval: TimeInterval = 1) {
+        guard !isRunning else { return }
+        self.interval = interval
         lastChange = NSPasteboard.general.changeCount
+        schedule()
+        let dnc = DistributedNotificationCenter.default()
+        let wnc = NSWorkspace.shared.notificationCenter
+        observers = [
+            dnc.addObserver(forName: Notification.Name("com.apple.screenIsLocked"), object: nil, queue: .main) { [weak self] _ in self?.pause() },
+            dnc.addObserver(forName: Notification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main) { [weak self] _ in self?.resume() },
+            wnc.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in self?.pause() },
+            wnc.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in self?.resume() },
+        ]
+    }
+
+    public func stop() {
+        timer?.invalidate()
+        timer = nil
+        paused = false
+        for o in observers {
+            DistributedNotificationCenter.default().removeObserver(o)
+            NSWorkspace.shared.notificationCenter.removeObserver(o)
+        }
+        observers = []
+    }
+
+    private func schedule() {
         let t = Timer(timeInterval: interval, repeats: true) { [weak self] _ in self?.poll() }
         t.tolerance = interval / 2
         RunLoop.main.add(t, forMode: .common)
         timer = t
     }
 
-    public func stop() {
+    private func pause() {
+        guard timer != nil else { return }
         timer?.invalidate()
         timer = nil
+        paused = true
+    }
+
+    private func resume() {
+        guard paused else { return }
+        paused = false
+        poll()
+        schedule()
     }
 
     private func poll() {
@@ -37,15 +76,32 @@ public final class ClipboardMonitor {
         lastChange = pb.changeCount
         let types = (pb.types ?? []).map(\.rawValue)
         guard let text = pb.string(forType: .string) else { return }
-        onCopy?(text, types, NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
+        // The copying app, when it says so (nspasteboard.org); otherwise the frontmost app, which
+        // is wrong for copies from menu bar extras.
+        let source = pb.string(forType: NSPasteboard.PasteboardType("org.nspasteboard.source"))
+            ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        onCopy?(text, types, source)
     }
 
-    /// Put text back on the pasteboard (marked so our own monitor skips it).
-    public func copy(_ text: String) {
+    /// Put text on the pasteboard without our own monitor recording it.
+    /// - Parameter secret: mark it concealed and transient (clipboard managers skip it) and keep
+    ///   it off Universal Clipboard.
+    public func copy(_ text: String, secret: Bool = false) {
+        Self.write(text, secret: secret)
+        lastChange = NSPasteboard.general.changeCount
+    }
+
+    public static func write(_ text: String, secret: Bool) {
         let pb = NSPasteboard.general
-        pb.clearContents()
-        pb.setString(text, forType: .string)
-        lastChange = pb.changeCount
+        if secret {
+            pb.prepareForNewContents(with: .currentHostOnly)
+            pb.setString(text, forType: .string)
+            pb.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
+            pb.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
+        } else {
+            pb.clearContents()
+            pb.setString(text, forType: .string)
+        }
     }
 }
 
@@ -89,8 +145,16 @@ public final class CameraMonitor {
         return value != 0
     }
 
+    private var hardwareListener: CMIOObjectPropertyListenerBlock?
+
     public func start() {
         stop()
+        // Cameras connected later (Continuity Camera, USB) need listeners too.
+        var hw = Self.address(kCMIOHardwarePropertyDevices)
+        let onDevices: CMIOObjectPropertyListenerBlock = { [weak self] _, _ in self?.start() }
+        if CMIOObjectAddPropertyListenerBlock(CMIOObjectID(kCMIOObjectSystemObject), &hw, DispatchQueue.main, onDevices) == 0 {
+            hardwareListener = onDevices
+        }
         devices = Self.allDevices()
         for d in devices {
             var addr = Self.address(kCMIODevicePropertyDeviceIsRunningSomewhere)
@@ -108,6 +172,11 @@ public final class CameraMonitor {
             CMIOObjectRemovePropertyListenerBlock(d, &addr, DispatchQueue.main, block)
         }
         listeners.removeAll()
+        if let hardwareListener {
+            var hw = Self.address(kCMIOHardwarePropertyDevices)
+            CMIOObjectRemovePropertyListenerBlock(CMIOObjectID(kCMIOObjectSystemObject), &hw, DispatchQueue.main, hardwareListener)
+            self.hardwareListener = nil
+        }
     }
 
     private func emit() {

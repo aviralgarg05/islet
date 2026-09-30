@@ -60,10 +60,11 @@ enum AppActions {
         ))
     }
 
+    /// The token is a secret: concealed from clipboard history (including Islet's own) and kept
+    /// off other devices.
     static func copyToken() {
         guard let d = APIDiscoveryStore.read() else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(d.token, forType: .string)
+        ClipboardMonitor.write(d.token, secret: true)
     }
 
     static var cliPath: String {

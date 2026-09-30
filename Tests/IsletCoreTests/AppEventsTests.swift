@@ -127,6 +127,28 @@ import Testing
         } else { Issue.record("expected progress") }
     }
 
+    @Test func unchangedPartialsAreReportedOnceThenAsPaused() {
+        var t = DownloadTracker()
+        let file = PartialDownload(fileName: "big.iso.crdownload", bytes: 5_000)
+        #expect(t.scan(partials: [file], existing: [], now: t0).count == 1)
+        #expect(t.recheckInterval(now: t0) == 1)
+        // Same size a second later: nothing to redraw.
+        #expect(t.scan(partials: [file], existing: [], now: t0.addingTimeInterval(1)).isEmpty)
+        // Quiet for 15 s: one update that marks it paused, then silence and a slower check.
+        let paused = t.scan(partials: [file], existing: [], now: t0.addingTimeInterval(16))
+        guard case .progress(let p) = paused.first else { Issue.record("expected a paused update"); return }
+        #expect(p.subtitle?.hasPrefix("Paused") == true)
+        #expect(p.staleAt != nil)
+        #expect(t.scan(partials: [file], existing: [], now: t0.addingTimeInterval(20)).isEmpty)
+        #expect(t.recheckInterval(now: t0.addingTimeInterval(20)) == 30)
+        #expect(t.recheckInterval(now: t0.addingTimeInterval(700)) == nil)
+        // It grows again: reported straight away.
+        let resumed = t.scan(partials: [PartialDownload(fileName: "big.iso.crdownload", bytes: 9_000)], existing: [], now: t0.addingTimeInterval(701))
+        guard case .progress(let r) = resumed.first else { Issue.record("expected progress"); return }
+        #expect(r.staleAt == nil)
+        #expect(t.recheckInterval(now: t0.addingTimeInterval(701)) == 1)
+    }
+
     @Test func cancelledDownloadVanishes() {
         var t = DownloadTracker()
         _ = t.scan(partials: [PartialDownload(fileName: "a.zip.part", bytes: 10)], existing: [], now: t0)
@@ -271,6 +293,17 @@ import Testing
         let r = Agenda.restOfToday(items, now: now, calendar: cal)
         #expect(r.timed.map(\.id) == ["now", "later"])
         #expect(r.allDay.map(\.id) == ["holiday"])
+    }
+
+    @Test func meetingLinksAreRecognisedButNotLookalikes() {
+        #expect(Agenda.meetingLink(in: ["Join: https://us02web.zoom.us/j/8812345"])?.host == "us02web.zoom.us")
+        #expect(Agenda.meetingLink(in: [nil, "https://meet.google.com/abc-defg-hij"]) != nil)
+        #expect(Agenda.meetingLink(in: ["https://app.slack.com/huddle/T1/C2"]) != nil)
+        #expect(Agenda.meetingLink(in: ["https://app.slack.com/client/T1"]) == nil)
+        #expect(Agenda.meetingLink(in: ["https://zoom.us.account-verify.example/j/8812"]) == nil)
+        #expect(Agenda.meetingLink(in: ["https://meet.google.com-sso.example/abc"]) == nil)
+        #expect(Agenda.meetingLink(in: ["https://teams.microsoft.comx.example/l/meetup"]) == nil)
+        #expect(Agenda.meetingLink(in: ["http://zoom.us/j/1"]) == nil)
     }
 
     @Test func hiddenCalendars() {

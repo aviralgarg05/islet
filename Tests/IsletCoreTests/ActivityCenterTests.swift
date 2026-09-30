@@ -146,6 +146,25 @@ let t0 = Date(timeIntervalSince1970: 1_800_000_000)
         #expect(c.activities["keep-high"] != nil)
     }
 
+    @Test func newActivityIsNeverTheOneEvicted() throws {
+        var c = ActivityCenter(maxActivities: 2)
+        try c.apply(ActivitySpec(id: "a", title: "x", priority: .high), now: t0)
+        try c.apply(ActivitySpec(id: "b", title: "x", priority: .high), now: t0)
+        let low = try c.apply(ActivitySpec(id: "low", title: "x", priority: .low, sneak: true), now: t0.addingTimeInterval(1))
+        #expect(c.activities[low.id] != nil)
+        #expect(c.activities.count == 2)
+        // The evicted activity doesn't linger as the sneak peek.
+        if let sneaking = c.sneak?.id { #expect(c.activities[sneaking] != nil) }
+    }
+
+    @Test func revivingAFinishedActivityCancelsItsAutoDismiss() throws {
+        var c = ActivityCenter()
+        try c.apply(ActivitySpec(id: "deploy", title: "Deploy", state: .success), now: t0)
+        #expect(c.activities["deploy"]?.expiresAt != nil)
+        try c.apply(ActivitySpec(id: "deploy", progress: 0.05, state: .running), now: t0.addingTimeInterval(2))
+        #expect(c.activities["deploy"]?.expiresAt == nil)
+    }
+
     @Test func hudLifecycle() {
         var c = ActivityCenter(hudDuration: 1.5)
         c.showHUD(.volume, value: 1.7, now: t0)

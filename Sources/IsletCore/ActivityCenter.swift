@@ -87,7 +87,9 @@ public struct ActivityCenter: Sendable {
             if let v = spec.steps { existing.steps = max(1, v) }
             if let v = spec.step { existing.step = max(0, v) }
             if let v = spec.actions { existing.actions = v }
-            existing.expiresAt = expiry(ttl: spec.ttl, state: existing.state, previous: existing.expiresAt, now: now)
+            // Back from done or failed to working: the automatic dismissal no longer applies.
+            let revived = (previousState == .success || previousState == .failure) && existing.state != previousState
+            existing.expiresAt = expiry(ttl: spec.ttl, state: existing.state, previous: revived ? nil : existing.expiresAt, now: now)
             existing.updatedAt = now
             activities[id] = existing
             let becameTerminal = existing.state != previousState && (existing.state == .success || existing.state == .failure)
@@ -123,7 +125,7 @@ public struct ActivityCenter: Sendable {
             updatedAt: now
         )
         activities[id] = activity
-        evictIfNeeded()
+        evictIfNeeded(keeping: id, now: now)
         if spec.sneak ?? (activity.priority >= .normal) {
             sneak = (id, now.addingTimeInterval(sneakDuration))
         }
@@ -140,13 +142,19 @@ public struct ActivityCenter: Sendable {
         return previous
     }
 
-    private mutating func evictIfNeeded() {
+    private mutating func evictIfNeeded(keeping id: String, now: Date) {
         guard activities.count > maxActivities else { return }
-        // Drop the least important, least recently updated activities first.
+        // Expired ones go first, then the least important, least recently updated. Never the
+        // activity that was just applied: the caller has been told it exists.
+        for a in activities.values where a.id != id && (a.expiresAt.map { $0 <= now } ?? false) {
+            remove(id: a.id)
+        }
+        guard activities.count > maxActivities else { return }
         let victims = activities.values
+            .filter { $0.id != id }
             .sorted { ($0.priority, $0.updatedAt) < ($1.priority, $1.updatedAt) }
             .prefix(activities.count - maxActivities)
-        for v in victims { activities[v.id] = nil }
+        for v in victims { remove(id: v.id) }
     }
 
     @discardableResult

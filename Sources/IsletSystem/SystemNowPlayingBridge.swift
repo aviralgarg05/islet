@@ -13,6 +13,8 @@ public final class SystemNowPlayingBridge {
 
     private var process: Process?
     private var stdin: FileHandle?
+    private var stdout: FileHandle?
+    private var startedAt = Date.distantPast
     private var buffer = Data()
     private var lastArtwork: Data?
     private var lastArtworkHash: Int?
@@ -25,15 +27,21 @@ public final class SystemNowPlayingBridge {
     deinit { stop() }
 
     /// Locate the helper files: inside the app bundle, or next to the build products in development.
+    /// Release builds only ever load the copy inside their own bundle: the helper runs with
+    /// Islet's privacy permissions, so it must not come from an environment variable or a path
+    /// relative to wherever the binary happens to be.
     public static func helperPaths() -> (script: URL, library: URL)? {
         var dirs: [URL] = []
-        if let env = ProcessInfo.processInfo.environment["ISLET_HELPERS_DIR"] { dirs.append(URL(fileURLWithPath: env)) }
+        if let res = Bundle.main.resourceURL, Bundle.main.bundleIdentifier != nil { dirs.append(res) }
+        #if DEBUG
+        if let env = ProcessInfo.processInfo.environment["ISLET_HELPERS_DIR"] { dirs.insert(URL(fileURLWithPath: env), at: 0) }
         if let res = Bundle.main.resourceURL { dirs.append(res) }
         let exe = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath().deletingLastPathComponent()
         dirs.append(exe)
         // swift run: .build/<config>/Islet → <repo>/build/helpers
         dirs.append(exe.appendingPathComponent("../../../build/helpers").standardizedFileURL)
         dirs.append(exe.appendingPathComponent("../../build/helpers").standardizedFileURL)
+        #endif
         for d in dirs {
             let script = d.appendingPathComponent("islet-mediaremote.pl")
             let lib = d.appendingPathComponent("IsletMediaRemote.dylib")
@@ -61,8 +69,15 @@ public final class SystemNowPlayingBridge {
         p.standardOutput = out
         p.standardInput = inp
         p.standardError = FileHandle.nullDevice
+        // A write after the helper has gone must fail, not raise SIGPIPE and end Islet.
+        _ = fcntl(inp.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
         out.fileHandleForReading.readabilityHandler = { [weak self] h in
             let data = h.availableData
+            // End of file: without this the handler is called again at once, forever.
+            guard !data.isEmpty else {
+                h.readabilityHandler = nil
+                return
+            }
             DispatchQueue.main.async { self?.ingest(data) }
         }
         p.terminationHandler = { [weak self] proc in
@@ -76,24 +91,32 @@ public final class SystemNowPlayingBridge {
         }
         process = p
         stdin = inp.fileHandleForWriting
+        stdout = out.fileHandleForReading
+        startedAt = Date()
         isRunning = true
     }
 
     public func stop() {
         stopped = true
+        stdout?.readabilityHandler = nil
         try? stdin?.close()
         process?.terminate()
         process = nil
         stdin = nil
+        stdout = nil
         isRunning = false
     }
 
     private func helperExited(status: Int32) {
+        stdout?.readabilityHandler = nil
         process = nil
         stdin = nil
+        stdout = nil
         isRunning = false
         guard !stopped else { return }
-        // Restart with backoff if the helper crashed (e.g. mediaremoted restarted).
+        // Restart with backoff if the helper crashed (e.g. mediaremoted restarted). A helper
+        // that ran for a while earns a fresh set of retries; one that keeps dying doesn't.
+        if Date().timeIntervalSince(startedAt) > 60 { restarts = 0 }
         restarts += 1
         guard restarts <= 5 else {
             onUnavailable?("MediaRemote helper keeps exiting (status \(status)).")
@@ -143,8 +166,6 @@ public final class SystemNowPlayingBridge {
     private func handle(line: Data) {
         guard let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { return }
         switch obj["type"] as? String {
-        case "ready":
-            restarts = 0
         case "nowPlaying":
             let (np, artHash, art) = Self.parse(obj)
             if let art { lastArtwork = art; lastArtworkHash = artHash }

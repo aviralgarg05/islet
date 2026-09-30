@@ -40,14 +40,26 @@ public enum Agenda {
         for text in texts.compactMap({ $0 }) where !text.isEmpty {
             let range = NSRange(text.startIndex..., in: text)
             for match in detector?.matches(in: text, range: range) ?? [] {
-                guard let url = match.url, let host = url.host?.lowercased() else { continue }
-                let hostPath = host + url.path.lowercased()
-                if meetingHosts.contains(where: { hostPath == $0 || hostPath.hasSuffix("." + $0) || hostPath.hasPrefix($0) || host.hasSuffix("." + $0) }) {
-                    return url
-                }
+                guard let url = match.url, isMeetingLink(url) else { continue }
+                return url
             }
         }
         return nil
+    }
+
+    /// A joinable call link: https (or a call app's own scheme) on one of `meetingHosts` or a
+    /// subdomain of it, never a host that merely starts with one ("zoom.us.example.com").
+    static func isMeetingLink(_ url: URL) -> Bool {
+        let scheme = url.scheme?.lowercased() ?? ""
+        if ["zoommtg", "zoomus", "msteams"].contains(scheme) { return true }
+        guard scheme == "https", let host = url.host?.lowercased() else { return false }
+        let path = url.path.lowercased()
+        return meetingHosts.contains { entry in
+            let parts = entry.split(separator: "/", maxSplits: 1)
+            let entryHost = String(parts[0])
+            guard host == entryHost || host.hasSuffix("." + entryHost) else { return false }
+            return parts.count == 1 || path.hasPrefix("/" + parts[1])
+        }
     }
 
     /// The event worth surfacing now: an ongoing timed event, else the next one starting

@@ -42,12 +42,13 @@ public final class ShelfService {
         shelf.items.filter { ids == nil || ids!.contains($0.id) }.map { URL(fileURLWithPath: $0.path) }
     }
 
-    /// Follow bookmarks so moved or renamed files stay on the shelf.
+    /// Follow bookmarks so moved or renamed files stay on the shelf. Never mounts a volume: an
+    /// item on a disconnected disk or share must not hold up launch.
     private func resolveBookmarks() {
         for item in shelf.items {
             guard let data = item.bookmark else { continue }
             var stale = false
-            if let url = try? URL(resolvingBookmarkData: data, options: [.withoutUI], relativeTo: nil, bookmarkDataIsStale: &stale),
+            if let url = try? URL(resolvingBookmarkData: data, options: [.withoutUI, .withoutMounting], relativeTo: nil, bookmarkDataIsStale: &stale),
                url.path != item.path {
                 shelf.updatePath(id: item.id, to: url.path)
             }

@@ -267,6 +267,9 @@ if let i = args.firstIndex(of: "--snapshot") {
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 
+// A write to a helper or client that has gone away returns an error instead of ending the app.
+signal(SIGPIPE, SIG_IGN)
+
 // Quit cleanly on SIGTERM/SIGINT (removes the API discovery file).
 signal(SIGTERM, SIG_IGN)
 signal(SIGINT, SIG_IGN)
