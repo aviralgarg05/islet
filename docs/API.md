@@ -215,14 +215,14 @@ echo '{"title":"Lakers at Celtics","teams":[{"abbr":"LAL","score":3},{"abbr":"BO
 
 Errors are JSON: `{"error": "'progress' must be between 0 and 1 …"}` with `400`, `401`, `403`, `404`, `405`, `411`, `413`, `422`, `429` or `503`.
 
-Live Activities mirrored from the menu bar (ids starting with `live-`, source `live-activity`) belong to the mirror. Creating, changing or removing one, or sending that source, gets a `403` whether or not the id exists. `GET /v1/activities` and `/v1/state` leave them out, and `/v1/debug/menubar` leaves out their text, unless **Share mirrored activities with scripts** is on; see [LIVE-ACTIVITIES.md](LIVE-ACTIVITIES.md).
-
 ```bash
 TOKEN=$(isletctl token)
 curl -s -X POST http://127.0.0.1:47831/v1/activities \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"id":"backup","title":"Backing up","progress":0.3}'
 ```
+
+Live Activities mirrored from the menu bar (ids starting with `live-`, source `live-activity`) belong to the mirror. Creating, changing or removing one, or sending that source, gets a `403` whether or not the id exists. `GET /v1/activities` and `/v1/state` leave them out, and `/v1/debug/menubar` leaves out their text, unless **Share mirrored activities with scripts** is on; see [LIVE-ACTIVITIES.md](LIVE-ACTIVITIES.md).
 
 ### Media commands
 
