@@ -112,6 +112,13 @@ private func writtenKeys(_ s: IsletSettings) throws -> Set<String> {
         #expect(IsletSettings.load(from: file) == s)
     }
 
+    @Test func glassIsTheDefaultAndItsLevelIsClamped() {
+        #expect(IsletSettings().theme == .glass)
+        #expect(decode(#"{"glassLevel": 5}"#).glassLevel == IsletSettings.glassLevelRange.upperBound)
+        #expect(decode(#"{"glassLevel": -1}"#).glassLevel == IsletSettings.glassLevelRange.lowerBound)
+        #expect(decode(#"{"theme": "black"}"#).theme == .black)
+    }
+
     @Test func remainingChoicesStillLoad() {
         #expect(decode(#"{"closedLayout": "wings"}"#).closedLayout == .wings)
         #expect(decode(#"{"closedLayout": "auto"}"#).closedLayout == .auto)

@@ -214,7 +214,8 @@ struct IslandView: View {
                             .frame(width: g.outerWidth, height: g.size.height)
                     }
                 }
-                model.settings.theme.background(expanded: p == .expanded, shape: shape, row: metrics.notch.height, height: g.size.height)
+                model.settings.theme.background(expanded: p == .expanded, shape: shape, row: metrics.notch.height, height: g.size.height,
+                                                glassLevel: model.settings.glassLevel)
                     .shadow(color: .black.opacity(p == .expanded ? 0.45 : 0), radius: 14, y: 6)
                 content(p, geometry: g)
                     .opacity(stale ? 0.55 : 1)

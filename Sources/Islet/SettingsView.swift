@@ -118,11 +118,23 @@ struct AppearanceSettings: View {
             }
             Section("Look") {
                 Picker("Theme", selection: $model.settings.theme) {
+                    Text("Glass").tag(IslandTheme.glass)
                     Text("Black").tag(IslandTheme.black)
                     Text("Graphite").tag(IslandTheme.graphite)
-                    Text("Glass").tag(IslandTheme.glass)
                 }
                 .pickerStyle(.segmented)
+                if model.settings.theme == .glass {
+                    LabeledContent("Glass level") {
+                        HStack(spacing: 8) {
+                            Text("Black").font(.caption).foregroundStyle(.secondary)
+                            Slider(value: $model.settings.glassLevel, in: IsletSettings.glassLevelRange) { Text("Glass level") }
+                                .labelsHidden()
+                            Text("Glass").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    Text("The strip beside the notch stays black so it blends with the hardware; below it the open island melts into glass.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 LabeledContent("Accent") {
                     HStack(spacing: 6) {
                         ForEach(Self.accents, id: \.self) { name in

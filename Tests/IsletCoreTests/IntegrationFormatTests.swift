@@ -277,7 +277,7 @@ import Testing
         #expect(s.expandedWidth == IsletSettings.expandedWidthRange.upperBound)
         #expect(s.disabledMediaSources == [.browser])
         #expect(s.clipboardEnabled == false)
-        #expect(s.theme == .black)          // unknown enum value falls back
+        #expect(s.theme == IsletSettings().theme)   // unknown enum value falls back to the default
         #expect(s.sizePreset == .large)
         #expect(s.expandedSize.width == 660)
         #expect(s.rule(for: "us.zoom.xos")?.showInFullscreen == true)

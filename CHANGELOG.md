@@ -41,7 +41,8 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 - A Today tab with the rest of the day's events, Join buttons and reminders you can tick off. Repeating meetings now alert every time, and the agenda rolls over at midnight.
 
 ### Look
-- Liquid Glass for the expanded island on macOS 26 and later, kept below the menu bar row so the notch still reads as hardware.
+- A calmer open island. The pages move out of the menu bar row into a small glass switcher under the island (Home, Today, Shelf and a menu for the rest), with a timer button on one side and Ask on the other. Home shows one main thing large, usually what's playing, with a quiet column beside it. Cards lost their borders, and spacing, corners and type follow one set of sizes.
+- Dynamic Glass is the default theme. The strip beside the notch stays black so it blends with the hardware, and the open island melts into Liquid Glass below it (a blurred material before macOS 26). A faint smoke keeps text readable, and a slow sheen drifts across unless Reduce Motion or Low Power Mode is on. **Glass level** in Settings sets how far down the black reaches. Black and Graphite are still there.
 
 ### Safer and lighter
 - A crash when the Now Playing helper stopped, and a core spinning at 100% after it did, are fixed.

@@ -100,44 +100,121 @@ extension IslandTheme {
     ///   - row: height of the menu bar row, which stays black in every theme.
     ///   - height: the island's current height, to place the seam below that row.
     @ViewBuilder
-    func background(expanded: Bool, shape: IslandShape, row: CGFloat = 0, height: CGFloat = 0) -> some View {
+    func background(expanded: Bool, shape: IslandShape, row: CGFloat = 0, height: CGFloat = 0, glassLevel: Double = 0.6) -> some View {
         switch self {
         case .graphite where expanded:
             shape.fill(Color(white: 0.105)).overlay(shape.stroke(Color.white.opacity(0.08), lineWidth: 1))
         case .glass:
-            GlassBody(shape: shape, expanded: expanded, row: row, height: height)
+            GlassBody(shape: shape, expanded: expanded, row: row, height: height, level: glassLevel)
         default:
             shape.fill(Color.black)
         }
     }
 }
 
-/// The Glass theme's surface. Glass sits only below the menu bar row: beside the hardware notch
-/// it would show the wallpaper at the notch's edges. It fades in once the island has grown
-/// clear of the notch and the black comes back first when it closes.
+/// Dynamic Glass: one piece of Liquid Glass that is black where it meets the notch and melts
+/// into glass below the menu bar row. Beside the hardware notch glass would show the wallpaper
+/// at the notch's edges, so the row stays black. A faint smoke stays under the content so text
+/// never loses contrast, and a slow sheen drifts across while the island is open.
+///
+/// The glass fades in once the island has grown clear of the notch, and the black comes back
+/// first when it closes.
 private struct GlassBody: View {
     let shape: IslandShape
     let expanded: Bool
     let row: CGFloat
     let height: CGFloat
+    /// 0 keeps the island mostly black, 1 turns it to glass right below the row.
+    let level: Double
+
+    /// The least black left over the glass, so text always has a floor of contrast.
+    static let smoke = 0.3
+    @Environment(\.snapshotMode) private var snapshotMode
 
     var body: some View {
         ZStack {
             if expanded {
-                GlassSurface(shape: shape, tint: Color.black.opacity(0.5))
+                GlassSurface(shape: shape, tint: Color.black.opacity(0.2), fallback: Color(white: 0.13).opacity(0.78))
                     .transition(.asymmetric(insertion: .identity, removal: .opacity.animation(.linear(duration: 0.12))))
-                if row > 0, height > row + 14 {
-                    shape.fill(LinearGradient(stops: [
-                        .init(color: .black, location: 0),
-                        .init(color: .black, location: row / height),
-                        .init(color: .black.opacity(0), location: (row + 14) / height),
-                    ], startPoint: .top, endPoint: .bottom))
-                }
+                shape.fill(LinearGradient(stops: Self.stops(row: row, height: height, level: level), startPoint: .top, endPoint: .bottom))
+                // An AppKit view, which offline snapshots can't draw.
+                if !snapshotMode { GlassSheen().clipShape(shape).allowsHitTesting(false) }
             }
             shape.fill(Color.black)
                 .opacity(expanded ? 0 : 1)
                 .animation(expanded ? .easeOut(duration: 0.18).delay(0.15) : .easeIn(duration: 0.08), value: expanded)
         }
+    }
+
+    /// Black down to the row, then a fade to the smoke. The fade is short at level 1 and runs
+    /// to the bottom at level 0.
+    static func stops(row: CGFloat, height: CGFloat, level: Double) -> [Gradient.Stop] {
+        guard height > row, height > 0 else { return [.init(color: .black, location: 0), .init(color: .black, location: 1)] }
+        let body = height - row
+        let span = max(14, body * CGFloat(1 - min(1, max(0, level))))
+        let rowEnd = row / height
+        let fadeEnd = min(1, (row + span) / height)
+        return [
+            .init(color: .black, location: 0),
+            .init(color: .black, location: rowEnd),
+            .init(color: .black.opacity(smoke), location: max(rowEnd, fadeEnd)),
+            .init(color: .black.opacity(smoke), location: 1),
+        ]
+    }
+}
+
+/// A faint diagonal reflection that drifts slowly across the glass. Core Animation runs it, so
+/// the app does no per-frame work. It stays still with Reduce Motion and in Low Power Mode.
+private struct GlassSheen: NSViewRepresentable {
+    @Environment(\.reduceMotionAnywhere) private var reduceMotion
+
+    func makeNSView(context: Context) -> GlassSheenView { GlassSheenView() }
+
+    func updateNSView(_ view: GlassSheenView, context: Context) {
+        view.setMoving(!reduceMotion && !ProcessInfo.processInfo.isLowPowerModeEnabled)
+    }
+}
+
+final class GlassSheenView: NSView {
+    private let sheen = CAGradientLayer()
+    private var moving = false
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        sheen.colors = [NSColor.white.withAlphaComponent(0).cgColor,
+                        NSColor.white.withAlphaComponent(0.06).cgColor,
+                        NSColor.white.withAlphaComponent(0).cgColor]
+        sheen.locations = [0.35, 0.5, 0.65]
+        sheen.startPoint = CGPoint(x: 0, y: 0.2)
+        sheen.endPoint = CGPoint(x: 1, y: 0.8)
+        layer?.addSublayer(sheen)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        // Wider than the island so the band can travel in from one side and out of the other.
+        sheen.frame = bounds.insetBy(dx: -bounds.width * 0.6, dy: 0)
+        CATransaction.commit()
+    }
+
+    func setMoving(_ on: Bool) {
+        guard on != moving else { return }
+        moving = on
+        sheen.removeAnimation(forKey: "drift")
+        guard on else { return }
+        let drift = CABasicAnimation(keyPath: "locations")
+        drift.fromValue = [-0.3, -0.15, 0.0]
+        drift.toValue = [1.0, 1.15, 1.3]
+        drift.duration = 9
+        drift.repeatCount = .infinity
+        drift.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        drift.capFrameRate()
+        sheen.add(drift, forKey: "drift")
     }
 }
 

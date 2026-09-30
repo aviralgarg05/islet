@@ -59,7 +59,8 @@ public enum IslandTheme: String, Codable, Sendable, CaseIterable {
     case black
     /// Dark graphite with a hairline edge.
     case graphite
-    /// Frosted glass when expanded (the closed island stays black over the notch).
+    /// Dynamic Glass: the menu bar row stays black over the notch and the open island melts
+    /// into Liquid Glass below it. `glassLevel` sets how far down the black reaches.
     case glass
 }
 
@@ -136,7 +137,10 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var wingWidth: Double = 52
 
     // Look & feel
-    public var theme: IslandTheme = .black
+    public var theme: IslandTheme = .glass
+    /// How much of the open island is glass in the Glass theme: 0 keeps it mostly black and
+    /// melts only near the bottom, 1 turns to glass right below the menu bar row.
+    public var glassLevel: Double = 0.6
     public var animationStyle: AnimationStyle = .fluid
     /// Hex or named color, or "auto" to follow album art / activity tints.
     public var accentColor = "auto"
@@ -261,6 +265,7 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public static let wingWidthRange: ClosedRange<Double> = 40...140
     public static let alertDurationRange: ClosedRange<Double> = 1...6
     public static let hudDurationRange: ClosedRange<Double> = 0.8...4
+    public static let glassLevelRange: ClosedRange<Double> = 0...1
     public static let clipboardLimitRange: ClosedRange<Int> = 1...500
     /// Ports for the local API and the LAN bridge (unprivileged, and never the same one).
     public static let portRange: ClosedRange<Int> = 1024...65535
@@ -294,6 +299,7 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         s.maxConcurrent = min(3, max(1, s.maxConcurrent))
         s.alertDuration = Self.clamp(s.alertDuration, Self.alertDurationRange)
         s.hudDuration = Self.clamp(s.hudDuration, Self.hudDurationRange)
+        s.glassLevel = Self.clamp(s.glassLevel, Self.glassLevelRange)
         s.batteryLowThreshold = min(50, max(5, s.batteryLowThreshold))
         s.batteryCriticalThreshold = min(s.batteryLowThreshold - 1, max(1, s.batteryCriticalThreshold))
         if s.batteryChargedAlert != 0 { s.batteryChargedAlert = min(100, max(50, s.batteryChargedAlert)) }
