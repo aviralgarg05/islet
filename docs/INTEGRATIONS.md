@@ -180,7 +180,7 @@ Two-finger swipes on the island work without any permission: Islet reads the scr
 
 | Swipe | Where | Does |
 |---|---|---|
-| Down | closed island | open it (handy with *Open on hover* off) |
+| Down | closed island | open it (handy with *Open the island* set to *On click*) |
 | Up | open island | close it (it stays closed until the pointer leaves the notch) |
 | Left / right | music, closed or on the Home tab | next / previous track, or 10 s forward / back |
 | Left / right | a closed activity | show the next / previous activity, from the bubbles beside the notch |

@@ -38,17 +38,23 @@ struct GeneralSettings: View {
                 Toggle("Hide from screenshots and screen sharing", isOn: $model.settings.hideFromScreenCapture)
             }
             Section("Behaviour") {
-                Toggle("Open on hover", isOn: $model.settings.hoverToOpen)
-                LabeledContent("Hover delay") {
-                    Slider(value: $model.settings.openDelay, in: IsletSettings.openDelayRange, step: 0.05) { Text("") }
-                    Text(String(format: "%.2fs", model.settings.openDelay)).monospacedDigit().frame(width: 44)
+                Picker("Open the island", selection: $model.settings.hoverToOpen) {
+                    Text("On hover").tag(true)
+                    Text("On click").tag(false)
+                }
+                if model.settings.hoverToOpen {
+                    LabeledContent("Hover delay") {
+                        Slider(value: $model.settings.openDelay, in: IsletSettings.openDelayRange, step: 0.05) { Text("") }
+                        Text(String(format: "%.2fs", model.settings.openDelay)).monospacedDigit().frame(width: 44)
+                    }
                 }
                 LabeledContent("Close delay") {
                     Slider(value: $model.settings.closeDelay, in: IsletSettings.closeDelayRange, step: 0.05) { Text("") }
                     Text(String(format: "%.2fs", model.settings.closeDelay)).monospacedDigit().frame(width: 44)
                 }
                 LabeledContent("Shortcut to open or close") {
-                    TextField("ctrl+option+i", text: $model.settings.hotkey)
+                    TextField("", text: $model.settings.hotkey, prompt: Text(verbatim: "ctrl+option+i"))
+                        .labelsHidden()
                         .frame(width: 140)
                     Text(Hotkey.parse(model.settings.hotkey)?.label ?? (model.settings.hotkey.isEmpty ? "Off" : "Invalid"))
                         .foregroundStyle(.secondary).frame(width: 60)
