@@ -150,6 +150,40 @@ import Testing
         a.clear(.browser)
         #expect(a.current(now: t0) == nil)
     }
+
+    @Test func pausedPlayerHasADeadline() {
+        var a = MediaArbiter(pausedTimeout: 60)
+        #expect(a.nextDeadline(now: t0) == nil)
+        a.update(np(.spotify, "s", playing: true, at: 0))
+        // Playing never times out.
+        #expect(a.nextDeadline(now: t0) == nil)
+        a.update(np(.spotify, "s", playing: false, at: 10))
+        a.update(np(.browser, "b", playing: false, at: 5))
+        #expect(a.nextDeadline(now: t0.addingTimeInterval(10)) == t0.addingTimeInterval(65))
+        #expect(a.nextDeadline(now: t0.addingTimeInterval(65)) == t0.addingTimeInterval(70))
+        #expect(a.nextDeadline(now: t0.addingTimeInterval(70)) == nil)
+    }
+
+    @Test func expireForgetsTimedOutPausedPlayers() {
+        var a = MediaArbiter(pausedTimeout: 60)
+        a.update(np(.spotify, "s", playing: false, at: 0))
+        a.update(np(.appleMusic, "m", playing: true, at: 0))
+        let early = a.expire(now: t0.addingTimeInterval(59))
+        #expect(!early)
+        #expect(a.current(now: t0.addingTimeInterval(59))?.title == "m")
+        let due = a.expire(now: t0.addingTimeInterval(60))
+        #expect(due)
+        #expect(a.snapshots[.spotify] == nil)
+        #expect(a.snapshots[.appleMusic] != nil)
+        let playing = a.expire(now: t0.addingTimeInterval(600))
+        #expect(!playing)
+        // Forgetting the only player is reported, so the app takes the track down at once.
+        var b = MediaArbiter(pausedTimeout: 60)
+        b.update(np(.spotify, "s", playing: false, at: 0))
+        let forgotten = b.expire(now: t0.addingTimeInterval(60))
+        #expect(forgotten)
+        #expect(b.current(now: t0.addingTimeInterval(60)) == nil)
+    }
 }
 
 @Suite struct PresenterTests {

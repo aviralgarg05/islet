@@ -109,6 +109,24 @@ public struct MediaArbiter: Sendable {
         snapshots[source] = nil
     }
 
+    /// The next moment a paused player is forgotten. The app arms its one deadline timer for this,
+    /// so the track goes on time instead of at the next media update.
+    public func nextDeadline(now: Date) -> Date? {
+        snapshots.values
+            .filter { !$0.isPlaying }
+            .map { $0.timestamp.addingTimeInterval(pausedTimeout) }
+            .filter { $0 > now }
+            .min()
+    }
+
+    /// Forget paused players that have timed out. Returns whether any were forgotten.
+    @discardableResult
+    public mutating func expire(now: Date) -> Bool {
+        let dead = snapshots.filter { !$0.value.isPlaying && now.timeIntervalSince($0.value.timestamp) >= pausedTimeout }.keys
+        for source in dead { snapshots[source] = nil }
+        return !dead.isEmpty
+    }
+
     public func current(now: Date) -> NowPlaying? {
         let live = snapshots.values.filter { s in
             guard !disabled.contains(s.source) else { return false }
