@@ -56,7 +56,8 @@ public enum Format {
     /// `m:ss` below an hour, `h:mm:ss` above.
     public static func clock(_ seconds: Double) -> String {
         guard seconds.isFinite else { return "--:--" }
-        let total = max(0, Int(seconds.rounded(.down)))
+        // Capped: dates come from API clients, and a huge span would trap converting to Int.
+        let total = Int(min(TemplateFormat.maxSeconds, max(0, seconds)).rounded(.down))
         let h = total / 3600, m = (total % 3600) / 60, s = total % 60
         if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
         return String(format: "%d:%02d", m, s)

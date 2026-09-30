@@ -1,84 +1,86 @@
 import Foundation
 
 /// Icon, colour and layout for apps known to publish Live Activities, so a mirrored activity
-/// looks like its app rather than a generic pill. Keys are lowercased app names and aliases.
+/// looks like its app rather than a generic pill. The table itself (`apps`) is generated from
+/// docs/research/07-live-activity-apps.json by scripts/gen-live-activity-apps.py.
 public enum LiveActivityCatalog {
     public struct Look: Equatable, Sendable {
+        public var app: String
+        /// The iOS bundle ID from the App Store (nil for Islet's own additions).
+        public var bundleID: String?
+        /// Other names the app goes by (App Store title, older names).
+        public var aliases: [String]
+        /// One of: system, rideshare, ev-parking, delivery, travel, transit, sports, fitness,
+        /// health, productivity, cooking, weather, finance, ai, developer, home, media.
+        public var category: String
         public var symbol: String
+        /// Brand colour as published. Some are too dark for the island; see `displayTint`.
         public var tint: String
+        public var template: ActivityTemplate
+
+        /// The tint lifted until it reads on the black island (3:1 contrast).
+        public var displayTint: String { RGBA.parse(tint).map { $0.readableOnBlack().hex } ?? tint }
     }
 
-    static let entries: [String: Look] = [
-        // Apple
-        "clock": Look(symbol: "timer", tint: "#FF9F0A"),
-        "timer": Look(symbol: "timer", tint: "#FF9F0A"),
-        "stopwatch": Look(symbol: "stopwatch.fill", tint: "#FF9F0A"),
-        "alarm": Look(symbol: "alarm.fill", tint: "#FF9F0A"),
-        "phone": Look(symbol: "phone.fill", tint: "#30D158"),
-        "facetime": Look(symbol: "video.fill", tint: "#30D158"),
-        "maps": Look(symbol: "arrow.triangle.turn.up.right.diamond.fill", tint: "#0A84FF"),
-        "music": Look(symbol: "music.note", tint: "#FF375F"),
-        "podcasts": Look(symbol: "mic.fill", tint: "#BF5AF2"),
-        "fitness": Look(symbol: "figure.run", tint: "#A2F92F"),
-        "workout": Look(symbol: "figure.run", tint: "#A2F92F"),
-        "voice memos": Look(symbol: "waveform", tint: "#FF453A"),
-        "shortcuts": Look(symbol: "square.stack.3d.up.fill", tint: "#5E5CE6"),
-        "wallet": Look(symbol: "wallet.pass.fill", tint: "#0A84FF"),
-        "find my": Look(symbol: "location.fill", tint: "#30D158"),
-        "sports": Look(symbol: "sportscourt.fill", tint: "#30D158"),
-        "tv": Look(symbol: "sportscourt.fill", tint: "#0A84FF"),
-        // Rides and delivery
-        "uber": Look(symbol: "car.fill", tint: "#FFFFFF"),
-        "lyft": Look(symbol: "car.fill", tint: "#FF00BF"),
-        "ola": Look(symbol: "car.fill", tint: "#CDDC39"),
-        "bolt": Look(symbol: "car.fill", tint: "#34D186"),
-        "uber eats": Look(symbol: "takeoutbag.and.cup.and.straw.fill", tint: "#06C167"),
-        "doordash": Look(symbol: "takeoutbag.and.cup.and.straw.fill", tint: "#FF3008"),
-        "deliveroo": Look(symbol: "takeoutbag.and.cup.and.straw.fill", tint: "#00CCBC"),
-        "swiggy": Look(symbol: "takeoutbag.and.cup.and.straw.fill", tint: "#FC8019"),
-        "zomato": Look(symbol: "takeoutbag.and.cup.and.straw.fill", tint: "#E23744"),
-        "blinkit": Look(symbol: "cart.fill", tint: "#F8CB46"),
-        "instacart": Look(symbol: "cart.fill", tint: "#43B02A"),
-        "starbucks": Look(symbol: "cup.and.saucer.fill", tint: "#00704A"),
-        // Travel
-        "flighty": Look(symbol: "airplane", tint: "#0A84FF"),
-        "united": Look(symbol: "airplane", tint: "#0A84FF"),
-        "delta": Look(symbol: "airplane", tint: "#E01933"),
-        "american airlines": Look(symbol: "airplane", tint: "#0078D2"),
-        "indigo": Look(symbol: "airplane", tint: "#1A2B6D"),
-        "air india": Look(symbol: "airplane", tint: "#DA0E29"),
-        // Parcels and shopping
-        "amazon": Look(symbol: "shippingbox.fill", tint: "#FF9900"),
-        "parcel": Look(symbol: "shippingbox.fill", tint: "#AC8E68"),
-        "fedex": Look(symbol: "shippingbox.fill", tint: "#4D148C"),
-        "ups": Look(symbol: "shippingbox.fill", tint: "#FFB500"),
-        "dhl": Look(symbol: "shippingbox.fill", tint: "#FFCC00"),
-        // Sport
-        "espn": Look(symbol: "sportscourt.fill", tint: "#E0201B"),
-        "cricbuzz": Look(symbol: "figure.cricket", tint: "#1AA355"),
-        "fotmob": Look(symbol: "soccerball", tint: "#00985F"),
-        "onefootball": Look(symbol: "soccerball", tint: "#FFFFFF"),
-        "theScore": Look(symbol: "sportscourt.fill", tint: "#1B6CFF"),
-        // Music and media
-        "spotify": Look(symbol: "music.note", tint: "#1ED760"),
-        "youtube music": Look(symbol: "music.note", tint: "#FF0000"),
-        "shazam": Look(symbol: "shazam.logo.fill", tint: "#0A84FF"),
-        // AI assistants
-        "chatgpt": Look(symbol: "sparkles", tint: "#10A37F"),
-        "claude": Look(symbol: "sparkle", tint: "#D97757"),
-        "perplexity": Look(symbol: "sparkle.magnifyingglass", tint: "#20B8CD"),
-        "gemini": Look(symbol: "sparkles", tint: "#8E75FF"),
-        // Productivity and focus
-        "forest": Look(symbol: "tree.fill", tint: "#30D158"),
-        "focus": Look(symbol: "moon.fill", tint: "#5E5CE6"),
-        "strava": Look(symbol: "figure.run", tint: "#FC4C02"),
-    ]
+    /// Every entry, in catalogue order.
+    public static var all: [Look] { apps }
 
-    /// Look for an app name as shown in the menu bar ("Uber", "Uber Eats", "Flighty").
+    private static let byBundleID: [String: Look] = index(apps.compactMap { e in e.bundleID.map { ($0, e) } })
+    private static let byName: [String: Look] = index(apps.map { ($0.app, $0) })
+    private static let byAlias: [String: Look] = index(apps.flatMap { e in e.aliases.map { ($0, e) } })
+
+    /// Lowercased keys; the first entry wins when two share a key.
+    private static func index(_ pairs: [(String, Look)]) -> [String: Look] {
+        var out: [String: Look] = [:]
+        for (key, look) in pairs where out[key.lowercased()] == nil { out[key.lowercased()] = look }
+        return out
+    }
+
+    /// Exact match on bundle ID, app name or alias, ignoring case and surrounding spaces.
+    public static func exact(_ nameOrBundleID: String) -> Look? {
+        let key = nameOrBundleID.lowercased().trimmingCharacters(in: .whitespaces)
+        guard !key.isEmpty else { return nil }
+        return byBundleID[key] ?? byName[key] ?? byAlias[key]
+    }
+
+    /// Look for an app name as shown in the menu bar ("Uber", "Uber Eats", "Flighty") or a bundle ID.
+    /// Falls back to the longest app name or alias found as whole words in the text, so
+    /// "Uber Eats · 12 min" finds Uber Eats rather than Uber.
     public static func look(for appName: String) -> Look? {
-        let name = appName.lowercased().trimmingCharacters(in: .whitespaces)
-        if let exact = entries[name] { return exact }
-        // Longest alias contained in the name wins ("uber eats" before "uber").
-        return entries.filter { name.contains($0.key.lowercased()) }.max { $0.key.count < $1.key.count }?.value
+        if let hit = exact(appName) { return hit }
+        let words = Self.words(appName)
+        guard !words.isEmpty else { return nil }
+        var best: (length: Int, look: Look)?
+        for p in phrases where p.length > (best?.length ?? 0) && contains(words, p.words) {
+            best = (p.length, p.look)
+        }
+        return best?.look
+    }
+
+    /// App names, then aliases, as word lists for the fuzzy match (names win ties).
+    private static let phrases: [(words: [String], length: Int, look: Look)] =
+        (apps.map { ($0.app, $0) } + apps.flatMap { e in e.aliases.map { ($0, e) } }).compactMap { key, look in
+            let w = words(key)
+            return w.isEmpty ? nil : (w, w.joined(separator: " ").count, look)
+        }
+
+    /// The entry for an activity's `source`: exact matches only, so a source that merely contains
+    /// an app's name ("claude-code", "github-actions") never picks up that app. A generic source
+    /// can still equal a name ("focus" is the Focus app), which is why `resolvedTemplate` uses the
+    /// entry's template only when the activity has the data for it.
+    public static func entry(forSource source: String) -> Look? { exact(source) }
+
+    static func words(_ text: String) -> [String] {
+        text.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "'+!")).inverted)
+            .filter { !$0.isEmpty }
+    }
+
+    private static func contains(_ haystack: [String], _ needle: [String]) -> Bool {
+        guard needle.count <= haystack.count else { return false }
+        for start in 0...(haystack.count - needle.count) where Array(haystack[start..<start + needle.count]) == needle {
+            return true
+        }
+        return false
     }
 }

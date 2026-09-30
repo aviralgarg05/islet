@@ -152,6 +152,24 @@ public struct ActivitySpec: Codable, Equatable, Sendable {
     /// Briefly expand the island when this spec is applied.
     public var sneak: Bool?
 
+    // Template fields (ActivityTemplate.swift): optional, validated by `validateTemplateFields()`.
+    /// Layout name: eta, stages, flight, route, score, timer, workout, gauge, live-audio, media, agent, progress.
+    public var template: String?
+    /// At most 5 characters for the minimal bubble ("3–1", "12m").
+    public var compactShort: String?
+    /// Glyph that rides the ETA track (`sf:car.fill`).
+    public var trackerIcon: ActivityIcon?
+    /// pickup, enroute, arrived, delivered (eta); predeparture, boarding, airborne, landed (flight); or free text.
+    public var phase: String?
+    public var stageLabels: [String]?
+    public var stageSymbols: [ActivityIcon]?
+    public var teams: [ActivityTeam]?
+    /// Game period or clock text ("Q3", "67'", "Bot 7").
+    public var period: String?
+    public var flight: ActivityFlight?
+    public var route: ActivityRoute?
+    public var metrics: [ActivityMetric]?
+
     public init(
         id: String? = nil, source: String? = nil, title: String? = nil, subtitle: String? = nil,
         icon: ActivityIcon? = nil, trailing: String? = nil, progress: Double? = nil,
@@ -190,6 +208,21 @@ public struct Activity: Codable, Equatable, Sendable, Identifiable {
     public var actions: [ActivityAction]
     public var createdAt: Date
     public var updatedAt: Date
+
+    // Template fields (ActivityTemplate.swift); see the matching fields on `ActivitySpec`.
+    public var template: ActivityTemplate? = nil
+    public var compactShort: String? = nil
+    public var trackerIcon: ActivityIcon? = nil
+    public var phase: String? = nil
+    public var stageLabels: [String]? = nil
+    public var stageSymbols: [ActivityIcon]? = nil
+    public var teams: [ActivityTeam]? = nil
+    public var period: String? = nil
+    public var flight: ActivityFlight? = nil
+    public var route: ActivityRoute? = nil
+    public var metrics: [ActivityMetric]? = nil
+    /// Seconds the ETA track covers, fixed from the first `endsAt` (see `stretchTrack`).
+    public var trackSpan: Double? = nil
 
     public var isIndeterminate: Bool { (progress ?? 0) < 0 }
 

@@ -186,6 +186,7 @@ enum Snapshots {
         shoot("24-sneak-usage-alert")
         model.forcedPresentation = .compact(.activity(usageAlert, others: 0))
         shoot("25-compact-usage-alert")
+        TemplateSnapshots.render(to: dir, model: model)
         print("Rendered snapshots to \(dir.path)")
     }
 

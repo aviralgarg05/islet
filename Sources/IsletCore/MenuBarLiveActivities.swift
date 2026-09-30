@@ -187,16 +187,19 @@ public enum MenuBarLiveActivities {
 
     /// The live activity Islet shows for a mirrored item.
     /// - Parameters:
-    ///   - look: icon and tint for the app, from the Live Activity catalogue when known.
+    ///   - look: icon and tint for the app, from the Live Activity catalogue when known. The
+    ///     catalogue also supplies the template, and dark brand tints are lifted to read on black.
     ///   - clock: a running countdown or count-up read from the item, animated locally.
     public static func activity(for m: MirroredLiveActivity, look: (symbol: String, tint: String)?, isNew: Bool,
                                 clock: LiveActivityClock.Reading? = nil) -> ActivitySpec {
         let suggestion = look ?? SmartIcon.suggest(title: m.appName, subtitle: m.detail).map { ($0.symbol, $0.tint) }
+        let tint = suggestion.flatMap { RGBA.parse($0.1) }.map { $0.readableOnBlack().hex }
         var spec = ActivitySpec(
             id: activityID(m.key), source: source, title: m.appName, subtitle: m.detail,
             icon: .symbol(suggestion?.0 ?? "dot.radiowaves.left.and.right"), trailing: shortTrailing(m.detail),
-            state: .running, tint: suggestion?.1 ?? "white", priority: .normal, ttl: 0, sneak: isNew
+            state: .running, tint: tint ?? suggestion?.1 ?? "white", priority: .normal, ttl: 0, sneak: isNew
         )
+        spec.template = LiveActivityCatalog.look(for: m.appName)?.template.rawValue
         switch clock {
         case .countdown(let end)?:
             spec.endsAt = end

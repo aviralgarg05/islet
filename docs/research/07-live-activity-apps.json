@@ -1,0 +1,1156 @@
+[
+  {
+    "app": "Phone",
+    "bundleID": "com.apple.mobilephone",
+    "aliases": [
+      "Calls"
+    ],
+    "category": "system",
+    "symbol": "phone.fill",
+    "tint": "#30D158",
+    "template": "live-audio"
+  },
+  {
+    "app": "FaceTime",
+    "bundleID": "com.apple.facetime",
+    "aliases": [],
+    "category": "system",
+    "symbol": "video.fill",
+    "tint": "#30D158",
+    "template": "live-audio"
+  },
+  {
+    "app": "Music",
+    "bundleID": "com.apple.Music",
+    "aliases": [
+      "Apple Music",
+      "Now Playing"
+    ],
+    "category": "system",
+    "symbol": "music.note",
+    "tint": "#FA2D48",
+    "template": "media"
+  },
+  {
+    "app": "Podcasts",
+    "bundleID": "com.apple.podcasts",
+    "aliases": [
+      "Apple Podcasts"
+    ],
+    "category": "system",
+    "symbol": "antenna.radiowaves.left.and.right",
+    "tint": "#B150E2",
+    "template": "media"
+  },
+  {
+    "app": "Clock",
+    "bundleID": "com.apple.mobiletimer",
+    "aliases": [
+      "Timer",
+      "Alarm",
+      "Stopwatch"
+    ],
+    "category": "system",
+    "symbol": "timer",
+    "tint": "#FF9F0A",
+    "template": "timer"
+  },
+  {
+    "app": "Maps",
+    "bundleID": "com.apple.Maps",
+    "aliases": [
+      "Apple Maps"
+    ],
+    "category": "system",
+    "symbol": "arrow.triangle.turn.up.right.diamond.fill",
+    "tint": "#0A84FF",
+    "template": "route"
+  },
+  {
+    "app": "Voice Memos",
+    "bundleID": "com.apple.VoiceMemos",
+    "aliases": [],
+    "category": "system",
+    "symbol": "waveform",
+    "tint": "#FF453A",
+    "template": "live-audio"
+  },
+  {
+    "app": "Fitness",
+    "bundleID": "com.apple.Fitness",
+    "aliases": [
+      "Apple Fitness",
+      "Workout"
+    ],
+    "category": "system",
+    "symbol": "figure.run",
+    "tint": "#30D158",
+    "template": "workout"
+  },
+  {
+    "app": "Wallet",
+    "bundleID": "com.apple.Passbook",
+    "aliases": [
+      "Apple Wallet",
+      "Boarding pass"
+    ],
+    "category": "system",
+    "symbol": "wallet.pass.fill",
+    "tint": "#0A84FF",
+    "template": "flight"
+  },
+  {
+    "app": "Sports",
+    "bundleID": "com.apple.sports",
+    "aliases": [
+      "Apple Sports"
+    ],
+    "category": "system",
+    "symbol": "sportscourt.fill",
+    "tint": "#FFFFFF",
+    "template": "score"
+  },
+  {
+    "app": "TV",
+    "bundleID": "com.apple.tv",
+    "aliases": [
+      "Apple TV"
+    ],
+    "category": "system",
+    "symbol": "tv.fill",
+    "tint": "#FFFFFF",
+    "template": "score"
+  },
+  {
+    "app": "Shazam",
+    "bundleID": "com.shazam.Shazam",
+    "aliases": [],
+    "category": "system",
+    "symbol": "shazam.logo.fill",
+    "tint": "#0088FF",
+    "template": "live-audio"
+  },
+  {
+    "app": "Shortcuts",
+    "bundleID": "com.apple.shortcuts",
+    "aliases": [],
+    "category": "system",
+    "symbol": "square.2.layers.3d.fill",
+    "tint": "#5E5CE6",
+    "template": "progress"
+  },
+  {
+    "app": "Uber",
+    "bundleID": "com.ubercab.UberClient",
+    "aliases": [
+      "Uber - Rides, Eats, Hotels"
+    ],
+    "category": "rideshare",
+    "symbol": "car.fill",
+    "tint": "#000000",
+    "template": "eta"
+  },
+  {
+    "app": "Lyft",
+    "bundleID": "com.zimride.instant",
+    "aliases": [],
+    "category": "rideshare",
+    "symbol": "car.fill",
+    "tint": "#FF00BF",
+    "template": "eta"
+  },
+  {
+    "app": "Grab",
+    "bundleID": "com.grabtaxi.iphone",
+    "aliases": [
+      "Grab: Food Delivery, Taxi Ride",
+      "GrabFood"
+    ],
+    "category": "rideshare",
+    "symbol": "car.fill",
+    "tint": "#00B14F",
+    "template": "eta"
+  },
+  {
+    "app": "Lugg",
+    "bundleID": "com.lugg.lugg",
+    "aliases": [
+      "Lugg - Moving & Delivery"
+    ],
+    "category": "rideshare",
+    "symbol": "box.truck.fill",
+    "tint": "#FFFFFF",
+    "template": "stages"
+  },
+  {
+    "app": "Cowboy",
+    "bundleID": "Cowboy.BIKE",
+    "aliases": [
+      "Cowboy - Electric Bikes"
+    ],
+    "category": "rideshare",
+    "symbol": "bicycle",
+    "tint": "#FFFFFF",
+    "template": "workout"
+  },
+  {
+    "app": "Tesla",
+    "bundleID": "com.teslamotors.TeslaApp",
+    "aliases": [],
+    "category": "ev-parking",
+    "symbol": "bolt.car.fill",
+    "tint": "#E82127",
+    "template": "gauge"
+  },
+  {
+    "app": "Tessie",
+    "bundleID": "io.tessie.app",
+    "aliases": [],
+    "category": "ev-parking",
+    "symbol": "bolt.car.fill",
+    "tint": "#30D158",
+    "template": "gauge"
+  },
+  {
+    "app": "ParkMobile",
+    "bundleID": "us.parkmobile.ParkMobile",
+    "aliases": [],
+    "category": "ev-parking",
+    "symbol": "parkingsign.circle.fill",
+    "tint": "#30D158",
+    "template": "timer"
+  },
+  {
+    "app": "Uber Eats",
+    "bundleID": "com.ubercab.UberEats",
+    "aliases": [
+      "Uber Eats: Food & Groceries",
+      "Postmates"
+    ],
+    "category": "delivery",
+    "symbol": "takeoutbag.and.cup.and.straw.fill",
+    "tint": "#06C167",
+    "template": "eta"
+  },
+  {
+    "app": "DoorDash",
+    "bundleID": "doordash.DoorDashConsumer",
+    "aliases": [],
+    "category": "delivery",
+    "symbol": "takeoutbag.and.cup.and.straw.fill",
+    "tint": "#FF3008",
+    "template": "eta"
+  },
+  {
+    "app": "Instacart",
+    "bundleID": "com.instacart",
+    "aliases": [],
+    "category": "delivery",
+    "symbol": "cart.fill",
+    "tint": "#0AAD0A",
+    "template": "stages"
+  },
+  {
+    "app": "Swiggy",
+    "bundleID": "bundl.swiggy",
+    "aliases": [
+      "Swiggy: Food Instamart Dineout",
+      "Instamart"
+    ],
+    "category": "delivery",
+    "symbol": "takeoutbag.and.cup.and.straw.fill",
+    "tint": "#FC8019",
+    "template": "stages"
+  },
+  {
+    "app": "Zomato",
+    "bundleID": "com.zomato.zomato",
+    "aliases": [
+      "zomato"
+    ],
+    "category": "delivery",
+    "symbol": "takeoutbag.and.cup.and.straw.fill",
+    "tint": "#E23744",
+    "template": "eta"
+  },
+  {
+    "app": "Starbucks",
+    "bundleID": "com.starbucks.mystarbucks",
+    "aliases": [],
+    "category": "delivery",
+    "symbol": "cup.and.saucer.fill",
+    "tint": "#00704A",
+    "template": "stages"
+  },
+  {
+    "app": "Domino's",
+    "bundleID": "com.dominos.iphone",
+    "aliases": [
+      "Domino's Pizza USA"
+    ],
+    "category": "delivery",
+    "symbol": "takeoutbag.and.cup.and.straw.fill",
+    "tint": "#006491",
+    "template": "stages"
+  },
+  {
+    "app": "Wolt",
+    "bundleID": "com.woltapp.wolt",
+    "aliases": [
+      "Wolt Delivery"
+    ],
+    "category": "delivery",
+    "symbol": "takeoutbag.and.cup.and.straw.fill",
+    "tint": "#009DE0",
+    "template": "eta"
+  },
+  {
+    "app": "Just Eat",
+    "bundleID": "com.justeat.JUSTEAT",
+    "aliases": [
+      "Thuisbezorgd.nl",
+      "Lieferando",
+      "Takeaway.com"
+    ],
+    "category": "delivery",
+    "symbol": "takeoutbag.and.cup.and.straw.fill",
+    "tint": "#FF8000",
+    "template": "eta"
+  },
+  {
+    "app": "Crumbl",
+    "bundleID": "crumbl.cookies",
+    "aliases": [],
+    "category": "delivery",
+    "symbol": "birthday.cake.fill",
+    "tint": "#FF9F0A",
+    "template": "stages"
+  },
+  {
+    "app": "Gopuff",
+    "bundleID": "com.gopuff.gopuff",
+    "aliases": [],
+    "category": "delivery",
+    "symbol": "bag.fill",
+    "tint": "#FF9F0A",
+    "template": "eta"
+  },
+  {
+    "app": "Flighty",
+    "bundleID": "com.flightyapp.flighty",
+    "aliases": [
+      "Flighty – Live Flight Tracker"
+    ],
+    "category": "travel",
+    "symbol": "airplane",
+    "tint": "#0A84FF",
+    "template": "flight"
+  },
+  {
+    "app": "United",
+    "bundleID": "com.united.UnitedCustomerFacingIPhone",
+    "aliases": [
+      "United Airlines"
+    ],
+    "category": "travel",
+    "symbol": "airplane",
+    "tint": "#005DAA",
+    "template": "flight"
+  },
+  {
+    "app": "Fly Delta",
+    "bundleID": "com.delta.iphone.ver1",
+    "aliases": [
+      "Delta"
+    ],
+    "category": "travel",
+    "symbol": "airplane",
+    "tint": "#E01933",
+    "template": "flight"
+  },
+  {
+    "app": "American",
+    "bundleID": "com.aa.AmericanAirlines",
+    "aliases": [
+      "American Airlines"
+    ],
+    "category": "travel",
+    "symbol": "airplane",
+    "tint": "#0078D2",
+    "template": "flight"
+  },
+  {
+    "app": "Air Canada",
+    "bundleID": "com.aircanada.csp.aciclient",
+    "aliases": [
+      "Air Canada + Aeroplan"
+    ],
+    "category": "travel",
+    "symbol": "airplane",
+    "tint": "#F01428",
+    "template": "flight"
+  },
+  {
+    "app": "JetBlue",
+    "bundleID": "com.jetblue.jetBlueiPhone",
+    "aliases": [],
+    "category": "travel",
+    "symbol": "airplane",
+    "tint": "#0033A0",
+    "template": "flight"
+  },
+  {
+    "app": "British Airways",
+    "bundleID": "com.britishairways.BAFlights",
+    "aliases": [
+      "BA"
+    ],
+    "category": "travel",
+    "symbol": "airplane",
+    "tint": "#075AAA",
+    "template": "flight"
+  },
+  {
+    "app": "Flight Tracker +",
+    "bundleID": "com.iaftt.flightplusfree",
+    "aliases": [],
+    "category": "travel",
+    "symbol": "airplane",
+    "tint": "#0A84FF",
+    "template": "flight"
+  },
+  {
+    "app": "Citymapper",
+    "bundleID": "azdev.citymapper",
+    "aliases": [],
+    "category": "transit",
+    "symbol": "tram.fill",
+    "tint": "#1CB24B",
+    "template": "route"
+  },
+  {
+    "app": "Transit",
+    "bundleID": "com.samvermette.Transit",
+    "aliases": [
+      "Transit • Subway & Bus Times"
+    ],
+    "category": "transit",
+    "symbol": "bus.fill",
+    "tint": "#30B566",
+    "template": "route"
+  },
+  {
+    "app": "SF TimeTable",
+    "bundleID": "com.harryshamansky.TimeTable",
+    "aliases": [],
+    "category": "transit",
+    "symbol": "tram.fill",
+    "tint": "#30D158",
+    "template": "route"
+  },
+  {
+    "app": "Google Maps",
+    "bundleID": "com.google.Maps",
+    "aliases": [],
+    "category": "transit",
+    "symbol": "arrow.triangle.turn.up.right.diamond.fill",
+    "tint": "#1A73E8",
+    "template": "route"
+  },
+  {
+    "app": "ESPN",
+    "bundleID": "com.espn.ScoreCenter",
+    "aliases": [],
+    "category": "sports",
+    "symbol": "sportscourt.fill",
+    "tint": "#CC0000",
+    "template": "score"
+  },
+  {
+    "app": "theScore",
+    "bundleID": "iphone.thescore.com",
+    "aliases": [],
+    "category": "sports",
+    "symbol": "sportscourt.fill",
+    "tint": "#FFFFFF",
+    "template": "score"
+  },
+  {
+    "app": "FotMob",
+    "bundleID": "com.mobilefootie.fotmobpro",
+    "aliases": [],
+    "category": "sports",
+    "symbol": "soccerball",
+    "tint": "#00985F",
+    "template": "score"
+  },
+  {
+    "app": "MLB",
+    "bundleID": "com.mlb.AtBatUniversal",
+    "aliases": [],
+    "category": "sports",
+    "symbol": "baseball.fill",
+    "tint": "#BF0D3E",
+    "template": "score"
+  },
+  {
+    "app": "NBA",
+    "bundleID": "com.nbaimd.gametime.universal",
+    "aliases": [],
+    "category": "sports",
+    "symbol": "basketball.fill",
+    "tint": "#C8102E",
+    "template": "score"
+  },
+  {
+    "app": "NHL",
+    "bundleID": "com.nhl.gc1112.free",
+    "aliases": [],
+    "category": "sports",
+    "symbol": "hockey.puck.fill",
+    "tint": "#000000",
+    "template": "score"
+  },
+  {
+    "app": "Yahoo Sports",
+    "bundleID": "com.softacular.Sportacular",
+    "aliases": [],
+    "category": "sports",
+    "symbol": "sportscourt.fill",
+    "tint": "#6001D2",
+    "template": "score"
+  },
+  {
+    "app": "Yahoo Fantasy",
+    "bundleID": "com.yahoo.ffootball2009",
+    "aliases": [],
+    "category": "sports",
+    "symbol": "trophy.fill",
+    "tint": "#6001D2",
+    "template": "score"
+  },
+  {
+    "app": "Sofascore",
+    "bundleID": "com.SofaScore.iOS",
+    "aliases": [],
+    "category": "sports",
+    "symbol": "sportscourt.fill",
+    "tint": "#374DF5",
+    "template": "score"
+  },
+  {
+    "app": "GOAL",
+    "bundleID": "com.goal.GOAL",
+    "aliases": [],
+    "category": "sports",
+    "symbol": "soccerball",
+    "tint": "#FFFFFF",
+    "template": "score"
+  },
+  {
+    "app": "Sports Alerts",
+    "bundleID": "lunosoftware.sportsalerts",
+    "aliases": [],
+    "category": "sports",
+    "symbol": "sportscourt.fill",
+    "tint": "#FFFFFF",
+    "template": "score"
+  },
+  {
+    "app": "March Madness Live",
+    "bundleID": "com.turner.mmod2011temp",
+    "aliases": [
+      "NCAA March Madness Live"
+    ],
+    "category": "sports",
+    "symbol": "basketball.fill",
+    "tint": "#FFFFFF",
+    "template": "score"
+  },
+  {
+    "app": "Box Box Club",
+    "bundleID": "club.boxbox.widgets-ios",
+    "aliases": [],
+    "category": "sports",
+    "symbol": "flag.checkered",
+    "tint": "#E10600",
+    "template": "score"
+  },
+  {
+    "app": "Strava",
+    "bundleID": "com.strava.stravaride",
+    "aliases": [],
+    "category": "fitness",
+    "symbol": "figure.run",
+    "tint": "#FC4C02",
+    "template": "workout"
+  },
+  {
+    "app": "Peloton",
+    "bundleID": "com.Peloton.PelotonApp",
+    "aliases": [],
+    "category": "fitness",
+    "symbol": "figure.indoor.cycle",
+    "tint": "#DF1C2F",
+    "template": "workout"
+  },
+  {
+    "app": "Hevy",
+    "bundleID": "com.hevyapp.hevy",
+    "aliases": [],
+    "category": "fitness",
+    "symbol": "dumbbell.fill",
+    "tint": "#30D158",
+    "template": "workout"
+  },
+  {
+    "app": "SmartGym",
+    "bundleID": "com.smartgymapp.smartgym",
+    "aliases": [],
+    "category": "fitness",
+    "symbol": "figure.strengthtraining.traditional",
+    "tint": "#30D158",
+    "template": "workout"
+  },
+  {
+    "app": "Liftin'",
+    "bundleID": "com.nstrm.Bello",
+    "aliases": [],
+    "category": "fitness",
+    "symbol": "dumbbell.fill",
+    "tint": "#30D158",
+    "template": "workout"
+  },
+  {
+    "app": "Slopes",
+    "bundleID": "com.consumedbycode.slopes",
+    "aliases": [],
+    "category": "fitness",
+    "symbol": "figure.skiing.downhill",
+    "tint": "#30D158",
+    "template": "workout"
+  },
+  {
+    "app": "Topo Maps by Landscape",
+    "bundleID": "com.landscape.landscapeapp",
+    "aliases": [
+      "Landscape"
+    ],
+    "category": "fitness",
+    "symbol": "mountain.2.fill",
+    "tint": "#30D158",
+    "template": "workout"
+  },
+  {
+    "app": "Gentler Streak",
+    "bundleID": "app.gentler.activity",
+    "aliases": [],
+    "category": "fitness",
+    "symbol": "figure.walk",
+    "tint": "#30D158",
+    "template": "workout"
+  },
+  {
+    "app": "Wakeout!",
+    "bundleID": "com.AndresCanella.Wakeouts",
+    "aliases": [
+      "Wakeout"
+    ],
+    "category": "fitness",
+    "symbol": "figure.cooldown",
+    "tint": "#30D158",
+    "template": "timer"
+  },
+  {
+    "app": "Posture Pal",
+    "bundleID": "com.goodsnooze.sebby",
+    "aliases": [],
+    "category": "fitness",
+    "symbol": "figure.stand",
+    "tint": "#30D158",
+    "template": "timer"
+  },
+  {
+    "app": "FITIV Pulse",
+    "bundleID": "com.eurekadesignsolutions.motiFIT",
+    "aliases": [],
+    "category": "fitness",
+    "symbol": "heart.fill",
+    "tint": "#30D158",
+    "template": "workout"
+  },
+  {
+    "app": "Bolt",
+    "bundleID": "com.nomtasticapps.boltworkout",
+    "aliases": [
+      "Bolt – Workout & Strength Log"
+    ],
+    "category": "fitness",
+    "symbol": "dumbbell.fill",
+    "tint": "#30D158",
+    "template": "workout"
+  },
+  {
+    "app": "Equilab",
+    "bundleID": "horse.schvung.equilab",
+    "aliases": [],
+    "category": "fitness",
+    "symbol": "figure.equestrian.sports",
+    "tint": "#30D158",
+    "template": "workout"
+  },
+  {
+    "app": "FastMinder",
+    "bundleID": "com.funnmedia.fastminder",
+    "aliases": [],
+    "category": "health",
+    "symbol": "hourglass",
+    "tint": "#FF375F",
+    "template": "timer"
+  },
+  {
+    "app": "Huckleberry",
+    "bundleID": "com.huckleberry-labs.app",
+    "aliases": [],
+    "category": "health",
+    "symbol": "stroller.fill",
+    "tint": "#FF375F",
+    "template": "timer"
+  },
+  {
+    "app": "Booby Track",
+    "bundleID": "net.rafaelconde.Booby-Track",
+    "aliases": [],
+    "category": "health",
+    "symbol": "stroller.fill",
+    "tint": "#FF375F",
+    "template": "timer"
+  },
+  {
+    "app": "Mango Baby",
+    "bundleID": "com.doleearts.Baby",
+    "aliases": [],
+    "category": "health",
+    "symbol": "stroller.fill",
+    "tint": "#FF375F",
+    "template": "timer"
+  },
+  {
+    "app": "Forest",
+    "bundleID": "com.forestapp.Forest",
+    "aliases": [],
+    "category": "productivity",
+    "symbol": "tree.fill",
+    "tint": "#5AC18E",
+    "template": "timer"
+  },
+  {
+    "app": "Structured",
+    "bundleID": "com.leomehlig.today",
+    "aliases": [],
+    "category": "productivity",
+    "symbol": "checklist",
+    "tint": "#FF9F0A",
+    "template": "timer"
+  },
+  {
+    "app": "Focus",
+    "bundleID": "com.laser-focused.focus-ios",
+    "aliases": [
+      "Focus - Deep Work Timer"
+    ],
+    "category": "productivity",
+    "symbol": "timer",
+    "tint": "#FF9F0A",
+    "template": "timer"
+  },
+  {
+    "app": "Sticky Timers",
+    "bundleID": "com.goodsnooze.Sticky-Timers",
+    "aliases": [],
+    "category": "productivity",
+    "symbol": "timer",
+    "tint": "#FF9F0A",
+    "template": "timer"
+  },
+  {
+    "app": "Tidur",
+    "bundleID": "net.voidstern.multitimer",
+    "aliases": [
+      "Tidur: Multiple Timers"
+    ],
+    "category": "productivity",
+    "symbol": "alarm.fill",
+    "tint": "#FF9F0A",
+    "template": "timer"
+  },
+  {
+    "app": "Time's Up!",
+    "bundleID": "com.overdesigned.TimesUpTimer",
+    "aliases": [],
+    "category": "productivity",
+    "symbol": "timer",
+    "tint": "#FF9F0A",
+    "template": "timer"
+  },
+  {
+    "app": "Toggl Track",
+    "bundleID": "com.toggl.daneel",
+    "aliases": [
+      "Toggl"
+    ],
+    "category": "productivity",
+    "symbol": "stopwatch.fill",
+    "tint": "#E57CD8",
+    "template": "timer"
+  },
+  {
+    "app": "Timery",
+    "bundleID": "com.joehribar.toggl",
+    "aliases": [],
+    "category": "productivity",
+    "symbol": "stopwatch.fill",
+    "tint": "#FF9F0A",
+    "template": "timer"
+  },
+  {
+    "app": "TickTick",
+    "bundleID": "com.TickTick.task",
+    "aliases": [],
+    "category": "productivity",
+    "symbol": "checklist",
+    "tint": "#4772FA",
+    "template": "timer"
+  },
+  {
+    "app": "Tiimo",
+    "bundleID": "com.tiimo.app",
+    "aliases": [],
+    "category": "productivity",
+    "symbol": "checklist",
+    "tint": "#FF9F0A",
+    "template": "timer"
+  },
+  {
+    "app": "Opal",
+    "bundleID": "com.withopal.opal",
+    "aliases": [],
+    "category": "productivity",
+    "symbol": "hourglass",
+    "tint": "#FF9F0A",
+    "template": "timer"
+  },
+  {
+    "app": "OffScreen",
+    "bundleID": "tech.miidii.off-screen",
+    "aliases": [],
+    "category": "productivity",
+    "symbol": "iphone.slash",
+    "tint": "#FF9F0A",
+    "template": "timer"
+  },
+  {
+    "app": "GoodTask",
+    "bundleID": "com.hahainteractive.GoodTask3",
+    "aliases": [],
+    "category": "productivity",
+    "symbol": "checklist",
+    "tint": "#FF9F0A",
+    "template": "timer"
+  },
+  {
+    "app": "Bookly",
+    "bundleID": "com.twodoor.bookeep",
+    "aliases": [],
+    "category": "productivity",
+    "symbol": "book.fill",
+    "tint": "#FF9F0A",
+    "template": "timer"
+  },
+  {
+    "app": "Subjects",
+    "bundleID": "com.jarrydbaillie.Subjects23",
+    "aliases": [],
+    "category": "productivity",
+    "symbol": "graduationcap.fill",
+    "tint": "#FF9F0A",
+    "template": "timer"
+  },
+  {
+    "app": "Calzy",
+    "bundleID": "com.waplestuff.calzy",
+    "aliases": [],
+    "category": "productivity",
+    "symbol": "function",
+    "tint": "#FF9F0A",
+    "template": "progress"
+  },
+  {
+    "app": "Just Press Record",
+    "bundleID": "com.openplanetsoftware.Just-Press-Record-for-iOS",
+    "aliases": [],
+    "category": "productivity",
+    "symbol": "waveform",
+    "tint": "#FF453A",
+    "template": "live-audio"
+  },
+  {
+    "app": "Crouton",
+    "bundleID": "com.meal.plan.ios",
+    "aliases": [],
+    "category": "cooking",
+    "symbol": "frying.pan.fill",
+    "tint": "#FF9F0A",
+    "template": "timer"
+  },
+  {
+    "app": "Mela",
+    "bundleID": "recipes.mela.uikit",
+    "aliases": [],
+    "category": "cooking",
+    "symbol": "fork.knife",
+    "tint": "#FF9F0A",
+    "template": "timer"
+  },
+  {
+    "app": "Pestle",
+    "bundleID": "com.willbishop.Simmer",
+    "aliases": [],
+    "category": "cooking",
+    "symbol": "oven.fill",
+    "tint": "#FF9F0A",
+    "template": "timer"
+  },
+  {
+    "app": "Coffee Book",
+    "bundleID": "uk.co.alexanderlogan.Coffee-Book",
+    "aliases": [],
+    "category": "cooking",
+    "symbol": "cup.and.saucer.fill",
+    "tint": "#FF9F0A",
+    "template": "timer"
+  },
+  {
+    "app": "Seeds",
+    "bundleID": "com.acrylic.Seeds",
+    "aliases": [],
+    "category": "cooking",
+    "symbol": "leaf.fill",
+    "tint": "#FF9F0A",
+    "template": "timer"
+  },
+  {
+    "app": "CARROT Weather",
+    "bundleID": "com.grailr.CARROTweather",
+    "aliases": [],
+    "category": "weather",
+    "symbol": "cloud.rain.fill",
+    "tint": "#64D2FF",
+    "template": "timer"
+  },
+  {
+    "app": "Lumy",
+    "bundleID": "com.appatakkars.lumy",
+    "aliases": [],
+    "category": "weather",
+    "symbol": "sun.horizon.fill",
+    "tint": "#64D2FF",
+    "template": "timer"
+  },
+  {
+    "app": "Alpenglow",
+    "bundleID": "com.andydev.alpenglow",
+    "aliases": [],
+    "category": "weather",
+    "symbol": "sunset.fill",
+    "tint": "#64D2FF",
+    "template": "timer"
+  },
+  {
+    "app": "Tide Guide",
+    "bundleID": "com.condor.digital.Tide-Over",
+    "aliases": [],
+    "category": "weather",
+    "symbol": "water.waves",
+    "tint": "#64D2FF",
+    "template": "gauge"
+  },
+  {
+    "app": "CardPointers",
+    "bundleID": "com.getcardpointers.app",
+    "aliases": [],
+    "category": "finance",
+    "symbol": "creditcard.fill",
+    "tint": "#30D158",
+    "template": "progress"
+  },
+  {
+    "app": "MoneyCoach",
+    "bundleID": "com.duuro.moneyCoach",
+    "aliases": [],
+    "category": "finance",
+    "symbol": "chart.pie.fill",
+    "tint": "#30D158",
+    "template": "gauge"
+  },
+  {
+    "app": "Catawiki",
+    "bundleID": "nl.catawiki.bidder-app",
+    "aliases": [],
+    "category": "finance",
+    "symbol": "tag.fill",
+    "tint": "#30D158",
+    "template": "timer"
+  },
+  {
+    "app": "ChatGPT",
+    "bundleID": "com.openai.chat",
+    "aliases": [],
+    "category": "ai",
+    "symbol": "sparkles",
+    "tint": "#10A37F",
+    "template": "live-audio"
+  },
+  {
+    "app": "Gemini",
+    "bundleID": "com.google.gemini",
+    "aliases": [
+      "Google Gemini",
+      "Gemini Live"
+    ],
+    "category": "ai",
+    "symbol": "sparkles",
+    "tint": "#4285F4",
+    "template": "live-audio"
+  },
+  {
+    "app": "Perplexity",
+    "bundleID": "ai.perplexity.app",
+    "aliases": [],
+    "category": "ai",
+    "symbol": "magnifyingglass",
+    "tint": "#20808D",
+    "template": "score"
+  },
+  {
+    "app": "GitHub",
+    "bundleID": "com.github.stormbreaker.prod",
+    "aliases": [
+      "GitHub Copilot"
+    ],
+    "category": "developer",
+    "symbol": "arrow.triangle.pull",
+    "tint": "#24292F",
+    "template": "agent"
+  },
+  {
+    "app": "Cursor",
+    "bundleID": "co.anysphere.cursor",
+    "aliases": [],
+    "category": "developer",
+    "symbol": "chevron.left.forwardslash.chevron.right",
+    "tint": "#000000",
+    "template": "agent"
+  },
+  {
+    "app": "Replit",
+    "bundleID": "com.replit.app",
+    "aliases": [],
+    "category": "developer",
+    "symbol": "chevron.left.forwardslash.chevron.right",
+    "tint": "#F26207",
+    "template": "agent"
+  },
+  {
+    "app": "Home Assistant",
+    "bundleID": "io.robbie.HomeAssistant",
+    "aliases": [],
+    "category": "home",
+    "symbol": "house.fill",
+    "tint": "#18BCF2",
+    "template": "progress"
+  },
+  {
+    "app": "Marvis Pro",
+    "bundleID": "com.adityarajveer.Marvis",
+    "aliases": [],
+    "category": "media",
+    "symbol": "music.note",
+    "tint": "#FF375F",
+    "template": "media"
+  },
+  {
+    "app": "Soor",
+    "bundleID": "me.tanmay.Music",
+    "aliases": [],
+    "category": "media",
+    "symbol": "music.note",
+    "tint": "#FF375F",
+    "template": "media"
+  },
+  {
+    "app": "Dark Noise",
+    "bundleID": "com.charliemchapman.dark-noise",
+    "aliases": [],
+    "category": "media",
+    "symbol": "waveform",
+    "tint": "#FF375F",
+    "template": "media"
+  },
+  {
+    "app": "Endel",
+    "bundleID": "com.endel.endel",
+    "aliases": [],
+    "category": "media",
+    "symbol": "waveform",
+    "tint": "#FF375F",
+    "template": "media"
+  },
+  {
+    "app": "Participant",
+    "bundleID": "com.thinktapwork.Participant-for-Zoom",
+    "aliases": [],
+    "category": "home",
+    "symbol": "video.fill",
+    "tint": "#40CBE0",
+    "template": "live-audio"
+  },
+  {
+    "app": "Zoom",
+    "bundleID": "us.zoom.videomeetings",
+    "aliases": [
+      "Zoom Workplace"
+    ],
+    "category": "home",
+    "symbol": "video.fill",
+    "tint": "#0B5CFF",
+    "template": "live-audio"
+  },
+  {
+    "app": "Dooinwell",
+    "bundleID": "com.dooinwellsas.Dooinwell",
+    "aliases": [],
+    "category": "home",
+    "symbol": "checkmark.circle.fill",
+    "tint": "#40CBE0",
+    "template": "timer"
+  },
+  {
+    "app": "Pixel Pals",
+    "bundleID": "com.christian.PixelPals",
+    "aliases": [],
+    "category": "home",
+    "symbol": "pawprint.fill",
+    "tint": "#40CBE0",
+    "template": "progress"
+  },
+  {
+    "app": "Duolingo",
+    "bundleID": "com.duolingo.DuolingoMobile",
+    "aliases": [],
+    "category": "home",
+    "symbol": "graduationcap.fill",
+    "tint": "#58CC02",
+    "template": "progress"
+  }
+]

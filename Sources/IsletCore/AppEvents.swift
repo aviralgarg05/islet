@@ -75,7 +75,7 @@ public struct CallDetector: Sendable {
         for (bundle, app) in current.sorted(by: { $0.key < $1.key }) {
             let isNew = active[bundle] == nil
             if isNew { active[bundle] = now }
-            let spec = ActivitySpec(
+            var spec = ActivitySpec(
                 id: Self.activityID(bundle), source: bundle,
                 title: app.isBrowser ? "Call in \(app.name)" : app.name,
                 subtitle: cameraOn ? "Video call" : "Call",
@@ -83,6 +83,7 @@ public struct CallDetector: Sendable {
                 state: .running, tint: "green", priority: .high, ttl: 0,
                 startedAt: active[bundle], sneak: isNew
             )
+            spec.template = ActivityTemplate.liveAudio.rawValue
             changes.append(isNew ? .started(spec) : .updated(spec))
         }
         for bundle in active.keys.sorted() where current[bundle] == nil {
