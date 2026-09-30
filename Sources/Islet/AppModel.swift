@@ -123,7 +123,11 @@ final class AppModel {
     private var deadlineTimer: Timer?
     private var batteryDetector = BatteryEventDetector()
     private var calendarTimer: Timer?
-    private var alertedEvents: Set<String> = []
+    private var dayObserver: NSObjectProtocol?
+    /// What `applyModules()` has started.
+    private var modules = RunningModules()
+    /// Calendar and reminder alerts already shown, by occurrence, with when they were for.
+    private var alertedEvents: [String: Date] = [:]
     private var settingsWatcher: DispatchSourceFileSystemObject?
 
     init(settings: IsletSettings = IsletSettings.load(from: IsletPaths.configFile)) {
@@ -139,41 +143,19 @@ final class AppModel {
         media.disabled = Set(settings.disabledMediaSources)
         shelfService.onChange = { [weak self] s in self?.shelf = s }
 
-        if settings.batteryEnabled {
-            battery_.onChange = { [weak self] s in self?.ingestBattery(s) }
-            battery_.start()
-        }
-        if settings.hudEnabled || settings.privacyIndicatorsEnabled {
-            audio.onOutputChange = { [weak self] out in self?.volumeChanged(out) }
-            audio.onMicrophoneInUse = { [weak self] inUse in self?.micInUse = inUse }
-            audio.start()
-            outputDeviceName = AudioMonitor.readOutput()?.deviceName
-        }
-        if settings.privacyIndicatorsEnabled {
-            camera.onChange = { [weak self] on in
-                self?.cameraInUse = on
-                self?.updateCalls()
-            }
-            camera.start()
-        }
-        if settings.mediaEnabled { startMedia() }
         fullscreen.onChange = { [weak self] displays, bundle in
             self?.fullscreenDisplays = displays
             self?.frontBundleID = bundle
         }
         fullscreen.start()
-        if settings.calendarEnabled && CalendarService.eventAccess == .granted
-            || settings.remindersEnabled && CalendarService.reminderAccess == .granted { startCalendar() }
-        if settings.clipboardEnabled { startClipboard() }
-        if settings.pluginsEnabled { startPlugins() }
-        if settings.apiEnabled { startAPI() }
         applyTiming()
         startEventSources()
         watchSettingsFile()
     }
 
-    /// iPhone-style event sources that depend on settings; safe to call again after changes.
+    /// Everything that depends on settings; safe to call again after changes.
     func startEventSources() {
+        applyModules()
         if settings.callDetection {
             micUsage.onChange = { [weak self] users in
                 self?.lastMicUsers = users
@@ -182,6 +164,7 @@ final class AppModel {
             micUsage.start()
         } else {
             micUsage.stop()
+            lastMicUsers = []
             for id in calls.active.keys.map(CallDetector.activityID) { remove(activityID: id) }
             calls = CallDetector()
         }
@@ -203,7 +186,6 @@ final class AppModel {
         }
         unlock.onUnlock = { [weak self] in self?.welcomeBack() }
         if settings.unlockSplash { unlock.start() } else { unlock.stop() }
-        if settings.apiEnabled && settings.lanBridgeEnabled { startLAN() } else { stopLAN() }
         if settings.mirrorMenuBarActivities && MenuBarLiveActivityMonitor.isAvailable {
             menuBarActivities.onChange = { [weak self] list in self?.syncMenuBarActivities(list) }
             menuBarActivities.knownApp = { $0.count <= 24 && LiveActivityCatalog.look(for: $0) != nil }
@@ -276,6 +258,12 @@ final class AppModel {
             self?.checkCalendarAlerts()
         }
         calendar.start()
+        // The agenda covers today and tomorrow; roll it forward when the day changes.
+        if dayObserver == nil {
+            dayObserver = NotificationCenter.default.addObserver(forName: .NSCalendarDayChanged, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.calendar.refresh() }
+            }
+        }
         calendarTimer?.invalidate()
         // Re-check upcoming events once a minute (tolerant timer; calendar data itself is event-driven).
         let t = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
@@ -369,6 +357,22 @@ final class AppModel {
         try? settings.save(to: IsletPaths.configFile)
     }
 
+    private static var pendingSettingsCommit: DispatchWorkItem?
+
+    /// A change made in the Settings window. Dragging a slider or typing a shortcut produces a
+    /// change per step, so saving and applying wait for a quarter of a second of quiet.
+    func settingsEdited() {
+        Self.pendingSettingsCommit?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                self?.saveSettings()
+                NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
+            }
+        }
+        Self.pendingSettingsCommit = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
+    }
+
     /// Live-reload `config.json` when edited by hand or synced from dotfiles. Watches the
     /// folder (editors that save by atomic rename) and the file itself (in-place writes).
     private func watchSettingsFile() {
@@ -409,9 +413,7 @@ final class AppModel {
         settings = fresh
         media.disabled = Set(fresh.disabledMediaSources)
         clipboard.limit = fresh.clipboardLimit
-        Haptics.mode = fresh.hapticsMode
-        applyTiming()
-        startEventSources()
+        // The app delegate applies everything else (modules, hotkey, panels) on this notification.
         NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
     }
 
@@ -473,7 +475,7 @@ final class AppModel {
         if display != nil {
             center.cancelSneak()
             Haptics.play(.open)
-            if tab == .stats { statsSampler.start() }
+            if tab == .stats && settings.systemStatsEnabled { statsSampler.start() }
         } else {
             statsSampler.stop()
             pinned = false
@@ -609,19 +611,29 @@ final class AppModel {
 
     private func checkCalendarAlerts() {
         let now = Date()
+        var alerted = false
+        // Keyed by occurrence: every repeat of a meeting shares its event identifier.
         if settings.calendarEnabled {
-            for item in visibleAgenda where Agenda.shouldAlert(item, now: now) && !alertedEvents.contains(item.id) {
-                alertedEvents.insert(item.id)
+            for item in visibleAgenda where Agenda.shouldAlert(item, now: now) {
+                let key = "\(item.id)@\(Int(item.start.timeIntervalSince1970))"
+                guard alertedEvents[key] == nil else { continue }
+                alertedEvents[key] = item.start
+                alerted = true
                 _ = try? applyLocal(Agenda.activity(for: item, now: now))
             }
         }
         if settings.remindersEnabled {
-            for r in reminders where Reminders.shouldAlert(r, now: now) && !alertedEvents.contains("r:" + r.id) {
-                alertedEvents.insert("r:" + r.id)
+            for r in reminders where Reminders.shouldAlert(r, now: now) {
+                let key = "r:\(r.id)@\(Int(r.due?.timeIntervalSince1970 ?? 0))"
+                guard alertedEvents[key] == nil else { continue }
+                alertedEvents[key] = r.due ?? now
+                alerted = true
                 _ = try? applyLocal(Reminders.activity(for: r))
             }
         }
-        tick &+= 1
+        alertedEvents = alertedEvents.filter { now.timeIntervalSince($0.value) < 86_400 }
+        // Redraw only when something time-based is on show.
+        if alerted || upcomingEvent != nil { tick &+= 1 }
     }
 
     @discardableResult
@@ -663,6 +675,7 @@ final class AppModel {
     // MARK: iPhone-style events
 
     private func updateCalls() {
+        guard settings.callDetection else { return }
         for change in calls.update(micUsers: lastMicUsers, cameraOn: cameraInUse, now: Date()) {
             switch change {
             case .started(let spec), .updated(let spec): _ = try? applyLocal(spec)
@@ -935,5 +948,158 @@ extension AppModel: IsletBackend {
 extension NSScreen {
     var displayID: CGDirectDisplayID? {
         (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber).map { CGDirectDisplayID($0.uint32Value) }
+    }
+}
+
+
+/// Which settings-controlled services are running, so switching a module on or off in Settings
+/// (or in config.json) takes effect at once instead of at the next launch.
+struct RunningModules {
+    var battery = false
+    var audio = false
+    var camera = false
+    var media = false
+    var calendar = false
+    var clipboard = false
+    var pluginDirectory: URL?
+    var apiPort: Int?
+    var lanPort: Int?
+}
+
+@MainActor
+extension AppModel {
+    /// Start or stop every module to match the current settings. Safe to call any number of times.
+    func applyModules() {
+        let s = settings
+
+        if s.batteryEnabled != modules.battery {
+            if s.batteryEnabled {
+                battery_.onChange = { [weak self] b in self?.ingestBattery(b) }
+                battery_.start()
+            } else {
+                battery_.stop()
+                battery = nil
+            }
+            modules.battery = s.batteryEnabled
+        }
+
+        let wantAudio = s.hudEnabled || s.privacyIndicatorsEnabled
+        if wantAudio != modules.audio {
+            if wantAudio {
+                audio.onOutputChange = { [weak self] out in self?.volumeChanged(out) }
+                audio.onMicrophoneInUse = { [weak self] inUse in
+                    guard let self else { return }
+                    self.micInUse = inUse && self.settings.privacyIndicatorsEnabled
+                }
+                audio.start()
+                outputDeviceName = AudioMonitor.readOutput()?.deviceName
+            } else {
+                audio.stop()
+            }
+            modules.audio = wantAudio
+        }
+        if !s.privacyIndicatorsEnabled { micInUse = false }
+
+        if s.privacyIndicatorsEnabled != modules.camera {
+            if s.privacyIndicatorsEnabled {
+                camera.onChange = { [weak self] on in
+                    self?.cameraInUse = on
+                    self?.updateCalls()
+                }
+                camera.start()
+            } else {
+                camera.stop()
+                cameraInUse = false
+            }
+            modules.camera = s.privacyIndicatorsEnabled
+        }
+
+        if s.mediaEnabled != modules.media {
+            if s.mediaEnabled { startMedia() } else { stopMedia() }
+            modules.media = s.mediaEnabled
+        }
+
+        let wantCalendar = s.calendarEnabled && CalendarService.eventAccess == .granted
+            || s.remindersEnabled && CalendarService.reminderAccess == .granted
+        if wantCalendar != modules.calendar {
+            if wantCalendar { startCalendar() } else { stopCalendar() }
+            modules.calendar = wantCalendar
+        } else if wantCalendar, calendar.includeReminders != s.remindersEnabled {
+            calendar.includeReminders = s.remindersEnabled
+            calendar.refresh()
+        }
+
+        if s.clipboardEnabled != modules.clipboard {
+            if s.clipboardEnabled {
+                startClipboard()
+            } else {
+                clipboardMonitor.stop()
+                clipboard.clear()
+            }
+            modules.clipboard = s.clipboardEnabled
+        }
+
+        let pluginDir = s.pluginsEnabled
+            ? s.pluginDirectory.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) } ?? IsletPaths.pluginsDirectory
+            : nil
+        if pluginDir != modules.pluginDirectory {
+            stopPlugins()
+            if pluginDir != nil { startPlugins() }
+            modules.pluginDirectory = pluginDir
+        }
+
+        let apiPort = s.apiEnabled ? s.apiPort : nil
+        if apiPort != modules.apiPort {
+            stopAPI()
+            if apiPort != nil { startAPI() }
+            modules.apiPort = apiPort
+        }
+
+        let lanPort = s.apiEnabled && s.lanBridgeEnabled ? s.lanPort : nil
+        if lanPort != modules.lanPort {
+            stopLAN()
+            if lanPort != nil { startLAN() }
+            modules.lanPort = lanPort
+        }
+
+        // A tab whose module was switched off falls back to Home.
+        if tab == .stats && !s.systemStatsEnabled || tab == .shelf && !s.shelfEnabled
+            || tab == .widgets && !s.pluginsEnabled || tab == .clipboard && !s.clipboardEnabled {
+            select(tab: .home)
+        }
+    }
+
+    func stopMedia() {
+        systemMedia.stop()
+        for p in [music, spotify] as [ScriptablePlayerProvider] { p.stop() }
+        for source in MediaSourceKind.allCases { media.clear(source) }
+        nowPlaying = nil
+    }
+
+    func stopCalendar() {
+        calendar.stop()
+        calendarTimer?.invalidate()
+        calendarTimer = nil
+        if let o = dayObserver { NotificationCenter.default.removeObserver(o) }
+        dayObserver = nil
+        agenda = []
+        reminders = []
+    }
+
+    func stopPlugins() {
+        guard let runner = pluginRunner else { return }
+        runner.stop()
+        pluginRunner = nil
+        plugins = [:]
+        for a in center.activities.values where a.source.hasPrefix("plugin:") { center.remove(id: a.id) }
+        reschedule()
+    }
+
+    func stopAPI() {
+        guard let server else { return }
+        server.stop()
+        self.server = nil
+        APIDiscoveryStore.remove()
+        apiStatus = "Off"
     }
 }

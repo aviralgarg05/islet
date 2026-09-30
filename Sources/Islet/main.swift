@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setUpHUD()
         setUpHotkey()
         rebuildPanels()
+        panelSettings = PanelSettings(model.settings)
         pointer.start()
         setUpStatusItem()
 
@@ -139,6 +140,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scheduleMenuBarMeasure(after: 0.1)
     }
 
+    /// The settings that change where panels go or how big they are.
+    private struct PanelSettings: Equatable {
+        var displayMode: DisplayMode
+        var size: SizePreset
+        var width: Double, height: Double, wing: Double
+        var nonNotch: Bool, hideFromCapture: Bool
+        var layout: ClosedLayoutPreference
+
+        init(_ s: IsletSettings) {
+            displayMode = s.displayMode; size = s.sizePreset
+            width = s.expandedWidth; height = s.expandedHeight; wing = s.wingWidth
+            nonNotch = s.showOnNonNotchDisplays; hideFromCapture = s.hideFromScreenCapture
+            layout = s.closedLayout
+        }
+    }
+
+    private var panelSettings: PanelSettings?
+
     private func settingsChanged() {
         Haptics.mode = model.settings.hapticsMode
         model.applyTiming()
@@ -146,7 +165,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setUpHotkey()
         pointer.applySettings()
         setUpHUD()
-        // Geometry-affecting settings need fresh panels.
+        // Only geometry changes need fresh panels; everything else updates in place.
+        let panels = PanelSettings(model.settings)
+        guard panels != panelSettings else { return }
+        panelSettings = panels
         controllers.forEach { $0.close() }
         controllers = []
         rebuildPanels()
@@ -163,25 +185,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: HUD
 
+    private var replacedHUD = false
+
     private func setUpHUD() {
         if model.settings.brightnessHUDEnabled {
             brightness.onChange = { [weak self] v in
-                guard let self, !self.model.settings.replaceSystemHUD else { return }
+                guard let self, self.model.settings.brightnessHUDEnabled, !self.model.settings.replaceSystemHUD else { return }
                 Task { await self.model.showHUD(kind: .brightness, value: v, muted: false, label: nil) }
             }
             brightness.start()
+        } else {
+            brightness.onChange = nil
         }
         if model.settings.replaceSystemHUD {
             keys.onKey = { [weak self] key, fine in self?.handleKey(key, fine: fine) }
-            if !keys.start() { MediaKeyInterceptor.requestAccessibility() }
+            // Ask for Accessibility only when the option is switched on, not on every change.
+            if !keys.start(), !replacedHUD { MediaKeyInterceptor.requestAccessibility() }
         } else {
             keys.stop()
         }
+        replacedHUD = model.settings.replaceSystemHUD
     }
 
     private func handleKey(_ key: MediaKeyInterceptor.Key, fine: Bool) {
         let step = fine ? 1.0 / 64 : 1.0 / 16
+        // The keys still do their job with a HUD switched off; only the display is skipped.
         func show(_ kind: HUDKind, _ v: Double, muted: Bool = false) {
+            let s = model.settings
+            guard kind == .brightness ? s.brightnessHUDEnabled : kind == .volume ? s.hudEnabled : true else { return }
             Task { await model.showHUD(kind: kind, value: v, muted: muted, label: nil) }
         }
         switch key {

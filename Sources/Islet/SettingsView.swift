@@ -17,10 +17,7 @@ struct SettingsView: View {
             AboutSettings().tabItem { Label("About", systemImage: "info.circle") }
         }
         .frame(width: 620, height: 540)
-        .onChange(of: model.settings) { _, _ in
-            model.saveSettings()
-            NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
-        }
+        .onChange(of: model.settings) { _, _ in model.settingsEdited() }
     }
 }
 
