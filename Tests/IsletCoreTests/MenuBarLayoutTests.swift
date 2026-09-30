@@ -11,9 +11,11 @@ import Testing
         MenuBarLayoutEngine.decide(preference: preference, notch: notch, preferredWing: 58, occupancy: occupancy, hasMenuBar: hasMenuBar)
     }
 
-    @Test func dropsWhenStatusItemsCrowdTheNotch() {
-        // 877 - 848.5 - 6 = 22.5 pt of room on the right: too narrow for a wing.
+    @Test func dropsOnlyWhenNotEvenAnIconFits() {
+        // 877 - 848.5 - 6 = 22.5 pt of room on the right: not even an icon fits.
         #expect(decide(MenuBarOccupancy(leftObstacleMaxX: 396, rightObstacleMinX: 877)) == .drop)
+        // 30 pt: icon-only wings, still in the top row.
+        #expect(decide(MenuBarOccupancy(leftObstacleMaxX: 396, rightObstacleMinX: 884.5)) == .wings(left: 26, right: 26))
     }
 
     @Test func narrowsWingsToTheTighterSide() {
@@ -30,8 +32,9 @@ import Testing
         #expect(decide(MenuBarOccupancy(leftObstacleMaxX: 650, rightObstacleMinX: 1100)) == .drop)
     }
 
-    @Test func unmeasurableMenuBarIsTreatedAsFull() {
-        #expect(decide(nil) == .drop)
+    @Test func unmeasuredMenuBarGetsNarrowWings() {
+        // Stays in the top row, narrow enough to clear most apps' menus and status items.
+        #expect(decide(nil) == .wings(left: 36, right: 36))
     }
 
     @Test func noMenuBarMeansNothingToCover() {

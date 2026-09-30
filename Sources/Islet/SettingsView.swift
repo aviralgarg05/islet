@@ -104,14 +104,14 @@ struct AppearanceSettings: View {
                 }
                 .pickerStyle(.segmented)
                 Text(model.settings.closedLayout == .auto
-                     ? "Islet measures the menu bar and only sits beside the notch when that won't cover any icons. Otherwise it hangs just below the notch."
+                     ? "Sits beside the notch and fits itself to the free space in the menu bar, down to just an icon. It hangs below the notch only when there's no room at all."
                      : model.settings.closedLayout == .wings
-                        ? "May cover menu bar icons that sit close to the notch."
-                        : "The menu bar row is never covered.")
+                        ? "Always full width beside the notch. May cover menu bar icons close to it."
+                        : "Hangs just below the notch. The menu bar row is never covered.")
                     .font(.caption).foregroundStyle(.secondary)
                 if model.settings.closedLayout == .auto && !MenuBarInspector.isAvailable {
                     HStack {
-                        Text("Measuring the menu bar needs Accessibility. Until then Islet stays below the notch.")
+                        Text("Without Accessibility Islet can't see the menu bar, so it uses narrow wings that may touch icons on a crowded bar.")
                             .font(.caption)
                         Spacer()
                         Button("Allow…") { MediaKeyInterceptor.requestAccessibility() }
@@ -300,6 +300,7 @@ struct ModulesSettings: View {
                     }
                 }
             }
+            LiveActivitySettingsSection(model: model)
             Section("iPhone-style events") {
                 Toggle("Call timer when FaceTime, Zoom, Meet… use the mic", isOn: $model.settings.callDetection)
                 Toggle("Download progress from ~/Downloads", isOn: $model.settings.downloadsEnabled)

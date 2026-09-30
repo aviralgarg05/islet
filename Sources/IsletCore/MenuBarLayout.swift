@@ -3,7 +3,8 @@ import Foundation
 
 /// How the closed island uses the space around the notch.
 public enum ClosedLayoutPreference: String, Codable, Sendable, CaseIterable {
-    /// Wings beside the notch when the menu bar has room for them, otherwise drop below.
+    /// Beside the notch, sized to the free space in the menu bar; below it only when there's
+    /// no room at all.
     case auto
     /// Always beside the notch, in the menu bar row (may cover menu bar icons).
     case wings
@@ -51,8 +52,13 @@ public struct MenuBarOccupancy: Equatable, Sendable {
 public enum MenuBarLayoutEngine {
     /// Space kept clear between a wing and the nearest menu bar item.
     public static let clearance: CGFloat = 6
-    /// Narrowest wing that can still show an icon or a short value.
+    /// Narrowest wing that can still show an icon and a short value.
     public static let minimumWing: CGFloat = 34
+    /// Narrowest wing at all: room for an icon only. Less than this and the island drops.
+    public static let iconOnlyWing: CGFloat = 26
+    /// Wing width when the menu bar can't be measured (no Accessibility). Narrow enough to clear
+    /// the menus of most apps and the status items on a 14" MacBook Pro.
+    public static let unmeasuredWing: CGFloat = 36
 
     /// Pick the closed layout.
     /// - Parameters:
@@ -74,16 +80,20 @@ public enum MenuBarLayoutEngine {
         case .drop:
             return .drop
         case .auto:
+            // Like the iPhone (and other notch apps), the closed island stays in the top row.
             guard hasMenuBar else { return .wings(left: preferredWing, right: preferredWing) }
-            guard let occupancy else { return .drop }
+            guard let occupancy else {
+                let w = min(preferredWing, unmeasuredWing)
+                return .wings(left: w, right: w)
+            }
             let leftRoom = occupancy.leftObstacleMaxX.map { notch.minX - $0 - clearance } ?? preferredWing
             let rightRoom = occupancy.rightObstacleMinX.map { $0 - notch.maxX - clearance } ?? preferredWing
-            let left = min(preferredWing, leftRoom)
-            let right = min(preferredWing, rightRoom)
-            guard left >= minimumWing, right >= minimumWing else { return .drop }
             // Keep the island symmetric around the notch: both wings take the narrower width.
-            let width = min(left, right)
-            return .wings(left: width, right: width)
+            let width = min(preferredWing, leftRoom, rightRoom)
+            if width >= minimumWing { return .wings(left: width, right: width) }
+            if width >= iconOnlyWing { return .wings(left: iconOnlyWing, right: iconOnlyWing) }
+            // Not even an icon fits without covering something: hang below the notch instead.
+            return .drop
         }
     }
 

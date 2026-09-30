@@ -91,6 +91,16 @@ enum Snapshots {
             model.tab = tab
             shoot("w" + name)
         }
+        // Icon-only wings (a crowded menu bar) and the pill below the notch (no room at all).
+        for (prefix, layout) in [("i", ClosedLayout.wings(left: MenuBarLayoutEngine.iconOnlyWing, right: MenuBarLayoutEngine.iconOnlyWing)),
+                                 ("d", ClosedLayout.drop)] {
+            model.closedPlacements[1] = ClosedPlacement(layout: layout, leftSlack: 0, rightSlack: 0)
+            for (name, presentation, tab) in states where !name.contains("expanded") && !name.contains("sneak") {
+                model.forcedPresentation = presentation
+                model.tab = tab
+                shoot(prefix + name)
+            }
+        }
         model.closedPlacements[1] = nil
 
         // A call with a live count-up timer, and the urgent glow on a failed deploy.

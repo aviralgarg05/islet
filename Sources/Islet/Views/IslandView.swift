@@ -12,7 +12,10 @@ struct ClosedPlacement: Equatable {
 
     static func unmeasured(_ preference: ClosedLayoutPreference, wing: CGFloat, hasMenuBar: Bool) -> ClosedPlacement {
         let layout = MenuBarLayoutEngine.decide(preference: preference, notch: .zero, preferredWing: wing, occupancy: nil, hasMenuBar: hasMenuBar)
-        return ClosedPlacement(layout: layout, leftSlack: .infinity, rightSlack: .infinity)
+        // Without a measurement nobody knows what's beside the wings, so bubbles go just below
+        // the row; with the explicit "beside the notch" choice they sit in it.
+        let slack: CGFloat = preference == .auto && hasMenuBar ? 0 : .infinity
+        return ClosedPlacement(layout: layout, leftSlack: slack, rightSlack: slack)
     }
 }
 
