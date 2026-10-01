@@ -25,6 +25,7 @@
 - **It costs nothing when idle.** Everything is driven by events, looping animations run in Core Animation, and the pointer isn't watched until it reaches the notch. `make perf` checks each state against a CPU budget; the latest figures are in the [changelog](CHANGELOG.md).
 - **It asks for nothing up front.** Each permission is requested when you turn on the feature that needs it.
 - **It keeps things on your Mac.** No account, no telemetry, no licence server. Questions go to an AI provider only when you ask one, with your own key. Lyrics, the weather, sales, stocks and OpenRouter or Copilot usage reach the network only once you turn them on; lyrics and the weather send no more than the song or a rounded position, and Islet never reads another app's sign-in.
+- **It works with VoiceOver and the keyboard.** VoiceOver reads the island in words ("Tea, 4 minutes 32 seconds left"), Increase Contrast firms up its text and edges, and with Keyboard navigation on, Tab reaches every control in Settings.
 - **It's free and MIT-licensed**, written from scratch.
 
 ## Download
