@@ -239,8 +239,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let step = fine ? 1.0 / 64 : 1.0 / 16
         // The keys still do their job with a HUD switched off; only the display is skipped.
         func show(_ kind: HUDKind, _ v: Double, muted: Bool = false) {
-            let s = model.settings
-            guard kind == .brightness ? s.brightnessHUDEnabled : kind == .volume ? s.hudEnabled : true else { return }
+            guard model.settings.showsHUD(kind) else { return }
             Task { await model.showHUD(kind: kind, value: v, muted: muted, label: nil) }
         }
         switch key {

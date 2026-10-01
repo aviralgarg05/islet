@@ -57,6 +57,7 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 - **Artwork corners** (Appearance) go from square to round beside the notch, in a new song's peek and in the open island.
 - **Fit to the notch** (Appearance) nudges the notch's width by up to 20 points and its height by up to 4, so the closed island lines up with the hardware. Hovering and clicking follow.
 - Volume and brightness HUDs can be white, the accent colour or colourful (volume green, brightness yellow, keyboard light blue).
+- HUDs can be **Compact** (in the wings, as before) or **Detailed**: a short line just below the notch with the icon, the level and a percentage, leaving the menu bar beside the notch clear. Keyboard brightness and microphone HUDs have their own switches beside volume and display brightness.
 
 ### Settings
 - Settings is a sidebar window like System Settings, with a search field that finds any setting and opens its page at that row. Each feature page starts with its switch and one plain line; Appearance gathers every look, with a live drawing of the island, any accent colour and sizes you can drag; shortcuts are set by pressing them; Coding agents connects Claude Code, Codex and Cursor with one button each, showing the change first; and ports, tokens, hook commands and script widgets wait under Advanced.

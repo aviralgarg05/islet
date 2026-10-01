@@ -66,6 +66,19 @@ extension Snapshots {
         shoot("41-hud-accent-volume")
         model.settings = saved
 
+        // The detailed HUD: below the notch, with a percentage. White, colourful and muted.
+        model.settings.hudStyle = .detailed
+        model.forcedPresentation = .hud(HUDEvent(kind: .volume, value: 0.62, until: now.addingTimeInterval(2)))
+        shoot("44-hud-detailed-volume")
+        model.forcedPresentation = .hud(HUDEvent(kind: .volume, value: 0.62, muted: true, until: now.addingTimeInterval(2)))
+        shoot("44-hud-detailed-volume-muted")
+        model.settings.hudColour = .colourful
+        for kind in HUDKind.allCases {
+            model.forcedPresentation = .hud(HUDEvent(kind: kind, value: kind == .brightness ? 1 : 0.35, until: now.addingTimeInterval(2)))
+            shoot("44-hud-detailed-colourful-\(kind.rawValue)")
+        }
+        model.settings = saved
+
         // A notch fit: 8 points wider and 2 shorter than the hardware notch drawn behind it.
         var fitted = saved
         fitted.notchWidthAdjust = 8

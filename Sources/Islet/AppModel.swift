@@ -1044,6 +1044,8 @@ extension AppModel: IsletBackend {
 
     nonisolated func showHUD(kind: HUDKind, value: Double, muted: Bool, label: String?) async {
         await MainActor.run {
+            // From the keys, the brightness monitor, the API or a link: each kind has its switch.
+            guard self.settings.showsHUD(kind) else { return }
             self.center.showHUD(kind, value: value, muted: muted, label: label, now: Date())
             self.reschedule()
         }

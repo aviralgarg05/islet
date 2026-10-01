@@ -140,3 +140,24 @@ private func song(playing: Bool, elapsed: Double? = 60, duration: Double? = 240,
         if case .hud = hud {} else { Issue.record("expected the HUD, got \(hud)") }
     }
 }
+
+@Suite struct HUDChoiceTests {
+    @Test func compactAndEveryKindByDefault() {
+        let s = IsletSettings()
+        #expect(s.hudStyle == .compact)
+        #expect(HUDKind.allCases.allSatisfy(s.showsHUD))
+        #expect(s.showsAnyHUD)
+        #expect(decode(#"{"hudStyle": "detailed"}"#).hudStyle == .detailed)
+        #expect(decode(#"{"hudStyle": "huge"}"#).hudStyle == .compact)
+    }
+
+    @Test func eachKindHasItsOwnSwitch() {
+        let s = decode(#"{"keyboardHUDEnabled": false, "microphoneHUDEnabled": false}"#)
+        #expect(s.showsHUD(.volume))
+        #expect(s.showsHUD(.brightness))
+        #expect(!s.showsHUD(.keyboardBrightness))
+        #expect(!s.showsHUD(.microphone))
+        let none = decode(#"{"hudEnabled": false, "brightnessHUDEnabled": false, "keyboardHUDEnabled": false, "microphoneHUDEnabled": false}"#)
+        #expect(!none.showsAnyHUD)
+    }
+}

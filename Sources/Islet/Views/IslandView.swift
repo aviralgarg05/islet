@@ -42,10 +42,24 @@ struct IslandGeometry: Equatable {
     var outerWidth: CGFloat { size.width + 2 * top }
 }
 
+/// Choices from Settings and the pointer that change the island's silhouette beyond the
+/// presentation itself. The view and the panel's hit-testing both read them (`AppModel.look`),
+/// so they always agree.
+struct IslandLook: Equatable {
+    /// HUDs drop below the notch with a percentage ("Detailed").
+    var detailedHUD = false
+}
+
+extension AppModel {
+    func look(for display: CGDirectDisplayID) -> IslandLook {
+        IslandLook(detailedHUD: settings.hudStyle == .detailed)
+    }
+}
+
 /// Layout of the island for each presentation. Shared by the view and the panel's hit-testing.
 enum IslandLayout {
     /// - Parameter wing: width of each wing beside the notch, from the closed placement.
-    static func geometry(for p: IslandPresentation, metrics m: IslandMetrics, wing: CGFloat) -> IslandGeometry {
+    static func geometry(for p: IslandPresentation, metrics m: IslandMetrics, wing: CGFloat, look: IslandLook = IslandLook()) -> IslandGeometry {
         let n = m.notch
         let small = min(12, n.height / 2.4)
         let row = n.width + 2 * wing
@@ -54,6 +68,8 @@ enum IslandLayout {
             return IslandGeometry(size: n, top: 6, bottom: small)
         case .expanded:
             return IslandGeometry(size: m.expanded, top: Radius.flare, bottom: Radius.shell)
+        case .hud where look.detailedHUD:
+            return detailedHUD(metrics: m)
         case .compact, .hud:
             return IslandGeometry(size: CGSize(width: row, height: n.height), top: 6, bottom: small, wing: wing)
         case .sneak(let a):
@@ -72,6 +88,18 @@ enum IslandLayout {
         return IslandGeometry(size: CGSize(width: width, height: n.height + 46 + extra), top: 8, bottom: 18,
                               stemWidth: width > row ? row : 0, stemHeight: n.height, wing: wing)
     }
+
+    /// The detailed HUD: a notch-wide stem in the menu bar row, so the menu bar beside the notch
+    /// stays clear, and one short line below it with the icon, the level and its percentage.
+    private static func detailedHUD(metrics m: IslandMetrics) -> IslandGeometry {
+        let n = m.notch
+        let width = max(n.width + 2 * Space.xxl, 236)
+        return IslandGeometry(size: CGSize(width: width, height: n.height + hudBody), top: 8, bottom: Radius.l,
+                              stemWidth: n.width, stemHeight: n.height)
+    }
+
+    /// Height of the detailed HUD's line below the notch: no more than the line needs.
+    static let hudBody: CGFloat = 30
 
     /// A sneak peek with a bar under its text gets a little more height, so the bar clears the
     /// rounded bottom edge.
@@ -223,7 +251,8 @@ struct IslandView: View {
     var body: some View {
         let p = model.presentation(for: display)
         let placement = model.placement(for: display, metrics: metrics)
-        let g = IslandLayout.geometry(for: p, metrics: metrics, wing: placement.wing)
+        let look = model.look(for: display)
+        let g = IslandLayout.geometry(for: p, metrics: metrics, wing: placement.wing, look: look)
         let visible = IslandLayout.isVisible(p) || dropTargeted
         let shape = g.shape
         let glow = model.urgentGlow(for: p)
@@ -389,7 +418,11 @@ struct IslandView: View {
         case .hidden, .idle:
             Color.clear
         case .hud(let hud):
-            HUDContent(hud: hud, metrics: metrics, geometry: g, tint: model.hudTint(hud.kind))
+            if model.settings.hudStyle == .detailed {
+                DetailedHUDContent(hud: hud, metrics: metrics, tint: model.hudTint(hud.kind))
+            } else {
+                HUDContent(hud: hud, metrics: metrics, geometry: g, tint: model.hudTint(hud.kind))
+            }
         case .compact(let c):
             CompactContentView(content: c, metrics: metrics, geometry: g, model: model,
                                counted: model.fittedBubbles(for: p, placement: model.placement(for: display, metrics: metrics), metrics: metrics).counted)
@@ -747,6 +780,31 @@ struct SongPeekView: View {
 
 // MARK: - HUD
 
+extension HUDEvent {
+    var symbol: String {
+        switch kind {
+        case .volume:
+            if muted || value == 0 { return "speaker.slash.fill" }
+            return value < 0.34 ? "speaker.wave.1.fill" : value < 0.67 ? "speaker.wave.2.fill" : "speaker.wave.3.fill"
+        case .brightness: return value < 0.5 ? "sun.min.fill" : "sun.max.fill"
+        case .keyboardBrightness: return value == 0 ? "light.min" : "light.max"
+        case .microphone: return muted ? "mic.slash.fill" : "mic.fill"
+        }
+    }
+
+    /// The level shown: nothing while muted.
+    var shownLevel: Double { muted ? 0 : value }
+
+    var accessibilityName: String {
+        switch kind {
+        case .volume: return "Volume"
+        case .brightness: return "Brightness"
+        case .keyboardBrightness: return "Keyboard brightness"
+        case .microphone: return "Microphone"
+        }
+    }
+}
+
 struct HUDContent: View {
     let hud: HUDEvent
     let metrics: IslandMetrics
@@ -754,16 +812,7 @@ struct HUDContent: View {
     /// White, the accent or the kind's own colour (Settings → Notifications & HUDs).
     var tint: Color = .white
 
-    var symbol: String {
-        switch hud.kind {
-        case .volume:
-            if hud.muted || hud.value == 0 { return "speaker.slash.fill" }
-            return hud.value < 0.34 ? "speaker.wave.1.fill" : hud.value < 0.67 ? "speaker.wave.2.fill" : "speaker.wave.3.fill"
-        case .brightness: return hud.value < 0.5 ? "sun.min.fill" : "sun.max.fill"
-        case .keyboardBrightness: return hud.value == 0 ? "light.min" : "light.max"
-        case .microphone: return hud.muted ? "mic.slash.fill" : "mic.fill"
-        }
-    }
+    var symbol: String { hud.symbol }
 
     var body: some View {
         Wings(metrics: metrics, wing: geometry.wing) {
@@ -780,6 +829,41 @@ struct HUDContent: View {
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(tint)
             .contentTransition(.symbolEffect(.replace))
+    }
+}
+
+/// The detailed HUD (Settings → Notifications & HUDs → Style): the menu bar row stays as the
+/// notch, and one line below it holds the icon, the level and its percentage.
+struct DetailedHUDContent: View {
+    let hud: HUDEvent
+    let metrics: IslandMetrics
+    var tint: Color = .white
+    @Environment(\.islandMotion) private var motion
+
+    var body: some View {
+        let percent = Int((hud.shownLevel * 100).rounded())
+        VStack(spacing: 0) {
+            Color.clear.frame(height: metrics.notch.height)
+            HStack(spacing: Space.s) {
+                Image(systemName: hud.symbol)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .contentTransition(.symbolEffect(.replace))
+                    .frame(width: 18)
+                LevelBar(value: hud.shownLevel, tint: tint, height: 5)
+                    .animation(motion == .off ? nil : .snappy(duration: 0.18), value: hud.value)
+                Text("\(percent)%")
+                    .textStyle(.caption, emphasized: true, numeric: true)
+                    .foregroundStyle(Ink.secondary)
+                    .contentTransition(.numericText(value: Double(percent)))
+                    .animation(motion == .off ? nil : .snappy(duration: 0.18), value: percent)
+                    .frame(width: 34, alignment: .trailing)
+            }
+            .padding(.horizontal, Space.l)
+            .frame(height: IslandLayout.hudBody)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(hud.accessibilityName) \(percent)%")
     }
 }
 

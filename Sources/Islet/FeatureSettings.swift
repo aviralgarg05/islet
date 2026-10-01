@@ -273,17 +273,52 @@ struct NotificationsSettings: View {
                 }
                 .settingsAnchor("notifications.welcome")
             }
-            Section("Volume and brightness") {
+            Section {
                 Toggle(isOn: $model.settings.hudEnabled) {
                     Text("Volume")
                     Text("When you change the volume or mute.")
                 }
                 .settingsAnchor("notifications.volume")
                 Toggle(isOn: $model.settings.brightnessHUDEnabled) {
-                    Text("Brightness")
+                    Text("Display brightness")
                     Text("When you change the display's brightness.")
                 }
                 .settingsAnchor("notifications.brightness")
+                Toggle(isOn: $model.settings.keyboardHUDEnabled) {
+                    Text("Keyboard brightness")
+                    Text("When you change the keyboard's light, while Islet replaces the system display.")
+                }
+                .settingsAnchor("notifications.keyboard")
+                Toggle(isOn: $model.settings.microphoneHUDEnabled) {
+                    Text("Microphone")
+                    Text("When an app or a shortcut mutes or unmutes it through Islet.")
+                }
+                .settingsAnchor("notifications.microphone")
+                Group {
+                    Picker(selection: $model.settings.hudStyle) {
+                        Text("Compact").tag(HUDStyle.compact)
+                        Text("Detailed").tag(HUDStyle.detailed)
+                    } label: {
+                        Text("Style")
+                        Text(model.settings.hudStyle == .compact
+                             ? "Beside the notch, in the menu bar."
+                             : "Just below the notch, with the level as a percentage.")
+                    }
+                    .settingsAnchor("notifications.hudStyle")
+                    Picker(selection: $model.settings.hudColour) {
+                        Text("White").tag(HUDColour.white)
+                        Text("Accent colour").tag(HUDColour.accent)
+                        Text("Colourful").tag(HUDColour.colourful)
+                    } label: {
+                        Text("Colour")
+                        Text(hudColourDetail)
+                    }
+                    .settingsAnchor("notifications.hudColour")
+                    SettingsSlider(title: "Stays on screen for", value: $model.settings.hudDuration, range: IsletSettings.hudDurationRange,
+                                   step: 0.2, format: SettingsSlider.seconds)
+                        .settingsAnchor("notifications.hudDuration")
+                }
+                .disabled(!model.settings.showsAnyHUD)
                 Toggle(isOn: $model.settings.replaceSystemHUD) {
                     Text("Replace the system volume and brightness display")
                     Text("Shows only Islet's when you press the keys.")
@@ -292,20 +327,10 @@ struct NotificationsSettings: View {
                 if model.settings.replaceSystemHUD && !axTrusted {
                     askForAccessibility("Islet needs Accessibility to take over the keys.")
                 }
-                SettingsSlider(title: "Stays on screen for", value: $model.settings.hudDuration, range: IsletSettings.hudDurationRange,
-                               step: 0.2, format: SettingsSlider.seconds)
-                    .disabled(!model.settings.hudEnabled && !model.settings.brightnessHUDEnabled)
-                    .settingsAnchor("notifications.hudDuration")
-                Picker(selection: $model.settings.hudColour) {
-                    Text("White").tag(HUDColour.white)
-                    Text("Accent colour").tag(HUDColour.accent)
-                    Text("Colourful").tag(HUDColour.colourful)
-                } label: {
-                    Text("Colour")
-                    Text(hudColourDetail)
-                }
-                .disabled(!model.settings.hudEnabled && !model.settings.brightnessHUDEnabled)
-                .settingsAnchor("notifications.hudColour")
+            } header: {
+                Text("HUDs")
+            } footer: {
+                SettingsFooter("A HUD shows a level for a moment when you change it. The keys still work with one switched off.")
             }
             Section {
                 Toggle(isOn: $model.settings.batteryEnabled) {
@@ -343,7 +368,7 @@ struct NotificationsSettings: View {
             return model.settings.accentColor == "auto"
                 ? "The playing artwork's colour, or your Mac's accent colour."
                 : "The accent colour from Appearance."
-        case .colourful: return "Volume green, brightness yellow, keyboard light blue."
+        case .colourful: return "Volume green, brightness yellow, keyboard light blue, microphone orange."
         }
     }
 

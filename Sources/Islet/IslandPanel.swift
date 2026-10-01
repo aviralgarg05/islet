@@ -131,7 +131,7 @@ final class IslandWindowController {
         let p = model.presentation(for: display)
         guard IslandLayout.isVisible(p) else { return [] }
         let placement = model.placement(for: display, metrics: metrics)
-        let g = IslandLayout.geometry(for: p, metrics: metrics, wing: placement.wing)
+        let g = IslandLayout.geometry(for: p, metrics: metrics, wing: placement.wing, look: model.look(for: display))
         let top = descriptor.frame.maxY
         let midX = descriptor.frame.midX
         var rects: [CGRect] = []

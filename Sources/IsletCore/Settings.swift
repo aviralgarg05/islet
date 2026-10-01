@@ -111,6 +111,14 @@ public enum HUDColour: String, Codable, Sendable, CaseIterable {
     }
 }
 
+/// How the volume, brightness and other HUDs look.
+public enum HUDStyle: String, Codable, Sendable, CaseIterable {
+    /// In the wings beside the notch, inside the menu bar row.
+    case compact
+    /// Below the notch, with the level as a percentage. The row beside the notch stays clear.
+    case detailed
+}
+
 /// Per-app customisation, keyed by bundle identifier.
 public struct AppRule: Codable, Equatable, Sendable, Identifiable {
     public var bundleID: String
@@ -234,6 +242,10 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var disabledMediaSources: [MediaSourceKind] = []
     public var hudEnabled = true
     public var brightnessHUDEnabled = true
+    public var keyboardHUDEnabled = true
+    /// Mute and unmute from an app or script (the API's `microphone` HUD).
+    public var microphoneHUDEnabled = true
+    public var hudStyle: HUDStyle = .compact
     public var hudColour: HUDColour = .white
     /// Swallow the volume/brightness keys so only Islet's HUD shows. Needs Accessibility.
     public var replaceSystemHUD = false
@@ -377,6 +389,20 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         if v <= mid { return standard * v / mid }
         return standard + (round - standard) * (v - mid) / (Self.artworkCornerRange.upperBound - mid)
     }
+
+    /// Whether a HUD of `kind` shows (Settings → Notifications & HUDs). The keys still do
+    /// their job when it doesn't.
+    public func showsHUD(_ kind: HUDKind) -> Bool {
+        switch kind {
+        case .volume: return hudEnabled
+        case .brightness: return brightnessHUDEnabled
+        case .keyboardBrightness: return keyboardHUDEnabled
+        case .microphone: return microphoneHUDEnabled
+        }
+    }
+
+    /// Whether any HUD shows at all.
+    public var showsAnyHUD: Bool { HUDKind.allCases.contains(where: showsHUD) }
 
     public func rule(for bundleID: String?) -> AppRule? {
         guard let bundleID else { return nil }

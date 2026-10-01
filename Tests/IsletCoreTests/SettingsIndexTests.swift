@@ -124,6 +124,8 @@ import Testing
         ("music colour", .nowPlaying),
         ("song progress", .nowPlaying),
         ("peek", .general),
+        ("keyboard brightness", .notifications),
+        ("hud style", .notifications),
     ])
     func queryFindsPage(query: String, page: SettingsPage) {
         let groups = SettingsIndex.search(query)

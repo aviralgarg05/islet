@@ -427,6 +427,8 @@ Now Playing, closed island, HUD, gestures and battery keys:
 | `visualiserStyle` | `"bars"` | The playing indicator: `"bars"`, `"slim"`, `"dots"`, `"wave"`, `"pulse"` or `"off"`. |
 | `musicColour` | `"artwork"` | The playing indicator, the progress ring and the open island's progress bar: `"artwork"`, `"accent"` (the artwork's colour while `accentColor` is `"auto"`) or `"white"`. Replaces `visualiserColour`, which is read once. |
 | `artworkCornerRadius` | `5` | Artwork corners beside the notch, 0 (square) to 10 (round). The song peek and the open island scale it to their size. |
+| `hudEnabled`, `brightnessHUDEnabled`, `keyboardHUDEnabled`, `microphoneHUDEnabled` | `true` | Which HUDs show: volume, display brightness, keyboard brightness and microphone. The keys still work with one off, and the API's `hud` follows the same switches. |
+| `hudStyle` | `"compact"` | `"compact"` (in the wings beside the notch) or `"detailed"` (just below the notch, with a percentage). |
 | `hudColour` | `"white"` | Volume and brightness HUDs: `"white"`, `"accent"` or `"colourful"` (volume green, brightness yellow, keyboard light blue, microphone orange). |
 | `notchWidthAdjust`, `notchHeightAdjust` | `0` | Points added to the notch so the closed island lines up with it: width −20 to +20, height −4 to +4. |
 | `gesturesEnabled` | `true` | Two-finger swipes on the island. |
