@@ -105,8 +105,8 @@ struct ShortcutField: View {
 
     final class Monitor {
         var token: Any?
-        /// Whether this field has Islet's shortcuts suspended.
-        var suspended = false
+        /// Islet's shortcuts, held off while this field records.
+        let shortcuts = ShortcutRecording()
     }
 
     private var label: String { Hotkey.parse(text)?.label ?? (text.isEmpty ? "Off" : "Not valid") }
@@ -133,11 +133,10 @@ struct ShortcutField: View {
     private func start() {
         recording = true
         hint = nil
-        // Islet's shortcuts would fire before the field saw the keys.
-        if !monitor.suspended {
-            monitor.suspended = true
-            GlobalHotkey.suspendAll()
-        }
+        // Islet's shortcuts would fire before the field saw the keys. Switching to another app,
+        // or closing or leaving the Settings window, ends recording, so they never stay off.
+        monitor.shortcuts.onEnd = { stop() }
+        monitor.shortcuts.begin()
         monitor.token = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             handle(event)
             return nil
@@ -147,10 +146,8 @@ struct ShortcutField: View {
     private func stop() {
         if let token = monitor.token { NSEvent.removeMonitor(token) }
         monitor.token = nil
-        if monitor.suspended {
-            monitor.suspended = false
-            GlobalHotkey.resumeAll()
-        }
+        monitor.shortcuts.end()
+        monitor.shortcuts.onEnd = nil
         recording = false
         hint = nil
     }

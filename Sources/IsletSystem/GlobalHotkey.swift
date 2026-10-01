@@ -1,3 +1,4 @@
+import AppKit
 import Carbon.HIToolbox
 import Foundation
 import IsletCore
@@ -88,5 +89,46 @@ public final class GlobalHotkey {
             DispatchQueue.main.async { GlobalHotkey.registered[id]?.hotkey?.onPress?() }
             return noErr
         }, 1, &spec, nil, &handler)
+    }
+}
+
+/// Islet's shortcuts held off while a shortcut field records (`GlobalHotkey.suspendAll`), in a
+/// form that can't be left behind: besides `end()`, it ends by itself when Islet stops being the
+/// active app or the key window changes (switching apps, closing Settings), since the field
+/// can't hear keys then, and when it is released. `onEnd` hears about the ones it ends itself.
+public final class ShortcutRecording {
+    public private(set) var isActive = false
+    /// Called when recording ends because focus moved, so the field can stop listening too.
+    public var onEnd: (() -> Void)?
+    private let center: NotificationCenter
+    private var observers: [NSObjectProtocol] = []
+
+    public init(center: NotificationCenter = .default) {
+        self.center = center
+    }
+
+    deinit { end() }
+
+    public func begin() {
+        guard !isActive else { return }
+        isActive = true
+        GlobalHotkey.suspendAll()
+        // Delivered on the posting thread (AppKit posts these on the main thread).
+        observers = [NSApplication.didResignActiveNotification, NSWindow.didResignKeyNotification].map { name in
+            center.addObserver(forName: name, object: nil, queue: nil) { [weak self] _ in
+                guard let self, self.isActive else { return }
+                self.end()
+                self.onEnd?()
+            }
+        }
+    }
+
+    /// Give the shortcuts back. Safe to call more than once.
+    public func end() {
+        guard isActive else { return }
+        isActive = false
+        observers.forEach(center.removeObserver)
+        observers = []
+        GlobalHotkey.resumeAll()
     }
 }
