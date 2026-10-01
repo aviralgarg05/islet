@@ -3,6 +3,7 @@ import Foundation
 import IsletCore
 import IsletSystem
 import Observation
+import os
 
 enum IslandTab: String, CaseIterable, Identifiable {
     case home, today, shelf, widgets, clipboard, stats
@@ -375,7 +376,7 @@ final class AppModel {
         systemMedia.onUnavailable = { [weak self] reason in
             // Fall back to per-player enrichment. It uses AppleScript only where Automation is
             // already allowed, so this never brings up the prompt; Settings → Permissions does.
-            NSLog("Islet: %@", reason)
+            Log.media.error("\(reason, privacy: .public)")
             self?.bridgeFailed = true
             self?.syncPlayers()
         }
@@ -547,7 +548,7 @@ final class AppModel {
         let restored = MeetingReminders.start(from: url)
         if let saved = restored.value { meetings = saved }
         canSaveMeetings = restored.canSave
-        if let moved = restored.setAside { NSLog("Islet: meetings.json couldn't be read; kept as %@", moved.lastPathComponent) }
+        if let moved = restored.setAside { Log.files.error("meetings.json couldn't be read; kept as \(moved.lastPathComponent, privacy: .public)") }
     }
 
     private func saveMeetings() {
@@ -555,7 +556,7 @@ final class AppModel {
         do {
             try meetings.save(to: url)
         } catch {
-            NSLog("Islet: couldn't save meetings.json: %@", error.localizedDescription)
+            Log.files.error("couldn't save meetings.json: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -696,7 +697,7 @@ final class AppModel {
         do {
             try configFile.save(settings)
         } catch {
-            NSLog("Islet: couldn't save config.json: %@", error.localizedDescription)
+            Log.files.error("couldn't save config.json: \(error.localizedDescription, privacy: .public)")
         }
         noteSettingsProblem(configFile.problem)
     }
@@ -707,7 +708,7 @@ final class AppModel {
         do {
             try configFile.replace(with: settings)
         } catch {
-            NSLog("Islet: couldn't replace config.json: %@", error.localizedDescription)
+            Log.files.error("couldn't replace config.json: \(error.localizedDescription, privacy: .public)")
         }
         noteSettingsProblem(configFile.problem)
     }

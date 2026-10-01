@@ -132,6 +132,7 @@ Four new pages, each off until you turn it on in Settings → Tools, then listed
 - The island's looping animations hold still in Low Power Mode.
 - Script widgets run with a short list of variables (home, user, language, PATH and the xbar ones) instead of Islet's whole environment, and Advanced names what they can use.
 - Clipboard history keeps at most 4 MB of text, dropping the oldest unpinned copies first.
+- What goes wrong in the background (a card that ran out of time, a terminal that couldn't be brought forward, the Now Playing helper stopping, a file that couldn't be read or saved) goes to the system log under Islet's name, by area, and never with what you typed or copied.
 - Settings → Permissions says what Accessibility lets Islet read (never your typing) and, from macOS 27, what System Settings calls it. Launch at login says why a change didn't take, and General says when Islet runs from outside Applications.
 - A browser video no longer stays "playing" in the island after you close its window, and a video that finished without saying so shows as stopped and then goes.
 - Local builds use the hardened runtime.

@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import IsletCore
+import os
 
 /// Persists the file shelf and performs file actions (AirDrop, share, reveal, open).
 ///
@@ -37,7 +38,7 @@ public final class ShelfService {
         let restored = JSONStore.start(storeURL) { JSONStore.read(Shelf.self, from: $0) }
         shelf = restored.value ?? Shelf()
         canSave = restored.canSave
-        if let moved = restored.setAside { NSLog("Islet: shelf.json couldn't be read; kept as %@", moved.lastPathComponent) }
+        if let moved = restored.setAside { Log.files.error("shelf.json couldn't be read; kept as \(moved.lastPathComponent, privacy: .public)") }
         resolveBookmarks(onStartupDisk: true)
         shelf.prune { path in Shelf.volume(of: path) != nil || exists(path) }
         checkVolumes()

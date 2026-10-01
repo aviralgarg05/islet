@@ -1,6 +1,8 @@
 import AppKit
 import IsletCore
+import IsletSystem
 import Observation
+import os
 
 /// Pending coding-agent approvals and the card that answers them.
 ///
@@ -72,6 +74,7 @@ final class ApprovalController {
     /// Nobody answered in time: the agent asks in the terminal, and its status says so.
     private func expire(_ id: String) {
         if waiters[id] != nil, let entry = queue.entries.first(where: { $0.id == id }) {
+            Log.approvals.notice("A \(entry.request.provider.rawValue, privacy: .public) card ran out of time; the agent asks in the terminal")
             _ = try? model.applyLocal(entry.request.statusUpdate(backToTerminal: .expired))
         }
         finish(id, with: nil)
@@ -85,6 +88,7 @@ final class ApprovalController {
             let request = entry.request
             TerminalJump.jump(request.terminal) { [weak self] reached in
                 guard !reached else { return }
+                Log.approvals.notice("Couldn't bring the \(request.provider.rawValue, privacy: .public) terminal forward")
                 _ = try? self?.model.applyLocal(request.statusUpdate(backToTerminal: .jumpFailed))
             }
         }
