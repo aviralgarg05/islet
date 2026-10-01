@@ -61,4 +61,13 @@ import Testing
         #expect(ShortcutsCatalog.failureReason("\n  \n") == nil)
         #expect((ShortcutsCatalog.failureReason(String(repeating: "x", count: 200))?.count ?? 0) == 90)
     }
+
+    @Test func returnRunsTheBestMatchOnlyOnceSomethingIsTyped() {
+        let items = [ShortcutItem(id: "1", name: "Text Sam I'm late"), ShortcutItem(id: "2", name: "Lights off")]
+        // A stray Return in an empty field runs nothing, not whichever shortcut is listed first.
+        #expect(ShortcutsCatalog.returnTarget("", in: items, recent: ["1"]) == nil)
+        #expect(ShortcutsCatalog.returnTarget("   ", in: items) == nil)
+        #expect(ShortcutsCatalog.returnTarget("lig", in: items)?.id == "2")
+        #expect(ShortcutsCatalog.returnTarget("zzz", in: items) == nil)
+    }
 }

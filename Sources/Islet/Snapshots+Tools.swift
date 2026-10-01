@@ -34,6 +34,16 @@ extension Snapshots {
             shoot("90b-lyrics-hidden")
             model.tools.lyrics.showForSnapshot(SongLyrics(plain: "Lights along the river\nTurning slowly into gold\nEvery window holds a story"), for: np)
             shoot("90c-lyrics-plain")
+            // A stopwatch (or a timer) counting stays above the lyrics.
+            model.tools.lyrics.showForSnapshot(lyrics, for: np)
+            var counting = Stopwatch()
+            counting.start(now: now.addingTimeInterval(-754))
+            model.tools.stopwatch.showForSnapshot(counting)
+            shoot("90d-lyrics-counting")
+            size(.standard)
+            shoot("90e-lyrics-counting-standard")
+            size(.compact)
+            model.tools.stopwatch.showForSnapshot(Stopwatch())
             model.tools.lyrics.showForSnapshot(nil, for: np)
             model.settings.lyricsEnabled = false
         }
@@ -76,17 +86,29 @@ extension Snapshots {
         model.settings.weatherPlace = WeatherPlace(name: "London", region: "England", country: "United Kingdom", latitude: 51.51, longitude: -0.13)
         let days = [(61, 16.1, 9.8, 80), (3, 17.4, 10.2, 20), (2, 18.0, 11.0, 10), (0, 19.5, 10.9, 0),
                     (80, 15.2, 9.0, 60), (95, 14.8, 8.7, 70), (1, 16.6, 8.1, 5)]
+        // Dates from today on, as Open-Meteo gives them for a place in the Mac's time zone.
+        func dayString(_ offset: Int) -> String {
+            let day = Calendar.current.date(byAdding: .day, value: offset, to: now) ?? now
+            let c = Calendar.current.dateComponents([.year, .month, .day], from: day)
+            return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+        }
+        func week(from first: Int) -> [WeatherReport.Day] {
+            days.enumerated().map { i, d in
+                WeatherReport.Day(date: dayString(first + i), code: d.0, high: d.1, low: d.2, rainChance: d.3)
+            }
+        }
         let report = WeatherReport(
             current: .init(temperature: 14.2, feelsLike: 12.6, code: 61, isDay: true, wind: 11),
-            days: days.enumerated().map { i, d in
-                WeatherReport.Day(date: String(format: "2026-10-%02d", i + 1), code: d.0, high: d.1, low: d.2, rainChance: d.3)
-            },
-            fetchedAt: now)
+            days: week(from: 0), fetchedAt: now)
         model.tools.weather.showForSnapshot(report)
         shoot("92b-weather")
         size(.standard)
         shoot("92c-weather-standard")
         size(.compact)
+        // Kept from yesterday evening and not replaced: from today on, and when it is from.
+        model.tools.weather.showForSnapshot(WeatherReport(current: report.current, days: week(from: -1),
+                                                          fetchedAt: now.addingTimeInterval(-15 * 3600)))
+        shoot("92e-weather-kept")
         model.tools.weather.showForSnapshot(nil, status: .failed)
         shoot("92d-weather-failed")
         model.tools.weather.showForSnapshot(nil)
@@ -114,6 +136,11 @@ extension Snapshots {
         size(.large)
         shoot("93d-today-month-large")
         size(.compact)
+        // A month of six weeks (August 2026 starts on a Saturday) on the shortest island.
+        if let august = Calendar.current.date(from: DateComponents(year: 2026, month: 8, day: 15)) {
+            model.tools.month.showForSnapshot(month: august, selected: nil, events: [])
+            shoot("93e-today-month-six-weeks")
+        }
         model.settings.monthCalendar = false
 
         // The stopwatch: Home's main thing with nothing playing, a glance beside the music,

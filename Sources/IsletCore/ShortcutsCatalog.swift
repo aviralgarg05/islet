@@ -72,6 +72,13 @@ public enum ShortcutsCatalog {
         }.map(\.item)
     }
 
+    /// What Return runs in the search field: the best match for what was typed. Nothing for a
+    /// blank field, so a stray Return can't run whichever shortcut happens to come first.
+    public static func returnTarget(_ query: String, in items: [ShortcutItem], recent: [String] = []) -> ShortcutItem? {
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return search(query, in: items, recent: recent).first
+    }
+
     /// Strong matches only, for suggesting a shortcut while someone types in the Ask box: the
     /// name starts with the text, or each word starts a word of the name. Two letters at least.
     public static func suggestions(for text: String, in items: [ShortcutItem], limit: Int = 2) -> [ShortcutItem] {

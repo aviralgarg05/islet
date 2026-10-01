@@ -26,7 +26,7 @@ import Testing
         #expect(r.days.map(\.date) == ["2026-10-01", "2026-10-02"])
         #expect(r.days[0].rainChance == 80)
         #expect(r.days[1].rainChance == nil)
-        #expect(r.today?.high == 16.1)
+        #expect(r.days.first?.high == 16.1)
     }
 
     @Test func aForecastWithoutCurrentConditionsIsAnError() {
@@ -120,5 +120,40 @@ import Testing
         #expect(s.temperatureUnit == .automatic, "an unknown unit falls back")
         let off = IsletSettings.decodeLenient(Data(#"{"weatherPlace": {"name": "X", "latitude": 400, "longitude": 0}}"#.utf8))
         #expect(off.weatherPlace == nil, "a place off the globe is dropped")
+    }
+
+    @Test func readsThePlacesOffsetFromUTC() throws {
+        let json = #"{"utc_offset_seconds":32400,"current":{"temperature_2m":20,"weather_code":0},"daily":{"time":["2026-10-02"],"weather_code":[0],"temperature_2m_max":[22],"temperature_2m_min":[15]}}"#
+        let r = try OpenMeteo.decodeForecast(Data(json.utf8), fetchedAt: Date(timeIntervalSince1970: 0))
+        #expect(r.utcOffset == 32_400)
+    }
+
+    @Test func aKeptReportShowsTheDaysFromThePlacesToday() {
+        let days = ["2026-10-01", "2026-10-02", "2026-10-03"].map { WeatherReport.Day(date: $0, code: 0, high: 20, low: 10) }
+        // 1 October, 23:30 UTC: still the 1st for a place on UTC, already the 2nd in Tokyo.
+        let now = Date(timeIntervalSince1970: 1_790_897_400)
+        let utc = WeatherReport(current: .init(temperature: 15, code: 0), days: days, fetchedAt: now, utcOffset: 0)
+        #expect(utc.placeDate(now) == "2026-10-01")
+        #expect(utc.upcoming(now: now).map(\.date) == ["2026-10-01", "2026-10-02", "2026-10-03"])
+        let tokyo = WeatherReport(current: .init(temperature: 15, code: 0), days: days, fetchedAt: now, utcOffset: 9 * 3600)
+        #expect(tokyo.placeDate(now) == "2026-10-02")
+        #expect(tokyo.upcoming(now: now).map(\.date) == ["2026-10-02", "2026-10-03"])
+        #expect(tokyo.today(now: now)?.date == "2026-10-02")
+        // Two days later the kept report has only its last day left, and no today.
+        let later = now.addingTimeInterval(2 * 86_400)
+        #expect(utc.upcoming(now: later).map(\.date) == ["2026-10-03"])
+        #expect(utc.today(now: later.addingTimeInterval(86_400)) == nil)
+    }
+
+    @Test func anOldReportSaysWhenItIsFrom() {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "UTC")!
+        let fetched = c.date(from: DateComponents(year: 2026, month: 10, day: 1, hour: 9, minute: 12))!
+        let r = WeatherReport(current: .init(temperature: 15, code: 0), days: [], fetchedAt: fetched, utcOffset: 0)
+        let gb = Locale(identifier: "en_GB")
+        #expect(r.updatedText(now: fetched.addingTimeInterval(59 * 60), calendar: c, locale: gb) == nil)
+        #expect(r.updatedText(now: fetched.addingTimeInterval(60 * 60), calendar: c, locale: gb) == "As of 09:12")
+        #expect(r.updatedText(now: fetched.addingTimeInterval(86_400), calendar: c, locale: gb) == "As of yesterday")
+        #expect(r.updatedText(now: fetched.addingTimeInterval(3 * 86_400), calendar: c, locale: gb) == "As of Thu")
     }
 }

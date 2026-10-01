@@ -151,17 +151,66 @@ public struct WeatherReport: Codable, Equatable, Sendable {
     }
 
     public var current: Current
-    /// Today first.
+    /// Today first (the place's today when it was fetched).
     public var days: [Day]
     public var fetchedAt: Date
+    /// The place's offset from UTC in seconds, which says when its days begin. Nil reads as the
+    /// Mac's own time zone.
+    public var utcOffset: Int?
 
-    public init(current: Current, days: [Day], fetchedAt: Date) {
+    public init(current: Current, days: [Day], fetchedAt: Date, utcOffset: Int? = nil) {
         self.current = current
         self.days = days
         self.fetchedAt = fetchedAt
+        self.utcOffset = utcOffset
     }
 
-    public var today: Day? { days.first }
+    /// A report this old came from an earlier visit, and the latest request didn't replace it:
+    /// the page says when it is from.
+    public static let staleAfter: TimeInterval = 60 * 60
+
+    /// "2026-10-01" for `now` where the place is.
+    public func placeDate(_ now: Date) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        let offset = utcOffset ?? TimeZone.current.secondsFromGMT(for: now)
+        calendar.timeZone = TimeZone(secondsFromGMT: offset) ?? .current
+        let c = calendar.dateComponents([.year, .month, .day], from: now)
+        return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+    }
+
+    /// The days from the place's today on: a report kept from yesterday doesn't show yesterday.
+    public func upcoming(now: Date) -> [Day] {
+        let today = placeDate(now)
+        return days.filter { $0.date >= today }
+    }
+
+    /// Today's forecast where the place is, if the report still has it.
+    public func today(now: Date) -> Day? {
+        let today = placeDate(now)
+        return days.first { $0.date == today }
+    }
+
+    public func isStale(now: Date) -> Bool {
+        now.timeIntervalSince(fetchedAt) >= Self.staleAfter
+    }
+
+    /// When a stale report is from, short enough for the line under the sky: "As of 09:12"
+    /// today, "As of yesterday", or "As of Mon" before that. Nil while it is fresh.
+    public func updatedText(now: Date, calendar: Calendar = .current, locale: Locale = .current) -> String? {
+        guard isStale(now: now) else { return nil }
+        if calendar.isDate(fetchedAt, inSameDayAs: now) {
+            return "As of " + UsageFormat.clockTime(fetchedAt, now: now, calendar: calendar, locale: locale)
+        }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(fetchedAt, inSameDayAs: yesterday) {
+            return "As of yesterday"
+        }
+        let f = DateFormatter()
+        f.calendar = calendar
+        f.timeZone = calendar.timeZone
+        f.locale = locale
+        f.setLocalizedDateFormatFromTemplate("EEE")
+        return "As of " + f.string(from: fetchedAt)
+    }
 }
 
 /// Open-Meteo: free forecasts with no account or key. Only a position (rounded to about a
@@ -231,6 +280,7 @@ public enum OpenMeteo {
         }
         var current: Current?
         var daily: Daily?
+        var utc_offset_seconds: Int?
     }
 
     /// Reads a forecast. Days with a missing temperature or code are left out.
@@ -251,7 +301,7 @@ public enum OpenMeteo {
                                               rainChance: d.precipitation_probability_max?[safe: i] ?? nil))
             }
         }
-        return WeatherReport(current: current, days: days, fetchedAt: fetchedAt)
+        return WeatherReport(current: current, days: days, fetchedAt: fetchedAt, utcOffset: json.utc_offset_seconds)
     }
 
     private struct PlacesJSON: Decodable {

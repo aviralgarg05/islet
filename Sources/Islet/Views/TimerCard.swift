@@ -196,6 +196,7 @@ struct TimerComposer: View {
                 }
                 .buttonStyle(CapsuleButtonStyle())
                 .help("Start a \(m)-minute timer")
+                .fixedSize()
             }
             Spacer(minLength: Space.s)
             if model.settings.stopwatchEnabled {
@@ -207,6 +208,8 @@ struct TimerComposer: View {
                 }
                 .buttonStyle(CapsuleButtonStyle())
                 .help(model.tools.stopwatch.stopwatch.isActive ? "Show the stopwatch" : "Start the stopwatch")
+                // Whole words or a shorter row: `ViewThatFits` picks the row, the row never clips.
+                .fixedSize()
             }
             HStack(spacing: 2) {
                 Button {
@@ -224,6 +227,7 @@ struct TimerComposer: View {
                     }
                 }
             }
+            .fixedSize()
         }
     }
 

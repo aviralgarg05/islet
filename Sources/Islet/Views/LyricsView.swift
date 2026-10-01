@@ -10,19 +10,33 @@ struct LyricsColumn: View {
     let model: AppModel
     let media: NowPlaying
     let lyrics: SongLyrics
+    /// The line just sung stays in view above the current one; not when a glance above the
+    /// lyrics leaves room for only a couple of lines.
+    var showsSungLine = true
     @ViewState private var hovering = false
     @Environment(\.reduceMotionAnywhere) private var reduceMotion
 
     /// A line shows a moment before it is sung, so it is read in time.
     static let lead: Double = 0.2
 
-    /// The lyrics to show in Home's column, or nil for the glances: lyrics are on, found for the
-    /// song on show, not hidden for it, and nothing in the column needs you.
-    static func lyrics(for plan: HomePlan, model: AppModel) -> (NowPlaying, SongLyrics)? {
+    /// What Home's column shows beside the music: the lyrics (when on, found for the song on
+    /// show and not hidden for it) under any timer or stopwatch that is counting, or nil for the
+    /// glances when something needs you or more is counting than fits (`LyricsPlacement`).
+    static func lyrics(for plan: HomePlan, model: AppModel, height: CGFloat)
+        -> (media: NowPlaying, lyrics: SongLyrics, kept: [HomePlan.Glance])? {
         guard model.settings.lyricsEnabled, case .media(let np) = plan.primary, !model.tools.lyrics.isHidden(np),
               let lyrics = model.tools.lyrics.lyrics(for: np) else { return nil }
-        let urgent = plan.glances.contains { if case .activity(let a) = $0 { return HomePlan.needsYou(a) } else { return false } }
-        return urgent ? nil : (np, lyrics)
+        let kinds = plan.glances.map { g -> LyricsPlacement.Glance in
+            switch g {
+            case .activity(let a) where HomePlan.needsYou(a): return .needsYou
+            case .timer, .stopwatch: return .counting
+            default: return .quiet
+            }
+        }
+        guard case .lyrics(let keeping) = LyricsPlacement.column(kinds, room: LyricsPlacement.room(height: Double(height))) else {
+            return nil
+        }
+        return (np, lyrics, keeping.map { plan.glances[$0] })
     }
 
     var body: some View {
@@ -68,7 +82,7 @@ struct LyricsColumn: View {
         let wakeUps = [now] + lyrics.changes(from: position, rate: rate, now: now)
         return TimelineView(.explicit(wakeUps)) { ctx in
             let current = lyrics.index(at: (model.displayPosition(media, now: ctx.date) ?? 0) + Self.lead)
-            LyricLines(lines: lyrics.lines, current: current) { line in
+            LyricLines(lines: lyrics.lines, current: current, showsSungLine: showsSungLine) { line in
                 Haptics.play(.tap)
                 model.seek(to: line.time)
             }
@@ -78,17 +92,18 @@ struct LyricsColumn: View {
 }
 
 /// The line being sung and the few around it. The window starts one line before the current one,
-/// so the line just sung stays in view, dimmed.
+/// so the line just sung stays in view, dimmed (unless `showsSungLine` is off).
 struct LyricLines: View {
     let lines: [LyricLine]
     let current: Int?
+    var showsSungLine = true
     var onTap: (LyricLine) -> Void
 
     /// More than ever fit, so the column is always full; the frame clips the rest.
     private static let window = 7
 
     var body: some View {
-        let first = max(0, (current ?? 0) - 1)
+        let first = max(0, (current ?? 0) - (showsSungLine ? 1 : 0))
         VStack(alignment: .leading, spacing: Space.s) {
             ForEach(first..<min(lines.count, first + Self.window), id: \.self) { i in
                 line(i)

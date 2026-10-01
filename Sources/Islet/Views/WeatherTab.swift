@@ -23,7 +23,7 @@ struct WeatherTab: View {
                     .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
                 }
             } else if let report = w.report {
-                WeatherReportView(report: report, place: w.placeName, unit: w.unit)
+                WeatherReportView(report: report, place: w.placeName, unit: w.unit, now: Date())
             } else {
                 status(w.status)
             }
@@ -65,20 +65,23 @@ struct WeatherTab: View {
 }
 
 /// Now on the left (the symbol, the temperature, the sky in words and the place), and one
-/// column per day on the right.
+/// column per day on the right, from the place's today on. A report kept from an earlier
+/// visit, which the latest request couldn't replace, says when it is from.
 struct WeatherReportView: View {
     let report: WeatherReport
     let place: String?
     let unit: TemperatureUnit
+    let now: Date
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
-            now
+            conditions
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             ColumnRule().padding(.horizontal, Space.l)
             HStack(alignment: .top, spacing: 0) {
-                ForEach(Array(report.days.prefix(OpenMeteo.days).enumerated()), id: \.element.id) { i, day in
-                    DayColumn(day: day, title: i == 0 ? "Today" : day.weekday(), unit: unit)
+                let today = report.placeDate(now)
+                ForEach(report.upcoming(now: now).prefix(OpenMeteo.days)) { day in
+                    DayColumn(day: day, title: day.date == today ? "Today" : day.weekday(), unit: unit)
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -87,7 +90,7 @@ struct WeatherReportView: View {
         }
     }
 
-    private var now: some View {
+    private var conditions: some View {
         let c = report.current
         return HStack(alignment: .center, spacing: Space.m) {
             Image(systemName: WeatherCode.symbol(c.code, isDay: c.isDay))
@@ -103,10 +106,11 @@ struct WeatherReportView: View {
                     .textStyle(.body)
                     .foregroundStyle(Ink.secondary)
                     .lineLimit(1)
-                // The place and how it feels, or just the place when that is all that fits.
+                // The place and how it feels, or just the place when that is all that fits. An
+                // old report says when it is from instead of how it feels.
                 ViewThatFits(in: .horizontal) {
                     Text(detail).lineLimit(1).fixedSize()
-                    Text(place ?? detail).lineLimit(1)
+                    Text(report.updatedText(now: now) ?? place ?? detail).lineLimit(1).minimumScaleFactor(0.85)
                 }
                 .textStyle(.caption)
                 .foregroundStyle(Ink.tertiary)
@@ -115,13 +119,16 @@ struct WeatherReportView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// "London · feels like 13°", or the day's high and low when it feels as it is.
+    /// "London · feels like 13°", or the day's high and low when it feels as it is, or
+    /// "London · As of 09:12" when the report is old.
     private var detail: String {
         var parts: [String] = []
         if let place { parts.append(place) }
-        if let feels = report.current.feelsLike, unit.format(feels) != unit.format(report.current.temperature) {
+        if let updated = report.updatedText(now: now) {
+            parts.append(updated)
+        } else if let feels = report.current.feelsLike, unit.format(feels) != unit.format(report.current.temperature) {
             parts.append("feels like \(unit.format(feels))")
-        } else if let today = report.today {
+        } else if let today = report.today(now: now) {
             parts.append("\(unit.format(today.high)) / \(unit.format(today.low))")
         }
         return parts.joined(separator: " · ")

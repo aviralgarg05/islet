@@ -101,3 +101,60 @@ import Testing
         #expect(IsletSettings().monthCalendar == false)
     }
 }
+
+@Suite struct MonthCalendarStateTests {
+    func calendar() -> Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "Europe/London")!
+        c.firstWeekday = 2
+        return c
+    }
+
+    func date(_ y: Int, _ m: Int, _ d: Int, _ h: Int = 0, in c: Calendar) -> Date {
+        c.date(from: DateComponents(year: y, month: m, day: d, hour: h))!
+    }
+
+    @Test func startsOnThisMonthWithNothingPicked() {
+        let c = calendar()
+        let s = MonthCalendarState(now: date(2026, 10, 14, 9, in: c), calendar: c)
+        #expect(s.month == date(2026, 10, 1, in: c))
+        #expect(s.selected == nil)
+    }
+
+    @Test func openingTodayAgainCatchesUpWithTheClock() {
+        // Left on 30 September with a day picked; opened again on 1 October.
+        let c = calendar()
+        var s = MonthCalendarState(now: date(2026, 9, 30, 23, in: c), calendar: c)
+        s.pick(date(2026, 9, 12, in: c), now: date(2026, 9, 30, 23, in: c), calendar: c)
+        #expect(s.selected == date(2026, 9, 12, in: c))
+        s.reset(now: date(2026, 10, 1, 8, in: c), calendar: c)
+        #expect(s.month == date(2026, 10, 1, in: c))
+        #expect(s.selected == nil)
+    }
+
+    @Test func aPickedDayGoesWithItsMonth() {
+        // The right-hand column reads the shown month's events, so a day from another month
+        // can't stay picked (it would say "Nothing on this day" when it has events).
+        let c = calendar()
+        let now = date(2026, 10, 1, 9, in: c)
+        var s = MonthCalendarState(now: now, calendar: c)
+        s.pick(date(2026, 10, 14, 15, in: c), now: now, calendar: c)
+        #expect(s.selected == date(2026, 10, 14, in: c))
+        s.shift(by: 1, calendar: c)
+        #expect(s.month == date(2026, 11, 1, in: c))
+        #expect(s.selected == nil)
+        s.shift(by: -2, calendar: c)
+        #expect(s.month == date(2026, 9, 1, in: c))
+    }
+
+    @Test func pickingTodayOrThePickedDayAgainGoesBackToToday() {
+        let c = calendar()
+        let now = date(2026, 10, 1, 9, in: c)
+        var s = MonthCalendarState(now: now, calendar: c)
+        s.pick(date(2026, 10, 1, 18, in: c), now: now, calendar: c)
+        #expect(s.selected == nil)
+        s.pick(date(2026, 10, 20, in: c), now: now, calendar: c)
+        s.pick(date(2026, 10, 20, 12, in: c), now: now, calendar: c)
+        #expect(s.selected == nil)
+    }
+}

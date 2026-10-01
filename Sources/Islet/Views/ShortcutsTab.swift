@@ -4,7 +4,8 @@ import IsletSystem
 import SwiftUI
 
 /// The Shortcuts page (under More once turned on): a search field like Ask's and the user's
-/// shortcuts, two to a row. Clicking one runs it on this Mac; Return runs the first match.
+/// shortcuts, two to a row. Clicking one runs it on this Mac; Return runs the best match for
+/// what was typed (nothing while the field is empty).
 struct ShortcutsTab: View {
     let model: AppModel
     @FocusState private var focused: Bool
@@ -58,7 +59,7 @@ struct ShortcutsTab: View {
                         .textFieldStyle(.plain)
                         .foregroundStyle(Ink.primary)
                         .focused($focused)
-                        .onSubmit { if let first = c.results.first { c.run(first) } }
+                        .onSubmit { if let target = c.returnTarget { c.run(target) } }
                         .onExitCommand(perform: escape)
                         .accessibilityLabel("Search shortcuts")
                     // The first click hands the keyboard to the island, then the field takes it.

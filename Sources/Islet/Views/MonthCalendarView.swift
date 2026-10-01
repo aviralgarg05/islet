@@ -31,7 +31,8 @@ struct TodayWithMonth: View {
                 }
             }
         }
-        .onAppear { if !snapshotMode { model.tools.month.load(model, force: true) } }
+        // Opening Today starts from this month and today, whatever was picked last time.
+        .onAppear { if !snapshotMode { model.tools.month.appeared(model) } }
         // New, moved or deleted events (the agenda follows the calendar store).
         .onChange(of: model.agenda) { _, _ in if !snapshotMode { model.tools.month.load(model, force: true) } }
     }

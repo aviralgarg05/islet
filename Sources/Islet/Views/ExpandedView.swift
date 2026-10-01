@@ -215,8 +215,9 @@ struct HomeTab: View {
             TimerComposer(model: model)
         } else {
             let plan = HomePlan(model: model)
-            // Lyrics, when on and found, take the glances' column beside the music.
-            let lyrics = LyricsColumn.lyrics(for: plan, model: model)
+            // Lyrics, when on and found, take the glances' column beside the music, under a
+            // timer or the stopwatch that is counting.
+            let lyrics = LyricsColumn.lyrics(for: plan, model: model, height: size.height)
             let split = !plan.glances.isEmpty || lyrics != nil
             // The primary thing gets the larger share; the glances the rest, past a hairline.
             let share: CGFloat = size.width < 480 ? 0.47 : 0.56
@@ -230,8 +231,15 @@ struct HomeTab: View {
                         .frame(height: size.height)
                         .padding(.horizontal, Space.l)
                     if let lyrics {
-                        LyricsColumn(model: model, media: lyrics.0, lyrics: lyrics.1)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        VStack(alignment: .leading, spacing: Space.m) {
+                            if !lyrics.kept.isEmpty {
+                                let keptHeight = lyrics.kept.map(\.height).reduce(0, +) + CGFloat(lyrics.kept.count - 1) * Space.m
+                                GlanceColumn(model: model, glances: lyrics.kept, height: keptHeight)
+                                    .frame(height: keptHeight, alignment: .topLeading)
+                            }
+                            LyricsColumn(model: model, media: lyrics.media, lyrics: lyrics.lyrics, showsSungLine: lyrics.kept.isEmpty)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     } else {
                         GlanceColumn(model: model, glances: plan.glances, height: size.height)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

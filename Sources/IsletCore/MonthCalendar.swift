@@ -103,3 +103,39 @@ extension Agenda {
                 touching.filter(\.isAllDay).sorted { $0.title < $1.title })
     }
 }
+
+/// The month the calendar on Today shows and the day picked in it. A picked day always lies in
+/// the month on show (its events are the ones read), and opening Today starts from this month
+/// again, so a calendar left open past midnight or the 1st doesn't stay behind.
+public struct MonthCalendarState: Equatable, Sendable {
+    /// The first day of the month on show.
+    public private(set) var month: Date
+    /// A day picked in the grid (its start); nil shows today.
+    public private(set) var selected: Date?
+
+    public init(now: Date, calendar: Calendar = .current) {
+        month = MonthGrid.startOfMonth(now, calendar: calendar)
+    }
+
+    /// Back to this month and today: Today has just opened, or its title was clicked.
+    public mutating func reset(now: Date, calendar: Calendar = .current) {
+        month = MonthGrid.startOfMonth(now, calendar: calendar)
+        selected = nil
+    }
+
+    /// The month `months` away. A picked day in the month left behind is let go.
+    public mutating func shift(by months: Int, calendar: Calendar = .current) {
+        month = MonthGrid.shifted(month, by: months, calendar: calendar)
+        if let s = selected, !calendar.isDate(s, equalTo: month, toGranularity: .month) { selected = nil }
+    }
+
+    /// Picks a day in the month on show; picking today, or the picked day again, goes back to today.
+    public mutating func pick(_ day: Date, now: Date, calendar: Calendar = .current) {
+        if calendar.isDate(day, inSameDayAs: now) || selected.map({ calendar.isDate($0, inSameDayAs: day) }) == true {
+            selected = nil
+        } else {
+            selected = calendar.startOfDay(for: day)
+            month = MonthGrid.startOfMonth(day, calendar: calendar)
+        }
+    }
+}

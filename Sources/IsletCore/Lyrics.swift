@@ -343,3 +343,34 @@ public struct LyricsCache: Sendable {
         return d
     }()
 }
+
+/// Whether Home's right-hand column shows the lyrics or the glances, when lyrics are found for
+/// the song on show. Lyrics take the column, but a timer or the stopwatch the user started stays
+/// above them, so a Pomodoro with music playing is still on Home. Anything that needs the user,
+/// or more counting than fits above the lyrics, gives the column back to the glances.
+public enum LyricsPlacement {
+    public enum Glance: Equatable, Sendable {
+        /// Waiting on the user, or failing loudly.
+        case needsYou
+        /// A timer or the stopwatch, counting.
+        case counting
+        /// The next event, usage figures, other activities.
+        case quiet
+    }
+
+    public enum Column: Equatable, Sendable {
+        case glances
+        /// The lyrics, under the glances at these positions.
+        case lyrics(keeping: [Int])
+    }
+
+    /// `room` is how many glances fit above the lyrics while leaving them a few lines.
+    public static func column(_ glances: [Glance], room: Int) -> Column {
+        if glances.contains(.needsYou) { return .glances }
+        let counting = glances.indices.filter { glances[$0] == .counting }
+        return counting.count > max(0, room) ? .glances : .lyrics(keeping: counting)
+    }
+
+    /// One glance above the lyrics on a short island, two on a taller one.
+    public static func room(height: Double) -> Int { height >= 140 ? 2 : 1 }
+}

@@ -210,3 +210,31 @@ import Testing
         #expect(files.count == 3)
     }
 }
+
+@Suite struct LyricsPlacementTests {
+    @Test func lyricsTakeTheQuietColumn() {
+        #expect(LyricsPlacement.column([], room: 1) == .lyrics(keeping: []))
+        #expect(LyricsPlacement.column([.quiet, .quiet], room: 1) == .lyrics(keeping: []))
+    }
+
+    @Test func aCountingTimerStaysAboveTheLyrics() {
+        // A Pomodoro running while the music plays is still on Home.
+        #expect(LyricsPlacement.column([.quiet, .counting], room: 1) == .lyrics(keeping: [1]))
+        #expect(LyricsPlacement.column([.counting, .quiet, .counting], room: 2) == .lyrics(keeping: [0, 2]))
+    }
+
+    @Test func moreCountingThanFitsKeepsTheGlances() {
+        #expect(LyricsPlacement.column([.counting, .counting], room: 1) == .glances)
+        #expect(LyricsPlacement.column([.counting], room: 0) == .glances)
+    }
+
+    @Test func somethingThatNeedsYouTakesTheColumnBack() {
+        #expect(LyricsPlacement.column([.quiet, .needsYou], room: 2) == .glances)
+        #expect(LyricsPlacement.column([.counting, .needsYou], room: 2) == .glances)
+    }
+
+    @Test func tallerIslandsKeepTwo() {
+        #expect(LyricsPlacement.room(height: 90) == 1)
+        #expect(LyricsPlacement.room(height: 160) == 2)
+    }
+}

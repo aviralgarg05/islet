@@ -164,6 +164,8 @@ final class ShortcutsController {
     }
 
     var results: [ShortcutItem] { ShortcutsCatalog.search(query, in: items, recent: recent) }
+    /// What Return runs: nothing until something is typed.
+    var returnTarget: ShortcutItem? { ShortcutsCatalog.returnTarget(query, in: items, recent: recent) }
 
     /// Read the list again, unless it was read in the last 30 seconds.
     func refresh() {
@@ -380,16 +382,23 @@ final class WeatherController {
 
 // MARK: - Month calendar
 
-/// The month shown on Today, the day picked in it, and that month's events, read when the
-/// month calendar is on screen and again when the calendars change.
+/// The month shown on Today, the day picked in it (`MonthCalendarState`), and that month's
+/// events, read when the month calendar is on screen and again when the calendars change.
 @MainActor
 @Observable
 final class MonthCalendarController {
-    private(set) var month = MonthGrid.startOfMonth(Date())
-    /// A day picked in the grid; nil shows today.
-    private(set) var selected: Date?
+    private(set) var state = MonthCalendarState(now: Date())
     private(set) var events: [AgendaItem] = []
     @ObservationIgnored private var loadedMonth: Date?
+
+    var month: Date { state.month }
+    var selected: Date? { state.selected }
+
+    /// Today has opened: start from this month and today again, and read its events.
+    func appeared(_ model: AppModel) {
+        state.reset(now: Date())
+        load(model, force: true)
+    }
 
     /// Read the shown month's events (only once per month unless `force`).
     func load(_ model: AppModel, force: Bool = false) {
@@ -406,30 +415,24 @@ final class MonthCalendarController {
     }
 
     func show(monthsFrom delta: Int, _ model: AppModel) {
-        month = MonthGrid.shifted(month, by: delta)
+        state.shift(by: delta)
         load(model)
     }
 
     /// Back to this month and today.
     func today(_ model: AppModel) {
-        month = MonthGrid.startOfMonth(Date())
-        selected = nil
+        state.reset(now: Date())
         load(model)
     }
 
     /// Pick a day; picking today or the picked day again goes back to today.
     func select(_ day: Date) {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(day) || selected.map({ calendar.isDate($0, inSameDayAs: day) }) == true {
-            selected = nil
-        } else {
-            selected = calendar.startOfDay(for: day)
-        }
+        state.pick(day, now: Date())
     }
 
     func showForSnapshot(month: Date, selected: Date?, events: [AgendaItem]) {
-        self.month = MonthGrid.startOfMonth(month)
-        self.selected = selected
+        state.reset(now: month)
+        if let selected { state.pick(selected, now: .distantPast) }
         self.events = events
         loadedMonth = self.month
     }
@@ -519,6 +522,8 @@ final class FocusSoundController {
     private unowned let model: AppModel
     private var director = FocusSoundDirector()
     private lazy var player = FocusSoundPlayer()
+    /// The volume the sound plays at, so a change elsewhere in Settings doesn't fade it again.
+    private var volume: Double?
 
     init(model: AppModel) {
         self.model = model
@@ -529,7 +534,12 @@ final class FocusSoundController {
         let actions = director.update(sound: s.focusSound, focusing: model.timers.engine.isFocusing,
                                       musicPlaying: model.nowPlaying?.isPlaying == true)
         perform(actions)
-        if director.noise != nil { player.setVolume(s.focusSoundVolume) }
+        if director.noise == nil {
+            volume = nil
+        } else if volume != s.focusSoundVolume {
+            if volume != nil { player.setVolume(s.focusSoundVolume) }
+            volume = s.focusSoundVolume
+        }
     }
 
     func stopAll() {

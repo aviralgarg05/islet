@@ -6,7 +6,7 @@ import Observation
 
 enum IslandTab: String, CaseIterable, Identifiable {
     case home, today, shelf, widgets, clipboard, stats
-    /// Tools: under More once turned on, under More tools until then.
+    /// Tools: listed under More once turned on in Settings, and not before.
     case shortcuts, weather
     case ask
     var id: String { rawValue }
