@@ -45,7 +45,7 @@ public enum SettingsPage: String, CaseIterable, Sendable, Identifiable {
         case .downloads: return "Browser downloads with their progress, then Open and Show when they finish."
         case .ai: return "Ask a question from anywhere, answered on this Mac or by Claude or ChatGPT."
         case .agents: return "See what your coding agents are doing and answer their questions in the notch."
-        case .apps: return "Give an app a colour, hide the island for it, or mute its notifications."
+        case .apps: return "Give an app a colour or a priority, hide the island for it, or mute its notifications."
         case .permissions: return "What Islet may use, and what uses it. None is needed to run."
         case .about: return "Version and licence."
         case .advanced: return "For scripts, other apps and troubleshooting. Nothing here is needed for everyday use."
@@ -236,6 +236,8 @@ public enum SettingsIndex {
                       keywords: ["next track", "previous track", "skip", "seek", "gesture"], anchor: "general.gestures"),
         SettingsEntry("general.swipeActivities", .general, "Swipe sideways to switch between activities", section: "Gestures",
                       keywords: ["cycle", "gesture"], anchor: "general.gestures"),
+        SettingsEntry("general.reverseSwipes", .general, "Reverse sideways swipes", section: "Gestures",
+                      keywords: ["invert", "direction", "natural", "swap", "gesture"], anchor: "general.gestures"),
         SettingsEntry("general.stats", .general, "System stats", section: "Island pages", keywords: ["CPU", "memory", "RAM", "performance"]),
     ]
 
@@ -277,6 +279,8 @@ public enum SettingsIndex {
                       keywords: ["album art", "cover", "rounded", "square", "round", "radius", "music"]),
         SettingsEntry("appearance.indicator", .appearance, "Playing indicator", section: "Now Playing",
                       keywords: ["music", "equaliser", "equalizer", "visualiser", "bars"]),
+        SettingsEntry("appearance.reset", .appearance, "Back to the original look", section: "Reset",
+                      keywords: ["reset appearance", "defaults", "restore", "start again"]),
     ]
 
     private static let shortcuts: [SettingsEntry] = [
@@ -379,6 +383,7 @@ public enum SettingsIndex {
         SettingsEntry("apps.hide", .apps, "Hide the island while an app is in front", keywords: ["per-app", "frontmost"], anchor: "apps.add"),
         SettingsEntry("apps.fullscreen", .apps, "Keep the island in full screen", keywords: ["per-app", "fullscreen", "games"], anchor: "apps.add"),
         SettingsEntry("apps.mute", .apps, "Mute an app's notifications", keywords: ["per-app", "silence"], anchor: "apps.add"),
+        SettingsEntry("apps.priority", .apps, "App priority", keywords: ["per-app", "urgent", "rank", "order", "first"], anchor: "apps.add"),
     ] + PermissionKind.allCases.map { kind in
         SettingsEntry("permissions.\(kind.rawValue)", .permissions, kind.title, keywords: ["privacy", "allow", "access"])
     } + [

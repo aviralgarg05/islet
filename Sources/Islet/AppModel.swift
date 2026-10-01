@@ -785,7 +785,8 @@ final class AppModel {
         let now = Date()
         let before = center.sneak
         let isNew = spec.id.map { center.activities[$0] == nil } ?? true
-        let a = try center.apply(spec, now: now)
+        // An app given a priority on the Apps page ranks its activities there.
+        let a = try center.apply(settings.prioritised(spec), now: now)
         if let after = center.sneak, after.id != before?.id || after.until != before?.until {
             pulse &+= 1
             if a.state == .waiting || a.priority >= .high { Haptics.play(.alert) }

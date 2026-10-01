@@ -283,3 +283,66 @@ private func song(playing: Bool, elapsed: Double? = 60, duration: Double? = 240,
         #expect(!decode(#"{"outline": "yes"}"#).outline)
     }
 }
+
+@Suite struct ReverseSwipeTests {
+    @Test func leftIsForwardUnlessReversed() {
+        var s = IsletSettings()
+        #expect(!s.reverseSideSwipes)
+        #expect(GestureMap.action(for: .left, on: .compactMedia, settings: s) == .nextTrack)
+        #expect(GestureMap.action(for: .right, on: .compactActivity, settings: s) == .cycle(forward: false))
+        s.reverseSideSwipes = true
+        #expect(GestureMap.action(for: .left, on: .compactMedia, settings: s) == .previousTrack)
+        #expect(GestureMap.action(for: .right, on: .compactMedia, settings: s) == .nextTrack)
+        #expect(GestureMap.action(for: .right, on: .compactActivity, settings: s) == .cycle(forward: true))
+        s.swipeMediaAction = .seek
+        #expect(GestureMap.action(for: .right, on: .expanded(media: true), settings: s) == .seek(MediaSeek.swipeInterval))
+        // Up and down don't change.
+        #expect(GestureMap.action(for: .down, on: .closed, settings: s) == .expand)
+        #expect(decode(#"{"reverseSideSwipes": true}"#).reverseSideSwipes)
+    }
+}
+
+@Suite struct AppPriorityTests {
+    @Test func anAppsPriorityRanksItsActivities() {
+        var s = IsletSettings()
+        let spec = ActivitySpec(id: "x", source: "us.zoom.xos", title: "Call", priority: .low)
+        #expect(s.prioritised(spec).priority == .low)
+        s.appRules = [AppRule(bundleID: "us.zoom.xos", priority: .high)]
+        #expect(s.prioritised(spec).priority == .high)
+        // Other apps, and specs without a source, keep their own.
+        #expect(s.prioritised(ActivitySpec(id: "y", source: "com.other", title: "A", priority: .low)).priority == .low)
+        #expect(s.prioritised(ActivitySpec(id: "z", title: "B")).priority == nil)
+    }
+
+    @Test func mirroredNotificationsFollowIt() {
+        let n = MirroredNotification(appName: "Zoom", bundleID: "us.zoom.xos", title: "Meeting")
+        #expect(n.activity(rule: nil).priority == .normal)
+        #expect(n.activity(rule: AppRule(bundleID: "us.zoom.xos", priority: .critical)).priority == .critical)
+        #expect(decode(#"{"appRules": [{"bundleID": "a.b", "priority": "high"}]}"#).rule(for: "a.b")?.priority == .high)
+    }
+}
+
+@Suite struct ResetAppearanceTests {
+    @Test func appearanceGoesBackAndTheRestStays() {
+        var s = IsletSettings()
+        s.theme = .graphite; s.glassLevel = 0.1; s.outline = true; s.glassOnNotchless = true
+        s.accentColor = "#FF0000"; s.roundedFont = false; s.smartIcons = false
+        s.sizePreset = .custom; s.expandedWidth = 800; s.expandedHeight = 300; s.wingWidth = 100; s.closedLayout = .wings
+        s.animationStyle = .snappy; s.animationSpeed = .quick; s.bounceOnActivity = false; s.urgentGlow = false
+        s.reduceMotion = true; s.hapticsMode = .off; s.alertDuration = 5; s.maxConcurrent = 1; s.bubblePlacement = .left
+        s.artworkCornerRadius = 0; s.visualiserStyle = .wave; s.musicColour = .white; s.songProgressRing = true
+        // Not appearance: a calibration, and other pages.
+        s.notchWidthAdjust = 6; s.notchHeightAdjust = -2
+        s.hotkey = "cmd+shift+i"; s.hoverToOpen = false; s.hudStyle = .detailed; s.notchlessStyle = .hover
+        s.appRules = [AppRule(bundleID: "a.b", tint: "red")]
+
+        let r = s.resettingAppearance()
+        var expected = IsletSettings()
+        expected.notchWidthAdjust = 6; expected.notchHeightAdjust = -2
+        expected.hotkey = "cmd+shift+i"; expected.hoverToOpen = false; expected.hudStyle = .detailed; expected.notchlessStyle = .hover
+        expected.appRules = [AppRule(bundleID: "a.b", tint: "red")]
+        #expect(r == expected)
+        // Nothing to reset on a fresh install.
+        #expect(IsletSettings().resettingAppearance() == IsletSettings())
+    }
+}

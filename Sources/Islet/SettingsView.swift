@@ -112,6 +112,7 @@ extension GeneralSettings {
 struct AppearanceSettings: View {
     @Bindable var model: AppModel
     @Environment(\.openSettingsPage) private var openPage
+    @ViewState private var confirmingReset = false
 
     static let accents = ["auto", "white", "blue", "indigo", "purple", "pink", "red", "orange", "yellow", "green", "teal"]
 
@@ -278,6 +279,26 @@ struct AppearanceSettings: View {
                     }
                 }
                 .settingsAnchor("appearance.indicator")
+            }
+            Section {
+                LabeledContent {
+                    Button("Reset appearance…") { confirmingReset = true }
+                        .disabled(s.resettingAppearance() == s)
+                } label: {
+                    Text("Back to the original look")
+                    Text("Theme, colours, sizes, motion and the playing indicator. Fit to the notch stays as it is.")
+                }
+                .settingsAnchor("appearance.reset")
+                .confirmationDialog("Reset the island's appearance?", isPresented: $confirmingReset) {
+                    Button("Reset appearance", role: .destructive) {
+                        model.settings = model.settings.resettingAppearance()
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Everything on this page goes back to how Islet came, apart from Fit to the notch. Other pages don't change.")
+                }
+            } header: {
+                Text("Reset")
             }
         }
         .formStyle(.grouped)
@@ -874,6 +895,7 @@ struct AppRuleRow: View {
                 AppIconView(bundleID: rule.bundleID, size: 24)
                 Text(name).font(.body.weight(.medium)).lineLimit(1)
                 Spacer(minLength: 8)
+                priorityPicker
                 // Menus draw their icons in one colour, so the chosen colour shows beside the menu.
                 // Clicking it picks any colour, as the accent's custom swatch does.
                 Button(action: pickColour) {
@@ -947,6 +969,21 @@ struct AppRuleRow: View {
             .fixedSize()
         Toggle("Mute notifications", isOn: Binding(get: { rule.muteNotifications ?? false }, set: { rule.muteNotifications = $0 ? true : nil }))
             .fixedSize()
+    }
+
+    /// Where the app's activities and notifications rank when several want the island.
+    private var priorityPicker: some View {
+        Picker("Priority", selection: Binding(get: { rule.priority }, set: { rule.priority = $0 })) {
+            Text("Its own priority").tag(ActivityPriority?.none)
+            Divider()
+            Text("Low priority").tag(ActivityPriority?.some(.low))
+            Text("Normal priority").tag(ActivityPriority?.some(.normal))
+            Text("High priority").tag(ActivityPriority?.some(.high))
+            Text("Urgent").tag(ActivityPriority?.some(.critical))
+        }
+        .labelsHidden()
+        .fixedSize()
+        .help("How its activities and notifications rank when several want the island. Urgent ones also show over full screen apps.")
     }
 }
 

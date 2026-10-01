@@ -39,7 +39,7 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 - The scrubber seeks. ±15 seconds, shuffle and repeat where the player supports them, the system volume and an output picker.
 - A new song shows for a moment: the island opens a little below the notch with the artwork, title and artist, then closes again. Skipping through tracks shows only the one you stop on, a song is shown once, and nothing shows for the first song after launch, while the island is open or hidden, or over a HUD or another peek. **Show the new song for a moment** in Settings (`songChangePeek`) turns it off.
 - Changing song no longer snaps: the artwork swaps with a short spring, and in the open island the title and artist slide in from below. With Reduce Motion they fade.
-- Two-finger swipes: down to open, up to close, sideways over music to change track.
+- Two-finger swipes: down to open, up to close, sideways over music to change track. **Reverse sideways swipes** turns the sideways ones round.
 - Keep awake for 15 minutes, an hour, two hours or until you turn it off.
 - Battery thresholds are adjustable, with an optional "charged to 80%" alert.
 - The playing indicator springs down to a dim, flat line when you pause and rises back into motion when you play, instead of jumping. Settings → Now Playing chooses its look (bars, slim bars, dots, wave, pulse or none) and its colour (from the artwork, the accent colour or white). With the accent colour on automatic, "accent" means the artwork's colour, as it does everywhere else. With Reduce Motion a playing song no longer looks paused, and in Low Power Mode the indicator holds still.
@@ -58,7 +58,8 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 - Dynamic Glass is the default theme. The strip beside the notch stays black so it blends with the hardware, and the open island melts into Liquid Glass below it (a blurred material before macOS 26). A faint smoke keeps text readable, and a slow sheen drifts across unless Reduce Motion or Low Power Mode is on. **Glass level** in Settings sets how far down the black reaches. Black and Graphite are still there.
 - **Subtle outline** (Appearance) draws a faint edge round the island for dark wallpapers; Increase Contrast always draws it. **Glass on displays without a notch** makes the closed pill glass too with the Glass theme.
 - **Animation speed** (Appearance) makes every move Relaxed, Normal or Quick, whatever the animation style.
-- An app on the Apps page can take any colour from the system colour panel, as the accent can.
+- An app on the Apps page can take any colour from the system colour panel, as the accent can, and a priority for its activities and notifications (low to urgent).
+- **Reset appearance…** at the end of Appearance puts the look back as Islet came, after asking. Fit to the notch and other pages stay as they are.
 - **Artwork corners** (Appearance) go from square to round beside the notch, in a new song's peek and in the open island.
 - **Fit to the notch** (Appearance) nudges the notch's width by up to 20 points and its height by up to 4, so the closed island lines up with the hardware. Hovering and clicking follow.
 - Volume and brightness HUDs can be white, the accent colour or colourful (volume green, brightness yellow, keyboard light blue).

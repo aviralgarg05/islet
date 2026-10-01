@@ -181,7 +181,8 @@ public enum GestureMap {
             if case .expanded = surface { return s.swipeUpToClose ? .collapse : nil }
             return nil
         case .left, .right:
-            let forward = swipe == .left
+            // Left moves forward, like paging, unless "Reverse sideways swipes" is on.
+            let forward = (swipe == .left) != s.reverseSideSwipes
             switch surface {
             case .compactMedia, .expanded(media: true):
                 guard s.swipeMedia else { return nil }

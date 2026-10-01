@@ -106,7 +106,7 @@ enum SettingsSnapshots {
         s.appRules = [
             // A colour from the colour panel shows as "Custom".
             AppRule(bundleID: "com.apple.Safari", tint: "#2F7CF6"),
-            AppRule(bundleID: "com.apple.Music", showInFullscreen: true),
+            AppRule(bundleID: "com.apple.Music", showInFullscreen: true, priority: .high),
             AppRule(bundleID: "com.apple.MobileSMS", tint: "green", muteNotifications: true),
         ]
         return s

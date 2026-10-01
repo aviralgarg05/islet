@@ -425,7 +425,7 @@ Placement, look and motion keys:
 | `glassOnNotchless` | `false` | With the Glass theme, the closed island on a display without a notch is glass too. |
 | `animationSpeed` | `"normal"` | `"relaxed"`, `"normal"` or `"quick"`: how long the island's springs and fades take. The playing indicator keeps its own pace. |
 
-An app rule's `tint` is a colour name or any hex value (`"#2F7CF6"`); anything else means the app's own colour.
+An app rule's `tint` is a colour name or any hex value (`"#2F7CF6"`); anything else means the app's own colour. Its `priority` (`"low"`, `"normal"`, `"high"` or `"critical"`) ranks the app's activities and mirrored notifications in place of their own.
 
 Now Playing, closed island, HUD, gestures and battery keys:
 
@@ -448,6 +448,7 @@ Now Playing, closed island, HUD, gestures and battery keys:
 | `swipeMedia` | `true` | Swipe sideways over music. |
 | `swipeMediaAction` | `"track"` | `"track"` (next or previous) or `"seek"` (10 s). |
 | `swipeCyclesActivities` | `true` | Swipe sideways over a closed activity to show the next one. |
+| `reverseSideSwipes` | `false` | Swipe right (rather than left) for the next song or activity. |
 | `batteryLowThreshold` | `20` | Low battery warning, 5–50%. |
 | `batteryCriticalThreshold` | `10` | Second, urgent warning; always below the low one. |
 | `batteryChargedAlert` | `0` | Tell me when charging reaches this level (50–100; `0` = off). |

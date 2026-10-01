@@ -171,7 +171,7 @@ public struct AppRule: Codable, Equatable, Sendable, Identifiable {
     public var showInFullscreen: Bool?
     /// Ignore this app's mirrored notifications.
     public var muteNotifications: Bool?
-    /// Priority for this app's mirrored notifications.
+    /// Priority for this app's activities and mirrored notifications (nil: their own).
     public var priority: ActivityPriority?
 
     public var id: String { bundleID }
@@ -338,6 +338,8 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var swipeMediaAction: MediaSwipeAction = .track
     /// Swipe sideways over a closed activity to bring the next one forward.
     public var swipeCyclesActivities = true
+    /// Sideways swipes the other way round: right for the next song or activity.
+    public var reverseSideSwipes = false
     /// Warn on battery at this level (percent).
     public var batteryLowThreshold = 20
     /// Warn again, more urgently, at this level.
@@ -455,6 +457,33 @@ public struct IsletSettings: Codable, Equatable, Sendable {
 
     /// Whether any HUD shows at all.
     public var showsAnyHUD: Bool { HUDKind.allCases.contains(where: showsHUD) }
+
+    /// Appearance → "Reset appearance": the theme, colours, sizes, motion and the music's look
+    /// go back to how Islet came. "Fit to the notch" (a calibration for this Mac's hardware)
+    /// and everything on other pages stay.
+    public func resettingAppearance() -> IsletSettings {
+        let d = IsletSettings()
+        var s = self
+        s.theme = d.theme; s.glassLevel = d.glassLevel; s.outline = d.outline; s.glassOnNotchless = d.glassOnNotchless
+        s.accentColor = d.accentColor; s.roundedFont = d.roundedFont; s.smartIcons = d.smartIcons
+        s.sizePreset = d.sizePreset; s.expandedWidth = d.expandedWidth; s.expandedHeight = d.expandedHeight
+        s.closedLayout = d.closedLayout; s.wingWidth = d.wingWidth
+        s.animationStyle = d.animationStyle; s.animationSpeed = d.animationSpeed; s.bounceOnActivity = d.bounceOnActivity
+        s.urgentGlow = d.urgentGlow; s.reduceMotion = d.reduceMotion; s.hapticsMode = d.hapticsMode; s.alertDuration = d.alertDuration
+        s.maxConcurrent = d.maxConcurrent; s.bubblePlacement = d.bubblePlacement
+        s.artworkCornerRadius = d.artworkCornerRadius; s.visualiserStyle = d.visualiserStyle; s.musicColour = d.musicColour
+        s.songProgressRing = d.songProgressRing
+        return s
+    }
+
+    /// `spec` with its app's priority from the Apps page, when the app has one; otherwise the
+    /// activity keeps its own.
+    public func prioritised(_ spec: ActivitySpec) -> ActivitySpec {
+        guard let priority = rule(for: spec.source)?.priority else { return spec }
+        var s = spec
+        s.priority = priority
+        return s
+    }
 
     /// What full screen asks of the island on a display: nothing (`show`) unless an app is in
     /// full screen there and the front app's rule doesn't keep the island.

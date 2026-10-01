@@ -130,6 +130,9 @@ import Testing
         ("full screen", .general),
         ("floating pill", .general),
         ("outline", .appearance),
+        ("reset appearance", .appearance),
+        ("invert swipe", .general),
+        ("app priority", .apps),
     ])
     func queryFindsPage(query: String, page: SettingsPage) {
         let groups = SettingsIndex.search(query)

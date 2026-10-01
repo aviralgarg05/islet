@@ -22,6 +22,11 @@ struct GestureSettingsSection: View {
                 }
                 .disabled(!model.settings.swipeMedia)
                 Toggle("Swipe sideways to switch between activities", isOn: $model.settings.swipeCyclesActivities)
+                Toggle(isOn: $model.settings.reverseSideSwipes) {
+                    Text("Reverse sideways swipes")
+                    Text("Swipe right for the next song or activity, and left for the one before.")
+                }
+                .disabled(!model.settings.swipeMedia && !model.settings.swipeCyclesActivities)
             }
             .disabled(!model.settings.gesturesEnabled)
         } header: {
