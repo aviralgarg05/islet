@@ -100,9 +100,9 @@ extension Color {
     }
 
     // Older names for the design system's ink and wash (DesignSystem.swift).
-    static let islandSecondary = Ink.secondary
-    static let islandTertiary = Ink.tertiary
-    static let islandFill = Wash.regular
+    @MainActor static var islandSecondary: Color { Ink.secondary }
+    @MainActor static var islandTertiary: Color { Ink.tertiary }
+    @MainActor static var islandFill: Color { Wash.regular }
 }
 
 /// Renders any `ActivityIcon` (SF Symbol, emoji, app icon, file or remote image).
@@ -302,7 +302,7 @@ struct ProgressRing: View {
         ZStack {
             if let progress {
                 // A neutral hairline track: the tint at low opacity reads as a muddy ring on black.
-                Circle().stroke(Color.white.opacity(0.14), lineWidth: lineWidth)
+                Circle().stroke(Wash.ringTrack, lineWidth: lineWidth)
                 Circle()
                     .trim(from: 0, to: max(0.02, progress))
                     .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
@@ -343,7 +343,7 @@ struct LevelBar: View {
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.white.opacity(0.18))
+                Capsule().fill(Wash.track)
                 Capsule().fill(tint).frame(width: max(height, geo.size.width * min(1, max(0, value))))
             }
         }
@@ -362,7 +362,7 @@ struct SegmentedBar: View {
         HStack(spacing: 3) {
             ForEach(0..<max(1, min(steps, 24)), id: \.self) { i in
                 Capsule()
-                    .fill(i < step ? tint : Color.white.opacity(0.18))
+                    .fill(i < step ? tint : Wash.track)
                     .overlay(Capsule().stroke(i == step - 1 ? Color.white.opacity(0.55) : .clear, lineWidth: 1))
             }
         }

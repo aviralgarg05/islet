@@ -44,9 +44,12 @@ enum SettingsWindow {
     /// The title bar row, which the sidebar's search field and the page title sit under and in.
     static let headerHeight: CGFloat = 52
 
-    /// `window` and `snapshot` are for `--settings-snapshot`, which draws an off-screen window.
-    static func make(model: AppModel, navigation: SettingsNavigation, window: NSWindow? = nil, snapshot: Bool = false) -> NSWindow {
+    /// `window`, `snapshot` and `increasedContrast` are for `--settings-snapshot`, which draws an
+    /// off-screen window and can't switch on the system's Increase Contrast.
+    static func make(model: AppModel, navigation: SettingsNavigation, window: NSWindow? = nil, snapshot: Bool = false,
+                     increasedContrast: Bool = false) -> NSWindow {
         let root = SettingsView(model: model, navigation: navigation).environment(\.snapshotMode, snapshot)
+            .modifier(IncreasedContrastStandIn(on: increasedContrast))
         let host = NSHostingController(rootView: root)
         host.sizingOptions = []
         let w = window ?? NSWindow()
@@ -68,6 +71,15 @@ enum SettingsWindow {
         w.setFrameAutosaveName(snapshot ? "" : "IsletSettingsWindow")
         if !snapshot, !w.setFrameUsingName("IsletSettingsWindow") { w.center() }
         return w
+    }
+}
+
+/// Increase Contrast for a snapshot. Off, the system's setting stands.
+private struct IncreasedContrastStandIn: ViewModifier {
+    let on: Bool
+
+    func body(content: Content) -> some View {
+        if on { content.environment(\._colorSchemeContrast, .increased) } else { content }
     }
 }
 
@@ -232,12 +244,14 @@ struct SettingsTile: View {
 struct SettingsSearchField: View {
     @Bindable var navigation: SettingsNavigation
     @FocusState private var focused: Bool
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary).font(.system(size: 12))
             TextField("Search", text: $navigation.query)
                 .textFieldStyle(.plain)
+                .accessibilityLabel("Search settings")
                 .focused($focused)
                 .onSubmit {
                     if let first = navigation.results.first?.entries.first { navigation.open(first) }
@@ -249,6 +263,7 @@ struct SettingsSearchField: View {
                 }
                 .buttonStyle(.plain)
                 .help("Clear the search")
+                .accessibilityLabel("Clear the search")
             }
         }
         .padding(.horizontal, 8)
@@ -256,7 +271,8 @@ struct SettingsSearchField: View {
         .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.primary.opacity(0.06)))
         .overlay {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .strokeBorder(focused ? Color.accentColor.opacity(0.55) : Color.primary.opacity(0.08), lineWidth: focused ? 2 : 1)
+                .strokeBorder(focused ? Color.accentColor.opacity(0.55) : Color.primary.opacity(contrast == .increased ? 0.5 : 0.08),
+                              lineWidth: focused ? 2 : 1)
         }
         .onChange(of: navigation.searchFocusRequest) { _, _ in focused = true }
     }

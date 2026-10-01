@@ -78,3 +78,60 @@ extension RGBA {
         }
     }
 }
+
+// MARK: - The island's ink and washes
+
+/// The island's text and glyph colours: white at falling opacities on its black. Increase
+/// Contrast (System Settings → Accessibility → Display) moves each step up, so even the
+/// quietest one reads at 4.5:1, while each stays quieter than the one before.
+public enum IslandInk: Int, CaseIterable, Sendable {
+    case primary, secondary, tertiary, quaternary
+
+    public func opacity(increasedContrast: Bool) -> Double {
+        switch self {
+        case .primary: return 1
+        case .secondary: return increasedContrast ? 0.86 : 0.64
+        case .tertiary: return increasedContrast ? 0.72 : 0.42
+        case .quaternary: return increasedContrast ? 0.52 : 0.24
+        }
+    }
+}
+
+/// White fills on the island's black: the washes behind controls, hairlines, the tracks under
+/// bars and rings, and the edge Increase Contrast draws round controls and boxes.
+public enum IslandWash: Int, CaseIterable, Sendable {
+    /// Hover, and code boxes.
+    case subtle
+    /// A control at rest.
+    case regular
+    /// Selected or pressed.
+    case strong
+    /// Dividers and keylines.
+    case hairline
+    /// The unfilled part of a bar.
+    case track
+    /// The unfilled part of a ring.
+    case ringTrack
+    /// Round a control or box: nothing normally, a clear line with Increase Contrast.
+    case edge
+
+    public func opacity(increasedContrast: Bool) -> Double {
+        switch self {
+        case .subtle: return increasedContrast ? 0.10 : 0.06
+        case .regular: return increasedContrast ? 0.16 : 0.10
+        case .strong: return increasedContrast ? 0.26 : 0.16
+        case .hairline: return increasedContrast ? 0.36 : 0.09
+        case .track: return increasedContrast ? 0.36 : 0.18
+        case .ringTrack: return increasedContrast ? 0.36 : 0.14
+        case .edge: return increasedContrast ? 0.5 : 0
+        }
+    }
+}
+
+extension RGBA {
+    /// White at `opacity` over black: the grey the eye sees.
+    public static func whiteOnBlack(_ opacity: Double) -> RGBA {
+        let v = min(1, max(0, opacity))
+        return RGBA(r: v, g: v, b: v)
+    }
+}

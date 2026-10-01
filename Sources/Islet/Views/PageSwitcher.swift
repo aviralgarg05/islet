@@ -46,15 +46,19 @@ struct PageSwitcher: View {
                         }
                     }
                     if !pages.more.isEmpty {
+                        // A menu of the other pages, whichever one it shows: "More pages, Weather".
                         segment(symbol: moreSelected ? model.tab.symbol : "ellipsis",
-                                title: moreSelected ? model.tab.title : nil, selected: moreSelected) {
+                                title: moreSelected ? model.tab.title : nil, selected: moreSelected,
+                                spoken: (label: "More pages", value: moreSelected ? model.tab.title : "",
+                                         hint: "Shows the other pages, keep awake, keep open and Settings")) {
                             showMore(pages.more)
                         }
-                        .help("More")
                     }
                 }
                 .padding(Self.inset)
                 .floatingGlass(Capsule())
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Pages")
                 // It buds off the island first; the discs follow a moment later.
                 .modifier(RiseIn(index: 0))
                 disc(symbol: IslandTab.ask.symbol, help: "Ask", selected: model.tab == .ask) {
@@ -74,7 +78,10 @@ struct PageSwitcher: View {
     }
 
     /// One page in the capsule. The selected one shows its name on the sliding highlight.
-    private func segment(symbol: String, title: String?, selected: Bool, action: @escaping () -> Void) -> some View {
+    /// - Parameter spoken: what VoiceOver says in place of the title, for the "more" menu.
+    private func segment(symbol: String, title: String?, selected: Bool,
+                         spoken: (label: String, value: String, hint: String)? = nil,
+                         action: @escaping () -> Void) -> some View {
         Button {
             Haptics.play(.tap)
             action()
@@ -95,14 +102,16 @@ struct PageSwitcher: View {
             .frame(minWidth: 36, minHeight: Self.height - 2 * Self.inset)
             .background {
                 if selected {
-                    Capsule().fill(Wash.strong).matchedGeometryEffect(id: "highlight", in: highlight)
+                    Capsule().fill(Wash.strong).contrastEdge(Capsule()).matchedGeometryEffect(id: "highlight", in: highlight)
                 }
             }
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .help(title ?? "")
-        .accessibilityLabel(title ?? "More")
+        .help(spoken == nil ? title ?? "" : "More")
+        .accessibilityLabel(spoken?.label ?? title ?? "More")
+        .accessibilityValue(spoken?.value ?? "")
+        .accessibilityHint(spoken?.hint ?? "")
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
@@ -116,7 +125,7 @@ struct PageSwitcher: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(selected ? Ink.primary : Ink.secondary)
                 .frame(width: Self.height, height: Self.height)
-                .background { if selected { Circle().fill(Wash.strong).padding(Self.inset) } }
+                .background { if selected { Circle().fill(Wash.strong).contrastEdge(Circle()).padding(Self.inset) } }
                 .contentShape(Circle())
         }
         .buttonStyle(PressableStyle())
@@ -124,6 +133,7 @@ struct PageSwitcher: View {
         .modifier(RiseIn(index: 1))
         .help(help)
         .accessibilityLabel(help)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     /// Pages whose feature is on, split between the capsule and the "more" menu

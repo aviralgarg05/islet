@@ -379,11 +379,8 @@ private struct ThemePicker: View {
                         IslandSketch(settings: standard, theme: theme, open: true, scale: 0.19, detailed: false)
                             .frame(width: 118, height: 62)
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .strokeBorder(selection == theme ? Color.accentColor : Color.primary.opacity(0.12),
-                                                  lineWidth: selection == theme ? 2.5 : 1)
-                            }
+                            .modifier(TileOutline(selected: selection == theme, cornerRadius: 8, hairline: 0.12))
+                            .accessibilityHidden(true)
                         Text(name).font(.callout)
                             .foregroundStyle(selection == theme ? .primary : .secondary)
                     }
@@ -401,6 +398,7 @@ private struct ThemePicker: View {
 /// Accent swatches, "auto" (from the artwork) first and any colour last.
 private struct AccentPicker: View {
     @Binding var selection: String
+    @Environment(\.colorSchemeContrast) private var contrast
 
     private var isCustom: Bool { !AppearanceSettings.accents.contains(selection.lowercased()) }
 
@@ -414,6 +412,8 @@ private struct AccentPicker: View {
                 }
                 .buttonStyle(.plain)
                 .help(name == "auto" ? "From the artwork" : name.capitalized)
+                .accessibilityLabel(name == "auto" ? "From the artwork" : name == "gray" ? "Grey" : name.capitalized)
+                .accessibilityAddTraits(selection.lowercased() == name ? .isSelected : [])
             }
             Button(action: pickColour) {
                 ZStack {
@@ -425,6 +425,9 @@ private struct AccentPicker: View {
             }
             .buttonStyle(.plain)
             .help(isCustom ? "\(selection). Click to pick another colour." : "Pick any colour")
+            .accessibilityLabel("Pick any colour")
+            .accessibilityValue(isCustom ? selection : "")
+            .accessibilityAddTraits(isCustom ? .isSelected : [])
         }
     }
 
@@ -436,7 +439,7 @@ private struct AccentPicker: View {
     private func swatch(_ fill: AnyShapeStyle, selected: Bool) -> some View {
         ZStack {
             Circle().fill(fill)
-            Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5)
+            Circle().strokeBorder(Color.primary.opacity(contrast == .increased ? 0.5 : 0.15), lineWidth: contrast == .increased ? 1 : 0.5)
             if selected { Circle().stroke(Color.primary, lineWidth: 2).padding(-3) }
         }
         .frame(width: 16, height: 16)
@@ -757,6 +760,12 @@ private struct NotchFitRows: View {
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: toggle)
+        // Tab reaches it with Full Keyboard Access, and Space or Return opens it, as a click does.
+        .focusable(interactions: .activate)
+        .onKeyPress(keys: [.space, .return]) { _ in
+            toggle()
+            return .handled
+        }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityHint(expanded ? "Hides the adjustments" : "Shows the adjustments")
@@ -820,17 +829,17 @@ struct ShortcutSettings: View {
             Section { SettingsHero(page: .shortcuts) }
             Section {
                 SettingsRow(title: "Open or close the island", detail: "Opens it pinned, so it stays open until you press the keys again.") {
-                    ShortcutField(text: $model.settings.hotkey, standard: IsletSettings().hotkey,
+                    ShortcutField(name: "Open or close the island", text: $model.settings.hotkey, standard: IsletSettings().hotkey,
                                   other: (model.settings.askHotkey, "open the Ask box"))
                 }
                 .settingsAnchor("shortcuts.island")
                 SettingsRow(title: "Open the Ask box", detail: "Ready to type a question. Press the keys again to close it.") {
-                    ShortcutField(text: $model.settings.askHotkey, standard: IsletSettings().askHotkey,
+                    ShortcutField(name: "Open the Ask box", text: $model.settings.askHotkey, standard: IsletSettings().askHotkey,
                                   other: (model.settings.hotkey, "open the island"))
                 }
                 .settingsAnchor("shortcuts.ask")
             } footer: {
-                SettingsFooter("Click a shortcut, then press the keys you want, with at least one of ⌃, ⌥ or ⌘. Delete turns a shortcut off and Esc keeps the one you had.")
+                SettingsFooter("Click a shortcut, then press the keys you want, with at least one of ⌃, ⌥ or ⌘. Delete turns a shortcut off, and Esc or Tab keeps the one you had.")
             }
         }
         .formStyle(.grouped)

@@ -38,17 +38,22 @@ struct TimerHero: View {
                 ProgressRing(progress: timer.fraction(at: now), tint: paused ? Ink.tertiary : tint, size: 56, lineWidth: 4)
                 IconView(icon: TimerEngine.look(for: timer).icon, size: 20, tint: paused ? Ink.tertiary : tint)
             }
+            .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: Space.s) {
-                    Text(timer.displayTitle).textStyle(.body, emphasized: true).foregroundStyle(Ink.primary).lineLimit(1)
-                    if let detail = paused ? "Paused" : round {
-                        Text(detail).textStyle(.caption).foregroundStyle(Ink.tertiary).lineLimit(1).fixedSize()
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: Space.s) {
+                        Text(timer.displayTitle).textStyle(.body, emphasized: true).foregroundStyle(Ink.primary).lineLimit(1)
+                        if let detail = paused ? "Paused" : round {
+                            Text(detail).textStyle(.caption).foregroundStyle(Ink.tertiary).lineLimit(1).fixedSize()
+                        }
                     }
+                    Text(Format.clock(timer.timeLeft(at: now).rounded(.up)))
+                        .textStyle(.display)
+                        .foregroundStyle(paused ? Ink.secondary : tint)
+                        .contentTransition(.numericText(countsDown: true))
                 }
-                Text(Format.clock(timer.timeLeft(at: now).rounded(.up)))
-                    .textStyle(.display)
-                    .foregroundStyle(paused ? Ink.secondary : tint)
-                    .contentTransition(.numericText(countsDown: true))
+                // "Tea", "4 minutes 32 seconds left": the dial redraws every second, so this is current.
+                .spokenGroup([timer.displayTitle, round].compactMap { $0 }.joined(separator: ", "), value: SpokenText.timer(timer, now: now))
                 TimerControls(timer: timer, model: model)
                     .padding(.leading, -Space.xs)
             }
@@ -63,6 +68,7 @@ struct TimerHero: View {
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(tint)
                     .frame(width: 32)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: Space.hair) {
                     Text(timer.displayTitle).textStyle(.title).foregroundStyle(Ink.primary).lineLimit(1)
                     Text("Time's up").textStyle(.body).foregroundStyle(tint)
@@ -121,24 +127,43 @@ struct TimerGlance: View {
         let tint = Color(tint: TimerEngine.look(for: timer).tint)
         let paused = timer.status == .paused
         TimelineView(.periodic(from: .now, by: timer.status == .running ? 1 : 3600)) { ctx in
-            GlanceRow(title: timer.displayTitle) {
+            let ends = ctx.date.addingTimeInterval(timer.timeLeft(at: ctx.date)).formatted(date: .omitted, time: .shortened)
+            GlanceRow(title: timer.displayTitle, speech: speech(now: ctx.date, ends: ends)) {
                 ProgressRing(progress: timer.fraction(at: ctx.date), tint: paused ? Ink.tertiary : tint, size: 14, lineWidth: 2)
             } trailing: {
                 Text(timer.status == .ringing ? "Time's up" : Format.clock(timer.timeLeft(at: ctx.date).rounded(.up)))
                     .textStyle(.body, emphasized: true, numeric: true)
                     .foregroundStyle(paused ? Ink.secondary : tint)
                     .contentTransition(.numericText(countsDown: true))
+                    .accessibilityHidden(true)
             } detail: {
                 if hovering {
                     TimerControls(timer: timer, model: model)
                         .frame(height: 14)
                         .padding(.leading, -Space.xs - 1)
                 } else {
-                    Text(paused ? "Paused" : "Ends \((ctx.date.addingTimeInterval(timer.timeLeft(at: ctx.date))).formatted(date: .omitted, time: .shortened))")
+                    Text(paused ? "Paused" : "Ends \(ends)")
                 }
             }
         }
         .onHover { hovering = $0 }
+    }
+
+    /// "Tea", "4 minutes 32 seconds left, ends at 18:30"; the controls under the pointer as actions.
+    private func speech(now: Date, ends: String) -> GlanceSpeech {
+        var value = SpokenText.timer(timer, now: now)
+        if timer.status == .running { value += ", ends at \(ends)" }
+        var actions: [(name: String, perform: () -> Void)] = []
+        if timer.status != .ringing {
+            if timer.status == .paused {
+                actions.append(("Resume", { model.timers.control(.resume, timer) }))
+            } else {
+                actions.append(("Pause", { model.timers.control(.pause, timer) }))
+            }
+            actions.append(("Add 1 minute", { model.timers.control(.add, timer, seconds: 60) }))
+        }
+        actions.append((timer.phase == nil ? "Stop" : "Stop the Pomodoro", { model.timers.control(.stop, timer) }))
+        return GlanceSpeech(label: timer.displayTitle, value: value, actions: actions)
     }
 }
 
@@ -271,6 +296,7 @@ struct TimerComposer: View {
         .padding(.horizontal, Space.m)
         .frame(height: 28)
         .background(Capsule().fill(Wash.regular))
+        .contrastEdge(Capsule())
     }
 
     private func submit() {

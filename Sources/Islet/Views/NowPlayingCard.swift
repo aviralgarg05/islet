@@ -30,6 +30,7 @@ struct NowPlayingHero: View {
                     .shadow(color: media.artworkData == nil ? .clear : accent.opacity(0.35), radius: 10, y: 2)
                     .onTapGesture { model.openPlayer() }
                     .help("Open \(media.appName ?? "player")")
+                    .spokenButton("Open \(media.appName ?? "player")") { model.openPlayer() }
                 TrackText(media: media) {
                     VStack(alignment: .leading, spacing: Space.hair) {
                         Text(media.title).textStyle(.title).foregroundStyle(Ink.primary).lineLimit(1)
@@ -110,6 +111,7 @@ struct PlayerChip: View {
             }
             .frame(width: 22, height: 22)
             .background(Circle().fill(hovering ? Wash.strong : Wash.regular))
+            .contrastEdge(Circle())
             .overlay(alignment: .bottomTrailing) {
                 if media.isPlaying {
                     Circle().fill(Color.green).frame(width: 5, height: 5)
@@ -122,6 +124,7 @@ struct PlayerChip: View {
         .onHover { hovering = $0 }
         .help("Switch to \(name): \(media.title)")
         .accessibilityLabel("Switch to \(name)")
+        .accessibilityValue([media.title, media.isPlaying ? "playing" : nil].compactMap { $0 }.joined(separator: ", "))
     }
 }
 
@@ -144,6 +147,8 @@ struct MediaScrubber: View {
                 Text(Format.clock(pos))
                     .foregroundStyle(preview == nil ? Ink.tertiary : Ink.primary)
                     .contentTransition(.numericText())
+                    // The scrubber says where the song is.
+                    .accessibilityHidden(true)
                 ScrubBar(value: duration > 0 ? pos / duration : 0, tint: accent) { f in
                     model.controls.holdsOpen = true
                     preview = f
@@ -155,8 +160,16 @@ struct MediaScrubber: View {
                     model.controls.holdsOpen = false
                     preview = nil
                 }
+                // VoiceOver moves it as far as the ±15 s buttons do.
+                .accessibilityElement()
                 .accessibilityLabel("Playback position")
-                .accessibilityValue(Format.clock(pos))
+                .accessibilityValue(SpokenText.position(pos, of: duration))
+                .accessibilityAdjustableAction { direction in
+                    let k = MediaSeek.skipInterval
+                    let step: Double = direction == .increment ? k : direction == .decrement ? -k : 0
+                    guard step != 0, duration > 0 else { return }
+                    model.seek(to: min(duration, max(0, pos + step)))
+                }
                 Button { model.toggleRemainingTime() } label: {
                     Text(MediaSeek.trailingLabel(position: pos, duration: duration, remaining: remaining))
                         .contentTransition(.numericText())
@@ -164,6 +177,9 @@ struct MediaScrubber: View {
                 }
                 .buttonStyle(.plain)
                 .help(remaining ? "Show track length" : "Show time left")
+                .accessibilityLabel(remaining ? "Time left" : "Track length")
+                .accessibilityValue(SpokenText.duration(remaining ? max(0, duration - pos) : duration))
+                .accessibilityHint(remaining ? "Shows the track length instead" : "Shows the time left instead")
             }
             .textStyle(.caption, numeric: true)
             .foregroundStyle(Ink.tertiary)
@@ -338,8 +354,15 @@ struct SoundControls: View {
             } onCancel: {
                 c.holdsOpen = false
             }
+                // VoiceOver moves it a sixteenth at a time, as the volume keys do.
+                .accessibilityElement()
                 .accessibilityLabel("Volume")
-                .accessibilityValue("\(Int((c.volume * 100).rounded()))%")
+                .accessibilityValue(c.muted ? "muted" : SpokenText.percent(c.volume))
+                .accessibilityAdjustableAction { direction in
+                    let step: Double = direction == .increment ? 1.0 / 16 : direction == .decrement ? -1.0 / 16 : 0
+                    guard step != 0 else { return }
+                    model.setVolume((c.muted ? 0 : c.volume) + step)
+                }
             OutputPickerButton(model: model)
         }
         .onAppear { if !snapshotMode { model.soundControlsAppeared() } }

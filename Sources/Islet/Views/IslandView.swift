@@ -728,6 +728,11 @@ struct IslandView: View {
                         Button("Mute “\(AppModel.mutedName(a.source))”") { model.mute(source: a.source) }
                     }
                 }
+                .spokenButton(slot.bubble.spokenLabel(overflow: slot.overflow), value: slot.bubble.spokenValue,
+                              hint: "Opens the island") { model.setExpanded(display) }
+                .modifier(DismissAction(activity: slot.bubble.activity, model: model))
+                // A bubble on its way out is gone as far as VoiceOver is concerned.
+                .accessibilityHidden(slot.leaving)
         }
     }
 
@@ -811,18 +816,65 @@ struct IslandView: View {
             if case .hud(let hud) = p, model.settings.hudStyle == .detailed {
                 DetailedHUDContent(hud: hud, metrics: metrics, tint: model.hudTint(hud.kind))
             } else {
+                let hud = p.isHUD
                 IslandRow(presentation: p, metrics: metrics, geometry: g, model: model, counted: counted, frame: row)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        if case .hud = p { return }
+                        if hud { return }
                         activate(p)
                     }
+                    // One element for VoiceOver, pressed like a click (a HUD isn't pressed); the
+                    // value comes from the wing that draws it (`SpokenText`).
+                    .spokenButton(model.spokenLabel(for: p, counted: spokenCount(p, counted: counted)), value: model.spokenValue(for: p),
+                                  hint: hud ? nil : model.focusedActivity(for: p).map { model.canOpen($0) ? "Opens it" : "Opens the island" }
+                                      ?? "Opens the island", isButton: !hud) { activate(p) }
+                    .modifier(DismissAction(activity: model.focusedActivity(for: p), model: model))
             }
         case .expanded:
             ApprovalGate(model: model, metrics: metrics) {
                 ExpandedView(model: model, metrics: metrics, dropTargeted: dropTargeted, stemmed: model.look(for: display).stemmedOpen)
             }
         }
+    }
+}
+
+extension IslandView {
+    /// Other activities the closed island's wing counts ("+2"), as `IslandRow` counts them.
+    func spokenCount(_ p: IslandPresentation, counted: Int) -> Int {
+        switch p {
+        case .compact(.activity(_, let others)): return model.settings.maxConcurrent == 1 ? others : counted
+        case .compact(.nowPlaying): return counted
+        default: return 0
+        }
+    }
+}
+
+/// Dismissing an activity is in its menu, which VoiceOver also offers as an action. The
+/// action comes and goes with the activity; the view stays the same view.
+struct DismissAction: ViewModifier {
+    let activity: Activity?
+    let model: AppModel
+
+    func body(content: Content) -> some View {
+        content.accessibilityActions {
+            if let activity {
+                Button("Dismiss") { model.remove(activityID: activity.id) }
+            }
+        }
+    }
+}
+
+extension IslandPresentation {
+    var isHUD: Bool {
+        if case .hud = self { return true }
+        return false
+    }
+}
+
+extension IslandBubble {
+    var activity: Activity? {
+        if case .activity(let a) = self { return a }
+        return nil
     }
 }
 
@@ -877,10 +929,15 @@ struct BubbleView: View {
     let diameter: CGFloat
     var overflow = 0
     @Environment(\.islandMotion) private var motion
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         ZStack {
             Circle().fill(Color.black)
+            // Increase Contrast edges a bubble as it does the island (`IslandOutline`).
+            if contrast == .increased {
+                Circle().strokeBorder(IslandOutline.increasedEdge, lineWidth: IslandOutline.increasedWidth)
+            }
             switch bubble {
             case .media(let np):
                 TrackArtwork(media: np, size: diameter - 8, corner: (diameter - 8) / 2)
@@ -892,6 +949,7 @@ struct BubbleView: View {
                 } else if a.clampedProgress != nil, a.endsAt == nil, a.startedAt == nil {
                     // A ring only for real progress; a bubble that is just "working" stays a clean icon.
                     ProgressRing(progress: a.clampedProgress, tint: model.tint(for: a), size: diameter - 8, lineWidth: 2.2)
+                        .spokenValue(SpokenText.value(a, now: Date()))
                     IconView(icon: model.icon(for: a), size: diameter - 17, tint: model.tint(for: a))
                 } else {
                     IconView(icon: model.icon(for: a), size: diameter - 13, tint: model.tint(for: a))
@@ -1208,8 +1266,6 @@ struct IslandRow: View {
             }
             .padding(.horizontal, lead)
             .padding(.top, Space.hair)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(["Now playing", np.title, np.artist].compactMap { $0 }.joined(separator: ", "))
         default:
             EmptyView()
         }
@@ -1285,6 +1341,7 @@ struct ActivityTrailing: View {
                 .foregroundStyle(tint)
                 .contentTransition(motion.symbolSwap)
                 .animation(motion.inPlace, value: glyph)
+                .spokenValue(SpokenText.value(activity, now: Date()))
         } else if activity.endsAt != nil || activity.startedAt != nil {
             TimelineView(.periodic(from: .now, by: 1)) { ctx in
                 Text(activity.trailingText(now: ctx.date) ?? "")
@@ -1294,6 +1351,7 @@ struct ActivityTrailing: View {
                     .lineLimit(1)
                     .minimumScaleFactor(room < NarrowValue.wordRoom ? 0.5 : 0.7)
                     .contentTransition(.numericText(countsDown: activity.endsAt != nil))
+                    .spokenValue(SpokenText.value(activity, now: ctx.date))
             }
         } else if let text = activity.trailingText(now: Date()), activity.trailing != nil || activity.progress == nil {
             Text(text)
@@ -1305,8 +1363,10 @@ struct ActivityTrailing: View {
                 // A changed value rolls to the new one rather than popping.
                 .contentTransition(motion.numberSwap())
                 .animation(motion.inPlace, value: text)
+                .spokenValue(SpokenText.value(activity, now: Date()))
         } else if activity.progress != nil {
             ProgressRing(progress: activity.clampedProgress, tint: tint, size: compact ? 13 : 15, lineWidth: 2.2)
+                .spokenValue(SpokenText.value(activity, now: Date()))
         } else {
             EmptyView()
         }
@@ -1350,15 +1410,6 @@ extension HUDEvent {
 
     /// The level shown: nothing while muted.
     var shownLevel: Double { muted ? 0 : value }
-
-    var accessibilityName: String {
-        switch kind {
-        case .volume: return "Volume"
-        case .brightness: return "Brightness"
-        case .keyboardBrightness: return "Keyboard brightness"
-        case .microphone: return "Microphone"
-        }
-    }
 }
 
 /// The detailed HUD (Settings → Notifications & HUDs → Style): the menu bar row stays as the
@@ -1393,7 +1444,8 @@ struct DetailedHUDContent: View {
             .frame(height: IslandLayout.hudBody)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(hud.accessibilityName) \(percent)%")
+        .accessibilityLabel(SpokenText.hud(hud).label)
+        .accessibilityValue(SpokenText.hud(hud).value)
     }
 }
 

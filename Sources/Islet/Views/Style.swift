@@ -164,11 +164,15 @@ struct IslandOutline: View {
     let on: Bool
     @Environment(\.colorSchemeContrast) private var contrast
 
+    /// The edge with Increase Contrast, which bubbles share.
+    static let increasedEdge = Color.white.opacity(0.25)
+    static let increasedWidth: CGFloat = 1
+
     var body: some View {
         let increased = contrast == .increased
         if on || increased {
             IslandEdge(shape: shape)
-                .stroke(Color.white.opacity(increased ? 0.25 : 0.14), lineWidth: increased ? 1 : 0.75)
+                .stroke(increased ? Self.increasedEdge : Color.white.opacity(0.14), lineWidth: increased ? Self.increasedWidth : 0.75)
                 .allowsHitTesting(false)
         }
     }

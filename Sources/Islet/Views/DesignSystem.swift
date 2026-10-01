@@ -46,25 +46,35 @@ enum Radius {
 }
 
 /// Text and glyph colours on the island's black (or dark glass). A ladder, not a palette:
-/// each step is quieter than the one before.
+/// each step is quieter than the one before. Increase Contrast firms up every step
+/// (`IslandInk`, `IslandContrast`).
+@MainActor
 enum Ink {
     static let primary = Color.white
-    static let secondary = Color.white.opacity(0.64)
-    static let tertiary = Color.white.opacity(0.42)
+    static var secondary: Color { .island(IslandInk.secondary) }
+    static var tertiary: Color { .island(IslandInk.tertiary) }
     /// Disabled glyphs and the faintest labels.
-    static let quaternary = Color.white.opacity(0.24)
+    static var quaternary: Color { .island(IslandInk.quaternary) }
 }
 
-/// Fills on the island. Deliberately not adaptive: on the black shell they must never turn dark.
+/// Fills on the island. Deliberately not adaptive to light and dark: on the black shell they
+/// must never turn dark. Increase Contrast firms them up (`IslandWash`).
+@MainActor
 enum Wash {
-    /// Hover, and the track under a bar.
-    static let subtle = Color.white.opacity(0.06)
+    /// Hover, and code boxes.
+    static var subtle: Color { .island(IslandWash.subtle) }
     /// A control at rest.
-    static let regular = Color.white.opacity(0.10)
+    static var regular: Color { .island(IslandWash.regular) }
     /// Selected or pressed.
-    static let strong = Color.white.opacity(0.16)
+    static var strong: Color { .island(IslandWash.strong) }
     /// Dividers and keylines.
-    static let hairline = Color.white.opacity(0.09)
+    static var hairline: Color { .island(IslandWash.hairline) }
+    /// The unfilled part of a bar.
+    static var track: Color { .island(IslandWash.track) }
+    /// The unfilled part of a ring.
+    static var ringTrack: Color { .island(IslandWash.ringTrack) }
+    /// Round controls and boxes with Increase Contrast (`contrastEdge`).
+    static let edge = Color.white.opacity(IslandWash.edge.opacity(increasedContrast: true))
 }
 
 /// Five text styles. `emphasized` is the same size one weight heavier; `numeric` switches to
@@ -207,6 +217,7 @@ struct CapsuleButtonStyle: ButtonStyle {
             .padding(.horizontal, Space.m)
             .frame(height: 24)
             .background(Capsule().fill(fill(pressed: configuration.isPressed)))
+            .contrastEdge(Capsule())
             .contentShape(Capsule())
             .scaleEffect(configuration.isPressed ? Motion.pressScale : 1)
             .animation(Motion.settle, value: configuration.isPressed)
@@ -237,6 +248,8 @@ struct SectionLabel: View {
         }
         .textStyle(.caption, emphasized: true, numeric: true)
         .lineLimit(1)
+        .spokenGroup(title, value: count > 0 ? "\(count)" : nil)
+        .accessibilityAddTraits(.isHeader)
     }
 }
 
@@ -257,17 +270,21 @@ struct FloatingGlass<S: InsettableShape>: ViewModifier {
     @Environment(\.hiddenFromCapture) private var hiddenFromCapture
 
     func body(content: Content) -> some View {
-        if reduceTransparency || snapshotMode || hiddenFromCapture {
-            content
-                .background(shape.fill(Color(white: 0.07).opacity(0.92)))
-                .overlay(shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5))
-        } else if #available(macOS 26, *) {
-            content.glassEffect(.regular.tint(Color.black.opacity(0.35)).interactive(), in: shape)
-        } else {
-            content
-                .background(shape.fill(Color.black.opacity(0.35)))
-                .background(shape.fill(.ultraThinMaterial))
+        Group {
+            if reduceTransparency || snapshotMode || hiddenFromCapture {
+                content
+                    .background(shape.fill(Color(white: 0.07).opacity(0.92)))
+                    .overlay(shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5))
+            } else if #available(macOS 26, *) {
+                content.glassEffect(.regular.tint(Color.black.opacity(0.35)).interactive(), in: shape)
+            } else {
+                content
+                    .background(shape.fill(Color.black.opacity(0.35)))
+                    .background(shape.fill(.ultraThinMaterial))
+            }
         }
+        // Over a busy desktop, Increase Contrast gives it a clear edge.
+        .contrastEdge(shape)
     }
 }
 

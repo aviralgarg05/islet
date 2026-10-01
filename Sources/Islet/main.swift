@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         AppActions.openSettingsHandler = { [weak self] page, anchor in self?.showSettings(page, at: anchor) }
         EditMenu.install()
+        IslandContrast.increased = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
         model.start()
         if demo { model.loadDemo() }
         setUpHUD()
@@ -99,8 +100,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 MainActor.assumeIsolated { self?.scheduleMenuBarMeasure() }
             }
         }
+        // Increase Contrast (and the other display options) changed in System Settings.
+        wnc.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.contrastChanged() }
+        }
         NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleURL(_:reply:)),
                                                      forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
+    }
+
+    /// The island's ink follows Increase Contrast. SwiftUI doesn't redraw colours for it, so the
+    /// panels are drawn afresh, once, when the setting changes.
+    private func contrastChanged() {
+        let increased = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        guard increased != IslandContrast.increased else { return }
+        IslandContrast.increased = increased
+        rebuildPanels(force: true)
     }
 
     func applicationWillTerminate(_ notification: Notification) {

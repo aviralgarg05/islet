@@ -55,12 +55,15 @@ struct ApprovalCard: View {
         HStack(spacing: 0) {
             HStack(spacing: Space.s) {
                 IconView(icon: .symbol(request.provider.symbol), size: 14, tint: Color(tint: request.provider.tint))
+                    .accessibilityHidden(true)
                 Text(request.title)
                     .textStyle(.body, emphasized: true)
                     .foregroundStyle(Ink.primary)
                     .lineLimit(1)
                     .help(request.agentType.map { "\(request.title) (\($0) subagent)" } ?? request.title)
+                    .accessibilityLabel(SpokenText.phrase(request.title))
             }
+            .accessibilityAddTraits(.isHeader)
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Color.clear.frame(width: metrics.notch.width + Space.m)
@@ -74,12 +77,16 @@ struct ApprovalCard: View {
                         .padding(.horizontal, Space.s)
                         .frame(height: 20)
                         .background(Capsule().fill(Wash.regular))
+                        .contrastEdge(Capsule())
                         .help(behind == 1 ? "1 more request waiting" : "\(behind) more requests waiting")
+                        .accessibilityLabel(behind == 1 ? "1 more request waiting" : "\(behind) more requests waiting")
                 }
                 if snapshotMode || TerminalJump.canJump(request.terminal) {
-                    HeaderButton(symbol: "macwindow", help: "Show the terminal") { TerminalJump.jump(request.terminal) }
+                    HeaderButton(symbol: "macwindow", label: "Show the terminal", help: "Show the terminal") { TerminalJump.jump(request.terminal) }
                 }
-                HeaderButton(symbol: "chevron.up", help: "Hide. The card comes back when the island opens.") { model.approvals.hide() }
+                HeaderButton(symbol: "chevron.up", label: "Hide", help: "Hide. The card comes back when the island opens.") {
+                    model.approvals.hide()
+                }
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
@@ -112,6 +119,7 @@ struct ToolApproval: View {
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                         .help(risks.joined(separator: "\n"))
+                        .accessibilityLabel("Risky: " + risks.joined(separator: ", "))
                 }
             }
             ScrollBox(risky: !risks.isEmpty) {
@@ -175,6 +183,7 @@ struct HoldToAllowButton: View {
                 }
                 .clipShape(Capsule())
             }
+            .contrastEdge(Capsule())
             .contentShape(Capsule())
             .gesture(
                 DragGesture(minimumDistance: 0)
@@ -192,6 +201,15 @@ struct HoldToAllowButton: View {
                     }
             )
             .help("This looks risky. Click twice, or press and hold, to allow.")
+            // A drag gesture isn't a button to VoiceOver: pressing it arms it, and again allows.
+            .accessibilityElement()
+            .accessibilityLabel(armed ? "Confirm" : "Allow")
+            .accessibilityHint("This looks risky. Press twice to allow.")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction {
+                guard Date().timeIntervalSince(shownAt) >= ApprovalController.clickGuard else { return }
+                if armed { action() } else { armed = true }
+            }
     }
 }
 
@@ -284,10 +302,14 @@ struct QuestionApproval: View {
             .padding(.horizontal, Space.m)
             .frame(maxWidth: .infinity, minHeight: ApprovalButtonStyle.height)
             .background(RoundedRectangle(cornerRadius: Radius.s, style: .continuous).fill(on ? Color.blue.opacity(0.3) : Wash.regular))
+            .contrastEdge(RoundedRectangle(cornerRadius: Radius.s, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: Radius.s, style: .continuous))
         }
         .buttonStyle(.plain)
         .help([option.label, option.detail].compactMap { $0 }.joined(separator: "\n"))
+        .accessibilityLabel(option.label)
+        .accessibilityHint(option.detail ?? "")
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 
     private func answer(_ q: AgentQuestion, with value: String) {
@@ -399,6 +421,8 @@ struct ScrollBox<Content: View>: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { visibleHeight = $0 }
         .clipShape(shape)
         .background(shape.fill(Wash.subtle))
+        // Orange round a risky command, always; Increase Contrast edges the others.
+        .contrastEdge(shape, normal: .clear)
         .overlay(shape.strokeBorder(risky ? Color.orange.opacity(0.75) : .clear, lineWidth: 1))
         .overlay(alignment: .bottomTrailing) {
             if overflows {
@@ -410,6 +434,7 @@ struct ScrollBox<Content: View>: View {
                     .background(Capsule().fill(Color.white.opacity(0.85)))
                     .padding(Space.xs)
                     .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
         }
     }
@@ -443,6 +468,7 @@ struct ApprovalButtonStyle: ButtonStyle {
             .padding(.horizontal, Space.m)
             .frame(height: Self.height)
             .background(Capsule().fill(fill.opacity(configuration.isPressed ? 0.7 : 1)))
+            .contrastEdge(Capsule())
             .contentShape(Capsule())
             .scaleEffect(configuration.isPressed ? Motion.pressScale : 1)
     }
@@ -450,6 +476,8 @@ struct ApprovalButtonStyle: ButtonStyle {
 
 private struct HeaderButton: View {
     let symbol: String
+    /// What VoiceOver says, when the help says more.
+    let label: String
     let help: String
     let action: () -> Void
 
@@ -463,6 +491,7 @@ private struct HeaderButton: View {
         }
         .buttonStyle(.plain)
         .help(help)
+        .accessibilityLabel(label)
     }
 }
 
@@ -477,5 +506,6 @@ private struct Chip: View {
             .padding(.horizontal, Space.s)
             .frame(height: 18)
             .background(Capsule().fill(Wash.regular))
+            .contrastEdge(Capsule())
     }
 }

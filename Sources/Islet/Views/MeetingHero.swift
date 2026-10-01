@@ -15,6 +15,7 @@ struct MeetingHero: View {
             VStack(alignment: .leading, spacing: Space.m) {
                 HStack(alignment: .top, spacing: Space.m) {
                     IconView(icon: MeetingReminders.icon(for: reminder, installed: AppActions.isInstalled), size: 24, tint: tint)
+                        .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: Space.hair) {
                         Text(item.title).textStyle(.title).foregroundStyle(Ink.primary).lineLimit(2)
                         Text(Self.when(reminder, now: ctx.date))
@@ -22,6 +23,10 @@ struct MeetingHero: View {
                             .foregroundStyle(reminder.phase == .now ? Color.green : Ink.secondary)
                             .lineLimit(1)
                     }
+                    .spokenGroup(item.title, value: SpokenText.when(
+                        start: item.start, now: ctx.date, ongoing: reminder.phase != .soon,
+                        startText: item.start.formatted(date: .omitted, time: .shortened),
+                        endText: item.end.formatted(date: .omitted, time: .shortened)))
                     Spacer(minLength: Space.s)
                     DismissButton { model.remove(activityID: reminder.id) }
                 }
@@ -64,6 +69,7 @@ struct LargeCapsuleButtonStyle: ButtonStyle {
             .padding(.horizontal, Space.xl)
             .frame(height: 32)
             .background(Capsule().fill(tint.opacity(configuration.isPressed ? 0.62 : hovering ? 0.95 : 0.82)))
+            .contrastEdge(Capsule())
             .contentShape(Capsule())
             .scaleEffect(configuration.isPressed ? Motion.pressScale : 1)
             .animation(Motion.settle, value: configuration.isPressed)

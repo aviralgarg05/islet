@@ -77,6 +77,13 @@ struct AskView: View {
                     Color.clear
                         .contentShape(Rectangle())
                         .onTapGesture { model.ask.requestKeyboard() }
+                        // VoiceOver presses it to start typing, as a click does.
+                        .accessibilityElement()
+                        .accessibilityLabel(placeholder(kind))
+                        .accessibilityValue(ask.draft)
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityHint("Starts typing")
+                        .accessibilityAction { model.ask.requestKeyboard() }
                 }
             }
         }
@@ -84,7 +91,7 @@ struct AskView: View {
         .padding(.horizontal, Space.m)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(Capsule().fill(Wash.regular))
-        .overlay(Capsule().strokeBorder(Ink.quaternary.opacity(fieldFocused && ask.wantsKeyboard ? 1 : 0), lineWidth: 1))
+        .contrastEdge(Capsule(), normal: Ink.quaternary.opacity(fieldFocused && ask.wantsKeyboard ? 1 : 0))
         .opacity(ready ? 1 : 0.6)
     }
 
@@ -102,7 +109,7 @@ struct AskView: View {
                 AskIconButton(symbol: "stop.fill", help: "Stop", prominent: true) { ask.stop() }
             } else {
                 let canSend = ready && !ask.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                AskIconButton(symbol: "arrow.up", help: "Send (Return)", prominent: canSend) { send() }
+                AskIconButton(symbol: "arrow.up", help: "Send (Return)", label: "Send", prominent: canSend) { send() }
                     .disabled(!canSend)
             }
         }
@@ -275,6 +282,8 @@ struct AskProviderChip: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .help(kind.recipient.map { "\(kind.title): your question is sent to \($0)" } ?? "On-device: nothing leaves this Mac")
+            .accessibilityLabel("Ask with")
+            .accessibilityValue(kind.title + (kind.leavesMac ? ", leaves this Mac" : ""))
         }
     }
 
@@ -291,6 +300,7 @@ struct AskProviderChip: View {
         .padding(.horizontal, Space.m)
         .frame(height: AskView.fieldHeight)
         .background(Capsule().fill(Wash.regular))
+        .contrastEdge(Capsule())
         .contentShape(Capsule())
     }
 }
@@ -298,6 +308,8 @@ struct AskProviderChip: View {
 struct AskIconButton: View {
     let symbol: String
     let help: String
+    /// What VoiceOver says, when the help says more ("Send (Return)").
+    var label: String?
     var prominent = false
     let action: () -> Void
     @Environment(\.isEnabled) private var isEnabled
@@ -312,10 +324,12 @@ struct AskIconButton: View {
                 .foregroundStyle(prominent ? Color.black : Ink.secondary)
                 .frame(width: AskView.fieldHeight, height: AskView.fieldHeight)
                 .background(Circle().fill(prominent ? Color.white.opacity(isEnabled ? 0.92 : 0.3) : Wash.regular.opacity(isEnabled ? 1 : 0.5)))
+                .contrastEdge(Circle())
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .help(help)
+        .accessibilityLabel(label ?? help)
     }
 }
 

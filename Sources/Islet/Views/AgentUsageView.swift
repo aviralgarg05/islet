@@ -15,6 +15,7 @@ struct AgentUsageGlance: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(tint)
                     .frame(width: 18)
+                    .accessibilityHidden(true)
                 Text(usage.provider.displayName).textStyle(.body, emphasized: true).foregroundStyle(Ink.primary)
                 if let detail {
                     Text(detail).textStyle(.caption).foregroundStyle(Ink.tertiary).lineLimit(1)
@@ -22,6 +23,8 @@ struct AgentUsageGlance: View {
                 Spacer(minLength: 0)
             }
             .frame(height: 16)
+            .spokenGroup(usage.provider.displayName, value: detail)
+            .accessibilityAddTraits(.isHeader)
             .help(usage.project.map { "Latest session: \($0)" } ?? "")
             ForEach(usage.windows) { w in UsageWindowRow(window: w, now: now, tint: tint) }
         }
@@ -62,6 +65,8 @@ struct UsageWindowRow: View {
         .textStyle(.caption, numeric: true)
         .frame(height: 12)
         .help(resetText(reset: reset) ?? "")
+        // "5-hour limit", "62% used, resets in 1 hour 12 minutes".
+        .spokenGroup(SpokenText.usage(window, now: now).label, value: SpokenText.usage(window, now: now).value)
     }
 
     private func resetText(reset: Bool) -> String? {
@@ -94,6 +99,7 @@ struct ClaudeUsageHintRow: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(tint)
                 .frame(width: 18)
+                .accessibilityHidden(true)
             Text(provider.displayName).textStyle(.body, emphasized: true).foregroundStyle(Ink.primary).lineLimit(1)
             Spacer(minLength: 0)
         }

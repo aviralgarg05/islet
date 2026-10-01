@@ -181,6 +181,7 @@ struct IgnoredAppsList: View {
                 }
                 .buttonStyle(.borderless)
                 .help("Stop ignoring \(AddAppMenu.name(id))")
+                .accessibilityLabel("Stop ignoring \(AddAppMenu.name(id))")
             }
         }
     }
@@ -201,6 +202,8 @@ struct ClipboardIgnoredApps: View {
 /// config.json uses. Delete turns it off; Esc keeps the one there was. While it records,
 /// Islet's own shortcuts are let through, so one of them can be pressed and recorded.
 struct ShortcutField: View {
+    /// What the shortcut does, for VoiceOver ("Open the Ask box").
+    var name = "Shortcut"
     @Binding var text: String
     /// Islet's own shortcut, which the reset button goes back to.
     let standard: String
@@ -224,8 +227,10 @@ struct ShortcutField: View {
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
                 .help("Back to \(Hotkey.parse(standard)?.label ?? standard)")
+                .accessibilityLabel("Back to \(Hotkey.parse(standard)?.label ?? standard)")
                 .opacity(!recording && text != standard ? 1 : 0)
                 .disabled(recording || text == standard)
+                .accessibilityHidden(recording || text == standard)
             Button(action: { recording ? stop() : start() }) {
                 Text(recording ? (hint ?? "Press keys") : label)
                     .foregroundStyle(recording ? AnyShapeStyle(Color.accentColor)
@@ -233,6 +238,9 @@ struct ShortcutField: View {
                     .frame(minWidth: 96)
             }
             .help(recording ? "Press the new shortcut, or Esc to keep the old one." : "Click, then press the keys you want.")
+            .accessibilityLabel(name)
+            .accessibilityValue(recording ? "recording" : label)
+            .accessibilityHint(recording ? "Press the new shortcut, or Escape to keep the old one" : "Press, then press the keys you want")
         }
         .onDisappear(perform: stop)
     }
@@ -245,8 +253,7 @@ struct ShortcutField: View {
         monitor.shortcuts.onEnd = { stop() }
         monitor.shortcuts.begin()
         monitor.token = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            handle(event)
-            return nil
+            handle(event) ? nil : event
         }
     }
 
@@ -259,14 +266,23 @@ struct ShortcutField: View {
         hint = nil
     }
 
-    private func handle(_ event: NSEvent) {
+    /// Whether the field took the key. Tab and Shift-Tab go on to the next control, as they do
+    /// from any field, so the keyboard alone never gets stuck here.
+    private func handle(_ event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.capsLock, .numericPad, .function])
+        if flags.subtracting(.shift).isEmpty, event.keyCode == 48 {   // Tab keeps the old shortcut and moves on
+            stop()
+            return false
+        }
         if flags.isEmpty {
             switch event.keyCode {
-            case 53: return stop()                          // Esc keeps the old shortcut
+            case 53:                                        // Esc keeps the old shortcut
+                stop()
+                return true
             case 51, 117:                                   // Delete turns it off
                 text = ""
-                return stop()
+                stop()
+                return true
             default: break
             }
         }
@@ -278,12 +294,31 @@ struct ShortcutField: View {
         if let recorded = Hotkey.text(keyCode: UInt32(event.keyCode), modifiers: modifiers) {
             if let other, Hotkey.sameKeys(recorded, other.text) {
                 hint = "Already used to \(other.does)"
-                return
+                return true
             }
             text = recorded
             stop()
         } else {
             hint = "Add ⌃, ⌥ or ⌘"
+        }
+        return true
+    }
+}
+
+/// The outline round a picture tile in Settings (a theme, an indicator look, a sticker): the
+/// accent colour round the chosen one, a hairline round the others, firmer with Increase
+/// Contrast so each tile's edge can be seen.
+struct TileOutline: ViewModifier {
+    var selected: Bool
+    var cornerRadius: CGFloat
+    var hairline: Double = 0.1
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    func body(content: Content) -> some View {
+        content.overlay {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(selected ? Color.accentColor : Color.primary.opacity(contrast == .increased ? 0.5 : hairline),
+                              lineWidth: selected ? 2.5 : 1)
         }
     }
 }

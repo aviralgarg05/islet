@@ -72,6 +72,13 @@ extension Snapshots {
             model.approvals.showForSnapshot(requests)
             shoot(name)
         }
+        // Increase Contrast: a clear edge round the command, the buttons and the options.
+        increasedContrast = true
+        model.approvals.showForSnapshot([risky, tests])
+        shoot("84-contrast-approval-risky")
+        model.approvals.showForSnapshot([multi])
+        shoot("85-contrast-approval-question")
+        increasedContrast = false
         model.approvals.showForSnapshot([])
     }
 }

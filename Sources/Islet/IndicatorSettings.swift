@@ -67,10 +67,7 @@ struct IndicatorStylePicker: View {
                     }
                 }
                 .frame(width: 52, height: 34)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(selected ? Color.accentColor : Color.primary.opacity(0.1), lineWidth: selected ? 2.5 : 1)
-                }
+                .modifier(TileOutline(selected: selected, cornerRadius: 7))
                 Text(Self.name(style)).font(.caption).foregroundStyle(selected ? .primary : .secondary)
                     .lineLimit(1).fixedSize()
             }
@@ -142,6 +139,9 @@ struct StickerGallery: View {
                         .contextMenu {
                             Button("Remove", role: .destructive) { remove(id) }
                         }
+                        // Without a pointer: Delete on the focused tile, or VoiceOver's action.
+                        .onDeleteCommand { remove(id) }
+                        .accessibilityAction(named: "Remove") { remove(id) }
                 }
                 if !library.isFull { addTile }
             }
@@ -156,8 +156,8 @@ struct StickerGallery: View {
                 return true
             }
             Text(library.isFull
-                 ? "You have \(StickerLimits.maxCustom) of your own. Right-click one to remove it."
-                 : "Add a GIF, animated PNG, WebP or HEIC of up to 5 MB, or drop one here. Right-click one of yours to remove it.")
+                 ? "You have \(StickerLimits.maxCustom) of your own. Right-click one, or press Delete on it, to remove it."
+                 : "Add a GIF, animated PNG, WebP or HEIC of up to 5 MB, or drop one here. Right-click one of yours, or press Delete on it, to remove it.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -177,10 +177,7 @@ struct StickerGallery: View {
                     StickerThumbnail(library: model.stickers, choice: choice, size: 30)
                 }
                 .frame(width: 48, height: 40)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(selected ? Color.accentColor : Color.primary.opacity(0.1), lineWidth: selected ? 2.5 : 1)
-                }
+                .modifier(TileOutline(selected: selected, cornerRadius: 7))
                 Text(name).font(.caption2).foregroundStyle(selected ? .primary : .secondary).lineLimit(1)
             }
             .contentShape(Rectangle())

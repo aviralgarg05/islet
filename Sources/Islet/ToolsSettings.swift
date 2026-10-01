@@ -136,6 +136,8 @@ private struct CitySearch: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(place.label)
+            .accessibilityAddTraits(place == model.settings.weatherPlace ? .isSelected : [])
         }
     }
 

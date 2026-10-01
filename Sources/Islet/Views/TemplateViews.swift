@@ -59,14 +59,21 @@ struct TemplateMotion {
 /// clocks, once a minute (aligned to the deadline) for minute counts, never otherwise.
 struct TemplateClock<Content: View>: View {
     let activity: Activity
+    /// Also gives `content` the activity's spoken value, kept as current as the text.
+    var speaks = false
     @ViewBuilder var content: (Date) -> Content
 
     var body: some View {
         if let r = activity.templateRefresh(now: Date()) {
-            TimelineView(.periodic(from: r.anchor, by: r.interval)) { ctx in content(ctx.date) }
+            TimelineView(.periodic(from: r.anchor, by: r.interval)) { ctx in spoken(content(ctx.date), now: ctx.date) }
         } else {
-            content(Date())
+            spoken(content(Date()), now: Date())
         }
+    }
+
+    @ViewBuilder
+    private func spoken(_ view: Content, now: Date) -> some View {
+        if speaks { view.spokenValue(SpokenText.value(activity, now: now)) } else { view }
     }
 }
 
@@ -92,6 +99,7 @@ struct TemplateValueText: View {
                 Image(systemName: glyph)
                     .font(.system(size: min(size, room * 0.6), weight: .semibold))
                     .foregroundStyle(tint ?? model.tint(for: activity))
+                    .spokenValue(SpokenText.value(activity, now: now))
             } else {
                 Text(narrow ? activity.minimalText(now: now) ?? text : text)
                     .font(.system(size: size, weight: .semibold, design: .rounded))
@@ -101,6 +109,7 @@ struct TemplateValueText: View {
                     .minimumScaleFactor(narrow ? 0.5 : 0.7)
                     .contentTransition(.numericText(countsDown: activity.endsAt != nil))
                     .animation(perSecond ? nil : motion.value, value: text)
+                    .spokenValue(SpokenText.value(activity, now: now))
             }
         }
     }
@@ -232,7 +241,7 @@ struct EtaTrack: View {
             ZStack(alignment: .leading) {
                 HStack(spacing: 2) {
                     ForEach(0..<10, id: \.self) { i in
-                        Capsule().fill(Double(i) + 0.5 <= progress * 10 ? tint : Color.white.opacity(0.18))
+                        Capsule().fill(Double(i) + 0.5 <= progress * 10 ? tint : Wash.track)
                     }
                 }
                 .frame(width: trackWidth, height: 3)
@@ -261,6 +270,9 @@ struct MilestoneBar: View {
     var dot: CGFloat = 7
     var animate: Bool
     @Environment(\.snapshotMode) private var snapshotMode
+
+    /// The bar between dots: a touch quieter than other tracks, as firm with Increase Contrast.
+    private static var track: Color { .islandWhite(0.16, increased: IslandWash.track.opacity(increasedContrast: true)) }
 
     /// Dots drawn: at most `TemplateLimits.stages`, since `steps` alone may be larger.
     private var n: Int { max(1, min(count, TemplateLimits.stages)) }
@@ -314,7 +326,7 @@ struct MilestoneBar: View {
                     Capsule().fill(tint.opacity(0.55)).frame(height: 2.5)
                 }
             } else {
-                Capsule().fill(Color.white.opacity(0.16)).frame(height: 2.5)
+                Capsule().fill(Self.track).frame(height: 2.5)
             }
         } else {
             Color.clear.frame(height: 2.5)
@@ -379,7 +391,7 @@ struct FlightLine: View {
             GeometryReader { geo in
                 let p = progress ?? 0
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.18)).frame(height: 1.5)
+                    Capsule().fill(Wash.track).frame(height: 1.5)
                     Capsule().fill(tint).frame(width: max(0, geo.size.width * p), height: 1.5)
                     Image(systemName: "airplane")
                         .font(.system(size: 9, weight: .bold))
@@ -591,9 +603,11 @@ struct TemplateTrailing: View {
                 }
                 here
             }
+            .spokenValue(SpokenText.value(a, now: Date()))
         case .score? where a.trailing == nil && a.teams?.count == 2:
             TeamScore(team: a.teams![1], height: compact ? 14 : 15, trailing: true, animation: motion.value)
                 .frame(minWidth: 0, maxWidth: compact ? 58 : .infinity, alignment: .trailing)
+                .spokenValue(SpokenText.value(a, now: Date()))
         case .liveAudio? where a.templateTrailing(now: Date()) == nil:
             VoiceWave(tint: tint, active: a.state == .running && motion.perpetual, width: 18, height: 13)
         case .media? where a.templateTrailing(now: Date()) == nil:
@@ -622,7 +636,7 @@ struct TemplateBubble: View {
         let ring = diameter - 8
         let glyph = diameter - 17
         let plain = IconView(icon: model.icon(for: a), size: diameter - 13, tint: tint)
-        TemplateClock(activity: a) { now in
+        TemplateClock(activity: a, speaks: true) { now in
             let text = a.minimalText(now: now)
             switch model.visualTemplate(for: a) {
             case .eta? where a.trackProgress(now: now) != nil:
@@ -812,11 +826,13 @@ struct FlightBoard: View {
     let activity: Activity
     var tint: Color
     var size: CGFloat
+    /// Carries the flight's spoken value (where nothing else beside it does).
+    var speaks = false
 
     var body: some View {
         let f = activity.flight ?? ActivityFlight()
         let delayed = f.statusKind == .delayed
-        TemplateClock(activity: activity) { now in
+        TemplateClock(activity: activity, speaks: speaks) { now in
             HStack(spacing: 6) {
                 if let from = f.from { AirportColumn(code: from, time: f.departs, delayed: delayed, alignment: .leading, size: size) }
                 FlightLine(progress: f.progress(now: now), tint: tint, number: f.number)
@@ -843,6 +859,7 @@ struct ScoreLine: View {
                     TeamBadge(team: teams[0], height: badge, round: round)
                     RollingNumber(text: teams[0].score ?? "0", size: score, animation: motion.value)
                 }
+                .spokenValue(SpokenText.value(activity, now: Date()))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 VStack(spacing: 0) {
                     if let period = activity.period {
@@ -853,6 +870,7 @@ struct ScoreLine: View {
                             Text(activity.trailingText(now: now) ?? "")
                                 .font(.system(size: 9.5, weight: .medium, design: .rounded)).monospacedDigit()
                                 .foregroundStyle(Color.islandSecondary)
+                                .spokenValue(SpokenText.time(activity, now: now))
                         }
                     }
                 }
@@ -903,6 +921,10 @@ struct TemplateRow: View {
             let tint = model.tint(for: activity)
             HStack(spacing: Space.m) {
                 card(t, tint: tint, motion: TemplateMotion(model, systemReduceMotion: reduceMotion))
+                    // One element: its title, then the value the card draws. The × shows only
+                    // under the pointer, so VoiceOver has it as an action.
+                    .spokenGroup(SpokenText.label(activity, detail: true))
+                    .modifier(DismissAction(activity: activity, model: model))
                 ActivityActions(activity: activity, model: model, tint: tint)
                 if hovering {
                     DismissButton { model.remove(activityID: activity.id) }
@@ -933,7 +955,7 @@ struct TemplateRow: View {
         let a = activity
         switch t {
         case .flight:
-            FlightBoard(activity: a, tint: tint, size: 14)
+            FlightBoard(activity: a, tint: tint, size: 14, speaks: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .score:
             ScoreLine(activity: a, badge: 24, score: 19, round: true, motion: motion)
@@ -950,7 +972,8 @@ struct TemplateRow: View {
         case .gauge:
             HStack(spacing: 10) {
                 GaugeRing(level: a.clampedProgress, tint: tint, size: 30, lineWidth: 3, animation: motion.value)
-                TemplateClock(activity: a) { now in
+                // With metrics in place of the value, the time comes from here.
+                TemplateClock(activity: a, speaks: a.metrics != nil) { now in
                     titles(a.title, a.subtitle ?? a.endsAt.map { "Full in " + TemplateFormat.minutes(until: $0, now: now) })
                 }
                 Spacer(minLength: 4)
@@ -1078,6 +1101,7 @@ struct ActivityRow: View {
         let tint = model.tint(for: activity)
         HStack(spacing: Space.m) {
             IconView(icon: model.icon(for: activity), size: 18, tint: tint)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Space.hair) {
                 Text(activity.title).textStyle(.body, emphasized: true).foregroundStyle(Ink.primary).lineLimit(1)
                 if let sub = activity.subtitle {
@@ -1087,6 +1111,10 @@ struct ActivityRow: View {
                     ActivityProgress(activity: activity, tint: tint, height: 3).padding(.top, Space.hair)
                 }
             }
+            // Its title and state; the value beside it reads on its own, as current as it is drawn.
+            // The × shows only under the pointer, so VoiceOver has it as an action.
+            .spokenGroup(SpokenText.label(activity, detail: true))
+            .modifier(DismissAction(activity: activity, model: model))
             Spacer(minLength: 0)
             ActivityActions(activity: activity, model: model, tint: tint)
             ActivityTrailing(activity: activity, tint: tint)
@@ -1108,6 +1136,7 @@ struct DismissButton: View {
         }
         .buttonStyle(.plain)
         .help("Dismiss")
+        .accessibilityLabel("Dismiss")
     }
 }
 

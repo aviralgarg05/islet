@@ -72,6 +72,7 @@ struct MenuBarRow: View {
                     }
                     .foregroundStyle(Color.red)
                     .help("Low battery")
+                    .spokenGroup("Low battery", value: "\(b.level)%")
                 }
                 IconButton(symbol: model.pinned ? "pin.fill" : "pin", help: model.pinned ? "Stop keeping open" : "Keep open",
                            size: 24, glyph: 11, ink: model.pinned ? Ink.primary : Ink.tertiary) {
@@ -85,7 +86,10 @@ struct MenuBarRow: View {
     }
 
     private func privacyDot(_ color: Color, help: String) -> some View {
-        Circle().fill(color).frame(width: 6, height: 6).help(help).accessibilityLabel(help)
+        Circle().fill(color).frame(width: 6, height: 6).help(help)
+            .accessibilityElement()
+            .accessibilityLabel(help)
+            .accessibilityAddTraits(.isImage)
     }
 }
 
@@ -276,11 +280,13 @@ struct ClockHero: View {
 
     var body: some View {
         TimelineView(.everyMinute) { ctx in
+            let day = ctx.date.formatted(.dateTime.weekday(.wide).month(.wide).day())
+            let time = ctx.date.formatted(date: .omitted, time: .shortened)
             VStack(alignment: .leading, spacing: Space.hair) {
-                Text(ctx.date.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+                Text(day)
                     .textStyle(.body)
                     .foregroundStyle(Ink.secondary)
-                Text(ctx.date.formatted(date: .omitted, time: .shortened))
+                Text(time)
                     .textStyle(.display)
                     .foregroundStyle(Ink.primary)
                 if let b = model.battery {
@@ -294,6 +300,12 @@ struct ClockHero: View {
                     .padding(.top, Space.xs)
                 }
             }
+            // "12:41", then "Thursday 2 October, battery 76%, charging".
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(time)
+            .accessibilityValue(([day] + (model.battery.map {
+                ["battery " + SpokenText.battery(level: $0.level, charging: $0.isCharging, pluggedIn: $0.isPluggedIn)]
+            } ?? [])).joined(separator: ", "))
         }
     }
 }
@@ -330,8 +342,13 @@ struct ActivityHero: View {
                         ActivityTrailing(activity: activity, tint: tint)
                     }
                 }
+                // One element; the bar's share is its value when nothing beside the title says it.
+                .spokenGroup(SpokenText.label(activity, detail: true),
+                             value: showsBar && activity.trailing == nil ? SpokenText.value(activity, now: Date()) : nil)
+                .modifier(DismissAction(activity: activity, model: model))
                 if showsBar {
                     ActivityProgress(activity: activity, tint: tint, height: 4)
+                        .accessibilityHidden(true)
                 }
                 ActivityActions(activity: activity, model: model, tint: tint)
             }
@@ -378,6 +395,9 @@ struct GlanceColumn: View {
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
+        // VoiceOver reads the column beside the main thing as one group, as it is drawn.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Also going on")
     }
 
     static func fitting(_ glances: [HomePlan.Glance], in height: CGFloat) -> Int {
@@ -403,7 +423,7 @@ struct GlanceColumn: View {
         case .claudeHint(let hint):
             ClaudeUsageHintRow(hint: hint, model: model)
         case .calendarAccess(let advice):
-            GlanceRow(title: "Calendar") {
+            GlanceRow(title: "Calendar", speech: GlanceSpeech(label: "Calendar", value: advice.status)) {
                 Image(systemName: "calendar").font(.system(size: 12, weight: .semibold)).foregroundStyle(Ink.tertiary)
             } trailing: {
                 Button(advice.button == "Open System Settings" ? "Open" : advice.button ?? "Open") {
@@ -418,15 +438,27 @@ struct GlanceColumn: View {
     }
 }
 
+/// What VoiceOver says for a glance, on its title: a label, a value in words, and actions for
+/// controls that show only under the pointer. The detail line is left out, since the value
+/// says it; buttons beside the title stay elements of their own.
+struct GlanceSpeech {
+    var label: String
+    var value: String?
+    var actions: [(name: String, perform: () -> Void)] = []
+}
+
 /// A glance: a mark, a title with its value, and one line of detail.
 struct GlanceRow<Lead: View, Trailing: View, Detail: View>: View {
     let title: String
+    var speech: GlanceSpeech?
     let lead: Lead
     let trailing: Trailing
     let detail: Detail
 
-    init(title: String, @ViewBuilder lead: () -> Lead, @ViewBuilder trailing: () -> Trailing, @ViewBuilder detail: () -> Detail) {
+    init(title: String, speech: GlanceSpeech? = nil, @ViewBuilder lead: () -> Lead, @ViewBuilder trailing: () -> Trailing,
+         @ViewBuilder detail: () -> Detail) {
         self.title = title
+        self.speech = speech
         self.lead = lead()
         self.trailing = trailing()
         self.detail = detail()
@@ -435,12 +467,14 @@ struct GlanceRow<Lead: View, Trailing: View, Detail: View>: View {
     var body: some View {
         HStack(alignment: .top, spacing: Space.s) {
             lead.frame(width: 18, height: 16)
+                .accessibilityHidden(speech != nil)
             VStack(alignment: .leading, spacing: Space.hair) {
                 HStack(spacing: Space.s) {
                     Text(title)
                         .textStyle(.body, emphasized: true)
                         .foregroundStyle(Ink.primary)
                         .lineLimit(1)
+                        .modifier(GlanceTitleSpeech(speech: speech))
                     Spacer(minLength: 0)
                     trailing.fixedSize()
                 }
@@ -449,10 +483,26 @@ struct GlanceRow<Lead: View, Trailing: View, Detail: View>: View {
                     .textStyle(.caption)
                     .foregroundStyle(Ink.secondary)
                     .lineLimit(1)
+                    .accessibilityHidden(speech != nil)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
+        .accessibilityElement(children: .contain)
+    }
+}
+
+private struct GlanceTitleSpeech: ViewModifier {
+    let speech: GlanceSpeech?
+
+    func body(content: Content) -> some View {
+        content
+            .modifier(SpokenAttachment(label: speech?.label, value: speech?.value))
+            .accessibilityActions {
+                ForEach(Array((speech?.actions ?? []).enumerated()), id: \.offset) { _, a in
+                    Button(a.name, action: a.perform)
+                }
+            }
     }
 }
 
@@ -462,7 +512,9 @@ struct EventGlance: View {
 
     var body: some View {
         TimelineView(.everyMinute) { ctx in
-            GlanceRow(title: item.title) {
+            let time: (Date) -> String = { $0.formatted(date: .omitted, time: .shortened) }
+            GlanceRow(title: item.title, speech: GlanceSpeech(label: item.title, value: SpokenText.when(
+                start: item.start, now: ctx.date, ongoing: item.isOngoing(at: ctx.date), startText: time(item.start), endText: time(item.end)))) {
                 RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                     .fill(Color(tint: item.calendarColor, fallback: .blue))
                     .frame(width: 3, height: 30)
@@ -488,16 +540,16 @@ struct ActivityGlance: View {
     var body: some View {
         let a = activity
         let tint = model.tint(for: a)
-        GlanceRow(title: a.title) {
+        // With a button beside the title, the title speaks for itself and the button stays its
+        // own element; otherwise the whole glance is one, taking its value from the wing's. The
+        // × under the pointer is left out of this: VoiceOver has it as an action.
+        let button = !a.actions.isEmpty
+        let label = SpokenText.label(a, detail: true)
+        GlanceRow(title: a.title, speech: button ? GlanceSpeech(label: label) : nil) {
             TemplateLeading(activity: a, model: model, tint: tint, size: 14, compact: true)
         } trailing: {
             if hovering {
-                Button { model.remove(activityID: a.id) } label: {
-                    Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundStyle(Ink.tertiary)
-                        .frame(width: 16, height: 16).contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Dismiss")
+                DismissButton { model.remove(activityID: a.id) }
             } else if let action = a.actions.first {
                 Button(action.title) { model.perform(action, activityID: a.id) }
                     .buttonStyle(CapsuleButtonStyle(tint: tint))
@@ -512,6 +564,9 @@ struct ActivityGlance: View {
                 Text(a.subtitle ?? a.phase ?? Self.stateText(a.state))
             }
         }
+        .modifier(WholeGlanceSpeech(label: button ? nil : label))
+        .modifier(DismissAction(activity: a, model: model))
+        .modifier(OpenAction(activity: a, model: model))
         .onHover { hovering = $0 }
         .onTapGesture { if model.canOpen(a) { model.openActivity(a) } }
         .contextMenu {
@@ -529,6 +584,33 @@ struct ActivityGlance: View {
         case .failure: return "Failed"
         case .warning: return "Needs a look"
         case .info: return ""
+        }
+    }
+}
+
+/// A glance read as one element when nothing in it is a button (a label), and as a group of
+/// its parts otherwise (nil).
+private struct WholeGlanceSpeech: ViewModifier {
+    let label: String?
+
+    func body(content: Content) -> some View {
+        content
+            .accessibilityElement(children: label == nil ? .contain : .combine)
+            .modifier(SpokenAttachment(label: label))
+            .accessibilityRemoveTraits(.isSelected)
+    }
+}
+
+/// Opening an activity's link, which a click on its glance does.
+private struct OpenAction: ViewModifier {
+    let activity: Activity
+    let model: AppModel
+
+    func body(content: Content) -> some View {
+        content.accessibilityActions {
+            if model.canOpen(activity) {
+                Button("Open") { model.openActivity(activity) }
+            }
         }
     }
 }
@@ -614,6 +696,7 @@ struct TodayTab: View {
             Text(items.map(\.title).joined(separator: ", ")).textStyle(.caption).foregroundStyle(Ink.secondary).lineLimit(1)
         }
         .frame(height: Self.allDayHeight)
+        .spokenGroup("All day", value: items.map(\.title).joined(separator: ", "))
     }
 
     private func quiet(_ text: String) -> some View {
@@ -664,6 +747,8 @@ struct AgendaLine: View {
                     .textStyle(.caption, numeric: true)
                     .foregroundStyle(ongoing ? Color.green : Ink.tertiary)
             }
+            .spokenGroup(item.title, value: ongoing ? "now, until \(item.end.formatted(date: .omitted, time: .shortened))"
+                         : "at \(item.start.formatted(date: .omitted, time: .shortened))")
             Spacer(minLength: 0)
             if item.meetingURL != nil {
                 Button("Join", action: join).buttonStyle(CapsuleButtonStyle(tint: .green))
@@ -689,6 +774,7 @@ struct ReminderLine: View {
             }
             .buttonStyle(.plain)
             .help("Mark as done")
+            .accessibilityLabel("Mark “\(item.title)” as done")
             VStack(alignment: .leading, spacing: Space.hair) {
                 Text(item.title).textStyle(.body, emphasized: true).foregroundStyle(Ink.primary).lineLimit(1)
                 if let due = item.due {
@@ -697,6 +783,10 @@ struct ReminderLine: View {
                         .foregroundStyle(item.isOverdue(at: now) ? Color.red : Ink.tertiary)
                 }
             }
+            .spokenGroup(item.title, value: item.due.map { due in
+                (item.isAllDay ? "due today" : "due at \(due.formatted(date: .omitted, time: .shortened))")
+                    + (item.isOverdue(at: now) ? ", overdue" : "")
+            })
             Spacer(minLength: 0)
         }
         .onHover { hovering = $0 }
@@ -781,6 +871,8 @@ struct FileTile: View {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(.white, Color.gray)
                 }
                 .buttonStyle(.plain)
+                .help("Remove from shelf")
+                .accessibilityLabel("Remove from shelf")
             }
         }
         .onHover { hovering = $0 }
@@ -801,6 +893,11 @@ struct FileTile: View {
             Divider()
             Button("Remove from shelf") { model.removeFromShelf(item.id) }
         }
+        // A double-click and the pointer don't reach VoiceOver: opening is the tile's own action.
+        .spokenButton(item.name, value: available ? nil : "on a disk that isn't connected", hint: "Opens it") { ShelfService.open(url) }
+        .accessibilityAction(named: "Show in Finder") { ShelfService.reveal([url]) }
+        .accessibilityAction(named: "AirDrop") { ShelfService.airDrop([url]) }
+        .accessibilityAction(named: "Remove from shelf") { model.removeFromShelf(item.id) }
         .help(available ? item.path : item.path + "\nOn a disk that isn't connected")
     }
 }
@@ -882,6 +979,7 @@ struct PluginCard: View {
                     }
                     .buttonStyle(.plain)
                     .help("Refresh")
+                    .accessibilityLabel("Refresh \(result.name)")
                 }
             }
             .frame(height: 16)
@@ -1004,6 +1102,11 @@ struct ClipRow: View {
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .onTapGesture { model.copyClip(entry) }
+        // The pin and × show only under the pointer, so VoiceOver has them as actions.
+        .spokenButton(entry.text.replacingOccurrences(of: "\n", with: " "), value: entry.pinned ? "pinned" : nil,
+                      hint: "Copies it") { model.copyClip(entry) }
+        .accessibilityAction(named: entry.pinned ? "Unpin" : "Pin") { model.togglePinClip(entry.id) }
+        .accessibilityAction(named: "Remove") { model.removeClip(entry.id) }
         .help("Click to copy")
     }
 }
@@ -1046,5 +1149,6 @@ struct Gauge: View {
             }
         }
         .frame(width: 112)
+        .spokenGroup(title, value: "\(SpokenText.percent(value)), \(SpokenText.phrase(detail))")
     }
 }

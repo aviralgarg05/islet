@@ -70,9 +70,14 @@ struct LyricsColumn: View {
                 }
                 .buttonStyle(.plain)
                 .help("Hide lyrics for this song")
+                .accessibilityLabel("Hide lyrics for this song")
             }
         }
         .onHover { hovering = $0 }
+        // The × shows only under the pointer.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Lyrics")
+        .accessibilityAction(named: "Hide lyrics for this song") { model.tools.lyrics.hide(media) }
     }
 
     private var synced: some View {
@@ -136,6 +141,9 @@ struct LyricLines: View {
         }
         .buttonStyle(.plain)
         .help("Play from here")
+        .accessibilityLabel(lines[i].text.isEmpty ? "Instrumental" : lines[i].text)
+        .accessibilityHint("Plays from here")
+        .accessibilityAddTraits(isCurrent ? .isSelected : [])
         .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity),
                                 removal: .move(edge: .top).combined(with: .opacity)))
     }

@@ -30,17 +30,21 @@ struct StopwatchHero: View {
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(tint)
             }
+            .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: Space.s) {
-                    Text("Stopwatch").textStyle(.body, emphasized: true).foregroundStyle(Ink.primary).lineLimit(1)
-                    if let detail = StopwatchText.detail(stopwatch, now: now) {
-                        Text(detail).textStyle(.caption, numeric: true).foregroundStyle(Ink.tertiary).lineLimit(1).fixedSize()
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: Space.s) {
+                        Text("Stopwatch").textStyle(.body, emphasized: true).foregroundStyle(Ink.primary).lineLimit(1)
+                        if let detail = StopwatchText.detail(stopwatch, now: now) {
+                            Text(detail).textStyle(.caption, numeric: true).foregroundStyle(Ink.tertiary).lineLimit(1).fixedSize()
+                        }
                     }
+                    Text(Format.clock(elapsed))
+                        .textStyle(.display)
+                        .foregroundStyle(paused ? Ink.secondary : stopwatchTint)
+                        .contentTransition(.numericText())
                 }
-                Text(Format.clock(elapsed))
-                    .textStyle(.display)
-                    .foregroundStyle(paused ? Ink.secondary : stopwatchTint)
-                    .contentTransition(.numericText())
+                .spokenGroup("Stopwatch", value: SpokenText.stopwatch(stopwatch, now: now))
                 StopwatchControls(model: model, stopwatch: stopwatch)
                     .padding(.leading, -Space.xs)
             }
@@ -76,7 +80,7 @@ struct StopwatchGlance: View {
         let paused = !stopwatch.isRunning
         TimelineView(.periodic(from: .now, by: stopwatch.isRunning ? 1 : 3600)) { ctx in
             let elapsed = stopwatch.elapsed(at: ctx.date)
-            GlanceRow(title: "Stopwatch") {
+            GlanceRow(title: "Stopwatch", speech: speech(now: ctx.date)) {
                 Image(systemName: "stopwatch.fill")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(paused ? Ink.tertiary : stopwatchTint)
@@ -85,6 +89,7 @@ struct StopwatchGlance: View {
                     .textStyle(.body, emphasized: true, numeric: true)
                     .foregroundStyle(paused ? Ink.secondary : stopwatchTint)
                     .contentTransition(.numericText())
+                    .accessibilityHidden(true)
             } detail: {
                 if hovering {
                     StopwatchControls(model: model, stopwatch: stopwatch)
@@ -96,6 +101,15 @@ struct StopwatchGlance: View {
             }
         }
         .onHover { hovering = $0 }
+    }
+
+    /// "Stopwatch", "12 minutes 3 seconds, lap 3"; the controls under the pointer as actions.
+    private func speech(now: Date) -> GlanceSpeech {
+        let sw = model.tools.stopwatch
+        var actions: [(name: String, perform: () -> Void)] = [(stopwatch.isRunning ? "Pause" : "Carry on", { sw.toggle() })]
+        if stopwatch.isRunning { actions.append(("Lap", { sw.lap() })) }
+        actions.append(("Reset", { sw.reset() }))
+        return GlanceSpeech(label: "Stopwatch", value: SpokenText.stopwatch(stopwatch, now: now), actions: actions)
     }
 }
 

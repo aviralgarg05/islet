@@ -51,6 +51,13 @@ enum SettingsSnapshots {
             navigation.open(page)
             shoot(String(format: "%02d-%@", i + 1, page.rawValue))
         }
+        // Increase Contrast: the picture tiles, swatches and search field get a firmer edge.
+        let contrast = SettingsWindow.make(model: model, navigation: navigation, window: OffscreenWindow(), snapshot: true,
+                                           increasedContrast: true)
+        contrast.setFrameOrigin(NSPoint(x: -20000, y: -20000))
+        navigation.open(.appearance)
+        capture(contrast, appearance: .accessibilityHighContrastAqua, to: dir.appendingPathComponent("appearance-increased-contrast-light.png"))
+        capture(contrast, appearance: .accessibilityHighContrastDarkAqua, to: dir.appendingPathComponent("appearance-increased-contrast-dark.png"))
         navigation.query = "colour"
         capture(window, appearance: .aqua, to: dir.appendingPathComponent("search-results.png"))
         // Calendar access that explains itself: "Add events only" for calendars, reminders turned
@@ -77,6 +84,9 @@ enum SettingsSnapshots {
         window.setContentSize(NSSize(width: SettingsWindow.defaultSize.width, height: 2150))
         navigation.open(.nowPlaying)
         shoot("now-playing-gif")
+        contrast.setContentSize(NSSize(width: SettingsWindow.defaultSize.width, height: 2150))
+        capture(contrast, appearance: .accessibilityHighContrastDarkAqua, to: dir.appendingPathComponent("now-playing-gif-increased-contrast-dark.png"))
+        contrast.orderOut(nil)
         model.stickers.problem = StickerImportError.tooLarge.message
         shoot("now-playing-gif-problem", dark: false)
         model.stickers.problem = nil

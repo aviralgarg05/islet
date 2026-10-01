@@ -66,11 +66,14 @@ struct ShortcutsTab: View {
                     if !typing {
                         Color.clear
                             .contentShape(Rectangle())
-                            .onTapGesture {
-                                typing = true
-                                IslandKeyboard.take(on: model.expandedScreen)
-                                DispatchQueue.main.async { focused = true }
-                            }
+                            .onTapGesture(perform: startTyping)
+                            // VoiceOver presses it to start typing, as a click does.
+                            .accessibilityElement()
+                            .accessibilityLabel("Search shortcuts")
+                            .accessibilityValue(c.query)
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityHint("Starts typing")
+                            .accessibilityAction { startTyping() }
                     }
                 }
             }
@@ -80,6 +83,13 @@ struct ShortcutsTab: View {
         .padding(.horizontal, Space.m)
         .frame(height: 26)
         .background(Capsule().fill(Wash.regular))
+        .contrastEdge(Capsule())
+    }
+
+    private func startTyping() {
+        typing = true
+        IslandKeyboard.take(on: model.expandedScreen)
+        DispatchQueue.main.async { focused = true }
     }
 
     /// Esc clears the search, then gives the keyboard back.

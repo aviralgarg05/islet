@@ -7,6 +7,12 @@ import SwiftUI
 /// geometry of a 14" MacBook Pro. Used for visual review and for the README.
 @MainActor
 enum Snapshots {
+    /// Stands in for Increase Contrast, which a snapshot can't switch on for the system: the
+    /// island's ink (`IslandContrast`) and SwiftUI's `colorSchemeContrast` both follow it.
+    static var increasedContrast = false {
+        didSet { IslandContrast.increased = increasedContrast }
+    }
+
     static let screen = ScreenDescriptor(
         id: 1, name: "Built-in", frame: CGRect(x: 0, y: 0, width: 1512, height: 982),
         safeAreaTop: 32, auxiliaryLeftWidth: 663.5, auxiliaryRightWidth: 663.5, menuBarHeight: 33, isBuiltIn: true
@@ -84,6 +90,8 @@ enum Snapshots {
             let view = IslandView(model: model, display: 1, metrics: metrics)
                 .frame(width: 760, height: metrics.expanded.height + extra)
                 .background(Snapshots.backdrop(metrics: metrics))
+                // As SwiftUI sets it from the system setting.
+                .environment(\._colorSchemeContrast, increasedContrast ? .increased : .standard)
             write(view, to: dir.appendingPathComponent("\(name).png"))
         }
 
@@ -92,6 +100,7 @@ enum Snapshots {
             model.tab = tab
             shoot(name)
         }
+        renderIncreasedContrast(model: model, waiting: waiting, metrics: metrics, shoot: shoot)
 
         // The states above use the narrow wings of an unmeasured menu bar. The same closed states
         // at full width ("w", the menu bar has room) and icon-only ("i", a crowded menu bar).

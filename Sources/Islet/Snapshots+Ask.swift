@@ -26,6 +26,9 @@ extension Snapshots {
             provider: .anthropic, usage: AskUsage(model: "claude-opus-5-5", inputTokens: 58, outputTokens: 71), phase: .done)
         ask.draft = "And how do I undo it?"
         shoot("25-expanded-ask-answer")
+        increasedContrast = true
+        shoot("86-contrast-ask-answer")
+        increasedContrast = false
 
         ask.draft = ""
         ask.showForSnapshot(question: "Summarise the difference between TCP and QUIC", answer: "QUIC runs over UDP and builds in TLS 1.3, so a connection",
