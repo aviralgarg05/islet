@@ -80,6 +80,7 @@ Every tool starts off until you turn it on in Settings: on the Tools page, or on
 - When the Now Playing helper stops for good, Settings → Now Playing says so with **Try again**, and waking the Mac tries again by itself.
 - A sideways swipe over a volume or brightness HUD acts on what is under it, so it changes track over music.
 - The progress bar follows the newest report of a song, so it no longer drifts back after a seek in Spotify.
+- The song's title on Home keeps room for about a dozen characters. At the compact size, with another player's icon beside it, the volume button makes way rather than cutting "Midnight City" to "Midnight…", and with several other players one icon stays.
 
 ### Calendar and reminders
 - A Today tab with the rest of the day's events, Join buttons and reminders you can tick off. Repeating meetings now alert every time, and the agenda rolls over at midnight.

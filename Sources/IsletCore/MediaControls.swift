@@ -112,3 +112,54 @@ public enum MediaModes {
         }
     }
 }
+
+/// The row beside Now Playing's artwork on Home: the title, the other players' chips and the
+/// volume button. The title keeps `titleRoom` points, about a dozen characters, and what
+/// doesn't fit beside it goes: the volume button first, then chips past the first, so another
+/// player can always be picked. At the compact size, with other things beside the music, that
+/// leaves the volume row off Home; the volume keys still work. A card tall enough for the
+/// volume row has no button at all.
+public enum NowPlayingTitleRow {
+    public static let titleRoom: Double = 96
+    public static let chip: Double = 22
+    public static let volumeButton: Double = 24
+    /// Between the chips and the button.
+    public static let gap: Double = 4
+    /// The most chips shown, however wide the card.
+    public static let maxChips = 3
+
+    public struct Layout: Equatable, Sendable {
+        public var chips: Int
+        public var showsVolume: Bool
+
+        public init(chips: Int, showsVolume: Bool) {
+            self.chips = chips
+            self.showsVolume = showsVolume
+        }
+
+        /// Whether anything sits beside the title.
+        public var isEmpty: Bool { chips == 0 && !showsVolume }
+    }
+
+    /// - Parameters:
+    ///   - width: the row's width beside the artwork.
+    ///   - spacing: the space the row puts between the title and what sits beside it.
+    ///   - otherPlayers: players live beside the one on show.
+    ///   - volumeRow: the card is tall enough to show the volume row all the time.
+    public static func layout(width: Double, spacing: Double, otherPlayers: Int, volumeRow: Bool) -> Layout {
+        let wanted = Layout(chips: min(max(otherPlayers, 0), maxChips), showsVolume: !volumeRow)
+        func fits(_ l: Layout) -> Bool { l.isEmpty || width - spacing - beside(l) >= titleRoom }
+        if fits(wanted) { return wanted }
+        var l = wanted
+        l.showsVolume = false
+        while l.chips > 1, !fits(l) { l.chips -= 1 }
+        return l
+    }
+
+    /// The width of what sits beside the title.
+    static func beside(_ l: Layout) -> Double {
+        let items = l.chips + (l.showsVolume ? 1 : 0)
+        guard items > 0 else { return 0 }
+        return Double(l.chips) * chip + (l.showsVolume ? volumeButton : 0) + Double(items - 1) * gap
+    }
+}
