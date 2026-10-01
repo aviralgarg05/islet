@@ -1089,7 +1089,7 @@ final class AppModel {
         let now = Date()
         if deviceChanged { volumeFilter.outputChanged(at: now) }
         if deviceChanged, let name = out.deviceName {
-            // A new output gets its card (macOS shows none), not a volume HUD.
+            // A new output gets its card ("Sound output changes"), not a volume HUD.
             guard settings.outputChangeCard else { return }
             let bt = AudioMonitor.isBluetooth(AudioMonitor.defaultDevice(input: false))
             _ = try? commit(ActivitySpec(

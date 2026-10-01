@@ -90,6 +90,9 @@ public final class FullscreenDetector {
                                                menuBarAutoHides: menuBarAutoHides, isFullscreen: axFullScreen)
     }
 
+    /// How long one Accessibility call about a window may take before it gives up.
+    static let axTimeout: Float = 0.1
+
     /// Whether the menu bar hides itself everywhere (System Settings > Control Centre).
     static var menuBarAutoHides: Bool { UserDefaults.standard.bool(forKey: "_HIHideMenuBar") }
 
@@ -99,11 +102,14 @@ public final class FullscreenDetector {
     static func axFullScreen(pid: pid_t, bounds: CGRect) -> Bool? {
         guard AXIsProcessTrusted() else { return nil }
         let app = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(app, 0.1)
+        AXUIElementSetMessagingTimeout(app, axTimeout)
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success,
               let windows = value as? [AXUIElement] else { return nil }
-        for window in windows {
+        for window in windows.prefix(8) {
+            // Each element has its own timeout (the app's isn't inherited), and this runs on the
+            // main thread: a game too busy to answer must not hold up the island for seconds.
+            AXUIElementSetMessagingTimeout(window, axTimeout)
             guard let frame = frame(of: window), abs(frame.minX - bounds.minX) < 2, abs(frame.minY - bounds.minY) < 2,
                   abs(frame.width - bounds.width) < 2, abs(frame.height - bounds.height) < 2 else { continue }
             var full: CFTypeRef?

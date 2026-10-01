@@ -140,6 +140,11 @@ public struct PeekPointerGuard: Equatable, Sendable {
         }
         return peek != nil && ignoring != peek
     }
+
+    /// While a body is ignored, the pointer has to be followed even though it is nowhere near
+    /// anything that takes it: otherwise nothing notices it leave, and the body stays dead to
+    /// clicks for as long as the peek shows.
+    public var followsPointer: Bool { ignoring != nil }
 }
 
 /// Tells a volume change you made from one an app or a headset made, so only yours shows a HUD.

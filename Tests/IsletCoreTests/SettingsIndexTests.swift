@@ -133,6 +133,8 @@ import Testing
         ("reset appearance", .appearance),
         ("invert swipe", .general),
         ("app priority", .apps),
+        ("two HUDs", .notifications),
+        ("ignore apps", .nowPlaying),
     ])
     func queryFindsPage(query: String, page: SettingsPage) {
         let groups = SettingsIndex.search(query)

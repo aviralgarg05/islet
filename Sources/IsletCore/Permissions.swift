@@ -25,7 +25,7 @@ public enum PermissionKind: String, CaseIterable, Sendable, Identifiable {
         guard self == .accessibility else { return nil }
         var lines: [String] = []
         if osMajor >= 27 { lines.append("Called Device Control and Data Access in System Settings.") }
-        lines.append("Islet doesn't read what you type. It reads where menu bar items are, the text of Live Activities and banners, and, only with Replace the system volume and brightness display on, those keys.")
+        lines.append("Islet doesn't read what you type. It reads where menu bar items are, whether a window is in full screen, the text of Live Activities and banners, and, only with Replace the system volume and brightness display on, those keys.")
         if status == .denied {
             lines.append("Already on in System Settings? Remove Islet with the minus button and add it again.")
         }

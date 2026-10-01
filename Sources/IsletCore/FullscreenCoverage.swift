@@ -31,7 +31,9 @@ public struct DisplayArea: Equatable, Sendable {
 /// screen on the built-in display stays "in full screen" while you work on the external one.
 public enum FullscreenCoverage {
     /// The app covering each display: one whose menu bar has gone, where the frontmost ordinary
-    /// window spans the display.
+    /// window that spans the display has no other app's window in front of it. The same app's
+    /// smaller windows in front don't count against it: a browser's "Press Esc to exit full
+    /// screen" bubble, its link preview or a player's controls are windows of their own.
     /// - Parameters:
     ///   - windows: front to back, as the window list gives them.
     ///   - menuLevel: the menu bar's window level.
@@ -47,9 +49,12 @@ public enum FullscreenCoverage {
             let d = display.bounds
             let hasMenuBar = windows.contains { $0.layer == menuLevel && $0.bounds.intersects(d) && $0.bounds.minY <= d.minY + 1 }
             if hasMenuBar { continue }
-            // The frontmost ordinary window on this display.
-            guard let front = windows.first(where: { $0.layer == 0 && d.contains(CGPoint(x: $0.bounds.midX, y: $0.bounds.midY)) }),
-                  covers(window: front.bounds, display: d) else { continue }
+            // The ordinary windows on this display, front to back.
+            let onDisplay = windows.filter { $0.layer == 0 && d.contains(CGPoint(x: $0.bounds.midX, y: $0.bounds.midY)) }
+            guard let i = onDisplay.firstIndex(where: { covers(window: $0.bounds, display: d) }) else { continue }
+            let front = onDisplay[i]
+            // Another app's window in front of it: that's a desktop, not full screen.
+            if onDisplay[..<i].contains(where: { $0.pid != front.pid }) { continue }
             let confirmed = isFullscreen(front.pid, front.bounds)
             if confirmed == false || (menuBarAutoHides && confirmed != true) { continue }
             covered[display.id] = front.pid

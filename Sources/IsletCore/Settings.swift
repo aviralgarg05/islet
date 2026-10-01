@@ -323,8 +323,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var hudColour: HUDColour = .white
     /// Swallow the volume/brightness keys so only Islet's HUD shows. Needs Accessibility.
     public var replaceSystemHUD = false
-    /// A short card when the sound output changes (AirPods connecting, say), which macOS
-    /// doesn't show. Its own switch, apart from the volume HUD.
+    /// A short card when the sound output changes (AirPods connecting, say). Its own switch,
+    /// apart from the volume HUD. A file from before it existed follows that file's volume
+    /// HUD, which used to bring the card with it (`decodeLenient`).
     public var outputChangeCard = true
     public var batteryEnabled = true
     public var calendarEnabled = true
@@ -671,6 +672,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         if !user.isEmpty {
             if user["hudEnabled"] == nil { s.hudEnabled = true }
             if user["brightnessHUDEnabled"] == nil { s.brightnessHUDEnabled = true }
+            // The output card came and went with the volume HUD then: whoever switched that off
+            // doesn't start getting cards now.
+            if !applied.contains("outputChangeCard") { s.outputChangeCard = s.hudEnabled }
         }
         // Older configs kept two bundle id lists beside `appRules`. They are folded into the
         // rules and not written back. (`launchAtLogin` is gone too: Login Items is the truth.)

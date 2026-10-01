@@ -37,9 +37,9 @@ public struct CallDetector: Sendable {
         if let name = callApps[bundleID] { return (bundleID, App(name: name, isBrowser: false)) }
         // A browser (`Browsers`) may be hosting a web call (Meet, Zoom on the web). Its helper
         // processes count as it ("com.google.Chrome.helper" is Chrome), and Safari's GPU process
-        // holds the microphone for Safari.
+        // holds the microphone for Safari: it is Safari's call, which Safari's app rule mutes.
         if bundleID == "com.apple.WebKit.GPU" || bundleID.hasPrefix("com.apple.WebKit.GPU.") {
-            return ("com.apple.WebKit.GPU", App(name: "Safari", isBrowser: true))
+            return ("com.apple.Safari", App(name: "Safari", isBrowser: true))
         }
         if let b = Browsers.browser(for: bundleID) { return (b.bundleID, App(name: b.name, isBrowser: true)) }
         for (id, name) in callApps where bundleID.hasPrefix(id + ".") {
@@ -227,10 +227,33 @@ public struct BannerDeduper<Banner: Hashable & Sendable>: Sendable {
 
     /// Whether `banner` should be mirrored now. Either way it is remembered.
     public mutating func isNew(_ banner: Banner, now: Date) -> Bool {
-        seen = seen.filter { now.timeIntervalSince($0.value) < Self.keepFor }
-        let new = seen[banner] == nil
+        let new = !hasSeen(banner, now: now)
         seen[banner] = now
         return new
+    }
+
+    /// The banners on screen now that are news, as `read` makes them out. A banner is
+    /// remembered only once it could be read: one caught while Notification Center was still
+    /// filling it in is read again at the next look rather than lost. One still up is
+    /// remembered afresh each time, however long it stays (an alert waits to be dismissed).
+    public mutating func news<Content>(in banners: [Banner], now: Date, read: (Banner) -> Content?) -> [Content] {
+        var found: [Content] = []
+        for b in banners {
+            if hasSeen(b, now: now) {
+                seen[b] = now
+                continue
+            }
+            guard let content = read(b) else { continue }
+            seen[b] = now
+            found.append(content)
+        }
+        return found
+    }
+
+    /// Whether `banner` was seen in the last `keepFor` seconds. Older ones are forgotten.
+    private mutating func hasSeen(_ banner: Banner, now: Date) -> Bool {
+        seen = seen.filter { now.timeIntervalSince($0.value) < Self.keepFor }
+        return seen[banner] != nil
     }
 }
 

@@ -360,7 +360,7 @@ public enum SettingsIndex {
         SettingsEntry("notifications.hudDuration", .notifications, "Stays on screen for", section: "HUDs",
                       keywords: ["HUD", "duration", "seconds"]),
         SettingsEntry("notifications.replaceHUD", .notifications, "Replace the system volume and brightness display", section: "HUDs",
-                      keywords: ["HUD", "keys", "overlay", "accessibility"]),
+                      keywords: ["HUD", "keys", "overlay", "accessibility", "two HUDs", "shows twice", "only one HUD", "double"]),
         SettingsEntry("notifications.battery", .notifications, "Battery and charging", section: "Battery", keywords: ["power", "charger", "plugged in"]),
         SettingsEntry("notifications.batteryLow", .notifications, "Low battery warning", section: "Battery", keywords: ["percent"],
                       anchor: "notifications.battery"),

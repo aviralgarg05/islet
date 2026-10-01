@@ -97,7 +97,7 @@ To connect a coding agent, press **Connect…** beside it in *Settings → Codin
 
 Now Playing, volume, brightness, battery, calls, camera and microphone indicators, timers, the shelf, the Ask box and the API need no permission.
 
-Islet doesn't read what you type. With Accessibility it reads where menu bar items are, the text of Live Activities and banners, and, only with *Replace the system volume and brightness display* on, those keys. From macOS 27, System Settings calls Accessibility *Device Control and Data Access*.
+Islet doesn't read what you type. With Accessibility it reads where menu bar items are, whether a window is in full screen, the text of Live Activities and banners, and, only with *Replace the system volume and brightness display* on, those keys. From macOS 27, System Settings calls Accessibility *Device Control and Data Access*.
 
 ## Configure
 

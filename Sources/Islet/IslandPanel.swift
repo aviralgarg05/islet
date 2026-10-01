@@ -377,6 +377,8 @@ final class PointerCoordinator {
 
     func start() {
         applySettings()
+        // A menu that was open when the pointer was last followed has long closed.
+        model.controls.menuOpen = false
         layoutObserver = NotificationCenter.default.addObserver(forName: .isletLayoutChanged, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.layoutChanged() }
         }
@@ -438,7 +440,13 @@ final class PointerCoordinator {
         }
         // Opened by the API, a hotkey or the menu: start tracking so it can close on leave.
         if model.expandedScreen != nil, !isActive { activate(from: model.expandedScreen) }
+        // A peek opened under the pointer: follow the pointer until it leaves the peek's body,
+        // so the body takes clicks again once it has (`PeekPointerGuard.followsPointer`).
+        if !isActive, followsPeek { activate(from: nil) }
     }
+
+    /// Some display ignores its peek's body until the pointer leaves it.
+    private var followsPeek: Bool { controllers.contains { peekGuards[$0.display]?.followsPointer == true } }
 
     private func clicked(_ display: CGDirectDisplayID) {
         Haptics.play(.tap)
@@ -492,7 +500,12 @@ final class PointerCoordinator {
     }
 
     private func evaluate(at location: CGPoint, now: Date) {
-        guard let c = controller(at: location) else {
+        // A peek ignored on another display: the pointer has left its body.
+        let here = controller(at: location)
+        for other in controllers where other !== here && peekGuards[other.display]?.followsPointer == true {
+            notePeek(on: other, at: location)
+        }
+        guard let c = here else {
             let p = location
             // On a display without an island: that's leaving, so a pending open is cancelled and
             // an open island starts its close grace period instead of waiting for the pointer.
@@ -559,7 +572,7 @@ final class PointerCoordinator {
 
     /// Stop listening once the island is closed and the pointer has moved away.
     private func maybeDeactivate(pointerNearIsland: Bool) {
-        guard isActive, model.expandedScreen == nil, !model.isDraggingFile, !pointerNearIsland,
+        guard isActive, model.expandedScreen == nil, !model.isDraggingFile, !pointerNearIsland, !followsPeek,
               intent.enteredAt == nil, intent.exitedAt == nil else { return }
         deactivate()
     }

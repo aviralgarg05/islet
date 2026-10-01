@@ -349,7 +349,7 @@ struct NotificationsSettings: View {
                 }
                 Toggle(isOn: $model.settings.outputChangeCard) {
                     Text("Sound output changes")
-                    Text("A short card when AirPods or another output connects. macOS doesn't show one.")
+                    Text("A short card when AirPods or another output connects, with its name.")
                 }
                 .settingsAnchor("notifications.outputCard")
                 Toggle(isOn: $model.settings.keyboardHUDEnabled) {

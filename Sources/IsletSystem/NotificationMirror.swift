@@ -143,25 +143,25 @@ public final class NotificationMirror {
     private func scan(_ appElement: AXUIElement, known: [String: String], prime: Bool) {
         let windows = (Self.attribute(appElement, kAXWindowsAttribute) as? [AXUIElement]) ?? []
         let now = Date()
-        var found: [MirroredNotification] = []
         var banners: [BannerKey] = []
         for w in windows {
             // The Notification Center panel is tall; banners are short.
             if let s = Self.size(w), s.height > 420 { continue }
             var groups: [AXUIElement] = []
             Self.bannerGroups(in: w, into: &groups)
-            for g in groups {
-                let key = BannerKey(g)
-                banners.append(key)
-                guard !prime, deduper.isNew(key, now: now) else { continue }
-                var texts: [String] = []
-                Self.texts(in: g, into: &texts)
-                let desc = Self.string(g, kAXDescriptionAttribute)
-                guard let n = NotificationParser.parse(texts: texts, description: desc, knownApps: known) else { continue }
-                found.append(n)
-            }
+            banners += groups.map(BannerKey.init)
         }
-        if prime { deduper.prime(banners, now: now) }
+        if prime {
+            deduper.prime(banners, now: now)
+            return
+        }
+        // A banner whose words can't be made out yet is read again at the next look.
+        let found = deduper.news(in: banners, now: now) { banner -> MirroredNotification? in
+            var texts: [String] = []
+            Self.texts(in: banner.element, into: &texts)
+            let desc = Self.string(banner.element, kAXDescriptionAttribute)
+            return NotificationParser.parse(texts: texts, description: desc, knownApps: known)
+        }
         guard !found.isEmpty else { return }
         DispatchQueue.main.async { [weak self] in found.forEach { self?.onNotification?($0) } }
     }

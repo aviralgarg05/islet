@@ -9,7 +9,7 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         let s = IsletSettings()
         #expect(!s.hudEnabled && !s.brightnessHUDEnabled)
         #expect(s.hudOverlap.isEmpty)
-        // The output card, which macOS doesn't draw, keeps its own switch and stays on.
+        // The output card keeps its own switch, on in a new setup.
         #expect(s.outputChangeCard)
         // A file written by Islet says what it chose, and keeps it.
         let saved = IsletSettings.decodeLenient(try! JSONEncoder().encode(s))
@@ -23,6 +23,21 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         #expect(chose.hudEnabled && !chose.brightnessHUDEnabled)
         // Nothing to go on (an empty file): the new defaults.
         #expect(!decode("{}").hudEnabled)
+        #expect(decode("{}").outputChangeCard)
+    }
+
+    @Test func theOutputCardFollowsAnOlderFilesVolumeHUD() {
+        // The card used to come with the volume HUD: someone who switched that off gets no cards now.
+        #expect(!decode(#"{"hudEnabled": false}"#).outputChangeCard)
+        #expect(decode(#"{"hudEnabled": true}"#).outputChangeCard)
+        #expect(decode(#"{"theme": "black"}"#).outputChangeCard)
+        // Once the file has its own answer, that is the one.
+        #expect(decode(#"{"hudEnabled": false, "outputChangeCard": true}"#).outputChangeCard)
+        #expect(!decode(#"{"hudEnabled": true, "outputChangeCard": false}"#).outputChangeCard)
+        var s = IsletSettings()
+        s.hudEnabled = false
+        s.outputChangeCard = true
+        #expect(IsletSettings.decodeLenient(try! JSONEncoder().encode(s)).outputChangeCard)
     }
 
     @Test func overlapIsWhatShowsTwice() {
@@ -165,6 +180,21 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         if case .started = d.update(micUsers: ["us.zoom.xos"], cameraOn: false, now: at(54)).first {} else { Issue.record("expected a new call") }
     }
 
+    @Test func safarisAppRuleMutesACallHeldByItsGPUProcess() {
+        // Safari's web calls hold the microphone through WebKit's GPU process; the Apps page
+        // rule is Safari's own bundle id.
+        var d = CallDetector()
+        let muted: Set<String> = ["com.apple.Safari"]
+        _ = d.update(micUsers: ["com.apple.WebKit.GPU"], cameraOn: false, now: at(0), muted: muted)
+        #expect(d.update(micUsers: ["com.apple.WebKit.GPU"], cameraOn: true, now: at(10), muted: muted).isEmpty)
+        // Not muted: Safari's call, under Safari's id.
+        var e = CallDetector()
+        _ = e.update(micUsers: ["com.apple.WebKit.GPU"], cameraOn: true, now: at(0))
+        let call = e.update(micUsers: ["com.apple.WebKit.GPU"], cameraOn: true, now: at(4))
+        guard case .started(let s) = call.first else { Issue.record("expected a call: \(call)"); return }
+        #expect(s.source == "com.apple.Safari" && s.title == "Call in Safari")
+    }
+
     @Test func aMutedAppShowsNothingAndItsPillGoes() {
         var d = CallDetector()
         let muted: Set<String> = ["com.hnc.Discord"]
@@ -267,6 +297,7 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         // A call held in Dia is a browser call, and so is one in Safari's GPU process.
         #expect(CallDetector.classify("company.thebrowser.dia.helper")?.app == CallDetector.App(name: "Dia", isBrowser: true))
         #expect(CallDetector.classify("com.apple.WebKit.GPU")?.app.name == "Safari")
+        #expect(CallDetector.classify("com.apple.WebKit.GPU")?.bundleID == "com.apple.Safari")
         #expect(ClipboardHistory.browsers.contains("company.thebrowser.dia"))
     }
 }
@@ -392,6 +423,20 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         #expect(said == [false, false, true, true])
     }
 
+    @Test func thePointerIsFollowedOnlyWhileABodyIsIgnored() {
+        var g = PeekPointerGuard()
+        #expect(!g.followsPointer)
+        g.update(peek: "sneak-a", pointerInBody: true)
+        // Nothing near the pointer takes it, so only following it shows when it leaves.
+        #expect(g.followsPointer)
+        g.update(peek: "sneak-a", pointerInBody: false)
+        #expect(!g.followsPointer)
+        // A peek that ends while ignored lets go too.
+        g.update(peek: "sneak-b", pointerInBody: true)
+        g.update(peek: nil, pointerInBody: true)
+        #expect(!g.followsPointer)
+    }
+
     @Test func aPeekAwayFromThePointerCountsAtOnce() {
         var g = PeekPointerGuard()
         // A new peek arriving under a pointer already resting there is ignored again.
@@ -462,11 +507,22 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         #expect(zoomed.isEmpty)
     }
 
-    @Test func onlyTheFrontmostWindowOnTheDisplayCounts() {
-        // A smaller window in front of a large one: not full screen.
+    @Test func anotherAppsWindowInFrontMeansItIsntFullScreen() {
+        // Another app's smaller window in front of a large one: a desktop, not full screen.
         let windows = [ScreenWindow(bounds: CGRect(x: 100, y: 100, width: 600, height: 400), layer: 0, pid: 30),
                        ScreenWindow(bounds: builtIn.bounds, layer: 0, pid: 10)]
         #expect(FullscreenCoverage.coveringApps(windows: windows, displays: [builtIn], menuLevel: menuLevel, menuBarAutoHides: false).isEmpty)
+        // The same app's own small windows in front (a browser's "Press Esc to exit full screen"
+        // bubble at the top, its link preview at the bottom): still full screen.
+        let video = [ScreenWindow(bounds: CGRect(x: 606, y: 40, width: 300, height: 44), layer: 0, pid: 10),
+                     ScreenWindow(bounds: CGRect(x: 0, y: 950, width: 400, height: 24), layer: 0, pid: 10),
+                     ScreenWindow(bounds: builtIn.bounds, layer: 0, pid: 10)]
+        #expect(FullscreenCoverage.coveringApps(windows: video, displays: [builtIn], menuLevel: menuLevel, menuBarAutoHides: false) == [1: 10])
+        // A window on the other display in front changes nothing here.
+        let elsewhere = [ScreenWindow(bounds: CGRect(x: 1700, y: 100, width: 600, height: 400), layer: 0, pid: 30),
+                         ScreenWindow(bounds: builtIn.bounds, layer: 0, pid: 10)]
+        #expect(FullscreenCoverage.coveringApps(windows: elsewhere, displays: [builtIn, external], menuLevel: menuLevel,
+                                                menuBarAutoHides: false) == [1: 10])
         // Content placed below the camera housing still counts.
         let notched = [ScreenWindow(bounds: CGRect(x: 0, y: 32, width: 1512, height: 950), layer: 0, pid: 10)]
         #expect(FullscreenCoverage.coveringApps(windows: notched, displays: [builtIn], menuLevel: menuLevel, menuBarAutoHides: false) == [1: 10])
@@ -537,12 +593,39 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         #expect(much)
     }
 
+    @Test func aBannerReadBeforeItsWordsArriveIsReadAgain() {
+        var d = BannerDeduper<Int>()
+        // Notification Center has made banner 7 but not filled in its text yet.
+        var text: [Int: String] = [:]
+        #expect(d.news(in: [7], now: at(0)) { text[$0] }.isEmpty)
+        // A moment later it has words: mirrored then, and once.
+        text[7] = "Deploy is green"
+        #expect(d.news(in: [7], now: at(0.3)) { text[$0] } == ["Deploy is green"])
+        #expect(d.news(in: [7], now: at(0.6)) { text[$0] }.isEmpty)
+    }
+
+    @Test func anAlertLeftUpIsntMirroredAgain() {
+        var d = BannerDeduper<Int>()
+        let read: (Int) -> String? = { "banner \($0)" }
+        #expect(d.news(in: [1], now: at(0), read: read) == ["banner 1"])
+        // Still on screen at each look, long past the ten minutes.
+        for minute in 1...30 {
+            #expect(d.news(in: [1], now: at(Double(minute) * 60), read: read).isEmpty)
+        }
+        // Gone, then a new banner: news.
+        #expect(d.news(in: [2], now: at(1900), read: read) == ["banner 2"])
+    }
+
     @Test func bannersAlreadyUpWhenMirroringStartsArentNews() {
         var d = BannerDeduper<Int>()
         d.prime([3, 4], now: at(0))
         let old = d.isNew(3, now: at(1))
         let fresh = d.isNew(5, now: at(1))
         #expect(!old && fresh)
+        // The same through `news`, which the mirror uses.
+        var e = BannerDeduper<Int>()
+        e.prime([3, 4], now: at(0))
+        #expect(e.news(in: [3, 4, 6], now: at(1)) { "banner \($0)" } == ["banner 6"])
     }
 }
 
@@ -667,6 +750,8 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         #expect(PermissionKind.camera.note(osMajor: 27) == nil)
         // The setting it names is the one on the Notifications & HUDs page.
         #expect(on26.contains("Replace the system volume and brightness display"))
+        // Full screen is confirmed through Accessibility too (`FullscreenDetector`).
+        #expect(on26.contains("whether a window is in full screen"))
         #expect(!on26.contains("—"))
     }
 }

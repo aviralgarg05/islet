@@ -19,7 +19,7 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 - Mission Control now hides the island.
 - **In full screen** chooses between Keep showing, Hide music only (timers, activities and HUDs stay) and Hide everything, replacing the on/off switch.
 - On a display without a notch the island is a **Floating pill** inside the menu bar by default. It can also be a notch shape at the top edge, appear only when the pointer reaches the top edge, or not show at all. This replaces "Show on displays without a notch".
-- Full screen is worked out per display, whichever app is in front: a video in full screen on one display keeps the island out of the way there while you work on the other, and that app's own rule (Keep it in full screen) is the one that counts. With Accessibility, a large window under a menu bar that hides itself no longer counts as full screen, and a game that goes full screen a second or two after it opens is caught.
+- Full screen is worked out per display, whichever app is in front: a video in full screen on one display keeps the island out of the way there while you work on the other, and that app's own rule (Keep it in full screen) is the one that counts. A large window under a menu bar that hides itself no longer counts as full screen unless Accessibility confirms it is, and a game that goes full screen a second or two after it opens is caught.
 - Without Accessibility, a display narrower than 1500 points (a 13-inch MacBook Air, or a larger one at a Larger Text setting) gets icon-only wings.
 
 ### Coding agents
@@ -96,7 +96,7 @@ Four new pages, each off until you turn it on in Settings → Tools, then listed
 
 ### Calm by default
 - Volume and brightness HUDs start off in a new setup, since macOS shows its own and every key press showed two. With one on and the system display not replaced, Notifications & HUDs says so and offers **Show only Islet's**. A config from before keeps what it had.
-- The card for a new sound output (AirPods connecting) has its own switch, **Sound output changes**, and stays on. The level a new output sets for itself, or an app's change while Islet replaces the system display, shows no HUD.
+- The card for a new sound output (AirPods connecting) has its own switch, **Sound output changes**, on in a new setup. A config from before gets it only if its volume HUD was on, as the card came with it then. The level a new output sets for itself, or an app's change while Islet replaces the system display, shows no HUD.
 - Mirrored notifications stay beside the notch, since macOS shows its banner at the same moment; **Peek at new notifications** opens them below the notch as well. Each banner is mirrored once while it is up, banners already showing when mirroring starts aren't, and a second one with the same words is.
 - A call shows once its app has held the microphone for 3 seconds. A browser or a chat app first shows a quiet **Microphone in use** until the camera comes on or a minute passes. A dismissed call stays away until the app lets go of the microphone, and **Mute notifications and calls** on the Apps page silences an app's calls too.
 
