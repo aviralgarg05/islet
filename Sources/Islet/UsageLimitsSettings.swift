@@ -2,7 +2,7 @@ import AppKit
 import IsletCore
 import SwiftUI
 
-/// Settings → Integrations → Usage limits: sources for plan limits, and the Claude Code
+/// Settings → Coding agents → Usage limits: sources for plan limits, and the Claude Code
 /// status line installer. `~/.claude/settings.json` is only written when the user confirms
 /// the exact change in a sheet. Home's "Show usage" opens Settings here.
 struct UsageLimitsSection: View {
@@ -10,31 +10,38 @@ struct UsageLimitsSection: View {
     @ViewState private var claudeStatus: ClaudeStatusLineSetup.Status?
     @ViewState private var pending: PendingStatusLineEdit?
     @ViewState private var message: String?
+    @Environment(\.snapshotMode) private var snapshotMode
 
     static var codexSessions: URL { IsletPaths.home.appendingPathComponent(".codex/sessions") }
 
     private var claudeSettingsFile: URL { model.agentUsage.claudeSettingsFile }
-    private var cliAvailable: Bool { FileManager.default.isExecutableFile(atPath: AppActions.cliPath) }
-    /// Where the change is made, as people see it in Finder and the terminal.
-    private var claudeSettingsPath: String { (claudeSettingsFile.path as NSString).abbreviatingWithTildeInPath }
+    /// Snapshots run from the build folder, which has no `isletctl` beside the app.
+    private var cliAvailable: Bool { snapshotMode || FileManager.default.isExecutableFile(atPath: AppActions.cliPath) }
 
     var body: some View {
-        Section("Usage limits") {
-            Toggle("Claude Code 5-hour and weekly limits", isOn: $model.settings.claudeUsageEnabled)
+        Section {
+            Toggle(isOn: $model.settings.claudeUsageEnabled) {
+                Text("Claude Code limits")
+                Text("Its 5-hour and weekly limits, on Home.")
+            }
+            .settingsAnchor("agents.claudeUsage")
             if model.settings.claudeUsageEnabled {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(claudeText).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    Spacer()
+                HStack(alignment: .center, spacing: 10) {
+                    Text(claudeText).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
                     claudeButton
                 }
                 if let message { Text(message).font(.caption).foregroundStyle(.orange) }
             }
-            Toggle("Codex 5-hour and weekly limits", isOn: $model.settings.codexUsageEnabled)
-            if model.settings.codexUsageEnabled {
-                Text(codexText).font(.caption).foregroundStyle(.secondary)
+            Toggle(isOn: $model.settings.codexUsageEnabled) {
+                Text("Codex limits")
+                Text(model.settings.codexUsageEnabled ? codexText : "Its 5-hour and weekly limits, on Home.")
             }
-            Text("Islet reads these figures from files on this Mac and never sends them anywhere. The closed island stays quiet until a limit reaches 90%.")
-                .font(.caption).foregroundStyle(.secondary)
+            .settingsAnchor("agents.codexUsage")
+        } header: {
+            Text("Usage limits")
+        } footer: {
+            SettingsFooter("Islet reads these on this Mac and sends nothing anywhere. The closed island stays quiet until a limit reaches 90%.")
         }
         .onAppear(perform: refresh)
         .sheet(item: $pending) { p in
@@ -49,7 +56,7 @@ struct UsageLimitsSection: View {
     @ViewBuilder private var claudeButton: some View {
         switch claudeStatus {
         case .notInstalled?:
-            Button("Show Claude usage…") { plan(install: true) }.disabled(!cliAvailable)
+            Button("Show Usage…") { plan(install: true) }.disabled(!cliAvailable)
         case .installed?:
             Button("Remove…") { plan(install: false) }
         default:
@@ -57,23 +64,19 @@ struct UsageLimitsSection: View {
         }
     }
 
-    /// What the button changes and when the figures update, in plain words.
+    /// Where the figures come from and what the button changes, in plain words. The exact
+    /// change to Claude Code's settings is shown in the sheet before anything is written.
     private var claudeText: String {
-        let why = "Claude Code saves its plan usage nowhere Islet can read. It only hands it to its status line, the line under its prompt in the terminal."
-        let change = "Only statusLine in \(claudeSettingsPath) changes, and the old file is kept as settings.json.bak."
-        let updates = "The figures update whenever Claude Code shows its status line in a terminal."
         switch claudeStatus {
         case .notInstalled(let current)?:
-            guard cliAvailable else { return "isletctl isn't in this copy of Islet, so its status line can't be added." }
-            let adds = current.map { "Show Claude usage adds Islet's status line around yours (\($0)), which keeps showing as before." }
-                ?? "Show Claude usage adds Islet's status line there."
-            return [why, adds, change, updates].joined(separator: " ")
-        case .installed(let original)?:
-            let own = original.map { " Your own (\($0)) still runs inside it." } ?? ""
-            let state = model.agentUsage.claude == nil
-                ? "Waiting for Claude Code: the figures arrive the next time it shows its status line in a terminal."
-                : updates
-            return "Islet's status line is in Claude Code.\(own) \(state)"
+            guard cliAvailable else { return "This copy of Islet can't add the status line Claude Code needs to share its limits." }
+            return current == nil
+                ? "Claude Code shares its limits only with its status line, the line under its prompt. Show Usage adds Islet's line there."
+                : "Claude Code shares its limits only with its status line, the line under its prompt. Show Usage adds Islet's around yours, which keeps showing."
+        case .installed?:
+            return model.agentUsage.claude == nil
+                ? "Waiting for Claude Code. The figures arrive the next time it shows its status line."
+                : "On. The figures update whenever Claude Code shows its status line."
         case .unsupported(let why)?:
             return why
         case nil:
@@ -82,10 +85,9 @@ struct UsageLimitsSection: View {
     }
 
     private var codexText: String {
-        guard FileManager.default.fileExists(atPath: Self.codexSessions.path) else {
-            return "Codex hasn't run on this Mac yet. After its first session, switch this off and on again."
-        }
-        return "Read from the newest session log in ~/.codex/sessions when it changes."
+        FileManager.default.fileExists(atPath: Self.codexSessions.path)
+            ? "Its 5-hour and weekly limits, on Home. They update as Codex works."
+            : "Codex hasn't run on this Mac yet. Its limits appear after its first session; then switch this off and on again."
     }
 
     private func refresh() {

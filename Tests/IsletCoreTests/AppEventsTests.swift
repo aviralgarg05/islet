@@ -272,6 +272,20 @@ import Testing
         #expect(Hotkey.parse("hyper+i") == nil)
         #expect(Hotkey.parse("") == nil)
     }
+
+    @Test func recordedKeysBecomeText() {
+        #expect(Hotkey.text(keyCode: 34, modifiers: [.option, .control]) == "ctrl+option+i")
+        #expect(Hotkey.text(keyCode: 49, modifiers: [.command, .shift]) == "shift+cmd+space")
+        #expect(Hotkey.text(keyCode: 36, modifiers: [.command]) == "cmd+return")
+        #expect(Hotkey.text(keyCode: 96, modifiers: []) == "f5")
+        // What a recorder must not save: a bare key, shift alone, or a key Islet can't name.
+        #expect(Hotkey.text(keyCode: 34, modifiers: []) == nil)
+        #expect(Hotkey.text(keyCode: 0, modifiers: [.shift]) == nil)
+        #expect(Hotkey.text(keyCode: 999, modifiers: [.command]) == nil)
+        // The text reads back as the same shortcut.
+        let text = Hotkey.text(keyCode: 40, modifiers: [.option, .command])
+        #expect(text.flatMap(Hotkey.parse) == Hotkey(keyCode: 40, modifiers: [.option, .command]))
+    }
 }
 
 @Suite struct CalendarAndRemindersTests {

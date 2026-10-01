@@ -435,6 +435,10 @@ import Testing
         #expect(RGBA.parse("grey") == RGBA.named["gray"])
         #expect(RGBA.parse("#12345") == nil)
         #expect(RGBA.parse("zzzzzz") == nil)
+        // A picked colour is saved as hex and reads back the same.
+        #expect(RGBA(r: 1, g: 0.5, b: 0).hex == "#FF8000")
+        #expect(RGBA(r: 1.2, g: -1, b: 0.2).hex == "#FF0033")
+        #expect(RGBA.parse(RGBA(r: 0.2, g: 0.4, b: 0.6).hex)?.hex == "#336699")
     }
 
     @Test func icons() throws {

@@ -2,8 +2,9 @@ import AppKit
 import IsletCore
 import SwiftUI
 
-/// Settings → Modules → Timers: the sound when a timer ends and the Pomodoro lengths.
-struct TimerSettingsSection: View {
+/// Settings → Timers: the sound when a timer ends and the Pomodoro lengths. Timers have no
+/// switch: nothing runs until one is started.
+struct TimersSettings: View {
     @Bindable var model: AppModel
 
     /// macOS system sounds, plus whatever name `config.json` holds.
@@ -14,30 +15,46 @@ struct TimerSettingsSection: View {
     }
 
     var body: some View {
-        Section("Timers") {
-            Picker("Sound when a timer ends", selection: $model.settings.timerSound) {
-                ForEach(sounds, id: \.self) { name in
-                    Text(name == "none" ? "None" : name).tag(name)
+        Form {
+            Section { SettingsHero(page: .timers) }
+            Section {
+                Picker("Sound when a timer ends", selection: $model.settings.timerSound) {
+                    ForEach(sounds, id: \.self) { name in
+                        Text(name == "none" ? "None" : name).tag(name)
+                    }
+                }
+                .onChange(of: model.settings.timerSound) { _, name in
+                    if name != "none" { NSSound(named: NSSound.Name(name))?.play() }
+                }
+                .settingsAnchor("timers.sound")
+            } footer: {
+                SettingsFooter("Start a timer from Home or ask Siri with a shortcut. When one ends, the island stays open until you stop, snooze or restart it.")
+            }
+            // Each value sits beside its stepper, on the right, like System Settings.
+            Section("Pomodoro") {
+                minutes("Focus", $model.settings.pomodoro.focusMinutes, 1...240, step: 5)
+                    .settingsAnchor("timers.focus")
+                minutes("Short break", $model.settings.pomodoro.shortBreakMinutes, 1...60, step: 1)
+                minutes("Long break", $model.settings.pomodoro.longBreakMinutes, 1...240, step: 5)
+                LabeledContent("Long break after") {
+                    HStack(spacing: 6) {
+                        Text(model.settings.pomodoro.longBreakEvery == 1 ? "every round" : "every \(model.settings.pomodoro.longBreakEvery) rounds")
+                            .monospacedDigit()
+                        Stepper("Long break after", value: $model.settings.pomodoro.longBreakEvery, in: 1...12).labelsHidden()
+                    }
                 }
             }
-            .onChange(of: model.settings.timerSound) { _, name in
-                if name != "none" { NSSound(named: NSSound.Name(name))?.play() }
+        }
+        .formStyle(.grouped)
+    }
+
+    /// The value, then the arrows at the row's right edge, so every row's arrows line up.
+    private func minutes(_ title: String, _ value: Binding<Double>, _ range: ClosedRange<Double>, step: Double) -> some View {
+        LabeledContent(title) {
+            HStack(spacing: 6) {
+                Text("\(Int(value.wrappedValue)) min").monospacedDigit()
+                Stepper(title, value: value, in: range, step: step).labelsHidden()
             }
-            Stepper(value: $model.settings.pomodoro.focusMinutes, in: 1...240, step: 5) {
-                LabeledContent("Pomodoro focus", value: "\(Int(model.settings.pomodoro.focusMinutes)) min")
-            }
-            Stepper(value: $model.settings.pomodoro.shortBreakMinutes, in: 1...60) {
-                LabeledContent("Short break", value: "\(Int(model.settings.pomodoro.shortBreakMinutes)) min")
-            }
-            Stepper(value: $model.settings.pomodoro.longBreakMinutes, in: 1...240, step: 5) {
-                LabeledContent("Long break", value: "\(Int(model.settings.pomodoro.longBreakMinutes)) min")
-            }
-            Stepper(value: $model.settings.pomodoro.longBreakEvery, in: 1...12) {
-                LabeledContent("Long break after", value: model.settings.pomodoro.longBreakEvery == 1
-                               ? "every round" : "every \(model.settings.pomodoro.longBreakEvery) rounds")
-            }
-            Text("Start timers from Home, with `isletctl timer \"tea 4m\"`, or from Siri with a shortcut. A timer that ends opens the island until you stop, snooze or restart it.")
-                .font(.caption).foregroundStyle(.secondary)
         }
     }
 }

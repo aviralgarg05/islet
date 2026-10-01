@@ -101,7 +101,7 @@ struct ClaudeUsageHintRow: View {
         case .offer:
             HStack(spacing: Space.xs) {
                 header
-                Button("Show usage") { AppActions.openSettings(model, at: .usageLimits) }
+                Button("Show usage") { AppActions.openSettings(.agents, at: "agents.claudeUsage") }
                     .buttonStyle(CapsuleButtonStyle(tint: tint))
                     .fixedSize()
                     .help("Claude's 5-hour and weekly limits. Settings shows what changes before anything does.")

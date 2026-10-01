@@ -74,9 +74,6 @@ final class AppModel {
     var forcedPresentation: IslandPresentation?
     /// Measured closed-island placement per display, for the automatic layout.
     var closedPlacements: [CGDirectDisplayID: ClosedPlacement] = [:]
-    /// The Settings tab on show, and a section to scroll to when it next appears.
-    var settingsPane: SettingsPane = .general
-    var settingsScrollTarget: SettingsSection?
     /// When a new song shows for a moment below the notch.
     private(set) var songPeek = SongPeek()
 
@@ -102,7 +99,7 @@ final class AppModel {
     @ObservationIgnored lazy var timers = TimerController(model: self)
     /// Coding-agent approval cards (ApprovalController.swift).
     @ObservationIgnored lazy var approvals = ApprovalController(model: self)
-    let ask = AskController()
+    let ask: AskController
     private var mirroredKeys: Set<String> = []
     private var mirrorClock = LiveActivityClock()
     /// Mirrored activity id → the menu bar item it came from. Clicking one presses that item;
@@ -144,8 +141,10 @@ final class AppModel {
     private var iconAttempts: Set<String> = []
     private var settingsWatcher: DispatchSourceFileSystemObject?
 
-    init(settings: IsletSettings = IsletSettings.load(from: IsletPaths.configFile)) {
+    /// `ask` is replaceable so Settings snapshots keep API keys in memory instead of the Keychain.
+    init(settings: IsletSettings = IsletSettings.load(from: IsletPaths.configFile), ask: AskController? = nil) {
         self.settings = settings
+        self.ask = ask ?? AskController()
         shelf = shelfService.shelf
         clipboard = ClipboardHistory(limit: settings.clipboardLimit)
     }

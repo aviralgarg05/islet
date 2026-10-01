@@ -1,42 +1,48 @@
+import AppKit
 import IsletCore
 import IsletSystem
 import SwiftUI
 
-/// Settings → Modules → Live Activities: mirroring what macOS shows in the menu bar.
-struct LiveActivitySettingsSection: View {
+/// Settings → Live Activities: mirroring what macOS shows in the menu bar. Whether scripts may
+/// read them through the local API is in Advanced.
+struct LiveActivitiesSettings: View {
     @Bindable var model: AppModel
     @ViewState private var axTrusted = MenuBarLiveActivityMonitor.isAvailable
 
+    private var on: Bool { model.settings.mirrorMenuBarActivities }
+
     var body: some View {
-        Section("Live Activities") {
-            Toggle("Show Live Activities from the menu bar", isOn: $model.settings.mirrorMenuBarActivities)
-            Text("Rides, deliveries, scores and flights from your iPhone, and Mac ones such as a running shortcut, appear in the island with their app's icon. Clicking one opens Apple's view of it.")
-                .font(.caption).foregroundStyle(.secondary)
-            if model.settings.mirrorMenuBarActivities {
-                if !axTrusted {
-                    HStack {
-                        Text("Needs Accessibility to read the menu bar.").font(.caption)
-                        Spacer()
-                        Button("Allow…") {
-                            MediaKeyInterceptor.requestAccessibility()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                                axTrusted = MenuBarLiveActivityMonitor.isAvailable
-                                model.startEventSources()
-                            }
+        Form {
+            Section {
+                SettingsHero(page: .liveActivities, switchTitle: "Show Live Activities", isOn: $model.settings.mirrorMenuBarActivities)
+                    .settingsAnchor("live.enabled")
+                if on && !axTrusted {
+                    AccessRow(text: "Islet needs Accessibility to read the menu bar.", button: "Allow…") {
+                        MediaKeyInterceptor.requestAccessibility()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                            axTrusted = MenuBarLiveActivityMonitor.isAvailable
+                            model.startEventSources()
                         }
                     }
-                } else if MenuBarLiveActivityMonitor.iPhoneActivitiesEnabled == false {
-                    Text("macOS is set not to show iPhone Live Activities on this Mac, so only Mac ones will appear.")
-                        .font(.caption).foregroundStyle(.orange)
+                } else if on && MenuBarLiveActivityMonitor.iPhoneActivitiesEnabled == false {
+                    AccessRow(text: "This Mac is set not to show Live Activities from your iPhone, so only the Mac's own appear.",
+                              button: "Open System Settings") {
+                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")!)
+                    }
                 }
-                Toggle("Only when the notch hides them", isOn: $model.settings.mirrorOnlyHiddenActivities)
-                Text("When the menu bar is full, macOS tucks Live Activities away behind the notch. With this on, only those appear in the island, so nothing shows twice.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Toggle("Let scripts read them through the local API", isOn: $model.settings.shareMirroredActivities)
-                Text("They often contain addresses, names and scores. Off keeps them out of the API.")
-                    .font(.caption).foregroundStyle(.secondary)
+            } footer: {
+                SettingsFooter("They appear with their app's icon. Clicking one opens Apple's own view of it.")
             }
+            Section {
+                Toggle(isOn: $model.settings.mirrorOnlyHiddenActivities) {
+                    Text("Only when the notch hides them")
+                    Text("When the menu bar is full, macOS tucks Live Activities behind the notch. Show only those, so nothing appears twice.")
+                }
+                .settingsAnchor("live.hiddenOnly")
+            }
+            .disabled(!on)
         }
+        .formStyle(.grouped)
         .onAppear { axTrusted = MenuBarLiveActivityMonitor.isAvailable }
     }
 }

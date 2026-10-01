@@ -6,16 +6,11 @@ import SwiftUI
 /// Actions triggered from views, the status menu and the URL scheme.
 @MainActor
 enum AppActions {
-    static var openSettingsHandler: (() -> Void)?
+    static var openSettingsHandler: ((SettingsPage?, String?) -> Void)?
 
-    static func openSettings() { openSettingsHandler?() }
-
-    /// Open Settings on the tab that holds `section`, scrolled to it.
-    static func openSettings(_ model: AppModel, at section: SettingsSection) {
-        model.settingsPane = section.pane
-        model.settingsScrollTarget = section
-        openSettings()
-    }
+    /// Open the Settings window on `page`, scrolled to the row `anchor` names (an id from
+    /// `SettingsIndex`), or else on the page it showed last.
+    static func openSettings(_ page: SettingsPage? = nil, at anchor: String? = nil) { openSettingsHandler?(page, anchor) }
 
     static func pluginsFolder(_ model: AppModel) -> URL {
         model.settings.pluginDirectory.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) } ?? IsletPaths.pluginsDirectory
@@ -93,8 +88,11 @@ enum AppActions {
     }
 
     static var cliPath: String {
-        Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/isletctl").path
+        bundleURL.appendingPathComponent("Contents/MacOS/isletctl").path
     }
+
+    /// Where Islet.app is. Settings snapshots show the installed location, not the build folder.
+    static var bundleURL = Bundle.main.bundleURL
 
     /// Handle an `islet://` URL.
     static func handle(url: URL, model: AppModel) {

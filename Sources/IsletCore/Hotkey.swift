@@ -62,4 +62,17 @@ public struct Hotkey: Equatable, Sendable {
         let name = Self.keyCodes.first { $0.value == keyCode && $0.key.count <= 6 && $0.key != "enter" && $0.key != "esc" }?.key ?? "?"
         return s + (name.count == 1 ? name.uppercased() : name.capitalized)
     }
+
+    /// The text Settings saves for a recorded key press ("ctrl+option+i"), or nil when the key
+    /// can't be used or `parse` would refuse the combination (no modifier, say).
+    public static func text(keyCode: UInt32, modifiers: Modifiers) -> String? {
+        guard let name = keyCodes.first(where: { $0.value == keyCode && $0.key != "enter" && $0.key != "esc" })?.key else { return nil }
+        var parts: [String] = []
+        if modifiers.contains(.control) { parts.append("ctrl") }
+        if modifiers.contains(.option) { parts.append("option") }
+        if modifiers.contains(.shift) { parts.append("shift") }
+        if modifiers.contains(.command) { parts.append("cmd") }
+        let text = (parts + [name]).joined(separator: "+")
+        return parse(text) == nil ? nil : text
+    }
 }

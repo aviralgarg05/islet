@@ -2,8 +2,8 @@ import AppKit
 import IsletCore
 import SwiftUI
 
-/// Settings → Integrations → iPhone bridge: the switch, the bridge's own token, and what it
-/// can and can't do.
+/// Settings → Advanced → iPhone bridge: the switch, its port, the bridge's own token, and
+/// what it can and can't do.
 struct LANBridgeSection: View {
     @Bindable var model: AppModel
     @ViewState private var copied = false
@@ -12,38 +12,51 @@ struct LANBridgeSection: View {
     private var enabled: Bool { model.settings.lanBridgeEnabled }
 
     var body: some View {
-        Section("iPhone bridge (local network)") {
-            Toggle("Accept events from iPhone Shortcuts on this network", isOn: $model.settings.lanBridgeEnabled)
-                .task(id: enabled) {
-                    if enabled { model.lan.loadToken() }
-                }
+        Section {
+            Toggle(isOn: $model.settings.lanBridgeEnabled) {
+                Text("Accept requests from this network")
+                Text("Lets Shortcuts on your iPhone, Home Assistant and other devices on this network show things in the island.")
+            }
+            .task(id: enabled) {
+                if enabled { model.lan.loadToken() }
+            }
+            .settingsAnchor("advanced.bridge")
             LabeledContent("Status") { Text(model.lan.status).foregroundStyle(.secondary) }
-            if enabled, let token = model.lan.token {
-                LabeledContent("Token") {
-                    Text(token).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
-                }
-                HStack {
-                    Button(copied ? "Copied" : "Copy Token") {
-                        Self.copy(token)
-                        copied = true
+            LabeledContent("Port") { PortField(port: $model.settings.lanPort, other: model.settings.apiPort) }
+                .settingsAnchor("advanced.bridgePort")
+            LabeledContent("Token") {
+                HStack(spacing: 8) {
+                    if enabled, let token = model.lan.token {
+                        Text("Ends in \(String(token.suffix(4)))").foregroundStyle(.secondary).monospacedDigit()
+                        Button(copied ? "Copied" : "Copy") {
+                            Self.copy(token)
+                            copied = true
+                        }
+                        Button("New Token…") { confirming = true }
+                    } else {
+                        Text("Made when the bridge is on").foregroundStyle(.secondary)
                     }
-                    Button("New Token…") { confirming = true }
-                }
-                .alert("Make a new bridge token?", isPresented: $confirming) {
-                    Button("New Token") {
-                        model.lan.rotateToken()
-                        copied = false
-                    }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("Shortcuts that send the current token stop working until you give them the new one.")
                 }
             }
-            Text("The bridge is not encrypted, so anyone on this network can read what is sent, token included. It only accepts notifications, timers, Focus and simple activities, without links, buttons or image files, and its token does not work on the local API.")
-                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            // Verbatim, so the port isn't shown as "47,832".
-            Text(verbatim: "In Shortcuts on iPhone, add a Personal Automation (Alarm, Focus, Arrive, Battery Level…) with Get Contents of URL: POST http://\(ProcessInfo.processInfo.hostName):\(model.settings.lanPort)/v1/notify, header Authorization: Bearer <token>, JSON body {\"title\": \"…\"}.")
-                .font(.caption).foregroundStyle(.secondary).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            .settingsAnchor("advanced.bridgeToken")
+            .alert("Make a new bridge token?", isPresented: $confirming) {
+                Button("New Token") {
+                    model.lan.rotateToken()
+                    copied = false
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Shortcuts that send the current token stop working until you give them the new one.")
+            }
+            if enabled {
+                // Verbatim, so the port isn't shown as "47,832".
+                CodeBlock(title: "In Shortcuts on iPhone, add Get Contents of URL",
+                          code: "POST http://\(ProcessInfo.processInfo.hostName):\(model.settings.lanPort)/v1/notify\nAuthorization: Bearer <token>\n{\"title\": \"…\"}")
+            }
+        } header: {
+            Text("iPhone bridge")
+        } footer: {
+            SettingsFooter("The bridge is not encrypted, so anyone on this network can read what is sent, token included. It only takes notifications, timers, Focus and simple activities, without links, buttons or image files, and its token doesn't work on the local API.")
         }
     }
 
@@ -55,5 +68,40 @@ struct LANBridgeSection: View {
         pb.setString(token, forType: .string)
         pb.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
         pb.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
+    }
+}
+
+/// Text to copy into a terminal, a file or another app, with a Copy button.
+struct CodeBlock: View {
+    let title: String
+    let code: String
+    /// Long blocks scroll inside this height.
+    var maxHeight: CGFloat = 150
+    @ViewState private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title).font(.callout)
+                Spacer(minLength: 8)
+                Button(copied ? "Copied" : "Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(code, forType: .string)
+                    copied = true
+                }
+                .controlSize(.small)
+            }
+            ScrollView([.horizontal, .vertical]) {
+                Text(verbatim: code)
+                    .font(.system(size: 11, design: .monospaced))
+                    .textSelection(.enabled)
+                    .fixedSize()
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: min(maxHeight, CGFloat(code.split(separator: "\n", omittingEmptySubsequences: false).count) * 14 + 22))
+            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.primary.opacity(0.05)))
+        }
+        .padding(.vertical, 2)
     }
 }

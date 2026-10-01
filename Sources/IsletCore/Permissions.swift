@@ -56,10 +56,10 @@ public enum PermissionKind: String, CaseIterable, Sendable, Identifiable {
         case .downloadsFolder:
             return [PermissionUse("Download progress", on: s.downloadsEnabled)]
         case .automationMusic:
-            return [PermissionUse("Music controls when the system-wide bridge is unavailable",
+            return [PermissionUse("Music controls, when the usual way is unavailable",
                                   on: s.mediaEnabled && !s.disabledMediaSources.contains(.appleMusic))]
         case .automationSpotify:
-            return [PermissionUse("Spotify controls when the system-wide bridge is unavailable",
+            return [PermissionUse("Spotify controls, when the usual way is unavailable",
                                   on: s.mediaEnabled && !s.disabledMediaSources.contains(.spotify))]
         }
     }

@@ -10,6 +10,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var pointer = PointerCoordinator(model: model)
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
+    /// The page Settings shows, kept for the session.
+    private let settingsNavigation = SettingsNavigation()
+    /// Status menu items for scripts and config, shown only while Option is held.
+    private var advancedMenuItems: [NSMenuItem] = []
     private var rebuildWork: DispatchWorkItem?
     private let brightness = BrightnessMonitor()
     private let keys = MediaKeyInterceptor()
@@ -33,7 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        AppActions.openSettingsHandler = { [weak self] in self?.showSettings() }
+        AppActions.openSettingsHandler = { [weak self] page, anchor in self?.showSettings(page, at: anchor) }
         EditMenu.install()
         model.start()
         if demo { model.loadDemo() }
@@ -269,10 +273,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.delegate = self
         menu.addItem(withTitle: "Open Island", action: #selector(toggleIsland), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Settings…", action: #selector(openSettingsAction), keyEquivalent: ",").target = self
-        menu.addItem(.separator())
-        menu.addItem(withTitle: "Copy API Token", action: #selector(copyToken), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "Open Plugins Folder", action: #selector(openPlugins), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "Edit config.json", action: #selector(openConfig), keyEquivalent: "").target = self
+        // For scripts and dotfiles; they show while Option is held as the menu opens.
+        advancedMenuItems = [.separator()]
+        for (title, action) in [("Copy API Token", #selector(copyToken)), ("Open Plugins Folder", #selector(openPlugins)),
+                                ("Edit config.json", #selector(openConfig))] {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            advancedMenuItems.append(item)
+        }
+        advancedMenuItems.forEach(menu.addItem)
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Islet", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.menu = menu
@@ -293,14 +302,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.open(IsletPaths.configFile)
     }
 
-    func showSettings() {
+    /// Open Settings on `page` at the row `anchor` names, or on the page it showed last.
+    func showSettings(_ page: SettingsPage? = nil, at anchor: String? = nil) {
+        if let page { settingsNavigation.open(page, at: anchor) }
         if settingsWindow == nil {
-            let w = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(model: model)))
-            w.title = "Islet Settings"
-            w.styleMask = [.titled, .closable, .miniaturizable]
-            w.isReleasedWhenClosed = false
-            w.center()
-            settingsWindow = w
+            settingsWindow = SettingsWindow.make(model: model, navigation: settingsNavigation)
         }
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
@@ -310,6 +316,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 extension AppDelegate: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.items.first?.title = model.expandedScreen == nil ? "Open Island" : "Close Island"
+        let option = NSEvent.modifierFlags.contains(.option)
+        advancedMenuItems.forEach { $0.isHidden = !option }
     }
 }
 
@@ -328,6 +336,39 @@ if args.contains("--snapshot") || args.contains("--demo") {
     if ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"] == nil {
         setenv("XDG_CONFIG_HOME", scratch.appendingPathComponent("config").path, 1)
     }
+}
+
+// Settings snapshots read the home folder (~/.claude, ~/.codex, ~/.cursor), so they run in a
+// child process whose home, config and support folders are all temporary. The home folder
+// has to be set before the process starts: Foundation reads it once.
+if let i = args.firstIndex(of: "--settings-snapshot") {
+    let dir = URL(fileURLWithPath: i + 1 < args.count ? args[i + 1] : "settings-snapshots").standardizedFileURL
+    if let home = ProcessInfo.processInfo.environment["ISLET_SNAPSHOT_HOME"] {
+        let rendered = MainActor.assumeIsolated { SettingsSnapshots.render(to: dir, home: URL(fileURLWithPath: home)) }
+        exit(rendered ? 0 : 1)
+    }
+    let home = scratch.appendingPathComponent("home")
+    try? FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+    var env = ProcessInfo.processInfo.environment
+    env["ISLET_SNAPSHOT_HOME"] = home.path
+    env["CFFIXED_USER_HOME"] = home.path
+    env["HOME"] = home.path
+    env["XDG_CONFIG_HOME"] = home.appendingPathComponent(".config").path
+    env["ISLET_SUPPORT_DIR"] = scratch.appendingPathComponent("support").path
+    let child = Process()
+    child.executableURL = Bundle.main.executableURL
+    child.arguments = ["--settings-snapshot", dir.path]
+    child.environment = env
+    var status: Int32 = 1
+    do {
+        try child.run()
+        child.waitUntilExit()
+        status = child.terminationStatus
+    } catch {
+        print("Could not start the snapshot renderer: \(error.localizedDescription)")
+    }
+    try? FileManager.default.removeItem(at: scratch)
+    exit(status)
 }
 
 if let i = args.firstIndex(of: "--snapshot") {

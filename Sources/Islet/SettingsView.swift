@@ -3,179 +3,163 @@ import IsletCore
 import IsletSystem
 import SwiftUI
 
-/// The tabs of the Settings window.
-enum SettingsPane: Hashable {
-    case general, appearance, modules, apps, integrations, ai, permissions, about
-}
-
-/// A section of Settings that something else can send the user to (`AppActions.openSettings(_:at:)`).
-enum SettingsSection: Hashable {
-    /// Integrations → Usage limits.
-    case usageLimits
-
-    var pane: SettingsPane {
-        switch self {
-        case .usageLimits: return .integrations
-        }
-    }
-}
-
+/// The Settings window's content: a sidebar of pages (SettingsShell.swift) and the page itself.
+/// Feature pages are in FeatureSettings.swift, Coding agents in AgentSettings.swift, Ask & AI in
+/// AISettingsView.swift and Advanced in AdvancedSettings.swift.
 struct SettingsView: View {
     @Bindable var model: AppModel
+    @Bindable var navigation: SettingsNavigation
 
     var body: some View {
-        TabView(selection: $model.settingsPane) {
-            GeneralSettings(model: model).tabItem { Label("General", systemImage: "gearshape") }.tag(SettingsPane.general)
-            AppearanceSettings(model: model).tabItem { Label("Appearance", systemImage: "paintbrush") }.tag(SettingsPane.appearance)
-            ModulesSettings(model: model).tabItem { Label("Modules", systemImage: "square.grid.2x2") }.tag(SettingsPane.modules)
-            AppRulesSettings(model: model).tabItem { Label("Apps", systemImage: "app.badge") }.tag(SettingsPane.apps)
-            IntegrationsSettings(model: model).tabItem { Label("Integrations", systemImage: "point.3.connected.trianglepath.dotted") }
-                .tag(SettingsPane.integrations)
-            AISettingsView(model: model).tabItem { Label("AI", systemImage: "sparkles") }.tag(SettingsPane.ai)
-            PermissionsSettings(model: model).tabItem { Label("Permissions", systemImage: "hand.raised") }.tag(SettingsPane.permissions)
-            AboutSettings().tabItem { Label("About", systemImage: "info.circle") }.tag(SettingsPane.about)
-        }
-        .frame(width: 620, height: 540)
-        .onChange(of: model.settings) { _, _ in model.settingsEdited() }
+        SettingsShell(model: model, navigation: navigation)
+            .onChange(of: model.settings) { _, _ in model.settingsEdited() }
     }
 }
+
+// MARK: - General
 
 struct GeneralSettings: View {
     @Bindable var model: AppModel
 
     var body: some View {
         Form {
-            Section("Placement") {
-                Picker("Show island on", selection: $model.settings.displayMode) {
-                    Text("Notched display (or main)").tag(DisplayMode.notchedScreen)
-                    Text("Main display").tag(DisplayMode.mainScreen)
-                    Text("All displays").tag(DisplayMode.allScreens)
-                }
-                Toggle("Show on displays without a notch", isOn: $model.settings.showOnNonNotchDisplays)
-                Toggle("Hide when an app is fullscreen", isOn: $model.settings.hideInFullscreen)
-                Toggle("Hide from screenshots and screen sharing", isOn: $model.settings.hideFromScreenCapture)
-            }
+            Section { SettingsHero(page: .general) }
             Section("Behaviour") {
-                Picker("Open the island", selection: $model.settings.hoverToOpen) {
-                    Text("On hover").tag(true)
-                    Text("On click").tag(false)
-                }
-                if model.settings.hoverToOpen {
-                    LabeledContent("Hover delay") {
-                        Slider(value: $model.settings.openDelay, in: IsletSettings.openDelayRange, step: 0.05) { Text("") }
-                        Text(String(format: "%.2fs", model.settings.openDelay)).monospacedDigit().frame(width: 44)
-                    }
-                }
-                LabeledContent("Close delay") {
-                    Slider(value: $model.settings.closeDelay, in: IsletSettings.closeDelayRange, step: 0.05) { Text("") }
-                    Text(String(format: "%.2fs", model.settings.closeDelay)).monospacedDigit().frame(width: 44)
-                }
-                LabeledContent("Shortcut to open or close") {
-                    TextField("", text: $model.settings.hotkey, prompt: Text(verbatim: "ctrl+option+i"))
-                        .labelsHidden()
-                        .frame(width: 140)
-                    Text(Hotkey.parse(model.settings.hotkey)?.label ?? (model.settings.hotkey.isEmpty ? "Off" : "Invalid"))
-                        .foregroundStyle(.secondary).frame(width: 60)
-                }
                 LaunchAtLoginToggle()
+                    .settingsAnchor("general.login")
+                Picker("Open the island", selection: $model.settings.hoverToOpen) {
+                    Text("When the pointer reaches it").tag(true)
+                    Text("When I click it").tag(false)
+                }
+                .settingsAnchor("general.open")
+                if model.settings.hoverToOpen {
+                    SettingsSlider(title: "Hover delay", value: $model.settings.openDelay, range: IsletSettings.openDelayRange,
+                                   step: 0.05, format: SettingsSlider.seconds)
+                }
+                SettingsSlider(title: "Close delay", value: $model.settings.closeDelay, range: IsletSettings.closeDelayRange,
+                               step: 0.05, format: SettingsSlider.seconds)
+                    .settingsAnchor("general.closeDelay")
+            }
+            Section("Placement") {
+                Picker("Show the island on", selection: $model.settings.displayMode) {
+                    Text("The display with a notch").tag(DisplayMode.notchedScreen)
+                    Text("The main display").tag(DisplayMode.mainScreen)
+                    Text("Every display").tag(DisplayMode.allScreens)
+                }
+                .settingsAnchor("general.display")
+                Toggle("Show on displays without a notch", isOn: $model.settings.showOnNonNotchDisplays)
+                    .settingsAnchor("general.nonNotch")
+                Toggle(isOn: $model.settings.hideInFullscreen) {
+                    Text("Hide when an app is fullscreen")
+                    Text("Apps can keep it in fullscreen from the Apps page.")
+                }
+                .settingsAnchor("general.fullscreen")
+                Toggle("Hide from screenshots and screen sharing", isOn: $model.settings.hideFromScreenCapture)
+                    .settingsAnchor("general.capture")
             }
             GestureSettingsSection(model: model)
+            Section("Island pages") {
+                Toggle(isOn: $model.settings.systemStatsEnabled) {
+                    Text("System stats")
+                    Text("CPU and memory on the System page, measured only while it's open.")
+                }
+                .settingsAnchor("general.stats")
+            }
         }
         .formStyle(.grouped)
     }
 }
 
+// MARK: - Appearance
+
 struct AppearanceSettings: View {
     @Bindable var model: AppModel
+    @Environment(\.openSettingsPage) private var openPage
 
-    private static let accents = ["auto", "white", "blue", "purple", "pink", "red", "orange", "yellow", "green", "teal"]
+    static let accents = ["auto", "white", "blue", "indigo", "purple", "pink", "red", "orange", "yellow", "green", "teal"]
+
+    private var s: IsletSettings { model.settings }
 
     var body: some View {
         Form {
+            Section {
+                IslandPreview(settings: s)
+                    .settingsAnchor("appearance.preview")
+                HStack {
+                    Text("Changes show here and in the island straight away.").font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Show a Sample in the Island") { AppActions.previewAppearance(model) }
+                        .controlSize(.small)
+                }
+            }
+            Section("Theme") {
+                ThemePicker(selection: $model.settings.theme, settings: s)
+                    .settingsAnchor("appearance.theme")
+                if s.theme == .glass {
+                    LabeledContent {
+                        HStack(spacing: 8) {
+                            Text("Black").font(.caption).foregroundStyle(.secondary)
+                            Slider(value: $model.settings.glassLevel, in: IsletSettings.glassLevelRange) { Text("Glass level") }
+                                .labelsHidden()
+                                .frame(minWidth: 120, maxWidth: 200)
+                            Text("Glass").font(.caption).foregroundStyle(.secondary)
+                        }
+                    } label: {
+                        Text("Glass level")
+                        Text("The strip beside the notch stays black; below it the island melts into glass.")
+                    }
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Accent colour")
+                    AccentPicker(selection: $model.settings.accentColor)
+                }
+                .settingsAnchor("appearance.accent")
+                Toggle("Rounded text", isOn: $model.settings.roundedFont)
+                    .settingsAnchor("appearance.rounded")
+                Toggle(isOn: $model.settings.smartIcons) {
+                    Text("Smart icons and colours for activities")
+                    Text("Picks an icon and colour for activities that don't bring their own.")
+                }
+                .settingsAnchor("appearance.smartIcons")
+            }
             Section("Size") {
-                Picker("Island size", selection: $model.settings.sizePreset) {
+                Picker("Island size", selection: presetBinding) {
                     Text("Compact").tag(SizePreset.compact)
                     Text("Standard").tag(SizePreset.standard)
                     Text("Large").tag(SizePreset.large)
                     Text("Custom").tag(SizePreset.custom)
                 }
                 .pickerStyle(.segmented)
-                if model.settings.sizePreset == .custom {
-                    LabeledContent("Expanded width") {
-                        Slider(value: $model.settings.expandedWidth, in: IsletSettings.expandedWidthRange, step: 10) { Text("") }
-                        Text("\(Int(model.settings.expandedWidth))").monospacedDigit().frame(width: 44)
-                    }
-                    LabeledContent("Expanded height") {
-                        Slider(value: $model.settings.expandedHeight, in: IsletSettings.expandedHeightRange, step: 10) { Text("") }
-                        Text("\(Int(model.settings.expandedHeight))").monospacedDigit().frame(width: 44)
-                    }
-                    LabeledContent("Closed wing width") {
-                        Slider(value: $model.settings.wingWidth, in: IsletSettings.wingWidthRange, step: 2) { Text("") }
-                        Text("\(Int(model.settings.wingWidth))").monospacedDigit().frame(width: 44)
-                    }
-                }
+                .settingsAnchor("appearance.size")
+                SettingsSlider(title: "Open width", value: size(\.expandedWidth) { $0.expandedSize.width },
+                               range: IsletSettings.expandedWidthRange, step: 10, format: SettingsSlider.points)
+                    .settingsAnchor("appearance.width")
+                SettingsSlider(title: "Open height", value: size(\.expandedHeight) { $0.expandedSize.height },
+                               range: IsletSettings.expandedHeightRange, step: 10, format: SettingsSlider.points)
+                    .settingsAnchor("appearance.height")
             }
-            Section("Menu bar") {
-                Picker("Closed island", selection: $model.settings.closedLayout) {
+            Section {
+                Picker("Closed island width", selection: $model.settings.closedLayout) {
                     Text("Fit the menu bar").tag(ClosedLayoutPreference.auto)
                     Text("Always full width").tag(ClosedLayoutPreference.wings)
                 }
                 .pickerStyle(.segmented)
-                Text(model.settings.closedLayout == .auto
-                     ? "Sits beside the notch and shrinks to the free space in the menu bar, down to just an icon each side. On a very crowded menu bar that icon may overlap the nearest menu bar item."
-                     : "Sits beside the notch at the full width for the island size above. May cover menu bar icons close to the notch.")
-                    .font(.caption).foregroundStyle(.secondary)
-                if model.settings.closedLayout == .auto && !MenuBarInspector.isAvailable {
-                    HStack {
-                        Text("Without Accessibility Islet can't see the menu bar, so it uses narrow wings that may touch icons on a crowded bar.")
-                            .font(.caption)
-                        Spacer()
-                        Button("Allow…") { MediaKeyInterceptor.requestAccessibility() }
-                    }
+                .settingsAnchor("appearance.closed")
+                SettingsSlider(title: "Wing width", value: size(\.wingWidth) { $0.effectiveWingWidth },
+                               range: IsletSettings.wingWidthRange, step: 2, format: SettingsSlider.points)
+                    .settingsAnchor("appearance.wing")
+                if s.closedLayout == .auto && !MenuBarInspector.isAvailable {
+                    AccessRow(text: "Islet needs Accessibility to see the menu bar. Until then it uses narrow wings.",
+                              button: "Allow…") { MediaKeyInterceptor.requestAccessibility() }
                 }
+            } header: {
+                Text("Closed island")
+            } footer: {
+                SettingsFooter(s.closedLayout == .auto
+                               ? "The island sits beside the notch and shrinks to the free space in the menu bar, down to an icon each side. The wing width is the most it takes."
+                               : "The island sits beside the notch at the wing width, even if that covers menu bar icons near the notch.")
             }
-            Section("Look") {
-                Picker("Theme", selection: $model.settings.theme) {
-                    Text("Glass").tag(IslandTheme.glass)
-                    Text("Black").tag(IslandTheme.black)
-                    Text("Graphite").tag(IslandTheme.graphite)
-                }
-                .pickerStyle(.segmented)
-                if model.settings.theme == .glass {
-                    LabeledContent("Glass level") {
-                        HStack(spacing: 8) {
-                            Text("Black").font(.caption).foregroundStyle(.secondary)
-                            Slider(value: $model.settings.glassLevel, in: IsletSettings.glassLevelRange) { Text("Glass level") }
-                                .labelsHidden()
-                            Text("Glass").font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    Text("The strip beside the notch stays black so it blends with the hardware; below it the open island melts into glass.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                LabeledContent("Accent") {
-                    HStack(spacing: 6) {
-                        ForEach(Self.accents, id: \.self) { name in
-                            Button { model.settings.accentColor = name } label: {
-                                ZStack {
-                                    if name == "auto" {
-                                        Circle().fill(AngularGradient(colors: [.red, .yellow, .green, .blue, .purple, .red], center: .center))
-                                    } else {
-                                        Circle().fill(Color(tint: name))
-                                    }
-                                    if model.settings.accentColor == name { Circle().stroke(Color.primary, lineWidth: 2).padding(-3) }
-                                }
-                                .frame(width: 16, height: 16)
-                            }
-                            .buttonStyle(.plain)
-                            .help(name == "auto" ? "Follow album art" : name.capitalized)
-                        }
-                    }
-                }
-                Toggle("Rounded text", isOn: $model.settings.roundedFont)
-                Toggle("Smart icons and colors for activities", isOn: $model.settings.smartIcons)
-            }
-            Section("Motion & feel") {
+            Section("Motion") {
                 Picker("Animation", selection: $model.settings.animationStyle) {
                     Text("Fluid").tag(AnimationStyle.fluid)
                     Text("Snappy").tag(AnimationStyle.snappy)
@@ -184,45 +168,428 @@ struct AppearanceSettings: View {
                     Text("Off").tag(AnimationStyle.off)
                 }
                 .pickerStyle(.segmented)
+                .settingsAnchor("appearance.animation")
                 Toggle("Bounce when something new arrives", isOn: $model.settings.bounceOnActivity)
+                    .settingsAnchor("appearance.bounce")
                 Toggle("Glow while something needs you", isOn: $model.settings.urgentGlow)
+                    .settingsAnchor("appearance.glow")
+                Toggle("Reduce motion", isOn: $model.settings.reduceMotion)
+                    .settingsAnchor("appearance.reduceMotion")
                 Picker("Trackpad haptics", selection: $model.settings.hapticsMode) {
                     Text("Off").tag(HapticsMode.off)
                     Text("When I use the island").tag(HapticsMode.direct)
                     Text("Also for important alerts").tag(HapticsMode.all)
                 }
-                Toggle("Reduce motion", isOn: $model.settings.reduceMotion)
-                LabeledContent("New activity stays open") {
-                    Slider(value: $model.settings.alertDuration, in: IsletSettings.alertDurationRange, step: 0.5) { Text("") }
-                    Text(String(format: "%.1fs", model.settings.alertDuration)).monospacedDigit().frame(width: 40)
-                }
-                LabeledContent("Volume/brightness HUD") {
-                    Slider(value: $model.settings.hudDuration, in: IsletSettings.hudDurationRange, step: 0.2) { Text("") }
-                    Text(String(format: "%.1fs", model.settings.hudDuration)).monospacedDigit().frame(width: 40)
-                }
-                Button("Preview") { AppActions.previewAppearance(model) }
+                .settingsAnchor("appearance.haptics")
+                SettingsSlider(title: "New activities stay open for", value: $model.settings.alertDuration,
+                               range: IsletSettings.alertDurationRange, step: 0.5, format: SettingsSlider.seconds)
+                    .settingsAnchor("appearance.alertDuration")
             }
-            Section("Several things at once") {
+            Section("Several at once") {
                 Picker("Activities shown together", selection: $model.settings.maxConcurrent) {
-                    Text("1").tag(1)
-                    Text("2").tag(2)
-                    Text("3").tag(3)
+                    Text("One").tag(1)
+                    Text("Two").tag(2)
+                    Text("Three").tag(3)
                 }
                 .pickerStyle(.segmented)
+                .settingsAnchor("appearance.together")
                 Picker("Extra activities appear", selection: $model.settings.bubblePlacement) {
                     Text("Right of the notch").tag(BubblePlacement.right)
                     Text("Left of the notch").tag(BubblePlacement.left)
                 }
+                .disabled(s.maxConcurrent == 1)
+                .settingsAnchor("appearance.bubbles")
+            }
+            Section("Now Playing") {
+                LabeledContent("Playing indicator") {
+                    HStack(spacing: 10) {
+                        Text(Self.indicatorSummary(s)).foregroundStyle(.secondary)
+                        Button("Change…") { openPage(.nowPlaying, "nowPlaying.indicator") }
+                    }
+                }
+                .settingsAnchor("appearance.indicator")
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    static func indicatorSummary(_ s: IsletSettings) -> String {
+        let style: String
+        switch s.visualiserStyle {
+        case .bars: style = "Bars"
+        case .slim: style = "Slim bars"
+        case .dots: style = "Dots"
+        case .off: return "Off"
+        }
+        switch s.visualiserColour {
+        case .artwork: return "\(style), artwork colour"
+        case .accent: return "\(style), accent colour"
+        case .white: return "\(style), white"
+        }
+    }
+
+    /// Picking Custom starts from the size on show, so nothing jumps.
+    private var presetBinding: Binding<SizePreset> {
+        Binding(get: { model.settings.sizePreset }, set: { preset in
+            var settings = model.settings
+            if preset == .custom, let d = settings.sizePreset.dimensions {
+                settings.expandedWidth = d.width
+                settings.expandedHeight = d.height
+                settings.wingWidth = d.wing
+            }
+            settings.sizePreset = preset
+            model.settings = settings
+        })
+    }
+
+    /// A size slider shows the size in use. Moving it switches to Custom, starting from the
+    /// preset's sizes, so the other two stay where they were.
+    private func size(_ key: WritableKeyPath<IsletSettings, Double>, effective: @escaping (IsletSettings) -> Double) -> Binding<Double> {
+        Binding(get: { effective(model.settings) }, set: { value in
+            var settings = model.settings
+            if settings.sizePreset != .custom, let d = settings.sizePreset.dimensions {
+                settings.expandedWidth = d.width
+                settings.expandedHeight = d.height
+                settings.wingWidth = d.wing
+                settings.sizePreset = .custom
+            }
+            settings[keyPath: key] = value
+            model.settings = settings
+        })
+    }
+}
+
+/// The three themes as small pictures of the open island.
+private struct ThemePicker: View {
+    @Binding var selection: IslandTheme
+    let settings: IsletSettings
+
+    private static let themes: [(IslandTheme, String)] = [(.glass, "Glass"), (.black, "Black"), (.graphite, "Graphite")]
+
+    /// The pictures show a standard island whatever the size, so it always fits the card.
+    private var standard: IsletSettings {
+        var s = settings
+        s.sizePreset = .standard
+        return s
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ForEach(Self.themes, id: \.0) { theme, name in
+                Button { selection = theme } label: {
+                    VStack(spacing: 6) {
+                        IslandSketch(settings: standard, theme: theme, open: true, scale: 0.19, detailed: false)
+                            .frame(width: 118, height: 62)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(selection == theme ? Color.accentColor : Color.primary.opacity(0.12),
+                                                  lineWidth: selection == theme ? 2.5 : 1)
+                            }
+                        Text(name).font(.callout)
+                            .foregroundStyle(selection == theme ? .primary : .secondary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selection == theme ? .isSelected : [])
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 4)
+    }
+}
+
+/// Accent swatches, "auto" (from the artwork) first and any colour last.
+private struct AccentPicker: View {
+    @Binding var selection: String
+
+    private var isCustom: Bool { !AppearanceSettings.accents.contains(selection.lowercased()) }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(AppearanceSettings.accents, id: \.self) { name in
+                Button { selection = name } label: {
+                    swatch(name == "auto" ? AnyShapeStyle(AngularGradient(colors: [.red, .yellow, .green, .blue, .purple, .red], center: .center))
+                                          : AnyShapeStyle(Color(tint: name)),
+                           selected: selection.lowercased() == name)
+                }
+                .buttonStyle(.plain)
+                .help(name == "auto" ? "From the artwork" : name.capitalized)
+            }
+            Button(action: pickColour) {
+                ZStack {
+                    swatch(isCustom ? AnyShapeStyle(Color(tint: selection)) : AnyShapeStyle(Color.primary.opacity(0.08)), selected: isCustom)
+                    if !isCustom {
+                        Image(systemName: "eyedropper").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .help(isCustom ? "\(selection). Click to pick another colour." : "Pick any colour")
+        }
+    }
+
+    /// Any colour, from the system colour panel. Each change is saved as `#RRGGBB`.
+    private func pickColour() {
+        let panel = NSColorPanel.shared
+        panel.showsAlpha = false
+        if let c = RGBA.parse(isCustom ? selection : "#FF8800") {
+            panel.color = NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: 1)
+        }
+        ColourPanelRelay.shared.onChange = { colour in
+            if let c = colour.usingColorSpace(.sRGB) {
+                selection = RGBA(r: c.redComponent, g: c.greenComponent, b: c.blueComponent).hex
+            }
+        }
+        panel.setTarget(ColourPanelRelay.shared)
+        panel.setAction(#selector(ColourPanelRelay.changed(_:)))
+        panel.orderFront(nil)
+    }
+
+    private func swatch(_ fill: AnyShapeStyle, selected: Bool) -> some View {
+        ZStack {
+            Circle().fill(fill)
+            Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5)
+            if selected { Circle().stroke(Color.primary, lineWidth: 2).padding(-3) }
+        }
+        .frame(width: 16, height: 16)
+        .padding(3)
+        .contentShape(Rectangle())
+    }
+}
+
+/// Hands the colour panel's changes to whichever picker opened it last.
+@MainActor
+final class ColourPanelRelay: NSObject {
+    static let shared = ColourPanelRelay()
+    var onChange: ((NSColor) -> Void)?
+
+    @objc func changed(_ sender: NSColorPanel) { onChange?(sender.color) }
+}
+
+/// The closed and the open island with the current look: theme, glass level, accent, size,
+/// wings, text and playing indicator.
+struct IslandPreview: View {
+    let settings: IsletSettings
+    @ViewState private var width: CGFloat = 500
+
+    var body: some View {
+        // Both drawings keep one scale whatever the size, so a bigger island looks bigger.
+        let open = min(0.42, (width - 24) / IsletSettings.expandedWidthRange.upperBound)
+        let closed = min(0.62, (width - 24) / (IslandSketch.notch.width + 2 * IsletSettings.wingWidthRange.upperBound))
+        VStack(spacing: 8) {
+            scene("Closed", IslandSketch(settings: settings, theme: settings.theme, open: false, scale: closed),
+                  height: IslandSketch.notch.height * closed + 24)
+            scene("Open", IslandSketch(settings: settings, theme: settings.theme, open: true, scale: open),
+                  height: settings.expandedSize.height * open + 20)
+        }
+        .frame(maxWidth: .infinity)
+        .background {
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear { width = geo.size.width }
+                    .onChange(of: geo.size.width) { _, w in width = w }
+            }
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement()
+        .accessibilityLabel("Preview of the island")
+    }
+
+    private func scene(_ label: String, _ sketch: IslandSketch, height: CGFloat) -> some View {
+        sketch
+            .frame(height: height)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(alignment: .bottomLeading) {
+                Text(label).font(.caption2.weight(.semibold)).foregroundStyle(.white.opacity(0.85))
+                    .padding(.horizontal, 8).padding(.vertical, 5)
+            }
+    }
+}
+
+/// A drawing of the island for Settings: the menu bar with the notch, and the island in it,
+/// closed or open. Not the real island: cheap, static, and drawable in snapshots.
+struct IslandSketch: View {
+    let settings: IsletSettings
+    var theme: IslandTheme
+    var open: Bool
+    /// Sketch points per island point.
+    var scale: CGFloat
+    /// Real text and the playing indicator; off for the small theme pictures.
+    var detailed = true
+
+    /// The notch of a 14-inch MacBook Pro.
+    static let notch = CGSize(width: 185, height: 32)
+    static let artwork = [Color(red: 1.0, green: 0.62, blue: 0.32), Color(red: 0.93, green: 0.3, blue: 0.48)]
+
+    private var accent: Color { settings.accentColor == "auto" ? Self.artwork[0] : Color(tint: settings.accentColor) }
+
+    private var indicatorTint: Color {
+        switch settings.visualiserColour {
+        case .artwork: return Self.artwork[0]
+        case .accent: return settings.accentColor == "auto" ? .accentColor : Color(tint: settings.accentColor)
+        case .white: return .white
+        }
+    }
+
+    var body: some View {
+        let row = Self.notch.height * scale
+        ZStack(alignment: .top) {
+            LinearGradient(colors: [Color(red: 0.36, green: 0.42, blue: 0.62), Color(red: 0.62, green: 0.45, blue: 0.55)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+            Rectangle().fill(Color.white.opacity(0.18)).frame(height: row)
+            if open { openIsland(row: row) } else { closedIsland(row: row) }
+        }
+    }
+
+    private func closedIsland(row: CGFloat) -> some View {
+        let wing = settings.effectiveWingWidth * scale
+        let width = Self.notch.width * scale + wing * 2
+        return IslandShape(topRadius: 4 * scale, bottomRadius: 10 * scale)
+            .fill(Color.black)
+            .frame(width: width, height: row)
+            .overlay(alignment: .leading) {
+                artworkTile(size: row * 0.62).padding(.leading, max(4, wing / 2 - row * 0.31) + 4 * scale)
+            }
+            .overlay(alignment: .trailing) {
+                if settings.visualiserStyle != .off {
+                    IndicatorSketch(style: settings.visualiserStyle, tint: indicatorTint, height: row * 0.5)
+                        .padding(.trailing, max(4, wing / 2 - row * 0.3) + 4 * scale)
+                }
+            }
+    }
+
+    private func openIsland(row: CGFloat) -> some View {
+        let size = settings.expandedSize
+        let w = size.width * scale, h = size.height * scale
+        let shape = IslandShape(topRadius: 6 * scale, bottomRadius: 30 * scale)
+        let design: Font.Design = settings.roundedFont ? .rounded : .default
+        return ZStack(alignment: .topLeading) {
+            surface(shape: shape, row: row, height: h)
+            HStack(alignment: .center, spacing: max(4, 12 * scale)) {
+                artworkTile(size: min(h - row - 10, 64 * scale))
+                if detailed {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Evening walk").font(.system(size: 10, weight: .semibold, design: design)).foregroundStyle(.white)
+                        Text("Islet radio").font(.system(size: 9, design: design)).foregroundStyle(.white.opacity(0.6))
+                        Capsule().fill(Color.white.opacity(0.18))
+                            .frame(height: 3)
+                            .overlay(alignment: .leading) {
+                                GeometryReader { g in Capsule().fill(accent).frame(width: g.size.width * 0.42) }
+                            }
+                            .padding(.top, 3)
+                    }
+                    .lineLimit(1)
+                    if settings.visualiserStyle != .off {
+                        IndicatorSketch(style: settings.visualiserStyle, tint: indicatorTint, height: 10)
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Capsule().fill(Color.white.opacity(0.85)).frame(width: w * 0.32, height: 3)
+                        Capsule().fill(Color.white.opacity(0.4)).frame(width: w * 0.22, height: 3)
+                        Capsule().fill(accent).frame(width: w * 0.4, height: 2.5).padding(.top, 2)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+            .padding(.horizontal, max(8, 26 * scale))
+            .frame(width: w, height: h - row)
+            .offset(y: row)
+        }
+        .frame(width: w, height: h)
+    }
+
+    @ViewBuilder private func surface(shape: IslandShape, row: CGFloat, height: CGFloat) -> some View {
+        switch theme {
+        case .black:
+            shape.fill(Color.black)
+        case .graphite:
+            shape.fill(Color(white: 0.105)).overlay(shape.stroke(Color.white.opacity(0.1), lineWidth: 1))
+        case .glass:
+            // Black over the notch row, melting into a tinted, see-through body; how soon follows the level.
+            let top = min(0.95, row / max(height, 1))
+            let melt = top + (1 - top) * (1 - settings.glassLevel) * 0.85
+            shape.fill(LinearGradient(stops: [
+                .init(color: .black, location: 0),
+                .init(color: .black, location: top),
+                .init(color: .black.opacity(0.92), location: min(1, max(top, melt - 0.08))),
+                .init(color: .black.opacity(0.42), location: min(1, melt + 0.12)),
+                .init(color: .black.opacity(0.36), location: 1),
+            ], startPoint: .top, endPoint: .bottom))
+            .overlay(shape.fill(LinearGradient(colors: [.white.opacity(0.0), .white.opacity(0.1)], startPoint: .top, endPoint: .bottom)))
+            .overlay(shape.stroke(Color.white.opacity(0.22), lineWidth: 0.75))
+        }
+    }
+
+    private func artworkTile(size: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
+            .fill(LinearGradient(colors: Self.artwork, startPoint: .topLeading, endPoint: .bottomTrailing))
+            .frame(width: size, height: size)
+    }
+}
+
+/// The playing indicator at rest, in the chosen look.
+struct IndicatorSketch: View {
+    let style: VisualiserStyle
+    let tint: Color
+    var height: CGFloat = 14
+
+    var body: some View {
+        let heights: [CGFloat] = style == .slim ? [0.55, 0.9, 0.45, 0.75, 0.6, 0.8] : [0.45, 0.8, 0.35, 0.65]
+        HStack(alignment: style == .dots ? .center : .bottom, spacing: height * (style == .slim ? 0.1 : style == .dots ? 0.22 : 0.15)) {
+            if style == .dots {
+                ForEach(0..<3, id: \.self) { i in
+                    Circle().fill(tint).frame(width: height * 0.3, height: height * 0.3).offset(y: -height * [0.2, 0.38, 0.12][i])
+                }
+            } else if style != .off {
+                ForEach(Array(heights.enumerated()), id: \.offset) { _, h in
+                    RoundedRectangle(cornerRadius: height * 0.09).fill(tint)
+                        .frame(width: height * (style == .slim ? 0.12 : 0.2), height: height * h)
+                }
+            }
+        }
+        .frame(height: height, alignment: .bottom)
+    }
+}
+
+// MARK: - Shortcuts
+
+struct ShortcutSettings: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        Form {
+            Section { SettingsHero(page: .shortcuts) }
+            Section {
+                LabeledContent {
+                    ShortcutField(text: $model.settings.hotkey, standard: IsletSettings().hotkey)
+                } label: {
+                    Text("Open or close the island")
+                    Text("Opens it pinned, so it stays open until you press the keys again.")
+                }
+                .settingsAnchor("shortcuts.island")
+                LabeledContent {
+                    ShortcutField(text: $model.settings.askHotkey, standard: IsletSettings().askHotkey)
+                } label: {
+                    Text("Open the Ask box")
+                    Text("Ready to type a question. Press the keys again to close it.")
+                }
+                .settingsAnchor("shortcuts.ask")
+            } footer: {
+                SettingsFooter("Click a shortcut, then press the keys you want, with at least one of ⌃, ⌥ or ⌘. Delete turns a shortcut off and Esc keeps the one you had.")
             }
         }
         .formStyle(.grouped)
     }
 }
 
-/// Per-app customisation: tint, icon, visibility and notification handling.
+// MARK: - Apps
+
+/// Per-app customisation: colour, visibility and notifications.
 struct AppRulesSettings: View {
     @Bindable var model: AppModel
-    @ViewState private var selection: String?
+    @ViewState private var added: String?
 
     private var runningApps: [NSRunningApplication] {
         let existing = Set(model.settings.appRules.map(\.bundleID))
@@ -232,35 +599,66 @@ struct AppRulesSettings: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Customise how each app appears in the island.").foregroundStyle(.secondary)
-                Spacer()
-                Menu("Add App") {
-                    ForEach(runningApps, id: \.processIdentifier) { app in
-                        Button(app.localizedName ?? app.bundleIdentifier!) {
-                            model.settings.appRules.append(AppRule(bundleID: app.bundleIdentifier!))
-                            selection = app.bundleIdentifier
+        ScrollViewReader { proxy in
+            Form {
+                Section {
+                    SettingsHero(page: .apps) { addMenu }
+                }
+                if model.settings.appRules.isEmpty {
+                    Section {
+                        VStack(spacing: 8) {
+                            Image(systemName: "app.dashed").font(.system(size: 30, weight: .light)).foregroundStyle(.tertiary)
+                            Text("No apps yet").font(.headline)
+                            Text("Add an app to change how the island treats it.")
+                                .font(.callout).foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 28)
+                    }
+                } else {
+                    Section {
+                        ForEach($model.settings.appRules) { $rule in
+                            AppRuleRow(rule: $rule) {
+                                model.settings.appRules.removeAll { $0.bundleID == rule.bundleID }
+                            }
+                            .id(rule.bundleID)
                         }
                     }
                 }
-                .fixedSize()
             }
-            if model.settings.appRules.isEmpty {
-                ContentUnavailableView("No app rules yet", systemImage: "app.dashed",
-                                       description: Text("Add an app to give it a color, hide the island while it's in front, keep the island in fullscreen, or mute its notifications."))
-            } else {
-                List(selection: $selection) {
-                    ForEach($model.settings.appRules) { $rule in
-                        AppRuleRow(rule: $rule) {
-                            model.settings.appRules.removeAll { $0.bundleID == rule.bundleID }
-                        }
-                        .tag(rule.bundleID)
-                    }
-                }
+            .formStyle(.grouped)
+            // A newly added app goes to the end of the list; bring it into view.
+            .onChange(of: added) { _, id in
+                if let id { withAnimation { proxy.scrollTo(id, anchor: .bottom) } }
             }
         }
-        .padding()
+    }
+
+    private var addMenu: some View {
+        Menu("Add App") {
+            ForEach(runningApps, id: \.processIdentifier) { app in
+                Button(app.localizedName ?? app.bundleIdentifier!) { add(app.bundleIdentifier!) }
+            }
+            if !runningApps.isEmpty { Divider() }
+            Button("Other App…", action: chooseApp)
+        }
+        .fixedSize()
+        .settingsAnchor("apps.add")
+    }
+
+    private func add(_ bundleID: String) {
+        guard !model.settings.appRules.contains(where: { $0.bundleID == bundleID }) else { return }
+        model.settings.appRules.append(AppRule(bundleID: bundleID))
+        added = bundleID
+    }
+
+    private func chooseApp() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.prompt = "Add"
+        guard panel.runModal() == .OK, let url = panel.url, let id = Bundle(url: url)?.bundleIdentifier else { return }
+        add(id)
     }
 }
 
@@ -268,263 +666,79 @@ struct AppRuleRow: View {
     @Binding var rule: AppRule
     var onDelete: () -> Void
 
+    static let tints = ["blue", "indigo", "purple", "pink", "red", "orange", "yellow", "green", "teal", "gray"]
+
     private var name: String {
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: rule.bundleID)
             .map { FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "") } ?? rule.bundleID
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                AppIconView(bundleID: rule.bundleID, size: 20)
-                Text(name).bold()
-                Spacer()
-                Picker("", selection: Binding(get: { rule.tint ?? "" }, set: { rule.tint = $0.isEmpty ? nil : $0 })) {
-                    Text("Default color").tag("")
-                    ForEach(["blue", "purple", "pink", "red", "orange", "yellow", "green", "teal", "gray"], id: \.self) { Text($0.capitalized).tag($0) }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                AppIconView(bundleID: rule.bundleID, size: 24)
+                Text(name).font(.body.weight(.medium)).lineLimit(1)
+                Spacer(minLength: 8)
+                // Menus draw their icons in one colour, so the chosen colour shows beside the menu.
+                Circle()
+                    .fill(rule.tint.map { Color(tint: $0) } ?? Color.clear)
+                    .overlay(Circle().strokeBorder(Color.primary.opacity(rule.tint == nil ? 0.25 : 0.12), lineWidth: 1))
+                    .frame(width: 12, height: 12)
+                Picker("Colour", selection: Binding(get: { rule.tint ?? "" }, set: { rule.tint = $0.isEmpty ? nil : $0 })) {
+                    Text("Its own colour").tag("")
+                    Divider()
+                    ForEach(Self.tints, id: \.self) { tint in
+                        Text(tint == "gray" ? "Grey" : tint.capitalized).tag(tint)
+                    }
                 }
-                .frame(width: 140)
-                Button(role: .destructive, action: onDelete) { Image(systemName: "trash") }.buttonStyle(.borderless)
+                .labelsHidden()
+                .fixedSize()
+                Button(role: .destructive, action: onDelete) { Image(systemName: "minus.circle") }
+                    .buttonStyle(.borderless)
+                    .help("Remove \(name)")
             }
-            HStack(spacing: 14) {
-                Toggle("Hide island when in front", isOn: Binding(get: { rule.hideIsland ?? false }, set: { rule.hideIsland = $0 ? true : nil }))
-                Toggle("Show in fullscreen", isOn: Binding(get: { rule.showInFullscreen ?? false }, set: { rule.showInFullscreen = $0 ? true : nil }))
+            HStack(spacing: 16) {
+                Toggle("Hide the island in front", isOn: Binding(get: { rule.hideIsland ?? false }, set: { rule.hideIsland = $0 ? true : nil }))
+                Toggle("Keep it in fullscreen", isOn: Binding(get: { rule.showInFullscreen ?? false }, set: { rule.showInFullscreen = $0 ? true : nil }))
                 Toggle("Mute notifications", isOn: Binding(get: { rule.muteNotifications ?? false }, set: { rule.muteNotifications = $0 ? true : nil }))
             }
             .toggleStyle(.checkbox)
-            .font(.caption)
+            .font(.callout)
+            .padding(.leading, 34)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 3)
     }
 }
 
-struct ModulesSettings: View {
-    @Bindable var model: AppModel
-    @ViewState private var calendarAccess = CalendarService.eventAccess
-    @ViewState private var reminderAccess = CalendarService.reminderAccess
-    @ViewState private var axTrusted = MediaKeyInterceptor.hasAccessibility
-
-    var body: some View {
-        Form {
-            Section("Media") {
-                Toggle("Now Playing", isOn: $model.settings.mediaEnabled)
-                MediaSourceToggles(model: model)
-                Toggle("Show paused media in the closed island", isOn: $model.settings.showPausedMedia)
-                Toggle("Show the new song for a moment", isOn: $model.settings.songChangePeek)
-                    .disabled(!model.settings.mediaEnabled)
-                Text("When the track changes, the closed island opens a little below the notch with the artwork, title and artist, then closes again.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Picker("Playing indicator", selection: $model.settings.visualiserStyle) {
-                    Text("Bars").tag(VisualiserStyle.bars)
-                    Text("Slim bars").tag(VisualiserStyle.slim)
-                    Text("Dots").tag(VisualiserStyle.dots)
-                    Text("Off").tag(VisualiserStyle.off)
-                }
-                .disabled(!model.settings.mediaEnabled)
-                if model.settings.visualiserStyle != .off {
-                    Picker("Indicator colour", selection: $model.settings.visualiserColour) {
-                        Text("From the artwork").tag(VisualiserColour.artwork)
-                        Text("Accent colour").tag(VisualiserColour.accent)
-                        Text("White").tag(VisualiserColour.white)
-                    }
-                    .disabled(!model.settings.mediaEnabled)
-                }
-                LabeledContent("System-wide bridge") {
-                    Text(model.systemMedia.isRunning ? "Running" : "Unavailable")
-                        .foregroundStyle(model.systemMedia.isRunning ? .green : .orange)
-                }
-            }
-            Section("Heads-up display") {
-                Toggle("Volume HUD", isOn: $model.settings.hudEnabled)
-                Toggle("Brightness HUD", isOn: $model.settings.brightnessHUDEnabled)
-                Toggle("Replace the system HUD (uses Accessibility)", isOn: $model.settings.replaceSystemHUD)
-                if model.settings.replaceSystemHUD && !axTrusted {
-                    HStack {
-                        Text("Grant Accessibility so Islet can take over the volume and brightness keys.").font(.caption)
-                        Button("Grant…") {
-                            MediaKeyInterceptor.requestAccessibility()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { axTrusted = MediaKeyInterceptor.hasAccessibility }
-                        }
-                    }
-                }
-            }
-            LiveActivitySettingsSection(model: model)
-            Section("iPhone-style events") {
-                Toggle("Call timer when FaceTime, Zoom, Meet… use the mic", isOn: $model.settings.callDetection)
-                Toggle("Download progress from ~/Downloads", isOn: $model.settings.downloadsEnabled)
-                Toggle("“Welcome back” summary when you unlock", isOn: $model.settings.unlockSplash)
-                HStack {
-                    Toggle("Mirror notifications from every app (experimental)", isOn: $model.settings.notificationMirroring)
-                    if model.settings.notificationMirroring && !axTrusted {
-                        Button("Grant Access…") {
-                            MediaKeyInterceptor.requestAccessibility()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                                axTrusted = MediaKeyInterceptor.hasAccessibility
-                                model.startEventSources()
-                            }
-                        }
-                    }
-                }
-                Text("Includes iPhone notifications that macOS already forwards. Uses Accessibility to read banners; nothing is stored or sent anywhere.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Toggle("On-device AI for icons and summaries", isOn: $model.settings.aiAssist)
-                LabeledContent("Apple Intelligence") { Text(AIAssist.shared.statusText).foregroundStyle(.secondary) }
-            }
-            TimerSettingsSection(model: model)
-            Section("Everything else") {
-                Toggle("Battery & charging", isOn: $model.settings.batteryEnabled)
-                HStack {
-                    Toggle("Calendar", isOn: $model.settings.calendarEnabled)
-                    Spacer()
-                    if calendarAccess != .granted {
-                        Button(calendarAccess == .denied ? "Open Privacy Settings" : "Grant Access") {
-                            if calendarAccess == .denied {
-                                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")!)
-                            } else {
-                                model.requestCalendarAccess()
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { calendarAccess = CalendarService.eventAccess }
-                            }
-                        }
-                    }
-                }
-                if calendarAccess == .granted && model.settings.calendarEnabled {
-                    DisclosureGroup("Calendars shown") {
-                        ForEach(model.calendar.calendars(), id: \.id) { c in
-                            Toggle(isOn: Binding(
-                                get: { !model.settings.hiddenCalendars.contains(c.id) },
-                                set: { show in
-                                    if show { model.settings.hiddenCalendars.removeAll { $0 == c.id } }
-                                    else if !model.settings.hiddenCalendars.contains(c.id) { model.settings.hiddenCalendars.append(c.id) }
-                                })) {
-                                HStack(spacing: 6) {
-                                    Circle().fill(Color(tint: c.color, fallback: .blue)).frame(width: 8, height: 8)
-                                    Text(c.title)
-                                }
-                            }
-                        }
-                    }
-                }
-                HStack {
-                    Toggle("Reminders due today", isOn: $model.settings.remindersEnabled)
-                    Spacer()
-                    if reminderAccess != .granted {
-                        Button(reminderAccess == .denied ? "Open Privacy Settings" : "Grant Access") {
-                            if reminderAccess == .denied {
-                                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders")!)
-                            } else {
-                                model.requestReminderAccess()
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { reminderAccess = CalendarService.reminderAccess }
-                            }
-                        }
-                    }
-                }
-                Toggle("File shelf & AirDrop", isOn: $model.settings.shelfEnabled)
-                Toggle("Clipboard history (local only, skips passwords)", isOn: $model.settings.clipboardEnabled)
-                if model.settings.clipboardEnabled { ClipboardLimitPicker(model: model) }
-                Toggle("Camera & microphone indicators", isOn: $model.settings.privacyIndicatorsEnabled)
-                Toggle("System stats", isOn: $model.settings.systemStatsEnabled)
-            }
-            BatteryAlertSettingsSection(model: model)
-        }
-        .formStyle(.grouped)
-    }
-}
-
-struct IntegrationsSettings: View {
-    @Bindable var model: AppModel
-    @ViewState private var copied = false
-
-    var body: some View {
-        // Home's "Show usage" opens this tab scrolled to Usage limits.
-        ScrollViewReader { proxy in
-            form
-                .onAppear { scroll(proxy) }
-                .onChange(of: model.settingsScrollTarget) { _, _ in scroll(proxy) }
-        }
-    }
-
-    private func scroll(_ proxy: ScrollViewProxy) {
-        guard let target = model.settingsScrollTarget, target.pane == .integrations else { return }
-        // After this pass, so the form has laid out the section.
-        DispatchQueue.main.async {
-            withAnimation(.smooth(duration: 0.3)) { proxy.scrollTo(target, anchor: .top) }
-            model.settingsScrollTarget = nil
-        }
-    }
-
-    private var hookSnippet: String {
-        let cli = AppActions.cliPath
-        return """
-        "hooks": {
-          "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "\(cli) hook claude"}]}],
-          "PreToolUse":       [{"hooks": [{"type": "command", "command": "\(cli) hook claude"}]}],
-          "Notification":     [{"hooks": [{"type": "command", "command": "\(cli) hook claude"}]}],
-          "Stop":             [{"hooks": [{"type": "command", "command": "\(cli) hook claude"}]}],
-          "SessionEnd":       [{"hooks": [{"type": "command", "command": "\(cli) hook claude"}]}]
-        }
-        """
-    }
-
-    private var form: some View {
-        Form {
-            Section("Local API") {
-                Toggle("Enable local API (127.0.0.1 only, token required)", isOn: $model.settings.apiEnabled)
-                LabeledContent("Status") { Text(model.apiStatus).foregroundStyle(.secondary) }
-                LabeledContent("Port") { PortField(port: $model.settings.apiPort, other: model.settings.lanPort) }
-                LabeledContent("iPhone bridge port") { PortField(port: $model.settings.lanPort, other: model.settings.apiPort) }
-                HStack {
-                    Button(copied ? "Copied" : "Copy Token") {
-                        AppActions.copyToken()
-                        copied = true
-                    }
-                    Button("Open API Docs") {
-                        if let doc = Bundle.main.url(forResource: "API", withExtension: "md") { NSWorkspace.shared.open(doc) }
-                    }
-                }
-            }
-            Section("Command line") {
-                Text("Link the bundled CLI onto your PATH:").font(.caption)
-                Text("ln -sf \"\(AppActions.cliPath)\" /opt/homebrew/bin/isletctl")
-                    .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
-            }
-            Section("Coding agents") {
-                ApprovalSettingsRows(model: model)
-                Text("Add to ~/.claude/settings.json to see agent status in the notch:").font(.caption)
-                Text(hookSnippet).font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
-                Text("Codex: add  notify = [\"\(AppActions.cliPath)\", \"hook\", \"codex\"]  to ~/.codex/config.toml")
-                    .font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
-            }
-            UsageLimitsSection(model: model)
-                .id(SettingsSection.usageLimits)
-            LANBridgeSection(model: model)
-            Section("Script widgets") {
-                Toggle("Run scripts from the plugins folder", isOn: $model.settings.pluginsEnabled)
-                PluginFolderRow(model: model)
-                HStack {
-                    Button("Open Plugins Folder") { AppActions.openPluginsFolder(model) }
-                    Button("Install Examples") { AppActions.installExamplePlugins(model) }
-                }
-            }
-            Section("URL scheme") {
-                Text("islet://notify?title=Hello  ·  islet://timer?minutes=5  ·  islet://media/playpause  ·  islet://awake?for=1h")
-                    .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
-            }
-        }
-        .formStyle(.grouped)
-    }
-}
+// MARK: - About
 
 struct AboutSettings: View {
     var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "capsule.fill").font(.system(size: 44)).foregroundStyle(.primary)
-            Text("Islet").font(.title.bold())
-            Text("Version \(AppModel.version)").foregroundStyle(.secondary)
-            Text("An open-source Dynamic Island for the Mac notch.\nMIT licensed. No accounts, no license server, no telemetry.")
-                .multilineTextAlignment(.center).foregroundStyle(.secondary)
-            Text("Settings live in ~/.config/islet/config.json")
-                .font(.system(.caption, design: .monospaced)).foregroundStyle(.tertiary)
+        Form {
+            Section {
+                VStack(spacing: 10) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(LinearGradient(colors: [Color(red: 0.36, green: 0.42, blue: 0.62), Color(red: 0.62, green: 0.45, blue: 0.55)],
+                                                 startPoint: .topLeading, endPoint: .bottomTrailing))
+                        Capsule().fill(Color.black).frame(width: 46, height: 16).offset(y: -18)
+                    }
+                    .frame(width: 80, height: 80)
+                    .shadow(color: .black.opacity(0.18), radius: 6, y: 3)
+                    Text("Islet").font(.title.bold())
+                    Text("Version \(AppModel.version)").foregroundStyle(.secondary).textSelection(.enabled)
+                        .settingsAnchor("about.version")
+                    Text("An open-source Dynamic Island for the Mac notch.")
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+            } footer: {
+                Text("MIT licence. No accounts, no licence server, no tracking.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .formStyle(.grouped)
     }
 }

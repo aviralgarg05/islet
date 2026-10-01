@@ -3,63 +3,85 @@ import IsletCore
 import IsletSystem
 import SwiftUI
 
-/// Settings → AI: Apple Intelligence, the Ask box, API keys and the local CLIs.
+/// Settings → Ask & AI: the Ask box, API keys, the command-line tools and Apple Intelligence.
 struct AISettingsView: View {
     @Bindable var model: AppModel
     @ViewState private var fetched: [AskProviderKind: [String]] = [:]
     @ViewState private var fetchError: [AskProviderKind: String] = [:]
     @ViewState private var keyStored: [AskProviderKind: Bool] = [:]
-    @ViewState private var cliPaths: [AskProviderKind: String] = [:]
-    @ViewState private var appleStatus = AIAssist.shared.statusText
+    @ViewState private var cliFound: [AskProviderKind: Bool] = [:]
+    @ViewState private var appleReady = AIAssist.shared.isAvailable
+    @Environment(\.openSettingsPage) private var openPage
 
     private var service: AskService { model.ask.service }
 
     var body: some View {
         Form {
-            Section("Apple Intelligence") {
-                LabeledContent("Status") { Text(appleStatus).foregroundStyle(.secondary) }
-                Toggle("On-device AI for icons and summaries", isOn: $model.settings.aiAssist)
-                Text("Smart icons and notification summaries only ever use the on-device model. Notification, calendar and clipboard text never goes to a cloud provider.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+            Section { SettingsHero(page: .ai) }
             Section("Ask") {
-                Picker("Default provider", selection: $model.settings.ask.provider) {
+                Picker("Answer with", selection: $model.settings.ask.provider) {
                     ForEach(AskProviderKind.allCases) { Text($0.title).tag($0) }
                 }
-                Picker("Effort", selection: $model.settings.ask.effort) {
+                .settingsAnchor("ai.provider")
+                Picker(selection: $model.settings.ask.effort) {
                     ForEach(AskEffort.allCases, id: \.self) { Text($0.title).tag($0) }
+                } label: {
+                    Text("Effort")
+                    Text("For Claude and ChatGPT. Low answers fastest and costs least.")
                 }
                 .pickerStyle(.segmented)
-                Text("For Claude and ChatGPT. Low answers fastest and costs least.")
-                    .font(.caption).foregroundStyle(.secondary)
-                TextField("Shortcut", text: $model.settings.askHotkey, prompt: Text("ctrl+option+a"))
-                Text("Opens the Ask box ready to type, from any app. Leave empty to turn it off.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Toggle("Keep follow-ups in memory", isOn: $model.settings.ask.followUps)
-                Text("Sends up to \(AskLimits.followUpTurns) earlier turns with the next question. Nothing is written to disk, and quitting Islet forgets them.")
-                    .font(.caption).foregroundStyle(.secondary)
+                .settingsAnchor("ai.effort")
+                Toggle(isOn: $model.settings.ask.followUps) {
+                    Text("Keep follow-ups in memory")
+                    Text("Sends up to \(AskLimits.followUpTurns) earlier turns with the next question. Nothing is written to disk, and quitting Islet forgets them.")
+                }
+                .settingsAnchor("ai.followUps")
+                LabeledContent("Shortcut") {
+                    HStack(spacing: 10) {
+                        Text(Hotkey.parse(model.settings.askHotkey)?.label ?? "Off").foregroundStyle(.secondary)
+                        Button("Change…") { openPage(.shortcuts, "shortcuts.ask") }
+                    }
+                }
             }
-            Section("Claude (Anthropic API)") {
+            Section("Claude") {
                 AIKeyRow(kind: .anthropic, service: service) { models in keyChanged(.anthropic, models: models) }
+                    .settingsAnchor("ai.anthropic")
                 modelPicker(.anthropic)
             }
-            Section("ChatGPT (OpenAI API)") {
+            Section("ChatGPT") {
                 AIKeyRow(kind: .openai, service: service) { models in keyChanged(.openai, models: models) }
+                    .settingsAnchor("ai.openai")
                 modelPicker(.openai)
             }
-            Section("Command-line tools") {
+            Section {
                 cliRow(.claudeCode)
+                    .settingsAnchor("ai.cli")
                 cliRow(.codex)
-                Text("Uses the login you already have in Terminal, so answers count towards that plan. Runs with no tools and no hooks, in an empty folder.")
-                    .font(.caption).foregroundStyle(.secondary)
+            } header: {
+                Text("Command-line tools")
+            } footer: {
+                SettingsFooter("Uses the login you already have in Terminal, so answers count towards that plan. They run with no tools, in an empty folder.")
             }
-            Section("What leaves this Mac") {
-                Text("""
-                On-device answers never leave this Mac. Questions to Claude or ChatGPT go to Anthropic or OpenAI with your key and are billed to your account; OpenAI is asked not to store them. The command-line tools send questions to their vendor. Islet keeps no history on disk, and an islet://ask link only fills in the question: it never sends it.
-                """)
-                .font(.caption).foregroundStyle(.secondary)
-                Text("Keys are protected by your login keychain. Builds signed with a Developer ID add a code-identity check.")
-                    .font(.caption).foregroundStyle(.secondary)
+            Section("Apple Intelligence") {
+                LabeledContent("On this Mac") {
+                    HStack(spacing: 5) {
+                        Circle().fill(appleReady ? Color.green : Color.secondary.opacity(0.5)).frame(width: 6, height: 6)
+                        Text(Self.appleStatus).foregroundStyle(.secondary)
+                    }
+                }
+                .settingsAnchor("ai.apple")
+                Toggle(isOn: $model.settings.aiAssist) {
+                    Text("Smart icons and short summaries")
+                    Text("Only ever on this Mac. Notification, calendar and clipboard text never goes to Claude or ChatGPT.")
+                }
+            }
+            Section {
+                Text("On-device answers never leave this Mac. Questions to Claude or ChatGPT go to Anthropic or OpenAI with your key, billed to your account; OpenAI is asked not to keep them. The command-line tools send questions to their maker. Islet keeps no history, and your keys stay in your login keychain.")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .settingsAnchor("ai.privacy")
+            } header: {
+                Text("What leaves this Mac")
             }
         }
         .formStyle(.grouped)
@@ -68,13 +90,24 @@ struct AISettingsView: View {
         .onChange(of: model.settings.ask.provider) { _, _ in model.ask.sessionProvider = nil }
     }
 
+    /// Apple Intelligence's state in plain words. The raw status is under Advanced → Diagnostics.
+    static var appleStatus: String {
+        let raw = AIAssist.shared.statusText
+        if AIAssist.shared.isAvailable { return "Ready" }
+        if raw.contains("macOS 26") { return "Needs macOS 26 or later" }
+        if raw.contains("NotEnabled") { return "Turn on Apple Intelligence in System Settings" }
+        if raw.contains("NotEligible") { return "This Mac can't run it" }
+        if raw.contains("NotReady") { return "Still downloading" }
+        return "Not available"
+    }
+
     private func refresh() {
-        appleStatus = AIAssist.shared.statusText
+        appleReady = AIAssist.shared.isAvailable
         for kind in [AskProviderKind.anthropic, .openai] {
             keyStored[kind] = service.secrets.contains(kind.keyAccount ?? "")
         }
         for kind in [AskProviderKind.claudeCode, .codex] {
-            cliPaths[kind] = service.cliBinary(for: kind)?.path
+            cliFound[kind] = service.cliBinary(for: kind) != nil
         }
     }
 
@@ -119,15 +152,20 @@ struct AISettingsView: View {
     }
 
     private func cliRow(_ kind: AskProviderKind) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            LabeledContent(kind.title) {
-                Text(cliPaths[kind].map { ($0 as NSString).abbreviatingWithTildeInPath } ?? "Not found")
-                    .foregroundStyle(.secondary)
-                    .font(.system(.caption, design: .monospaced))
+        let found = cliFound[kind] ?? false
+        return LabeledContent {
+            HStack(spacing: 10) {
+                TextField("Model", text: Binding(get: { model.settings.ask.models[kind.rawValue] ?? "" },
+                                                 set: { model.settings.ask.setModel($0, for: kind) }),
+                          prompt: Text("Default model"))
+                    .labelsHidden()
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 160)
+                    .disabled(!found)
             }
-            TextField("Model", text: Binding(get: { model.settings.ask.models[kind.rawValue] ?? "" },
-                                             set: { model.settings.ask.setModel($0, for: kind) }),
-                      prompt: Text("Default"))
+        } label: {
+            Text(kind.title)
+            Text(found ? "Ready" : "Not installed")
         }
     }
 }
@@ -157,8 +195,9 @@ struct AIKeyRow: View {
                     }
                 } else {
                     HStack(spacing: 8) {
-                        SecureField("", text: $draft, prompt: Text(kind == .anthropic ? "sk-ant-…" : "sk-…"))
-                            .frame(minWidth: 180)
+                        SecureField("", text: $draft, prompt: Text("Paste your key"))
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 180)
                             .onSubmit(save)
                         Button(checking ? "Checking…" : "Save", action: save)
                             .disabled(AskKeys.normalized(draft).isEmpty || checking)

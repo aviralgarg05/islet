@@ -320,7 +320,7 @@ public enum SettingsIndex {
 
         SettingsEntry("shelf.enabled", .shelf, "File shelf and AirDrop", keywords: ["drag", "drop", "files", "share"]),
         SettingsEntry("shelf.clipboard", .shelf, "Clipboard history", keywords: ["copy", "paste", "pasteboard"]),
-        SettingsEntry("shelf.clipboardLimit", .shelf, "Items kept", section: "Clipboard history", keywords: ["history size", "clipboard"],
+        SettingsEntry("shelf.clipboardLimit", .shelf, "Items kept", section: "Clipboard", keywords: ["history size", "clipboard"],
                       anchor: "shelf.clipboard"),
 
         SettingsEntry("downloads.enabled", .downloads, "Download progress", keywords: ["files", "Safari", "Chrome", "browser"]),
@@ -357,19 +357,21 @@ public enum SettingsIndex {
     ]
 
     private static let advanced: [SettingsEntry] = [
-        SettingsEntry("advanced.api", .advanced, "Local API", section: "Local API", keywords: ["HTTP", "server", "scripts", "REST"]),
+        SettingsEntry("advanced.api", .advanced, "Accept requests from apps on this Mac", section: "Local API",
+                      keywords: ["HTTP", "server", "scripts", "REST"]),
         SettingsEntry("advanced.apiPort", .advanced, "Local API port", section: "Local API"),
         SettingsEntry("advanced.token", .advanced, "Copy API token", section: "Local API", keywords: ["bearer", "authorisation", "authorization"]),
         SettingsEntry("advanced.shareLive", .advanced, "Let scripts read Live Activities", section: "Local API", keywords: ["privacy", "mirrored"]),
         SettingsEntry("advanced.cli", .advanced, "Command-line tool", section: "Local API", keywords: ["isletctl", "PATH", "terminal"]),
-        SettingsEntry("advanced.bridge", .advanced, "iPhone bridge", section: "iPhone bridge",
+        SettingsEntry("advanced.bridge", .advanced, "Accept requests from this network", section: "iPhone bridge",
                       keywords: ["iPhone", "Shortcuts", "network", "LAN", "Home Assistant"]),
         SettingsEntry("advanced.bridgePort", .advanced, "iPhone bridge port", section: "iPhone bridge"),
         SettingsEntry("advanced.bridgeToken", .advanced, "iPhone bridge token", section: "iPhone bridge", keywords: ["bearer", "new token"]),
         SettingsEntry("advanced.hooks", .advanced, "Agent hook commands", section: "Coding agents",
                       keywords: ["hooks", "Claude Code", "Codex", "Cursor", "settings.json", "config.toml", "notify", "JSON"]),
         SettingsEntry("advanced.mcp", .advanced, "MCP server", section: "Coding agents", keywords: ["Model Context Protocol", "Claude Desktop", "tools"]),
-        SettingsEntry("advanced.scripts", .advanced, "Script widgets", section: "Script widgets", keywords: ["plugins", "xbar", "SwiftBar", "widgets"]),
+        SettingsEntry("advanced.scripts", .advanced, "Run scripts from the plugins folder", section: "Script widgets",
+                      keywords: ["xbar", "SwiftBar", "widgets"]),
         SettingsEntry("advanced.pluginsFolder", .advanced, "Plugins folder", section: "Script widgets", keywords: ["scripts", "examples"]),
         SettingsEntry("advanced.urlScheme", .advanced, "Links that control Islet", section: "Links", keywords: ["URL scheme", "islet://"]),
         SettingsEntry("advanced.config", .advanced, "Settings file", section: "Settings file", keywords: ["config.json", "dotfiles", "JSON"]),

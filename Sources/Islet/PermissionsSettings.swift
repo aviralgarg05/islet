@@ -19,13 +19,14 @@ struct PermissionsSettings: View {
 
     var body: some View {
         Form {
+            Section { SettingsHero(page: .permissions) }
             Section {
                 ForEach(PermissionKind.allCases) { kind in
                     PermissionRow(kind: kind, uses: kind.uses(model.settings), status: statuses[kind]) { act(on: kind) }
+                        .settingsAnchor("permissions.\(kind.rawValue)")
                 }
             } footer: {
-                Text("None of these is needed to run Islet. macOS asks the first time you turn on a feature that uses one, or press Allow here.")
-                    .font(.caption).foregroundStyle(.secondary)
+                SettingsFooter("macOS asks the first time you turn on a feature that uses one, or when you press Allow here.")
             }
         }
         .formStyle(.grouped)
