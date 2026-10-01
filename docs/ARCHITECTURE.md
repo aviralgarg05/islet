@@ -129,6 +129,14 @@ POST /v1/media (extensions, scripts) ──────────────�
 
 macOS 15.4 and later refuse MediaRemote to non-Apple processes, so the helper (`Helpers/MediaRemoteBridge`) is a small Objective-C dylib that `/usr/bin/perl`, an Apple platform binary, loads. Release builds load only the copy inside their own bundle. The helper streams JSON lines, takes `get`, `cmd N`, `seek S`, `shuffle N` and `repeat N` on stdin, and exits when the pipe closes. If it exits, it is restarted after a growing delay. If it keeps exiting within a minute of starting, the bridge gives up after five restarts, and the Music and Spotify providers fetch artwork and position themselves (AppleScript, and Spotify's oEmbed endpoint for cover art). They send Apple Events to a player only once macOS reports Automation for it as allowed; see [Privacy rules](#privacy-rules).
 
+### The playing indicator and stickers
+
+The closed island's indicator (`PlayingIndicatorNSView`, `LayerAnimations.swift`) draws the look chosen in `visualiserStyle`: bars, slim bars, dots and mirrored bars (`EqualizerNSView`), a wave, a pulse, or Vinyl's still dot. Each moves between playing and paused with a spring and a fade, and loops in Core Animation. With Vinyl the artwork itself is the record (`VinylNSView`): one rotation animation turns it every 6 s, spinning up from rest when the music plays and coasting to a stop when it pauses.
+
+The GIF look shows a sticker in the right wing instead (`StickerNSView`). `StickerLibrary` finds the built-ins in the app's `Resources/Stickers` (drawn by `scripts/make-stickers.py` and copied by `bundle.sh`) and the user's in `StickerStore`'s folder (`stickers/` in the support folder). Its frames are decoded once with ImageIO at the pixel size they are drawn (`StickerDecoder`), shared between displays through a weak cache, and played by one discrete `CAKeyframeAnimation` on the layer's `contents`, with each frame's own time (at least 20 ms, `StickerTiming`) and at most 30 frames a second. Paused, it freezes on the frame it had reached and dims; playing again carries on from that frame. Reduce Motion shows the first frame and Low Power Mode holds the current one. The view lets its frames go as soon as it leaves the window, so a hidden, full-screen or open island holds none. `StickerLayout` keeps the sticker inside the wing and the menu bar row whatever the offsets and size say. With "Also when nothing is playing" the presenter shows `.compact(.sticker)` instead of idle, and the sticker rests on its first frame.
+
+An import (`StickerStore.add`) checks the size before reading (5 MB), what the bytes are rather than the file's name (GIF, animated PNG, WebP or HEIC sequence), and the pixel count from the header before decoding; keeps at most 150 frames spread over the whole loop, with the dropped frames' time added to the kept ones; scales them to fit 160 x 80 pixels; and writes an animated PNG named by a fresh UUID, through a temporary file in the same folder. Removing takes only names `CustomStickerID` accepts, so nothing outside the folder can be named.
+
 ## Live Activity mirroring
 
 `MenuBarLiveActivityMonitor` shows the Live Activities macOS puts in the menu bar (from the iPhone, and Mac ones such as Shortcuts) as island activities with the source `live-activity`. It needs Accessibility, and only starts once that has been granted.
@@ -262,7 +270,7 @@ Each model reports its next moment to `AppModel.reschedule()`, which keeps the o
   | Focus sound | the audio engine renders noise; fades in and out over a second | a focus sound plays in a Pomodoro focus round |
 
 - **Transitions end.** Opening, closing, peeks, bubbles and glyph swaps are one-shot SwiftUI animations (see [Motion](#motion)); once they finish nothing is left running.
-- **Looping motion is Core Animation.** The equaliser, spinners, countdown rings, call waveforms, the breathing stage capsule and the urgent glow are layer animations, which the window server runs. SwiftUI's `repeatForever` and `symbolEffect` redraw the view every frame, so they aren't used for these. The equaliser, spinner and glow run at 30 fps at most. The glow pulses six times, then stays steady. Content that has gone stale stops its looping motion.
+- **Looping motion is Core Animation.** The equaliser, the turning record, stickers, spinners, countdown rings, call waveforms, the breathing stage capsule and the urgent glow are layer animations, which the window server runs. SwiftUI's `repeatForever` and `symbolEffect` redraw the view every frame, so they aren't used for these. The equaliser, spinner and glow run at 30 fps at most. The glow pulses six times, then stays steady. Content that has gone stale stops its looping motion.
 - **The menu bar is measured only while the island is drawn** on that display, and off the main thread. Live Activity mirroring reads it only when a notification or Accessibility event says something changed, apart from its safety rescan.
 - **Budgets.** `make perf` measures CPU in seven island states: at most 0.5% idle, 1.5% in each compact state and 3% expanded with Now Playing. `make e2e` checks idle CPU under 1% and memory under 150 MB.
 
@@ -284,7 +292,7 @@ Each model reports its next moment to `AppModel.reschedule()`, which keeps the o
 - `scripts/bundle.sh` (`make app`):
   1. builds the release products;
   2. compiles the helper for `arm64e`, `arm64` and `x86_64`;
-  3. assembles `Islet.app` (Info.plist, icon, helper, CLI, API docs), taking the version from the newest `CHANGELOG.md` heading;
+  3. assembles `Islet.app` (Info.plist, icon, the built-in stickers, helper, CLI, API docs), taking the version from the newest `CHANGELOG.md` heading;
   4. signs the app and CLI with the hardened runtime. Locally that's ad-hoc with an identifier-based designated requirement, so privacy grants survive rebuilds. With `SIGN_IDENTITY` set it signs with that Developer ID identity and a timestamp.
 - `scripts/release.sh` (`make release`) zips the app and writes its SHA-256 and release notes; `PUBLISH=1` also pushes and creates the GitHub release.
 - Two quirks of the CLT toolchain on the macOS 27 SDK:
