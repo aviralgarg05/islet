@@ -33,7 +33,7 @@ struct LiveActivitiesSettings: View {
             } footer: {
                 SettingsFooter("They appear with their app's icon. Clicking one opens Apple's own view of it.")
             }
-            Section {
+            Section("When to show them") {
                 Toggle(isOn: $model.settings.mirrorOnlyHiddenActivities) {
                     Text("Only when the notch hides them")
                     Text("When the menu bar is full, macOS tucks Live Activities behind the notch. Show only those, so nothing appears twice.")

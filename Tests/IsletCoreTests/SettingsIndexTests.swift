@@ -43,6 +43,40 @@ import Testing
         }
     }
 
+    /// Messages that send people to Settings name a page that exists ("Settings → Ask & AI").
+    @Test func messagesNamePagesThatExist() {
+        let messages = [
+            AskProviderStatus.needsKey.message(for: .anthropic),
+            AskProviderStatus.needsKey.message(for: .openai),
+            AskErrorText.http(status: 401, body: Data(), retryAfter: nil, provider: .anthropic),
+            AskErrorText.http(status: 404, body: Data(), retryAfter: nil, provider: .openai),
+        ]
+        for message in messages {
+            #expect(Self.pagesNamed(in: message) == ["Ask & AI"], "\(message)")
+        }
+        #expect(Self.pagesNamed(in: "Settings → AI and Settings → Integrations → iPhone bridge") == [nil, nil])
+    }
+
+    /// The page each "Settings → " in `text` leads to: the longest page title the rest starts with.
+    static func pagesNamed(in text: String) -> [String?] {
+        text.components(separatedBy: "Settings → ").dropFirst().map { rest in
+            SettingsPage.allCases.map(\.title).filter { rest.hasPrefix($0) }.max { $0.count < $1.count }
+        }
+    }
+
+    /// The Permissions page lists what uses each permission by the names those rows have on
+    /// their own pages.
+    @Test func permissionsNameFeaturesAsTheirPagesDo() {
+        let titles = Set(SettingsIndex.entries.map(\.title))
+        let settings = IsletSettings()
+        let named = PermissionKind.accessibility.uses(settings).map(\.feature) + PermissionKind.reminders.uses(settings).map(\.feature)
+        for feature in ["Replace the system volume and brightness display", "Mirror notifications from every app",
+                        "Show Live Activities", "Reminders due today"] {
+            #expect(named.contains(feature), "\(feature)")
+            #expect(titles.contains(feature), "\(feature)")
+        }
+    }
+
     @Test func permissionRowsFollowThePermissionList() {
         let titles = SettingsIndex.entries.filter { $0.page == .permissions }.map(\.title)
         #expect(titles == PermissionKind.allCases.map(\.title))
@@ -75,6 +109,10 @@ import Testing
         ("zoom", .notifications),
         ("downloads", .downloads),
         ("reset", .advanced),
+        ("api guide", .advanced),
+        ("paused music", .nowPlaying),
+        ("closed island width", .appearance),
+        ("airdrop", .shelf),
     ])
     func queryFindsPage(query: String, page: SettingsPage) {
         let groups = SettingsIndex.search(query)

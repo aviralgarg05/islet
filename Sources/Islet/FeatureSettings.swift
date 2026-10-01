@@ -27,7 +27,7 @@ struct NowPlayingSettings: View {
             .disabled(!on)
             Section("Closed island") {
                 Toggle(isOn: $model.settings.showPausedMedia) {
-                    Text("Show paused music in the closed island")
+                    Text("Show paused music")
                     Text("Keeps the artwork beside the notch after you pause.")
                 }
                 .settingsAnchor("nowPlaying.paused")
@@ -285,14 +285,19 @@ struct NotificationsSettings: View {
 
 // MARK: - Shelf & Clipboard
 
+/// Two features that switch on and off apart, so each has its own switch under the page's line.
 struct ShelfSettings: View {
     @Bindable var model: AppModel
 
     var body: some View {
         Form {
-            Section {
-                SettingsHero(page: .shelf, switchTitle: "File shelf and AirDrop", isOn: $model.settings.shelfEnabled)
-                    .settingsAnchor("shelf.enabled")
+            Section { SettingsHero(page: .shelf) }
+            Section("Shelf") {
+                Toggle(isOn: $model.settings.shelfEnabled) {
+                    Text("File shelf and AirDrop")
+                    Text("Drop files on the island to keep them handy, then drag them out or AirDrop them.")
+                }
+                .settingsAnchor("shelf.enabled")
             }
             Section("Clipboard") {
                 Toggle(isOn: $model.settings.clipboardEnabled) {

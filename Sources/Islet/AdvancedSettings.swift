@@ -146,13 +146,12 @@ struct AdvancedSettings: View {
 
     private var diagnostics: some View {
         Section {
-            LabeledContent("Local API") { Text(model.apiStatus).foregroundStyle(.secondary) }
-                .settingsAnchor("advanced.diagnostics")
-            LabeledContent("iPhone bridge") { Text(model.lan.status).foregroundStyle(.secondary) }
+            // The local API's and the bridge's own status rows are in their sections above.
             LabeledContent("Now Playing helper") {
                 Text(model.systemMedia.isRunning ? "Running" : "Not running")
                     .foregroundStyle(model.systemMedia.isRunning ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
             }
+            .settingsAnchor("advanced.diagnostics")
             LabeledContent("Apple Intelligence") { Text(AIAssist.shared.statusText).foregroundStyle(.secondary) }
             LabeledContent("Accessibility") {
                 Text(MediaKeyInterceptor.hasAccessibility ? "Allowed" : "Not allowed").foregroundStyle(.secondary)

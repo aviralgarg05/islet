@@ -139,7 +139,7 @@ struct AppearanceSettings: View {
                     .settingsAnchor("appearance.height")
             }
             Section {
-                Picker("Closed island width", selection: $model.settings.closedLayout) {
+                Picker("Width", selection: $model.settings.closedLayout) {
                     Text("Fit the menu bar").tag(ClosedLayoutPreference.auto)
                     Text("Always full width").tag(ClosedLayoutPreference.wings)
                 }
@@ -691,16 +691,25 @@ struct AppRuleRow: View {
                     .buttonStyle(.borderless)
                     .help("Remove \(name)")
             }
-            HStack(spacing: 16) {
-                Toggle("Hide the island in front", isOn: Binding(get: { rule.hideIsland ?? false }, set: { rule.hideIsland = $0 ? true : nil }))
-                Toggle("Keep it in fullscreen", isOn: Binding(get: { rule.showInFullscreen ?? false }, set: { rule.showInFullscreen = $0 ? true : nil }))
-                Toggle("Mute notifications", isOn: Binding(get: { rule.muteNotifications ?? false }, set: { rule.muteNotifications = $0 ? true : nil }))
+            // One line when the window is wide enough, else one under another, never wrapped.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 16) { options }
+                VStack(alignment: .leading, spacing: 6) { options }
             }
             .toggleStyle(.checkbox)
             .font(.callout)
             .padding(.leading, 34)
         }
         .padding(.vertical, 3)
+    }
+
+    @ViewBuilder private var options: some View {
+        Toggle("Hide the island in front", isOn: Binding(get: { rule.hideIsland ?? false }, set: { rule.hideIsland = $0 ? true : nil }))
+            .fixedSize()
+        Toggle("Keep it in fullscreen", isOn: Binding(get: { rule.showInFullscreen ?? false }, set: { rule.showInFullscreen = $0 ? true : nil }))
+            .fixedSize()
+        Toggle("Mute notifications", isOn: Binding(get: { rule.muteNotifications ?? false }, set: { rule.muteNotifications = $0 ? true : nil }))
+            .fixedSize()
     }
 }
 
@@ -724,13 +733,14 @@ struct AboutSettings: View {
                         .settingsAnchor("about.version")
                     Text("An open-source Dynamic Island for the Mac notch.")
                         .multilineTextAlignment(.center)
+                    // Inside the card, so it centres on the card rather than on the footer's inset.
+                    Text("MIT licence. No accounts, no licence server, no tracking.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 4)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 20)
-            } footer: {
-                Text("MIT licence. No accounts, no licence server, no tracking.")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
             }
         }
         .formStyle(.grouped)

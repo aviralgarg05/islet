@@ -3,7 +3,8 @@ import IsletCore
 import IsletSystem
 import SwiftUI
 
-/// Settings → Ask & AI: the Ask box, API keys, the command-line tools and Apple Intelligence.
+/// Settings → Ask & AI: the Ask box, keys for Claude and ChatGPT, the command-line tools and
+/// Apple Intelligence. Plain words only: the raw Apple Intelligence status is in Advanced.
 struct AISettingsView: View {
     @Bindable var model: AppModel
     @ViewState private var fetched: [AskProviderKind: [String]] = [:]
@@ -184,7 +185,7 @@ struct AIKeyRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            LabeledContent("API key") {
+            LabeledContent("Key") {
                 if let masked, !editing {
                     HStack(spacing: 8) {
                         Text(masked).font(.system(.body, design: .monospaced))

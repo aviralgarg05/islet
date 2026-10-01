@@ -361,10 +361,14 @@ struct SettingsSearchResults: View {
     var body: some View {
         let groups = navigation.results
         if groups.isEmpty {
-            ContentUnavailableView {
-                Label("No results", systemImage: "magnifyingglass")
-            } description: {
-                Text("Nothing matches “\(navigation.query.trimmingCharacters(in: .whitespaces))”. Try another word, such as a feature or an app.")
+            ZStack {
+                // An empty grouped form, so the background matches every page's.
+                Form {}.formStyle(.grouped).allowsHitTesting(false).accessibilityHidden(true)
+                ContentUnavailableView {
+                    Label("No results", systemImage: "magnifyingglass")
+                } description: {
+                    Text("Nothing matches “\(navigation.query.trimmingCharacters(in: .whitespaces))”. Try another word, such as a feature or an app.")
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {

@@ -44,9 +44,9 @@ public enum PermissionKind: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .accessibility:
             return [
-                PermissionUse("Replace the system volume and brightness HUD", on: s.replaceSystemHUD),
+                PermissionUse("Replace the system volume and brightness display", on: s.replaceSystemHUD),
                 PermissionUse("Mirror notifications from every app", on: s.notificationMirroring),
-                PermissionUse("Show Live Activities from the menu bar", on: s.mirrorMenuBarActivities),
+                PermissionUse("Show Live Activities", on: s.mirrorMenuBarActivities),
                 PermissionUse("Fit the closed island between menu bar icons", on: s.closedLayout == .auto),
             ]
         case .calendars:

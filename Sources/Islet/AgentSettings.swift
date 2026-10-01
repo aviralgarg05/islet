@@ -25,8 +25,8 @@ struct CodingAgentsSettings: View {
                 Text("Connections")
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
-                    SettingsFooter("Connecting adds Islet's hooks to the agent's own settings. You see the change first, your other settings stay as they are, and a backup is kept.")
-                    SettingsLink(text: "Hook commands and the MCP server are in Advanced", page: .advanced, anchor: "advanced.hooks")
+                    SettingsFooter("Connecting adds a few lines to the agent's own settings so it can tell Islet what it's doing. You see the change first, your other settings stay as they are, and a backup is kept.")
+                    SettingsLink(text: "Set it up by hand in Advanced", page: .advanced, anchor: "advanced.hooks")
                 }
             }
             Section {
