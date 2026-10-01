@@ -8,9 +8,13 @@ import SwiftUI
 ///
 /// It sits over the desktop, not on the island, so it is the one place the island uses Liquid
 /// Glass in the Black theme too (and never glass on glass in the Glass theme).
+///
+/// When the island opens, the capsule and then the discs rise into place after the content
+/// (`SwitcherReveal`, `RiseIn`).
 struct PageSwitcher: View {
     let model: AppModel
     @Namespace private var highlight
+    @Environment(\.islandMotion) private var motion
 
     /// Height of the capsule and the discs.
     static let height: CGFloat = 32
@@ -51,15 +55,22 @@ struct PageSwitcher: View {
                 }
                 .padding(Self.inset)
                 .floatingGlass(Capsule())
+                // It buds off the island first; the discs follow a moment later.
+                .modifier(RiseIn(index: 0))
                 disc(symbol: IslandTab.ask.symbol, help: "Ask", selected: model.tab == .ask) {
                     model.select(tab: model.tab == .ask ? .home : .ask)
                 }
             }
         }
+        // Always its own width: while the island opens or closes, bubbles still beside it can
+        // leave the switcher less room than it needs, and that must not squeeze the selected
+        // page's name over its neighbour.
+        .fixedSize()
         .frame(height: Self.height)
         .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
-        .animation(Motion.settle, value: model.tab)
-        .animation(Motion.settle, value: model.timers.isEntering)
+        // The highlight slides on the settle spring; a short fade with less motion, none with Off.
+        .animation(motion.inPlace, value: model.tab)
+        .animation(motion.inPlace, value: model.timers.isEntering)
     }
 
     /// One page in the capsule. The selected one shows its name on the sliding highlight.
@@ -110,6 +121,7 @@ struct PageSwitcher: View {
         }
         .buttonStyle(PressableStyle())
         .floatingGlass(Circle())
+        .modifier(RiseIn(index: 1))
         .help(help)
         .accessibilityLabel(help)
     }

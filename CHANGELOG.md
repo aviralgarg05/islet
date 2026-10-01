@@ -66,6 +66,7 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 - The closed island widens a little while the pointer rests on it, before it opens. It never grows downwards, and not at all with Reduce Motion.
 - **Subtle outline** (Appearance) draws a faint edge round the island for dark wallpapers; Increase Contrast always draws it. **Glass on displays without a notch** makes the closed pill glass too with the Glass theme.
 - **Animation speed** (Appearance) makes every move Relaxed, Normal or Quick, whatever the animation style.
+- The island moves like liquid: bubbles bud off its side and are pulled back in, the shell springs open before its content fades in and the page switcher rises after it, closing clears the content first, a new activity's icon bounces in, a changed value morphs instead of popping, and a peek's shoulders no longer flash square corners or a nub, with or without a notch. Growing out of the notch and bouncing when something arrives, it keeps clear of the menu bar items beside it. Reduce Motion, Minimal, Off and Low Power Mode keep to short fades.
 - An app on the Apps page can take any colour from the system colour panel, as the accent can, and a priority for its activities and notifications (low to urgent).
 - **Reset appearance…** at the end of Appearance puts the look back as Islet came, after asking: everything on that page and the music's look. Fit to the notch stays as it is.
 - **Artwork corners** (Appearance) go from square to round beside the notch, in a new song's peek and in the open island.

@@ -36,13 +36,9 @@ struct TemplateMotion {
 
     @MainActor
     init(_ model: AppModel, systemReduceMotion: Bool) {
-        if model.settings.animationStyle == .off {
-            style = .off
-        } else if systemReduceMotion || model.settings.reduceMotion {
-            style = .minimal
-        } else {
-            style = model.settings.animationStyle
-        }
+        // Low Power Mode is left to the layer animations themselves, which slow down for it.
+        style = AnimationStyle.effective(model.settings.animationStyle, reduceMotion: systemReduceMotion || model.settings.reduceMotion,
+                                         lowPower: false)
     }
 
     /// Waveforms and breathing segments: off with Reduce Motion or Motion Off.
