@@ -20,8 +20,9 @@ extension ClosedPlacement {
     static func unmeasured(_ preference: ClosedLayoutPreference, wing: CGFloat, hasMenuBar: Bool) -> ClosedPlacement {
         let width = MenuBarLayoutEngine.wingWidth(preference: preference, notch: .zero, preferredWing: wing, occupancy: nil, hasMenuBar: hasMenuBar)
         // Without a measurement nobody knows what's beside the wings, so bubbles go just below
-        // the row; with "Always full width" they sit in it.
-        let slack: CGFloat = preference == .auto && hasMenuBar ? 0 : .infinity
+        // the row, whatever the width setting; they never cover a menu bar item. Only a display
+        // with no menu bar row has room for certain.
+        let slack: CGFloat = hasMenuBar ? 0 : .infinity
         return ClosedPlacement(wing: width, slack: slack)
     }
 }
@@ -419,7 +420,8 @@ struct BubbleView: View {
             case .activity(let a):
                 if model.visualTemplate(for: a) != nil {
                     TemplateBubble(activity: a, model: model, diameter: diameter)
-                } else if a.clampedProgress != nil || a.isIndeterminate, a.endsAt == nil, a.startedAt == nil {
+                } else if a.clampedProgress != nil, a.endsAt == nil, a.startedAt == nil {
+                    // A ring only for real progress; a bubble that is just "working" stays a clean icon.
                     ProgressRing(progress: a.clampedProgress, tint: model.tint(for: a), size: diameter - 8, lineWidth: 2.2)
                     IconView(icon: model.icon(for: a), size: diameter - 17, tint: model.tint(for: a))
                 } else {

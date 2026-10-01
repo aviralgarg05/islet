@@ -289,13 +289,15 @@ struct ProgressRing: View {
 
     var body: some View {
         ZStack {
-            Circle().stroke(tint.opacity(0.25), lineWidth: lineWidth)
             if let progress {
+                // A neutral hairline track: the tint at low opacity reads as a muddy ring on black.
+                Circle().stroke(Color.white.opacity(0.14), lineWidth: lineWidth)
                 Circle()
                     .trim(from: 0, to: max(0.02, progress))
                     .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                     .rotationEffect(.degrees(-90))
             } else {
+                // Working with no known progress: the moving arc alone, no track.
                 SpinnerArc(tint: tint, lineWidth: lineWidth)
             }
         }

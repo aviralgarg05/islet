@@ -488,8 +488,15 @@ final class AppModel {
     /// menu bar has been measured).
     func placement(for display: CGDirectDisplayID, metrics: IslandMetrics) -> ClosedPlacement {
         let preference = settings.closedLayout
-        guard preference == .auto else { return .unmeasured(preference, wing: metrics.wingWidth, hasMenuBar: true) }
-        return closedPlacements[display] ?? .unmeasured(.auto, wing: metrics.wingWidth, hasMenuBar: true)
+        guard let measured = closedPlacements[display] else {
+            return .unmeasured(preference, wing: metrics.wingWidth, hasMenuBar: true)
+        }
+        // A measurement taken before "Always full width" was chosen has narrower wings; until the
+        // next one, keep bubbles out of the row rather than trust its room.
+        if preference == .wings, measured.wing != metrics.wingWidth {
+            return .unmeasured(preference, wing: metrics.wingWidth, hasMenuBar: true)
+        }
+        return measured
     }
 
     var upcomingEvent: AgendaItem? { settings.calendarEnabled ? Agenda.upcoming(visibleAgenda, now: Date()) : nil }

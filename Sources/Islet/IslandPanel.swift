@@ -162,26 +162,27 @@ final class IslandWindowController {
     /// Something in the menu bar may have changed since the last measurement.
     private var menuBarStale = true
 
-    /// Measure the menu bar beside the notch and fit the wings to it (the automatic layout).
+    /// Measure the menu bar beside the notch: it fits the wings to the free space ("Fit the menu
+    /// bar") and, with either setting, tells bubbles whether there is room for them in the row.
     /// While nothing is drawn on this display it only notes that a measurement is due, so an
     /// idle island never reads the menu bar; `measureIfStale` catches up when it appears.
     func measureMenuBar() {
-        guard model.settings.closedLayout == .auto else { return }
         guard IslandLayout.isVisible(model.presentation(for: display)) else {
             menuBarStale = true
             return
         }
         menuBarStale = false
         let preferred = metrics.wingWidth
+        let preference = model.settings.closedLayout
         let notch = notchRect
         let display = display
         guard descriptor.menuBarHeight > 0 else {
-            model.closedPlacements[display] = .unmeasured(.auto, wing: preferred, hasMenuBar: false)
+            model.closedPlacements[display] = .unmeasured(preference, wing: preferred, hasMenuBar: false)
             return
         }
         MenuBarInspector.measure(notch: notch, screenFrame: descriptor.frame) { [weak self] occupancy in
             guard let self else { return }
-            let measured = MenuBarLayoutEngine.wingWidth(preference: .auto, notch: notch, preferredWing: preferred, occupancy: occupancy, hasMenuBar: true)
+            let measured = MenuBarLayoutEngine.wingWidth(preference: preference, notch: notch, preferredWing: preferred, occupancy: occupancy, hasMenuBar: true)
             let current = self.model.closedPlacements[display]
             var wing = measured
             if let kept = current?.wing, !MenuBarLayoutEngine.shouldReplace(kept, with: measured, preferredWing: preferred) { wing = kept }
