@@ -14,6 +14,13 @@ public enum ClaudeHookInstaller {
         /// Seconds before Claude Code gives up on the hook; nil keeps Claude's default.
         public var timeout: Int?
 
+        public init(event: String, matcher: String? = nil, arguments: String, timeout: Int? = nil) {
+            self.event = event
+            self.matcher = matcher
+            self.arguments = arguments
+            self.timeout = timeout
+        }
+
         var waits: Bool { arguments.contains("--wait") }
     }
 
@@ -33,16 +40,24 @@ public enum ClaudeHookInstaller {
         public var changes: [String]
 
         public var isUpToDate: Bool { changes.isEmpty }
+
+        public init(merged: Data, changes: [String]) {
+            self.merged = merged
+            self.changes = changes
+        }
     }
 
     public enum InstallError: Error, Equatable, CustomStringConvertible {
         case notJSON
         case unexpectedShape(String)
 
-        public var description: String {
+        public var description: String { description(file: "settings.json") }
+
+        /// The same sentence about another agent's file ("hooks.json").
+        public func description(file: String) -> String {
             switch self {
-            case .notJSON: return "settings.json isn't valid JSON, so it was left alone."
-            case .unexpectedShape(let key): return "“\(key)” in settings.json isn't in the expected shape, so it was left alone."
+            case .notJSON: return "\(file) isn't valid JSON, so it was left alone."
+            case .unexpectedShape(let key): return "“\(key)” in \(file) isn't in the expected shape, so it was left alone."
             }
         }
     }
@@ -52,6 +67,14 @@ public enum ClaudeHookInstaller {
     ///   - executable: how hooks call `isletctl` (a name on `PATH` or a full path).
     ///   - wait: seconds the approval hooks wait for an answer in the notch.
     public static func plan(existing: Data?, executable: String = "isletctl", wait: Int) throws -> Plan {
+        try merge(existing: existing, entries: entries(wait: wait), agent: "claude", executable: executable)
+    }
+
+    /// Merges `entries` into a file shaped like Claude Code's settings (`hooks` → event →
+    /// groups of hooks), a shape Codex's `hooks.json` shares.
+    /// - Parameter agent: the name in `isletctl hook <agent>`, which tells Islet's own hooks
+    ///   from the user's.
+    static func merge(existing: Data?, entries: [Entry], agent: String, executable: String) throws -> Plan {
         var root: [String: Any] = [:]
         if let existing, !String(decoding: existing, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             guard let obj = (try? JSONSerialization.jsonObject(with: existing)) as? [String: Any] else { throw InstallError.notJSON }
@@ -61,14 +84,14 @@ public enum ClaudeHookInstaller {
         let exe = quoted(executable)
         var changes: [String] = []
 
-        for e in entries(wait: wait) {
+        for e in entries {
             guard var groups = (hooks[e.event] ?? [Any]()) as? [[String: Any]] else { throw InstallError.unexpectedShape("hooks.\(e.event)") }
             let command = exe + " " + e.arguments
             let label = e.event + (e.matcher.map { " (\($0))" } ?? "") + ": isletctl " + e.arguments
-            if let (g, h) = find(e, in: groups) {
+            if let (g, h) = find(e, agent: agent, in: groups) {
                 var list = groups[g]["hooks"] as? [[String: Any]] ?? []
                 let current = list[h]
-                if e.waits, (current["command"] as? String).flatMap(isletWait) != wait || (current["timeout"] as? Int) != e.timeout {
+                if e.waits, (current["command"] as? String).flatMap(isletWait) != isletWait(command) || (current["timeout"] as? Int) != e.timeout {
                     list[h]["command"] = command
                     if let t = e.timeout { list[h]["timeout"] = t }
                     groups[g]["hooks"] = list
@@ -90,12 +113,12 @@ public enum ClaudeHookInstaller {
     }
 
     /// The group and hook index of Islet's hook for this entry, if the file already has it.
-    static func find(_ e: Entry, in groups: [[String: Any]]) -> (Int, Int)? {
+    static func find(_ e: Entry, agent: String, in groups: [[String: Any]]) -> (Int, Int)? {
         for (g, group) in groups.enumerated() {
             let matcher = (group["matcher"] as? String).flatMap { $0.isEmpty || $0 == "*" ? nil : $0 }
             guard matcher == e.matcher else { continue }
             for (h, hook) in (group["hooks"] as? [[String: Any]] ?? []).enumerated() {
-                guard let args = (hook["command"] as? String).flatMap(isletArguments), args.starts(with: ["hook", "claude"]) else { continue }
+                guard let args = (hook["command"] as? String).flatMap(isletArguments), args.starts(with: ["hook", agent]) else { continue }
                 if args.contains("--wait") == e.waits { return (g, h) }
             }
         }
