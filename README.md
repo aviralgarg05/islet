@@ -16,6 +16,7 @@
 - **Calendar and Reminders**: the next meeting with a Join button, the rest of today, and reminders you can tick off.
 - **Calls, HUDs and system events**: call timers, volume and brightness, charging and battery, Focus, keep awake, a summary when you unlock.
 - **A file shelf, clipboard history, download progress and script widgets** (xbar and SwiftBar plugins run unchanged).
+- **Tools you switch on when you want them**: time-synced lyrics, your Shortcuts, the weather, a month calendar on Today, a stopwatch, Pomodoro lengths and focus sounds. Each starts off and waits under More.
 - **Your own activities** from the command line, a local HTTP API, the `islet://` URL scheme or iPhone Shortcuts. See the [API](docs/API.md).
 
 ## How it stays out of the way
@@ -23,7 +24,7 @@
 - **It sits beside the notch, like the iPhone's.** It always stays in the menu bar row. With Accessibility it measures the menu bar and shrinks to the free space, down to just an icon each side, so it covers a menu bar icon only when the bar is packed right up to the notch.
 - **It costs nothing when idle.** Everything is driven by events, looping animations run in Core Animation, and the pointer isn't watched until it reaches the notch. `make perf` checks each state against a CPU budget; the latest figures are in the [changelog](CHANGELOG.md).
 - **It asks for nothing up front.** Each permission is requested when you turn on the feature that needs it.
-- **It keeps things on your Mac.** No account, no telemetry, no licence server. Questions go to an AI provider only when you ask one, with your own key.
+- **It keeps things on your Mac.** No account, no telemetry, no licence server. Questions go to an AI provider only when you ask one, with your own key. Lyrics and the weather go online only once you turn them on, and send no more than the song or a rounded position.
 - **It's free and MIT-licensed**, written from scratch.
 
 ## Download
@@ -92,6 +93,7 @@ To connect a coding agent, press **Connect…** beside it in *Settings → Codin
 | Calendar events | Calendars |
 | Reminders | Reminders |
 | Download progress | Downloads folder |
+| Weather where you are (a typed city needs nothing) | Location |
 | Music and Spotify extras when the system bridge can't help | Automation |
 
 Now Playing, volume, brightness, battery, calls, camera and microphone indicators, timers, the shelf, the Ask box and the API need no permission.

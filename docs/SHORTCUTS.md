@@ -127,6 +127,7 @@ Other commands work the same way:
 
 ## Tips
 
+- **Run them from the island.** Turn on **Run your shortcuts** in Settings → Tools, and a Shortcuts page appears under More: type part of a name, then click a shortcut or press Return. The Ask box offers a shortcut whose name matches what you type, too.
 - **Your own phrases.** The shortcut's name is the phrase. Rename it to whatever you like saying.
 - **A key instead of your voice.** In a shortcut's details, **Add Keyboard Shortcut** runs it from anywhere.
 - **From the iPhone.** Shortcuts sync, but `islet://` links only work on the Mac. Turn on the iPhone bridge in Islet's Settings → Advanced on the Mac, then on the iPhone use **Get Contents of URL** to POST `{"in": "20m", "title": "Pizza"}` to `/v1/timer` with the API token. See [iPhone → Mac](INTEGRATIONS.md#iphone).

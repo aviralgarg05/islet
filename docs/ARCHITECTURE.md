@@ -10,8 +10,10 @@ Islet is a menu bar agent (no Dock icon) built with SwiftPM from four targets: `
 │   IslandWindowController ×display: IslandPanel (level 27) + TriggerPanel (26)      │
 │   PointerCoordinator: hover intent, click-through, drag to shelf, swipes           │
 │   TimerController · ApprovalController · AskController · AgentUsageModel           │
+│   Tools: lyrics · shortcuts · weather · month calendar · stopwatch · focus sound   │
 │   Views: IslandView → compact / sneak / HUD / bubbles / expanded                   │
 │          expanded tabs: Home · Today · Shelf · Widgets · Clipboard · System · Ask  │
+│          and, once switched on, Shortcuts · Weather                                │
 │                                                                                    │
 │  IsletSystem (adapters to macOS)                                                   │
 │   LocalAPIServer (Network.framework) · SystemNowPlayingBridge (perl helper)        │
@@ -21,7 +23,8 @@ Islet is a menu bar agent (no Dock icon) built with SwiftPM from four targets: `
 │   DownloadsWatcher · ClipboardMonitor · SystemStatsSampler · ShelfService          │
 │   MenuBarInspector · MenuBarLiveActivityMonitor (AX) · ScriptPluginRunner          │
 │   UsageWatcher · AskService · KeychainStore · AIAssist · PowerAssertion            │
-│   GlobalHotkey                                                                     │
+│   GlobalHotkey · LyricsService · ShortcutsRunner · WeatherService                  │
+│   LocationProvider · FocusSoundPlayer                                              │
 │                                                                                    │
 │  IsletCore (pure Swift, no AppKit, unit-tested)                                    │
 │   ActivityCenter · Presenter · MediaArbiter · HoverIntent · NotchGeometry          │
@@ -30,6 +33,8 @@ Islet is a menu bar agent (no Dock icon) built with SwiftPM from four targets: `
 │   Ask providers and stream decoders · SSEParser · AgentUsage · AgentHooks          │
 │   HTTP parser + APIRouter · URLCommand · ScriptPlugins · GestureMap · KeepAwake    │
 │   CallDetector · NotificationParser · DownloadTracker · SmartIcon · IsletSettings  │
+│   LRC + LRCLIB · ShortcutsCatalog · Open-Meteo + WeatherRefresh · MonthGrid        │
+│   Stopwatch · NoiseGenerator · FocusSoundDirector · PomodoroPreset                 │
 └────────────────────────────────────────────────────────────────────────────────────┘
    ▲ isletctl (CLI, hooks, status line, MCP)   ▲ islet:// URLs
    ▲ HTTP (loopback, optional LAN bridge)      ▲ script widgets
@@ -181,6 +186,17 @@ Claude Code and Codex plan usage come from local files. Nothing polls and nothin
 
 `AgentUsageModel` shows the figures on the Home tab. It posts one activity when a window first crosses 90%, and a high-priority one at 100% (`UsageAlertTracker`). The first reading after launch only sets the baseline, so relaunching doesn't repeat an alert. Both sources are on by default (`claudeUsageEnabled`, `codexUsageEnabled`).
 
+## Tools
+
+Each tool starts off. The ones that are pages (Shortcuts, Weather) wait in the page switcher's More menu under **More tools**, where their page offers Turn on; once on, they are ordinary pages under More. Their state lives in `Tools` (Tools.swift); `AppModel.applyTools()` follows their switches, and everything a tool decides is in `IsletCore`.
+
+- **Lyrics** (`lyricsEnabled`). When Now Playing shows in the open island with a song from Music or Spotify, `LyricsQuery` takes its title, artist, album and length (nothing else) and `LyricsService` asks LRCLIB's `/api/get`, then `/api/search` with the same details. `LRC` reads the time-synced text. Each answer, including "none", is kept in `lyrics/` in the support folder (one file per song, named by a hash, at most 400; a miss is asked again after a week), so a song is looked up once. A network failure isn't kept. The lyrics column wakes only when the next line starts (`SongLyrics.changes`, a `TimelineView` with those moments), and clicking a line seeks there.
+- **Shortcuts** (`shortcutsEnabled`). `ShortcutsRunner` runs `/usr/bin/shortcuts list --show-identifiers` when the page or the Ask box opens (at most every 30 s), and `shortcuts run <identifier>` when one is clicked. `ShortcutsCatalog` reads the list and ranks matches.
+- **Weather** (`weatherEnabled`). `WeatherService` fetches Open-Meteo's forecast for a city found with its geocoding search, or for where the Mac is (`weatherUsesLocation`, CoreLocation at kilometre accuracy, asked for only when that is chosen). The position is rounded to two decimal places before it is sent. A forecast is fetched when the Weather page opens and the last one is 30 minutes old (`WeatherRefresh`), never in the background.
+- **Month calendar** (`monthCalendar`). Today shows `MonthGrid` beside the day's events. The month's events are read from EventKit when the page is on screen and when the calendars change.
+- **Stopwatch** (`stopwatchEnabled`). `Stopwatch` keeps when it last started and the time before that, so nothing ticks; it shows beside the notch as a count-up and is saved to `stopwatch.json`.
+- **Focus sounds** (`focusSound`). During a Pomodoro focus round (`TimerEngine.isFocusing`), `FocusSoundDirector` starts brown noise, rain or waves, which `NoiseGenerator` makes and `FocusSoundPlayer` plays through an `AVAudioEngine` that runs only while a sound plays, or presses play on the user's music and pauses it for the break, but only if Islet started it.
+
 ## Local API security
 
 - Loopback bind, on port 47831 by default. If that port is taken, an ephemeral one, which clients read from the discovery file.
@@ -211,6 +227,8 @@ Claude Code and Codex plan usage come from local files. Nothing polls and nothin
   | Live Activity mirroring | a safety rescan every 15 s | at least one activity is mirrored |
   | Hover intent | every 50 ms | an open or close decision is pending |
   | Clock text | SwiftUI `TimelineView`: every second for clocks, every minute for minute counts | the text is on screen |
+  | Lyrics | once at the start of each line | lyrics are on screen and the song is playing |
+  | Focus sound | the audio engine renders noise; fades in and out over a second | a focus sound plays in a Pomodoro focus round |
 
 - **Looping motion is Core Animation.** The equaliser, spinners, countdown rings, call waveforms, the breathing stage capsule and the urgent glow are layer animations, which the window server runs. SwiftUI's `repeatForever` and `symbolEffect` redraw the view every frame, so they aren't used for these. The equaliser, spinner and glow run at 30 fps at most. The glow pulses six times, then stays steady. Content that has gone stale stops its looping motion.
 - **The menu bar is measured only while the island is drawn** on that display, and off the main thread. Live Activity mirroring reads it only when a notification or Accessibility event says something changed, apart from its safety rescan.
@@ -218,12 +236,12 @@ Claude Code and Codex plan usage come from local files. Nothing polls and nothin
 
 ## Privacy rules
 
-- **Permissions only for features the user switches on or asks to use.** Calendar and Reminders access is requested from Settings or the Allow buttons on the Today tab. Accessibility is requested when the user switches on replacing the system HUD, or presses an Allow or Grant button in Settings. If the HUD option is on at launch but Accessibility has been taken away, Islet doesn't ask again: it leaves the volume and brightness keys to macOS and Settings shows the missing permission. Notification mirroring, menu bar measurement and Live Activity mirroring use it only once it has been granted. Automation (AppleScript to Music and Spotify) is used only when the MediaRemote bridge isn't running, and only once it has been granted: Islet checks without prompting (`AEDeterminePermissionToAutomateTarget`, off the main thread, never launching the player) once per player per launch, and again when that player opens or comes to the front, or one of its controls is pressed in the island, while macOS has no lasting answer. The prompt itself comes only from Allow in Settings → Permissions. macOS asks for Downloads folder access the first time the downloads module reads the folder.
-- **Off by default:** clipboard history, download progress, notification mirroring, script widgets, the LAN bridge, replacing the system HUD, and reminders.
+- **Permissions only for features the user switches on or asks to use.** Calendar and Reminders access is requested from Settings or the Allow buttons on the Today tab. Accessibility is requested when the user switches on replacing the system HUD, or presses an Allow or Grant button in Settings. If the HUD option is on at launch but Accessibility has been taken away, Islet doesn't ask again: it leaves the volume and brightness keys to macOS and Settings shows the missing permission. Notification mirroring, menu bar measurement and Live Activity mirroring use it only once it has been granted. Automation (AppleScript to Music and Spotify) is used only when the MediaRemote bridge isn't running, and only once it has been granted: Islet checks without prompting (`AEDeterminePermissionToAutomateTarget`, off the main thread, never launching the player) once per player per launch, and again when that player opens or comes to the front, or one of its controls is pressed in the island, while macOS has no lasting answer. The prompt itself comes only from Allow in Settings → Permissions. macOS asks for Downloads folder access the first time the downloads module reads the folder. Location is asked for only when the user chooses "Where I am" for the weather, or presses Allow in Settings → Permissions.
+- **Off by default:** clipboard history, download progress, notification mirroring, script widgets, the LAN bridge, replacing the system HUD, reminders, and every tool (lyrics, shortcuts, weather, the month calendar, the stopwatch and focus sounds).
 - **Accessibility reads are narrow and stay in memory.** Menu bar measurement reads frames only. Live Activity mirroring reads only MenuBarAgent's items and the renderer's content. Notification mirroring reads the text a banner shows and ignores the Notification Center panel. None of it is written to disk or logs.
 - **Clipboard history** lives in memory. It skips content marked concealed or transient (the nspasteboard.org conventions) and copies from password managers, and is cleared when switched off. When Islet copies the API token, it marks it concealed and keeps it off Universal Clipboard.
-- **On disk:** `config.json` in `~/.config/islet` (or `$XDG_CONFIG_HOME/islet`), and `api.json` (0600), `shelf.json`, `timers.json` and `usage/claude.json` (0600) in `~/Library/Application Support/Islet`. API keys are in the Keychain.
-- **What leaves the Mac:** an Ask question sent to a cloud provider, directly or through its CLI, and a model-list request when a key is saved or the list is refreshed; images given to Islet as URLs (activity icons, artwork); and Spotify cover art from `open.spotify.com` when the MediaRemote bridge isn't running. Smart icons and notification summaries use the on-device model or nothing.
+- **On disk:** `config.json` in `~/.config/islet` (or `$XDG_CONFIG_HOME/islet`), and `api.json` (0600), `shelf.json`, `timers.json`, `stopwatch.json`, `lyrics/` and `usage/claude.json` (0600) in `~/Library/Application Support/Islet`. API keys are in the Keychain.
+- **What leaves the Mac:** an Ask question sent to a cloud provider, directly or through its CLI, and a model-list request when a key is saved or the list is refreshed; images given to Islet as URLs (activity icons, artwork); Spotify cover art from `open.spotify.com` when the MediaRemote bridge isn't running; with lyrics on, a song's title, artist, album and length to `lrclib.net`, once per song; and with the weather on, a city name typed into Settings and a position rounded to about a kilometre to `open-meteo.com`. These requests use an ephemeral session with no cookies. Smart icons and notification summaries use the on-device model or nothing.
 - **Script widgets run only if trusted:** the user must own the script and its folder, and nobody else may be able to write to them. The first time in a session that a widget's menu item would run a command, Islet shows the command and asks.
 - **Hide from screen capture** (`hideFromScreenCapture`, off by default) keeps the island out of screenshots and screen sharing.
 
