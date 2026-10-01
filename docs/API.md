@@ -277,7 +277,7 @@ curl -s -X POST http://127.0.0.1:47831/v1/timer -H "Authorization: Bearer $TOKEN
 
 **When a timer ends** it rings: the island opens on Home with Stop, Snooze 5 and Restart (unless you've hidden the island for the app in front or for fullscreen apps), the chosen sound plays, and the activity turns critical, so it pops up over fullscreen apps too. A timer that ended more than an hour before Islet could ring it (the Mac was asleep or Islet wasn't running) is dropped instead.
 
-**Pomodoro.** 25 minutes of focus, a 5-minute break, and a 15-minute break after every 4th round, moving on by itself. Change the lengths in Settings → Modules → Timers, or with the `pomodoro` key in the settings file.
+**Pomodoro.** 25 minutes of focus, a 5-minute break, and a 15-minute break after every 4th round, moving on by itself. Change the lengths in Settings → Timers, or with the `pomodoro` key in the settings file.
 ### Approvals (long-poll)
 
 `POST /v1/hooks/{provider}?wait=N` is for blocking agent hooks (`provider` is `claude`, `codex` or `cursor`; `N` is 1 to 3600 seconds). It maps the agent's status like the plain hook endpoint. If the payload asks for a decision (Claude Code `PermissionRequest`, `PreToolUse` for `AskUserQuestion` or `ExitPlanMode`, Codex `PermissionRequest`, Cursor `beforeShellExecution` or `beforeMCPExecution`) and approvals are on, Islet shows a card and holds the request until:
@@ -291,7 +291,7 @@ No endpoint accepts a decision. Answers come only from clicks on the card, so a 
 
 ### Local-network bridge (iPhone Shortcuts)
 
-Off by default. When enabled (Settings → Integrations), a second listener serves a small part of the API on the local network at port `47832`, advertised over Bonjour as `_islet._tcp` under the name "Islet". It is plain HTTP, so anyone on the same network can read requests, token included. It only takes what a Shortcut needs to put something in the island:
+Off by default. When enabled (Settings → Advanced → iPhone bridge), a second listener serves a small part of the API on the local network at port `47832`, advertised over Bonjour as `_islet._tcp` under the name "Islet". It is plain HTTP, so anyone on the same network can read requests, token included. It only takes what a Shortcut needs to put something in the island:
 
 | Route | Limits |
 |---|---|
@@ -301,7 +301,7 @@ Off by default. When enabled (Settings → Integrations), a second listener serv
 
 Everything else is `403`: the bridge can't read activities or state, remove anything, send agent hooks, or control media, the HUD, keep awake or the island.
 
-The bridge has its own token, shown in Settings with **Copy Token** and **New Token**, and kept in `~/Library/Application Support/Islet/lan.json` (mode `0600`). The local API's token is refused on the bridge, and the bridge's token is refused on the local API. A missing or wrong token gets `401` as soon as the headers arrive, before the body is read. Bodies are limited to 16 KB (`413`), 8 connections are served at once (`503`), and each client gets 30 requests per 10 seconds (`429`; an IPv6 /64 counts as one client). Browser origins are refused. See [iPhone recipes](INTEGRATIONS.md#iphone).
+The bridge has its own token, shown in Settings → Advanced → iPhone bridge with **Copy** and **New Token**, and kept in `~/Library/Application Support/Islet/lan.json` (mode `0600`). The local API's token is refused on the bridge, and the bridge's token is refused on the local API. A missing or wrong token gets `401` as soon as the headers arrive, before the body is read. Bodies are limited to 16 KB (`413`), 8 connections are served at once (`503`), and each client gets 30 requests per 10 seconds (`429`; an IPv6 /64 counts as one client). Browser origins are refused. See [iPhone recipes](INTEGRATIONS.md#iphone).
 
 ---
 
@@ -334,7 +334,7 @@ isletctl media <play|pause|playpause|next|previous|forward|rewind|shuffle|repeat
 isletctl media seek <90s|2m>           jump to a position in the track
 isletctl awake [15m|1h|2h|on|off|status]   keep the Mac awake (default: until turned off; up to 24h)
 isletctl focus <name> [on|off]
-isletctl open | close                  (or press ⌃⌥I; change it in Settings → General)
+isletctl open | close                  (or press ⌃⌥I; change it in Settings → Shortcuts)
 isletctl hook <claude|codex|AGENT> [JSON]   forward an agent hook payload (stdin or last argument)
 isletctl statusline [-- <command…>]    Claude Code status line: record plan usage, run your own line
 isletctl hook <claude|codex|cursor> --wait N   wait up to N s for an answer in the notch, print it

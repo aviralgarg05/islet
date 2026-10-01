@@ -28,6 +28,8 @@ Ready-made files live in [`integrations/`](../integrations/). For recipes coveri
 
 ## Coding agents
 
+The quickest way: open *Settings → Coding agents* and press **Connect…** beside Claude Code, Codex or Cursor. A sheet lists every change before anything is written, your own hooks and settings stay as they are, and each file is copied to a `.bak` file first. The row then says **Connected**; if you later change how long Islet waits for an answer, it says **Needs an update** and **Update…** brings the hooks in line. The commands themselves are in *Settings → Advanced → Coding agents*, for dotfiles. The sections below do the same by hand.
+
 **Claude Code:** add [`integrations/claude-code/settings.json`](../integrations/claude-code/settings.json) to `~/.claude/settings.json` (merge the `hooks` key). The island then shows, per session:
 - *Thinking…* with a spinner;
 - *Running swift test* or *Editing App.swift* as tools run;
@@ -64,7 +66,7 @@ Questions show their options as buttons. When a question takes several answers, 
 
 **Risky commands.** Commands are checked against a list of patterns: `rm -rf`, `sudo`, `git push --force`, `git reset --hard`, `git clean -f`, `curl … | sh`, `chmod 777`, `dd` to a disk, `mkfs`, `diskutil erase…`, `npm publish`, `DROP TABLE`, writes, copies and moves outside the project folder, files that often hold secrets, and a few more. A match is shown in orange above the command, **Allow** then needs a second click (or a press and hold), and **Always** is hidden. The rules only add friction; they never block anything.
 
-**Claude Code:** Settings → Integrations → **Install for Claude Code…** lists the hooks it will add to `~/.claude/settings.json` and asks before writing. Your own hooks and settings stay as they are, and the previous file is kept as `settings.json.bak`. Running it again changes nothing. To do it by hand, merge [`integrations/claude-code/settings.json`](../integrations/claude-code/settings.json). Next to the status hooks it adds:
+**Claude Code:** **Connect…** beside Claude Code in Settings → Coding agents lists the hooks it will add to `~/.claude/settings.json` and asks before writing. Your own hooks and settings stay as they are, and the previous file is kept as `settings.json.bak`. Connecting again changes nothing. To do it by hand, merge [`integrations/claude-code/settings.json`](../integrations/claude-code/settings.json). Next to the status hooks it adds:
 
 ```json
 "PermissionRequest": [{"hooks": [{"type": "command", "command": "isletctl hook claude --wait 300", "timeout": 330}]}],
@@ -74,9 +76,9 @@ Questions show their options as buttons. When a question takes several answers, 
 
 The hook's `timeout` is 30 seconds longer than `--wait`, so Islet always answers first. Claude Code's deny and ask rules still apply: an **Allow** from the notch can't override them.
 
-**Codex CLI:** add `hooks = true` under `[features]` in `~/.codex/config.toml`, copy [`integrations/codex/hooks.json`](../integrations/codex/hooks.json) to `~/.codex/hooks.json`, then run `/hooks` in Codex once to trust the new hooks. Codex won't run them until you do.
+**Codex CLI:** **Connect…** beside Codex adds Islet's hooks to `~/.codex/hooks.json` and turns on `hooks = true` under `[features]` in `~/.codex/config.toml`, changing only that line. By hand: add the key, and copy [`integrations/codex/hooks.json`](../integrations/codex/hooks.json) to `~/.codex/hooks.json`. Either way, run `/hooks` in Codex once to trust the new hooks; Codex won't run them until you do.
 
-**Cursor:** copy [`integrations/cursor/hooks.json`](../integrations/cursor/hooks.json) to `~/.cursor/hooks.json` (or a project's `.cursor/hooks.json`). Shell commands and MCP tool calls then ask in the notch, and **Terminal** hands the choice back to Cursor's own prompt.
+**Cursor:** **Connect…** beside Cursor adds Islet's hooks to `~/.cursor/hooks.json`. By hand, copy [`integrations/cursor/hooks.json`](../integrations/cursor/hooks.json) there (or to a project's `.cursor/hooks.json`). Shell commands and MCP tool calls then ask in the notch, and **Terminal** hands the choice back to Cursor's own prompt.
 
 **How it works.** `isletctl hook <agent> --wait N` posts the hook's payload to `/v1/hooks/<agent>?wait=N` and waits (see [API.md](API.md#approvals-long-poll)). The card appears a quarter of a second later, so the terminal can print its own prompt first. Islet holds the request until you answer, for at most N seconds or the wait set in Settings, whichever is shorter, and `isletctl` prints the answer in the form the agent expects. Everything fails open: if Islet isn't running, approvals are off, the wait runs out or you choose **Terminal**, `isletctl` prints nothing and exits 0, and the agent asks in the terminal as if no hook had run. Only events that ask for a decision wait; every other event is sent and forgotten within 1.5 seconds.
 
@@ -86,7 +88,7 @@ Cards clear themselves when a later event shows the question is settled: the too
 
 **Back to the terminal.** The hook records where the agent runs: `TERM_PROGRAM`, `__CFBundleIdentifier`, the tmux, WezTerm, kitty and Zellij pane variables, and the terminal device. The window button on the card, and **Terminal**, bring that app forward if it's running and select the tmux pane (or WezTerm pane). This needs no Automation permission. Individual iTerm2 and Terminal tabs are not selected.
 
-Settings → Integrations → Coding agents has **Answer agent approvals in the notch** (on by default) and **Hand back to the terminal after** (5 minutes by default). After changing the wait, press **Install for Claude Code…** again so the hook's `--wait` and `timeout` follow it; until then the shorter of the two applies.
+Settings → Coding agents → Approvals has **Answer requests in the notch** (on by default) and **Hand back to the terminal after** (5 minutes by default). After changing the wait, press **Update…** beside each connected agent so the hooks' `--wait` and `timeout` follow it; until then the shorter of the two applies.
 
 ---
 
@@ -96,7 +98,7 @@ The Home tab shows the 5-hour and weekly plan limits of Claude Code and Codex, o
 
 The closed island shows nothing about usage until a window reaches 90%, and again at 100%. Each crossing posts one normal activity ("Claude 5-hour limit at 90%", "Resets 16:40") that leaves on its own. Alerts are armed again when the window resets.
 
-Islet reads only what the two tools already write on this Mac. It doesn't read their login tokens, doesn't call their usage endpoints and sends nothing over the network. Switch either source off in Settings → Integrations → Usage limits (`claudeUsageEnabled` and `codexUsageEnabled` in `config.json`).
+Islet reads only what the two tools already write on this Mac. It doesn't read their login tokens, doesn't call their usage endpoints and sends nothing over the network. Switch either source off in Settings → Coding agents → Usage limits (`claudeUsageEnabled` and `codexUsageEnabled` in `config.json`).
 
 ### Claude Code
 
@@ -104,7 +106,7 @@ Claude Code keeps no usage on disk that Islet can read. It passes plan usage onl
 
 While Claude Code is installed (it has a `~/.claude` folder) without Islet's status line, Home shows Claude with a **Show usage** button that opens this part of Settings. Once the status line is in place, Home says "Waiting for Claude Code" until the first figures arrive. The "x" on that row hides it for good (`"claudeUsageHint": false`).
 
-In Settings → Integrations → Usage limits, click **Show Claude usage…**. A sheet shows the `statusLine` command before and after, and nothing is written until you click Add.
+In Settings → Coding agents → Usage limits, click **Show Usage…** beside Claude Code limits. A sheet shows the `statusLine` command before and after, and nothing is written until you click Add.
 
 - Without a status line, Islet sets one:
   ```json
@@ -213,7 +215,7 @@ Apple doesn't let third-party apps read the iPhone's Live Activities (macOS 26+ 
 1. **iPhone notifications.** macOS forwards them to the Mac when iPhone Mirroring or notification forwarding is on, and Islet's notification mirroring picks them up like any other banner.
 2. **iPhone Shortcuts automations → Islet's local-network bridge.**
 
-To set up the bridge, turn on *Settings → Integrations → iPhone bridge* and press **Copy Token**. This is the bridge's own token, not the one `isletctl token` prints; neither works in place of the other. Then on the iPhone: Shortcuts → Automation → **New** → pick a trigger → **Get Contents of URL**:
+To set up the bridge, turn on **Accept requests from this network** in *Settings → Advanced → iPhone bridge* and press **Copy** beside the token. This is the bridge's own token, not the one `isletctl token` prints; neither works in place of the other. Then on the iPhone: Shortcuts → Automation → **New** → pick a trigger → **Get Contents of URL**:
 - URL: `http://<your-mac>.local:47832/v1/notify`
 - Method: POST
 - Headers: `Authorization: Bearer <bridge token>`
@@ -237,7 +239,7 @@ The bridge also rejects browser origins, rate-limits each client (30 requests / 
 
 ## Script widgets (xbar-compatible)
 
-Drop executables into `~/.config/islet/plugins/` (Settings → Integrations → *Open Plugins Folder*):
+Turn on **Run scripts from the plugins folder** in *Settings → Advanced → Script widgets*, then drop executables into `~/.config/islet/plugins/` (**Open Folder** there):
 
 - **Existing xbar/SwiftBar plugins** from [xbarapp.com](https://xbarapp.com) work as-is: the header appears in the Widgets tab, items with `href=` or `shell=` are clickable, and `refresh=true` re-runs.
 - **JSON widgets** become live activities. [`integrations/plugins/cpu.10s.sh`](../integrations/plugins/cpu.10s.sh) turns CPU load into a low-priority activity every 10 s.

@@ -11,7 +11,7 @@
 | `finish` | Marks that task done or failed (`id`, `success`, optional `subtitle`). A success stays for 12 seconds, a failure for a minute. |
 | `dismiss` | Removes an activity made through MCP (`id`). |
 | `start_timer` | Starts a countdown of up to 24 hours (`duration`, optional `title`). `duration` can be `90s`, `1h 30m`, `half an hour`, `tea 4m` or `at 18:30`; a bare number means minutes. Without a `title`, the words around the duration become the title. |
-| `list_activities` | Lists the activities in the notch (id, title and state), including ones Islet or other apps made. Live Activities mirrored from the menu bar are left out unless **Let scripts read them through the local API** is on (Settings → Modules). |
+| `list_activities` | Lists the activities in the notch (id, title and state), including ones Islet or other apps made. Live Activities mirrored from the menu bar are left out unless **Let scripts read Live Activities** is on (Settings → Advanced → Local API). |
 
 The server adds `mcp-` to the front of every id, so a tool call can't replace an activity made by Islet itself or another app. An id that already starts with `mcp-`, as `list_activities` shows it, is used as it is, so `finish` and `dismiss` take either form. Ids keep only ASCII letters, digits and `._:-`; when anything else had to go, a short hash of the original is added, so the same id always finds the same task. A task stays until it's finished or dismissed; one that gets no update for 15 minutes dims.
 

@@ -4,9 +4,9 @@ On macOS 26 and later, the Mac shows your iPhone's Live Activities (a ride on it
 
 ## Turning it on
 
-1. Give Islet Accessibility access: press *Allow…* in *Settings → Modules → Live Activities* (it shows while access is missing), or use *System Settings → Privacy & Security → Accessibility*. If nothing appears after you grant it, quit and reopen Islet.
+1. Give Islet Accessibility access: press *Allow…* in *Settings → Live Activities* (it shows while access is missing), or use *System Settings → Privacy & Security → Accessibility*. If nothing appears after you grant it, quit and reopen Islet.
 2. Leave *Show Live Activities from the menu bar* on, in the same section.
-3. Make sure macOS shows them. Your iPhone and Mac need the same Apple Account, iPhone Mirroring set up, and *Allow Live Activities from iPhone* on in *System Settings → Notifications*; Apple's guide is [support.apple.com/120684](https://support.apple.com/en-us/120684). If that last setting is off, Islet's Live Activities section says so, and only the Mac's own activities appear.
+3. Make sure macOS shows them. Your iPhone and Mac need the same Apple Account, iPhone Mirroring set up, and *Allow Live Activities from iPhone* on in *System Settings → Notifications*; Apple's guide is [support.apple.com/120684](https://support.apple.com/en-us/120684). If that last setting is off, Islet's Live Activities page says so, and only the Mac's own activities appear.
 
 Nothing else is needed, and nothing is installed on the iPhone.
 

@@ -57,7 +57,7 @@ isletctl set deploy --title "Deploying" --progress 40
 open "islet://timer?in=25m&title=Focus"
 ```
 
-To connect a coding agent, use *Settings → Integrations*, or copy [`integrations/claude-code/settings.json`](integrations/claude-code/settings.json), [`integrations/codex`](integrations/codex) or [`integrations/cursor`](integrations/cursor).
+To connect a coding agent, press **Connect…** beside it in *Settings → Coding agents*, or copy [`integrations/claude-code/settings.json`](integrations/claude-code/settings.json), [`integrations/codex`](integrations/codex) or [`integrations/cursor`](integrations/cursor).
 
 ## Permissions (all optional)
 
@@ -73,7 +73,7 @@ Now Playing, volume, brightness, battery, calls, camera and microphone indicator
 
 ## Configure
 
-Everything is in *Settings* (the capsule in the menu bar) and in `~/.config/islet/config.json`, which reloads when you edit it and can live in your dotfiles.
+Everything is in *Settings* (the capsule in the menu bar) and in `~/.config/islet/config.json`, which reloads when you edit it and can live in your dotfiles. The search field at the top of Settings finds any setting, and everything technical (the local API, the iPhone bridge, hook commands, script widgets) waits under *Advanced*.
 
 ## Develop
 
@@ -82,6 +82,7 @@ make test        # unit and system tests (swift-testing)
 make e2e         # end-to-end checks against the real app, with its own config and port
 make perf        # CPU for each island state against its budget
 make snapshots   # renders every island state to build/snapshots/
+make settings-snapshots  # renders every Settings page, light and dark
 make demo        # runs with sample content
 ```
 

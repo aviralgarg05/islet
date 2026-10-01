@@ -172,7 +172,7 @@ See [AI.md](AI.md).
 
 Claude Code and Codex plan usage come from local files. Nothing polls and nothing goes over the network.
 
-- **Claude Code.** Settings → Integrations → **Install status line for Claude Code…** sets `isletctl statusline` as Claude Code's status line, wrapping any existing one. On each update it writes the plan usage Claude passes on stdin to `usage/claude.json` in the support folder (mode 0600, in a 0700 folder), only when a figure changed, then runs the user's own status line. `UsageWatcher` follows the file with vnode sources on the file and its folder.
+- **Claude Code.** Settings → Coding agents → Usage limits → **Show Usage…** sets `isletctl statusline` as Claude Code's status line, wrapping any existing one. On each update it writes the plan usage Claude passes on stdin to `usage/claude.json` in the support folder (mode 0600, in a 0700 folder), only when a figure changed, then runs the user's own status line. `UsageWatcher` follows the file with vnode sources on the file and its folder.
 - **Codex.** An FSEvents stream on `~/.codex/sessions` (5 s latency), set up only if that folder exists. On each event only the last 64 KB of the newest `rollout-*.jsonl` is read.
 
 `AgentUsageModel` shows the figures on the Home tab. It posts one activity when a window first crosses 90%, and a high-priority one at 100% (`UsageAlertTracker`). The first reading after launch only sets the baseline, so relaunching doesn't repeat an alert. Both sources are on by default (`claudeUsageEnabled`, `codexUsageEnabled`).
@@ -244,4 +244,4 @@ Claude Code and Codex plan usage come from local files. Nothing polls and nothin
 | System adapters | `make test`: real sockets (API server, held long-polls, LAN rate limit, LAN token, early 401, body and connection limits, malformed requests), IOKit/Music/Spotify/MediaRemote parsers, script runner (output, exit codes, timeouts), Safari/Chrome partial downloads, shelf persistence, discovery-file permissions, Ask service with fake transports and CLIs, Keychain queries, usage file watching, hook installer, menu bar inspector |
 | End to end | `make e2e`: launches the real app with isolated config and port; drives the CLI, HTTP, URL scheme, agent and zsh hooks, plugins, MCP and the LAN bridge; checks window level and placement, single instance, clean shutdown, idle CPU and memory. `make e2e-media` adds the MediaRemote bridge, which skips itself if something is playing. |
 | Performance | `make perf`: CPU in seven island states against the budgets above |
-| Visual | `make snapshots`: renders every island state to PNG offline, with sample content and a scratch config |
+| Visual | `make snapshots`: renders every island state to PNG offline, with sample content and a scratch config. `make settings-snapshots`: renders every Settings page in light and dark, and a page of search results, in a child process whose home folder is temporary |

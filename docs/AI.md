@@ -5,7 +5,7 @@ Islet uses AI in two places:
 1. **The Ask box**: a question field in the expanded island that streams a short answer from Apple's on-device model, Claude, ChatGPT, or the Claude Code and Codex command-line tools you already use.
 2. **Apple Intelligence helpers**: smart icons for activities and one-line summaries of long notifications. These only ever use the on-device model.
 
-Nothing goes over the network until you ask a cloud provider a question, save an API key or press **Refresh List**. Settings for both live in **Settings → AI**.
+Nothing goes over the network until you ask a cloud provider a question, save an API key or press **Refresh List**. Settings for both live in **Settings → Ask & AI**.
 
 ---
 
@@ -24,7 +24,7 @@ Open it in any of three ways:
 | Stop an answer | Esc, or the stop button |
 | Hand the keyboard back | Esc, which also closes the island when nothing is streaming, or click in another app |
 | Copy the answer | The copy button next to the field |
-| Change provider for this session | The chip on the left. The default is set in Settings → AI |
+| Change provider for this session | The chip on the left. The default is set in Settings → Ask & AI |
 | Start a new conversation | The pencil button (shown after an answer when follow-ups are on) |
 
 What to expect:
@@ -41,7 +41,7 @@ What to expect:
 
 ### Keyboard shortcut
 
-The Ask shortcut is `ctrl+option+a` (⌃⌥A) by default. From any app, it opens the island on the Ask box, pinned, with the field focused. Press it again, or Esc in the field, to close it. Change it in the **Shortcut** field in Settings → AI, or clear the field to turn it off.
+The Ask shortcut is `ctrl+option+a` (⌃⌥A) by default. From any app, it opens the island on the Ask box, pinned, with the field focused. Press it again, or Esc in the field, to close it. Change it in Settings → Shortcuts: click the shortcut and press the new keys, or press Delete to turn it off.
 
 Write it as modifiers and a key joined by `+`. Modifiers are `ctrl`, `option` (or `opt`, `alt`), `shift` and `cmd`, or the symbols ⌃⌥⇧⌘. The key is a letter, digit or punctuation key, `space`, `return`, `tab`, `escape`, an arrow (`up`, `down`, `left`, `right`) or `f1` to `f12`. It needs a modifier other than Shift unless the key is a function key. Text Islet can't read leaves the shortcut off.
 
@@ -108,7 +108,7 @@ codex exec --json --ephemeral --skip-git-repo-check --sandbox read-only [--model
 - **A minimal environment**: `HOME`, `USER`, `LOGNAME`, `TMPDIR`, `LANG`, `PATH`, `TERM=dumb` and `NO_COLOR=1`. No API keys and no Islet token are passed, so Claude Code uses its own login rather than an `ANTHROPIC_API_KEY`, which would switch it to API billing.
 - **Arguments, not a shell**: the prompt is passed as one argument and never interpreted by a shell. Standard input is `/dev/null`.
 - **Limits**: output is capped at 256 KB. Stop, or closing the island, sends SIGTERM, then SIGKILL after 2 seconds.
-- **Model**: blank uses the CLI's default. You can set one per CLI in Settings → AI (`sonnet`, `opus`, `gpt-6-luna`…). Names with spaces or a leading `-` are refused, so the setting can't add options to the command.
+- **Model**: blank uses the CLI's default. You can set one per CLI in Settings → Ask & AI (`sonnet`, `opus`, `gpt-6-luna`…). Names with spaces or a leading `-` are refused, so the setting can't add options to the command.
 
 If a CLI isn't signed in, the Ask box says so; run `claude` or `codex` once in Terminal to sign in. If a CLI is too old for one of the options above, the Ask box shows the one it rejected and asks you to update it.
 
@@ -116,7 +116,7 @@ If a CLI isn't signed in, the Ask box says so; run `claude` or `codex` once in T
 
 ## API keys
 
-- Create a key at platform.claude.com or platform.openai.com and paste it into Settings → AI.
+- Create a key at platform.claude.com or platform.openai.com and paste it into Settings → Ask & AI.
 - Islet checks its shape (`sk-ant-…` for Anthropic, `sk-…` for OpenAI), then calls `GET /v1/models` once to make sure it works, and only then stores it.
 - Keys are stored in your **login keychain** as generic passwords: service `dev.islet.Islet.ai`, accounts `anthropic` and `openai`, readable only while your Mac is unlocked. By default only the app that created the item can read it without asking.
 - Afterwards Settings shows only the key's last four characters. **Replace** swaps it for a new one; **Remove** deletes the Keychain item.
@@ -162,7 +162,7 @@ The footer under each answer shows the model, the output tokens when the provide
 
 ## Apple Intelligence
 
-Settings → AI → Apple Intelligence shows the on-device model's status:
+Settings → Ask & AI → Apple Intelligence says in a few words whether the on-device model is ready, and Settings → Advanced → Diagnostics shows the exact status:
 
 | Status | What Islet does |
 |---|---|

@@ -79,7 +79,7 @@ To aim at one timer, add `&id=` with its id (`timer-1`), its number (`1`) or its
 1. New shortcut, named **Pomodoro**.
 2. Add **Open URLs** with `islet://pomodoro?action=toggle`.
 
-"Hey Siri, Pomodoro" starts 25 minutes of focus, and saying it again stops it. When the focus ends, Islet moves on to a 5-minute break and then the next round; every fourth break is 15 minutes. Those are the defaults: change them in Settings → Modules → Timers. For separate start and stop shortcuts, use `action=start` and `action=stop`.
+"Hey Siri, Pomodoro" starts 25 minutes of focus, and saying it again stops it. When the focus ends, Islet moves on to a 5-minute break and then the next round; every fourth break is 15 minutes. Those are the defaults: change them in Settings → Timers. For separate start and stop shortcuts, use `action=start` and `action=stop`.
 
 ---
 
@@ -129,5 +129,5 @@ Other commands work the same way:
 
 - **Your own phrases.** The shortcut's name is the phrase. Rename it to whatever you like saying.
 - **A key instead of your voice.** In a shortcut's details, **Add Keyboard Shortcut** runs it from anywhere.
-- **From the iPhone.** Shortcuts sync, but `islet://` links only work on the Mac. Turn on the iPhone bridge in Islet's Settings → Integrations on the Mac, then on the iPhone use **Get Contents of URL** to POST `{"in": "20m", "title": "Pizza"}` to `/v1/timer` with the API token. See [iPhone → Mac](INTEGRATIONS.md#iphone).
+- **From the iPhone.** Shortcuts sync, but `islet://` links only work on the Mac. Turn on the iPhone bridge in Islet's Settings → Advanced on the Mac, then on the iPhone use **Get Contents of URL** to POST `{"in": "20m", "title": "Pizza"}` to `/v1/timer` with the API token. See [iPhone → Mac](INTEGRATIONS.md#iphone).
 - **What a link can do.** `islet://` links can start and control timers and the Pomodoro, show notifications and activities, open or close the island, control playback, keep the Mac awake and fill in the Ask box. They can't approve anything, send a question, spend money or read anything back. Activities made by links get ids starting with `url-` (the prefix is added for you), `islet://dismiss` only removes those, and any web address attached to an activity must be https. The full list is in [API.md](API.md#islet-url-scheme).
