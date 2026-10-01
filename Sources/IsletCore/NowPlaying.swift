@@ -168,8 +168,9 @@ public struct NowPlaying: Codable, Equatable, Sendable {
 ///     that a video finished) counts as paused from its end and goes after `endedTimeout`.
 /// 5. Sources switched off in settings are ignored. Music and Spotify count as themselves even
 ///    when the system bridge reports them (`setting(for:)`).
-/// 6. A player picked in the island (`pick(player:at:)`) is shown instead, while it is live,
-///    until another player starts playing after the pick or the picked one goes.
+/// 6. A player picked in the island (`pick(player:at:)`) is shown in the open island and
+///    controlled instead, while it is live, until another player starts playing after the pick
+///    or the picked one goes. The closed island keeps showing what plays (`closedIsland`).
 /// 7. Apps the user hid (`hidden`, Settings → Now Playing → Ignore apps) never show.
 /// 8. An app Islet doesn't know as a player, reporting nothing but a title (a voice note, a
 ///    sound in a chat app, a muted preview), shows only once it has played for `settle`
@@ -394,12 +395,27 @@ public struct MediaArbiter: Sendable {
         return !dead.isEmpty
     }
 
-    /// What the island shows and controls: the picked player while it is live, otherwise the
-    /// best of all (rules 1 to 3).
+    /// What the open island shows and its controls reach: the picked player while it is live,
+    /// otherwise the best of all (rules 1 to 3).
     public func current(now: Date) -> NowPlaying? {
         let live = liveSnapshots(now: now)
-        if let pick, let group = Self.grouped(live)[pick.player], let picked = Self.best(group) { return picked }
+        if let picked = picked(in: live) { return picked }
         return Self.best(live)
+    }
+
+    /// What the closed island shows: what is playing. A pick steers the open island and the
+    /// controls; the closed island follows it only while the picked player plays. So a paused
+    /// video picked while a song plays leaves the song beside the notch, rather than the video
+    /// showing there paused and then going after "Hide paused music after".
+    public func closedIsland(now: Date) -> NowPlaying? {
+        let live = liveSnapshots(now: now)
+        if let picked = picked(in: live), picked.isPlaying { return picked }
+        return Self.best(live)
+    }
+
+    private func picked(in live: [NowPlaying]) -> NowPlaying? {
+        guard let pick, let group = Self.grouped(live)[pick.player] else { return nil }
+        return Self.best(group)
     }
 
     /// Snapshots still counting at `now`, from sources that are on, each past its end shown as stopped.
