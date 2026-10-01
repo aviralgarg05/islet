@@ -39,7 +39,9 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 - Two-finger swipes: down to open, up to close, sideways over music to change track.
 - Keep awake for 15 minutes, an hour, two hours or until you turn it off.
 - Battery thresholds are adjustable, with an optional "charged to 80%" alert.
-- The playing indicator springs down to a dim, flat line when you pause and rises back into motion when you play, instead of jumping. Settings → Now Playing chooses its look (bars, slim bars, dots or none) and its colour (from the artwork, the accent colour or white).
+- The playing indicator springs down to a dim, flat line when you pause and rises back into motion when you play, instead of jumping. Settings → Now Playing chooses its look (bars, slim bars, dots, wave, pulse or none) and its colour (from the artwork, the accent colour or white). With the accent colour on automatic, "accent" means the artwork's colour, as it does everywhere else. With Reduce Motion a playing song no longer looks paused, and in Low Power Mode the indicator holds still.
+- Paused music stays beside the notch for a while so the pause can be seen: the artwork dims and the indicator settles, then the island goes back to the notch. **Hide paused music after** sets how long (right away to 5 minutes, or never; 10 seconds by default) and replaces "Show paused music" (on becomes never).
+- Play and pause change the moment you click, with the symbol morphing between them, then follow what the player reports.
 
 ### Calendar and reminders
 - A Today tab with the rest of the day's events, Join buttons and reminders you can tick off. Repeating meetings now alert every time, and the agenda rolls over at midnight.
@@ -47,9 +49,15 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 ### Look
 - A calmer open island. The pages move out of the menu bar row into a small glass switcher under the island (Home, Today, Shelf and a menu for the rest), with a timer button on one side and Ask on the other. Home shows one main thing large, usually what's playing, with a quiet column beside it. Cards lost their borders, and spacing, corners and type follow one set of sizes.
 - Dynamic Glass is the default theme. The strip beside the notch stays black so it blends with the hardware, and the open island melts into Liquid Glass below it (a blurred material before macOS 26). A faint smoke keeps text readable, and a slow sheen drifts across unless Reduce Motion or Low Power Mode is on. **Glass level** in Settings sets how far down the black reaches. Black and Graphite are still there.
+- **Artwork corners** (Appearance) go from square to round beside the notch, in a new song's peek and in the open island.
+- **Fit to the notch** (Appearance) nudges the notch's width by up to 20 points and its height by up to 4, so the closed island lines up with the hardware. Hovering and clicking follow.
+- Volume and brightness HUDs can be white, the accent colour or colourful (volume green, brightness yellow, keyboard light blue).
 
 ### Settings
 - Settings is a sidebar window like System Settings, with a search field that finds any setting and opens its page at that row. Each feature page starts with its switch and one plain line; Appearance gathers every look, with a live drawing of the island, any accent colour and sizes you can drag; shortcuts are set by pressing them; Coding agents connects Claude Code, Codex and Cursor with one button each, showing the change first; and ports, tokens, hook commands and script widgets wait under Advanced.
+- Appearance and Now Playing open with a live drawing of the closed island and a play/pause button, so the indicator and the pause can be judged without music playing.
+- A shortcut field can record a combination that is already one of Islet's shortcuts; they pause while it listens.
+- Buttons use sentence case. The Ask box says plainly when Claude Code or Codex isn't installed; where Islet looked is in Advanced → Diagnostics.
 
 ### Safer and lighter
 - A crash when the Now Playing helper stopped, and a core spinning at 100% after it did, are fixed.
