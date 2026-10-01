@@ -8,6 +8,9 @@ import SwiftUI
 ///
 /// It sits over the desktop, not on the island, so it is the one place the island uses Liquid
 /// Glass in the Black theme too (and never glass on glass in the Glass theme).
+///
+/// When the island opens, the capsule and then the discs rise into place after the content
+/// (`SwitcherReveal`, `RiseIn`).
 struct PageSwitcher: View {
     let model: AppModel
     @Namespace private var highlight
@@ -51,6 +54,8 @@ struct PageSwitcher: View {
                 }
                 .padding(Self.inset)
                 .floatingGlass(Capsule())
+                // It buds off the island first; the discs follow a moment later.
+                .modifier(RiseIn(index: 0))
                 disc(symbol: IslandTab.ask.symbol, help: "Ask", selected: model.tab == .ask) {
                     model.select(tab: model.tab == .ask ? .home : .ask)
                 }
@@ -110,6 +115,7 @@ struct PageSwitcher: View {
         }
         .buttonStyle(PressableStyle())
         .floatingGlass(Circle())
+        .modifier(RiseIn(index: 1))
         .help(help)
         .accessibilityLabel(help)
     }

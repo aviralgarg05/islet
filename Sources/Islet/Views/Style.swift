@@ -49,10 +49,18 @@ enum Haptics {
 // MARK: - Motion
 
 extension AnimationStyle {
+    /// The style the island actually uses: Off stays off; Reduce Motion (the system's or
+    /// Islet's) and Low Power Mode get plain short fades.
+    static func effective(_ setting: AnimationStyle, reduceMotion: Bool,
+                          lowPower: Bool = ProcessInfo.processInfo.isLowPowerModeEnabled) -> AnimationStyle {
+        if setting == .off { return .off }
+        return reduceMotion || lowPower ? .minimal : setting
+    }
+
     /// Every duration below is scaled by "Animation speed" (`Motion.pace`).
     private var k: Double { Motion.pace }
 
-    /// Shape morphing between island states (expanding).
+    /// The shell growing into a bigger shape (opening, a peek dropping down).
     var morph: Animation? {
         switch self {
         case .fluid: return Motion.open
@@ -63,29 +71,36 @@ extension AnimationStyle {
         }
     }
 
-    /// Collapsing is quicker and settles without overshoot.
+    /// The shell shrinking back: once the content has faded, on a calmer spring.
     var collapse: Animation? {
         switch self {
-        case .fluid: return Motion.close
-        case .snappy: return .snappy(duration: 0.22 * k)
-        case .smooth: return .smooth(duration: 0.3 * k)
+        case .fluid: return Motion.close.delay(IslandMotion.closeDelay * k)
+        case .snappy: return .snappy(duration: 0.22 * k).delay(0.03 * k)
+        case .smooth: return .smooth(duration: 0.3 * k).delay(IslandMotion.closeDelay * k)
         case .minimal: return .easeInOut(duration: 0.14 * k)
         case .off: return nil
         }
     }
 
-    /// How content enters and leaves.
-    var contentTransition: AnyTransition {
+    /// The richer motion (liquid bubbles, the staggered switcher, glyphs that bounce in):
+    /// every style but Minimal and Off.
+    var isRich: Bool { self == .fluid || self == .snappy || self == .smooth }
+
+    /// The shell squashes and stretches only with the springy style.
+    var stretches: Bool { self == .fluid }
+
+    /// How content enters and leaves. Shape first, content after: new content fades and scales
+    /// in once the shell has made room, and outgoing content is gone before the shell closes.
+    func contentTransition(opening: Bool) -> AnyTransition {
         switch self {
-        case .fluid, .smooth:
+        case .fluid, .smooth, .snappy:
+            let quick = self == .snappy ? 0.7 : 1
+            let delay = opening ? IslandMotion.contentDelay : IslandMotion.contentDelayClosing
             return .asymmetric(
-                insertion: AnyTransition(.blurReplace).combined(with: .scale(scale: 0.94, anchor: .top))
-                    .animation(.easeOut(duration: 0.26 * k).delay(0.05 * k)),
-                removal: .opacity.animation(.easeIn(duration: 0.08 * k))
+                insertion: ContentReveal.transition
+                    .animation(.easeOut(duration: IslandMotion.contentFade * quick * k).delay(delay * quick * k)),
+                removal: .opacity.animation(.easeIn(duration: IslandMotion.contentExit * quick * k))
             )
-        case .snappy:
-            return .asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.14 * k).delay(0.03 * k)),
-                               removal: .opacity.animation(.linear(duration: 0.06 * k)))
         case .minimal:
             return .opacity
         case .off:
@@ -162,6 +177,23 @@ private struct GlassBody: View {
     /// The least black left over the glass, so text always has a floor of contrast.
     static let smoke = GlassMelt.smokeFloor
     @Environment(\.snapshotMode) private var snapshotMode
+    @Environment(\.shellClock) private var clock
+
+    /// The black melts into glass this long after the island starts to open, over `melt`, and
+    /// comes back over `unmelt` as it closes.
+    static let meltDelay = 0.15
+    static let melt = 0.18
+    static let unmelt = 0.08
+
+    /// How much of the black is over the glass: at rest, or in a transition frozen for the
+    /// motion sheets.
+    private var blackness: Double {
+        let rest: Double = expanded || closedGlass ? 0 : 1
+        guard let clock, clock.wasExpanded != expanded, !closedGlass else { return rest }
+        let k = Motion.pace
+        if expanded { return 1 - IslandMotion.eased(.easeOut, from: Self.meltDelay * k, length: Self.melt * k, at: clock.t) }
+        return IslandMotion.eased(.easeIn, from: 0, length: Self.unmelt * k, at: clock.t)
+    }
 
     var body: some View {
         ZStack {
@@ -184,9 +216,9 @@ private struct GlassBody: View {
                 shape.fill(Color.black.opacity(Self.smoke))
             }
             shape.fill(Color.black)
-                .opacity(expanded || closedGlass ? 0 : 1)
-                .animation(expanded ? .easeOut(duration: 0.18 * Motion.pace).delay(0.15 * Motion.pace)
-                                    : .easeIn(duration: 0.08 * Motion.pace), value: expanded)
+                .opacity(blackness)
+                .animation(expanded ? .easeOut(duration: Self.melt * Motion.pace).delay(Self.meltDelay * Motion.pace)
+                                    : .easeIn(duration: Self.unmelt * Motion.pace), value: expanded)
         }
     }
 
