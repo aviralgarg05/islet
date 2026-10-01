@@ -629,3 +629,192 @@ final class SpinnerNSView: NSView {
         }
     }
 }
+
+// MARK: - Song progress ring
+
+/// The outline the song progress ring follows: a rounded rectangle that starts at the top
+/// centre and runs clockwise, in y-down coordinates (SwiftUI's).
+enum SongRingPath {
+    static func path(in r: CGRect, corner: CGFloat) -> CGPath {
+        let c = max(0, min(corner, r.width / 2, r.height / 2))
+        let p = CGMutablePath()
+        p.move(to: CGPoint(x: r.midX, y: r.minY))
+        p.addArc(tangent1End: CGPoint(x: r.maxX, y: r.minY), tangent2End: CGPoint(x: r.maxX, y: r.maxY), radius: c)
+        p.addArc(tangent1End: CGPoint(x: r.maxX, y: r.maxY), tangent2End: CGPoint(x: r.minX, y: r.maxY), radius: c)
+        p.addArc(tangent1End: CGPoint(x: r.minX, y: r.maxY), tangent2End: CGPoint(x: r.minX, y: r.minY), radius: c)
+        p.addArc(tangent1End: CGPoint(x: r.minX, y: r.minY), tangent2End: CGPoint(x: r.midX, y: r.minY), radius: c)
+        p.closeSubpath()
+        return p
+    }
+}
+
+/// The same outline as a SwiftUI shape, for snapshots and the drawing in Settings: `inset`
+/// points inside the frame (half the line, so the stroke stays inside), corners kept parallel.
+struct SongRingShape: Shape {
+    var corner: CGFloat
+    var inset: CGFloat = 0
+    func path(in rect: CGRect) -> Path {
+        Path(SongRingPath.path(in: rect.insetBy(dx: inset, dy: inset), corner: max(0, corner - inset)))
+    }
+}
+
+/// A thin ring round the closed artwork that fills as the song plays (Settings → Now Playing →
+/// Show song progress). Core Animation fills it from the player's last report to the end of the
+/// song, so the app does no work while the song plays on; a new report (a seek, a pause, a new
+/// song) starts it again. Paused, it holds still. It glides at a few frames a second, and steps
+/// once a second in Low Power Mode and with Reduce Motion. A static drawing in snapshots.
+struct SongRing: View {
+    let media: NowPlaying
+    var tint: Color
+    /// The artwork's corner; the ring keeps parallel to it.
+    var corner: CGFloat
+    var lineWidth: CGFloat = 1.5
+    @Environment(\.snapshotMode) private var snapshotMode
+
+    var body: some View {
+        let inset = lineWidth / 2
+        if snapshotMode {
+            let fraction = SongProgress(media, now: Date())?.fraction ?? 0
+            ZStack {
+                SongRingShape(corner: corner, inset: inset).stroke(Color.white.opacity(SongRingNSView.trackOpacity), lineWidth: lineWidth)
+                SongRingShape(corner: corner, inset: inset).trim(from: 0, to: fraction)
+                    .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+            }
+        } else {
+            SongRingLayer(media: media, color: NSColor(tint), corner: corner, lineWidth: lineWidth)
+        }
+    }
+}
+
+private struct SongRingLayer: NSViewRepresentable {
+    let media: NowPlaying
+    var color: NSColor
+    var corner: CGFloat
+    var lineWidth: CGFloat
+
+    func makeNSView(context: Context) -> SongRingNSView { SongRingNSView() }
+
+    func updateNSView(_ view: SongRingNSView, context: Context) {
+        view.update(media: media, color: color, corner: corner, lineWidth: lineWidth,
+                    reduceMotion: context.environment.reduceMotionAnywhere)
+    }
+}
+
+final class SongRingNSView: NSView {
+    static let trackOpacity = 0.14
+    private let track = CAShapeLayer()
+    private let fill = CAShapeLayer()
+    private var corner: CGFloat = 0
+    private var lineWidth: CGFloat = 1.5
+    /// What the fill was last started from: the player's report, not the moment it was drawn.
+    private var lastReport: Report?
+    private var reduceMotion = false
+    private var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+
+    private struct Report: Equatable {
+        var track: String
+        var elapsed: Double?
+        var timestamp: Date
+        var rate: Double
+        var playing: Bool
+        var duration: Double?
+        var stepped: Bool
+
+        init(_ np: NowPlaying, stepped: Bool) {
+            track = np.trackKey; elapsed = np.elapsed; timestamp = np.timestamp; rate = np.playbackRate
+            playing = np.isPlaying; duration = np.duration; self.stepped = stepped
+        }
+    }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        for l in [track, fill] {
+            l.fillColor = nil
+            l.lineCap = .round
+            l.lineJoin = .round
+            layer?.addSublayer(l)
+        }
+        track.strokeColor = NSColor.white.withAlphaComponent(Self.trackOpacity).cgColor
+        fill.strokeEnd = 0
+        // Removed by the system when the view goes.
+        NotificationCenter.default.addObserver(self, selector: #selector(powerStateChanged(_:)),
+                                               name: .NSProcessInfoPowerStateDidChange, object: nil)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let inset = lineWidth / 2
+        // Drawn y-down, then flipped into the layer's y-up space, so it starts at the top.
+        var flip = CGAffineTransform(translationX: 0, y: bounds.height).scaledBy(x: 1, y: -1)
+        let path = SongRingPath.path(in: bounds.insetBy(dx: inset, dy: inset), corner: max(0, corner - inset)).copy(using: &flip)
+        for l in [track, fill] {
+            l.frame = bounds
+            l.lineWidth = lineWidth
+            l.path = path
+        }
+        CATransaction.commit()
+    }
+
+    func update(media: NowPlaying, color: NSColor, corner: CGFloat, lineWidth: CGFloat, reduceMotion: Bool) {
+        fill.strokeColor = color.cgColor
+        if corner != self.corner || lineWidth != self.lineWidth {
+            self.corner = corner
+            self.lineWidth = lineWidth
+            needsLayout = true
+        }
+        self.reduceMotion = reduceMotion
+        lastMedia = media
+        start(media)
+    }
+
+    /// Fill from where the song is to its end, unless that is already under way.
+    private func start(_ np: NowPlaying) {
+        let stepped = reduceMotion || lowPower
+        let report = Report(np, stepped: stepped)
+        guard report != lastReport else { return }
+        lastReport = report
+        fill.removeAnimation(forKey: "fill")
+        guard let progress = SongProgress(np, now: Date()) else {
+            setStrokeEnd(0)
+            return
+        }
+        setStrokeEnd(progress.fraction)
+        guard let remaining = progress.remaining, remaining > 0, progress.fraction < 1 else { return }
+        let a = CABasicAnimation(keyPath: "strokeEnd")
+        a.fromValue = progress.fraction
+        a.toValue = 1
+        a.duration = remaining
+        a.fillMode = .forwards
+        a.isRemovedOnCompletion = false
+        // Most of a pixel a second: a few frames are plenty, and one a second when saving power.
+        a.preferredFrameRateRange = stepped ? CAFrameRateRange(minimum: 1, maximum: 1, preferred: 1)
+                                            : CAFrameRateRange(minimum: 1, maximum: 4, preferred: 4)
+        fill.add(a, forKey: "fill")
+    }
+
+    private func setStrokeEnd(_ value: Double) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        fill.strokeEnd = value
+        CATransaction.commit()
+    }
+
+    /// Posted on whichever thread changed the power state.
+    @objc nonisolated private func powerStateChanged(_ note: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+                // Start again from the last report at the new pace.
+                if let last = self.lastMedia { self.lastReport = nil; self.start(last) }
+            }
+        }
+    }
+
+    private var lastMedia: NowPlaying?
+}

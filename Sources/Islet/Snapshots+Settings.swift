@@ -68,7 +68,8 @@ enum SettingsSnapshots {
             custom.expandedHeight = 260
             custom.wingWidth = 120
             custom.accentColor = "#34C759"
-            custom.visualiserColour = .accent
+            custom.musicColour = .accent
+            custom.songProgressRing = true
             custom.visualiserStyle = .dots
             model.settings = custom
             navigation.open(.appearance)

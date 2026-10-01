@@ -80,8 +80,10 @@ public enum VisualiserStyle: String, Codable, Sendable, CaseIterable {
     case off
 }
 
-/// Where the playing indicator takes its colour from.
-public enum VisualiserColour: String, Codable, Sendable, CaseIterable {
+/// Where the music's colour comes from: the playing indicator, the song progress ring and the
+/// open island's progress bar, shuffle and repeat. Replaces `visualiserColour`, which coloured
+/// the indicator alone.
+public enum MusicColour: String, Codable, Sendable, CaseIterable {
     /// The artwork's main colour.
     case artwork
     /// The accent colour from Appearance.
@@ -219,7 +221,10 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// Show a new song for a moment below the notch when the track changes (`SongPeek`).
     public var songChangePeek = true
     public var visualiserStyle: VisualiserStyle = .bars
-    public var visualiserColour: VisualiserColour = .artwork
+    /// The music's colour (`MusicColour`). Read from `visualiserColour` in older configs.
+    public var musicColour: MusicColour = .artwork
+    /// A thin ring round the artwork beside the notch that fills as the song plays.
+    public var songProgressRing = false
     /// Corner radius of the artwork beside the notch, in points: 0 is square and 10 is round.
     /// The song peek and the open island's artwork scale it to their size (`artworkCorner`).
     public var artworkCornerRadius: Double = IsletSettings.standardArtworkCorner
@@ -442,6 +447,11 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         // false (or no key) now means the new default, and the old key isn't written back. A
         // `pausedMusicTimeout` that can't be read doesn't count, so the old choice still carries.
         if !applied.contains("pausedMusicTimeout"), user["showPausedMedia"] as? Bool == true { s.pausedMusicTimeout = Self.neverHide }
+        // `visualiserColour` coloured the playing indicator alone; `musicColour` colours all the
+        // music and takes its value. The old key isn't written back.
+        if !applied.contains("musicColour"), let old = user["visualiserColour"] as? String, let colour = MusicColour(rawValue: old) {
+            s.musicColour = colour
+        }
         // Older configs kept two bundle id lists beside `appRules`. They are folded into the
         // rules and not written back. (`launchAtLogin` is gone too: Login Items is the truth.)
         s.appRules = AppRule.merging(s.appRules,

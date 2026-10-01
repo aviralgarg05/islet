@@ -121,6 +121,8 @@ import Testing
         ("colourful", .notifications),
         ("closed island width", .appearance),
         ("airdrop", .shelf),
+        ("music colour", .nowPlaying),
+        ("song progress", .nowPlaying),
     ])
     func queryFindsPage(query: String, page: SettingsPage) {
         let groups = SettingsIndex.search(query)

@@ -121,9 +121,9 @@ private func writtenKeys(_ s: IsletSettings) throws -> Set<String> {
 
     @Test func playingIndicatorSettingsLoadAndFallBack() {
         #expect(IsletSettings().visualiserStyle == .bars)
-        #expect(IsletSettings().visualiserColour == .artwork)
-        #expect(decode(#"{"visualiserStyle": "dots", "visualiserColour": "white"}"#).visualiserStyle == .dots)
-        #expect(decode(#"{"visualiserStyle": "dots", "visualiserColour": "white"}"#).visualiserColour == .white)
+        #expect(IsletSettings().musicColour == .artwork)
+        #expect(decode(#"{"visualiserStyle": "dots", "musicColour": "white"}"#).visualiserStyle == .dots)
+        #expect(decode(#"{"visualiserStyle": "dots", "musicColour": "white"}"#).musicColour == .white)
         #expect(decode(#"{"visualiserStyle": "laser"}"#).visualiserStyle == .bars)
     }
 

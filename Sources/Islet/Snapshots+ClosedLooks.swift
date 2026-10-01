@@ -32,6 +32,21 @@ extension Snapshots {
         shoot("40-song-peek-artwork-round")
         model.settings.artworkCornerRadius = saved.artworkCornerRadius
 
+        // The song progress ring, in the music colour: playing, paused, and in a new song's peek.
+        model.settings.songProgressRing = true
+        model.settings.musicColour = .accent
+        model.settings.accentColor = "pink"
+        model.forcedPresentation = .compact(.nowPlaying(playing))
+        shoot("40-compact-media-progress-ring")
+        model.forcedPresentation = .compact(.nowPlaying(paused))
+        shoot("40-compact-media-progress-ring-paused")
+        model.forcedPresentation = .songPeek(playing)
+        shoot("40-song-peek-progress-ring")
+        model.settings.artworkCornerRadius = 10
+        model.forcedPresentation = .compact(.nowPlaying(playing))
+        shoot("40-compact-media-progress-ring-round")
+        model.settings = saved
+
         // Beside an activity, music paused a moment ago keeps its bubble, dimmed.
         if let activity = model.activities.first {
             model.setPausedForSnapshot(true, now: Date())  // paused just now, whenever this runs

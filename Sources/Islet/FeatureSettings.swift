@@ -41,9 +41,14 @@ struct NowPlayingSettings: View {
                 .settingsAnchor("nowPlaying.paused")
                 Toggle(isOn: $model.settings.songChangePeek) {
                     Text("Show the new song for a moment")
-                    Text("When the track changes, the island opens a little with the artwork, title and artist.")
+                    Text("When the track changes, the island opens a little with the artwork, title and artist, for as long as new activities stay open.")
                 }
                 .settingsAnchor("nowPlaying.peek")
+                Toggle(isOn: $model.settings.songProgressRing) {
+                    Text("Show song progress")
+                    Text("A thin ring round the artwork beside the notch fills as the song plays.")
+                }
+                .settingsAnchor("nowPlaying.progressRing")
             }
             .disabled(!on)
             Section("Open island") {
@@ -57,21 +62,23 @@ struct NowPlayingSettings: View {
             Section {
                 IndicatorStylePicker(model: model)
                     .settingsAnchor("nowPlaying.indicator")
-                Picker("Colour", selection: indicatorColour) {
-                    Text("From the artwork").tag(VisualiserColour.artwork)
+                Picker(selection: musicColour) {
+                    Text("From the artwork").tag(MusicColour.artwork)
                     // With the accent on "auto" it is the artwork's colour, so it isn't offered twice.
                     if model.settings.accentColor != "auto" {
-                        Text("Accent colour").tag(VisualiserColour.accent)
+                        Text("Accent colour").tag(MusicColour.accent)
                     }
-                    Text("White").tag(VisualiserColour.white)
+                    Text("White").tag(MusicColour.white)
+                } label: {
+                    Text("Music colour")
+                    Text("The playing indicator, the progress ring and the open island's progress bar.")
                 }
-                .disabled(model.settings.visualiserStyle == .off)
-                .settingsAnchor("nowPlaying.indicatorColour")
+                .settingsAnchor("nowPlaying.musicColour")
             } header: {
-                Text("Playing indicator")
+                Text("Look")
             } footer: {
                 HStack(spacing: 4) {
-                    SettingsFooter("It settles and dims when you pause, and springs back when you play.")
+                    SettingsFooter("The indicator settles and dims when you pause, and springs back when you play.")
                     SettingsLink(text: "Accent colour", page: .appearance, anchor: "appearance.accent").fixedSize()
                 }
             }
@@ -99,11 +106,11 @@ struct NowPlayingSettings: View {
     }
 
     /// "Accent colour" on "auto" shows as "From the artwork", which is what it draws.
-    private var indicatorColour: Binding<VisualiserColour> {
+    private var musicColour: Binding<MusicColour> {
         Binding(get: {
-            let c = model.settings.visualiserColour
+            let c = model.settings.musicColour
             return c == .accent && model.settings.accentColor == "auto" ? .artwork : c
-        }, set: { model.settings.visualiserColour = $0 })
+        }, set: { model.settings.musicColour = $0 })
     }
 }
 
@@ -125,7 +132,7 @@ struct IndicatorStylePicker: View {
     }
 
     var body: some View {
-        SettingsRow(title: "Look") {
+        SettingsRow(title: "Playing indicator") {
             HStack(spacing: 8) {
                 ForEach(Self.styles, id: \.self) { style in
                     let selected = model.settings.visualiserStyle == style

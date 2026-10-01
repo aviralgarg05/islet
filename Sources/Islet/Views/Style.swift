@@ -331,10 +331,11 @@ extension AppModel {
         settings.accentColor == "auto" ? ArtworkCache.accent(for: np) : Color(tint: settings.accentColor)
     }
 
-    /// The playing indicator's colour (Settings → Now Playing). "Accent" follows the accent
-    /// colour, which, set to "auto", means the artwork's colour here as everywhere else.
-    func visualiserTint(_ np: NowPlaying?) -> Color {
-        switch settings.visualiserColour {
+    /// The music's colour (Settings → Now Playing → Music colour): the playing indicator, the
+    /// progress ring, and the open island's progress bar, shuffle and repeat. "Accent" follows
+    /// the accent colour, which, set to "auto", means the artwork's colour here as everywhere else.
+    func musicTint(_ np: NowPlaying?) -> Color {
+        switch settings.musicColour {
         case .artwork: return ArtworkCache.accent(for: np)
         case .accent: return mediaAccent(np)
         case .white: return .white

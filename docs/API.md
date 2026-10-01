@@ -420,10 +420,11 @@ Now Playing, closed island, HUD, gestures and battery keys:
 | Key | Default | Meaning |
 |---|---|---|
 | `mediaShowsRemainingTime` | `true` | Time left (rather than the track length) right of the scrubber. Tapping the label switches it. |
-| `songChangePeek` | `true` | Show a new song for a moment below the notch when the track changes. |
+| `songChangePeek` | `true` | Show a new song for a moment below the notch when the track changes, for as long as `alertDuration`. |
+| `songProgressRing` | `false` | A thin ring round the artwork beside the notch that fills as the song plays. |
 | `pausedMusicTimeout` | `10` | Seconds the closed island keeps paused music before it hides (0–300; `0` = right away, `-1` = never). Replaces `showPausedMedia`, which is read once: `true` becomes `-1`. |
 | `visualiserStyle` | `"bars"` | The playing indicator: `"bars"`, `"slim"`, `"dots"`, `"wave"`, `"pulse"` or `"off"`. |
-| `visualiserColour` | `"artwork"` | `"artwork"`, `"accent"` (the artwork's colour while `accentColor` is `"auto"`) or `"white"`. |
+| `musicColour` | `"artwork"` | The playing indicator, the progress ring and the open island's progress bar: `"artwork"`, `"accent"` (the artwork's colour while `accentColor` is `"auto"`) or `"white"`. Replaces `visualiserColour`, which is read once. |
 | `artworkCornerRadius` | `5` | Artwork corners beside the notch, 0 (square) to 10 (round). The song peek and the open island scale it to their size. |
 | `hudColour` | `"white"` | Volume and brightness HUDs: `"white"`, `"accent"` or `"colourful"` (volume green, brightness yellow, keyboard light blue, microphone orange). |
 | `notchWidthAdjust`, `notchHeightAdjust` | `0` | Points added to the notch so the closed island lines up with it: width −20 to +20, height −4 to +4. |

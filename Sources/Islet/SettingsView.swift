@@ -230,7 +230,7 @@ struct AppearanceSettings: View {
     static func indicatorSummary(_ s: IsletSettings) -> String {
         guard s.visualiserStyle != .off else { return "Off" }
         let style = IndicatorStylePicker.name(s.visualiserStyle)
-        switch s.visualiserColour {
+        switch s.musicColour {
         case .artwork: return "\(style), artwork colour"
         // With the accent on "auto" the accent is the artwork's colour.
         case .accent: return s.accentColor == "auto" ? "\(style), artwork colour" : "\(style), accent colour"
@@ -476,11 +476,9 @@ struct IslandSketch: View {
     static let notch = CGSize(width: 185, height: 32)
     static let artwork = [Color(red: 1.0, green: 0.62, blue: 0.32), Color(red: 0.93, green: 0.3, blue: 0.48)]
 
-    private var accent: Color { settings.accentColor == "auto" ? Self.artwork[0] : Color(tint: settings.accentColor) }
-
-    /// The playing indicator's colour on the sample song. "Accent" on "auto" is the artwork's.
+    /// The music colour on the sample song. "Accent" on "auto" is the artwork's.
     static func indicatorTint(_ s: IsletSettings) -> Color {
-        switch s.visualiserColour {
+        switch s.musicColour {
         case .artwork: return artwork[0]
         case .accent: return s.accentColor == "auto" ? artwork[0] : Color(tint: s.accentColor)
         case .white: return .white
@@ -511,7 +509,21 @@ struct IslandSketch: View {
             .fill(Color.black)
             .frame(width: width, height: height)
             .overlay(alignment: .leading) {
-                artworkTile(size: art, corner: CGFloat(settings.artworkCorner(size: 20, standard: 5)) * scale)
+                let corner = CGFloat(settings.artworkCorner(size: 20, standard: 5)) * scale
+                artworkTile(size: art, corner: corner)
+                    .overlay {
+                        if settings.songProgressRing {
+                            let pad = (ClosedArtwork.ringGap + ClosedArtwork.ringLine) * scale
+                            let line = ClosedArtwork.ringLine * scale
+                            ZStack {
+                                SongRingShape(corner: corner + pad, inset: line / 2)
+                                    .stroke(Color.white.opacity(SongRingNSView.trackOpacity), lineWidth: line)
+                                SongRingShape(corner: corner + pad, inset: line / 2).trim(from: 0, to: 0.42)
+                                    .stroke(Self.indicatorTint(settings), style: StrokeStyle(lineWidth: line, lineCap: .round))
+                            }
+                            .frame(width: art + 2 * pad, height: art + 2 * pad)
+                        }
+                    }
                     .opacity(playing ? 1 : PausedLook.artworkOpacity)
                     .animation(.easeInOut(duration: PausedLook.fade), value: playing)
                     .padding(.leading, inset)
@@ -546,7 +558,7 @@ struct IslandSketch: View {
                         Capsule().fill(Color.white.opacity(0.18))
                             .frame(height: 3)
                             .overlay(alignment: .leading) {
-                                GeometryReader { g in Capsule().fill(accent).frame(width: g.size.width * 0.42) }
+                                GeometryReader { g in Capsule().fill(Self.indicatorTint(settings)).frame(width: g.size.width * 0.42) }
                             }
                             .padding(.top, 3)
                     }
@@ -555,7 +567,7 @@ struct IslandSketch: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Capsule().fill(Color.white.opacity(0.85)).frame(width: w * 0.32, height: 3)
                         Capsule().fill(Color.white.opacity(0.4)).frame(width: w * 0.22, height: 3)
-                        Capsule().fill(accent).frame(width: w * 0.4, height: 2.5).padding(.top, 2)
+                        Capsule().fill(Self.indicatorTint(settings)).frame(width: w * 0.4, height: 2.5).padding(.top, 2)
                     }
                     Spacer(minLength: 0)
                 }

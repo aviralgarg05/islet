@@ -357,3 +357,29 @@ public struct PlaybackIntent: Equatable, Sendable {
         return shown
     }
 }
+
+/// How far through the song the progress ring round the closed artwork is, and how long it
+/// has left to fill at the player's rate. The ring is drawn by Core Animation from this, so
+/// the app does nothing while the song plays on: it starts again only when the player reports.
+public struct SongProgress: Equatable, Sendable {
+    /// 0 at the start of the song, 1 at its end.
+    public var fraction: Double
+    /// Seconds until the ring is full; nil while paused (the ring holds still).
+    public var remaining: Double?
+
+    /// Nil for a song without a length (a live stream): there is nothing to fill.
+    public init?(_ np: NowPlaying, now: Date) {
+        guard let duration = np.duration, duration.isFinite, duration > 0, let pos = np.position(at: now) else { return nil }
+        fraction = min(1, max(0, pos / duration))
+        if np.isPlaying, np.playbackRate > 0, np.playbackRate.isFinite {
+            remaining = max(0, duration - pos) / np.playbackRate
+        } else {
+            remaining = nil
+        }
+    }
+
+    public init(fraction: Double, remaining: Double?) {
+        self.fraction = fraction
+        self.remaining = remaining
+    }
+}

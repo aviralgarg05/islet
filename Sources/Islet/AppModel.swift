@@ -74,7 +74,8 @@ final class AppModel {
     var forcedPresentation: IslandPresentation?
     /// Measured closed-island placement per display, for the automatic layout.
     var closedPlacements: [CGDirectDisplayID: ClosedPlacement] = [:]
-    /// When a new song shows for a moment below the notch.
+    /// When a new song shows for a moment below the notch, for as long as "New activities stay
+    /// open for" says.
     private(set) var songPeek = SongPeek()
     /// When the music was paused, so the closed island keeps it for `pausedMusicTimeout`.
     private(set) var pausedMusic = PausedMusic()
@@ -151,6 +152,7 @@ final class AppModel {
         self.ask = ask ?? AskController()
         shelf = shelfService.shelf
         clipboard = ClipboardHistory(limit: settings.clipboardLimit)
+        songPeek.duration = settings.alertDuration
     }
 
     // MARK: Lifecycle
@@ -244,6 +246,8 @@ final class AppModel {
     func applyTiming() {
         center.sneakDuration = settings.alertDuration
         center.hudDuration = settings.hudDuration
+        // A new song stays as long as a new activity does.
+        songPeek.duration = settings.alertDuration
         // "Hide paused music after" may have moved the moment paused music goes.
         reschedule()
     }

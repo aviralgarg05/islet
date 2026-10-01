@@ -18,6 +18,8 @@ struct NowPlayingHero: View {
 
     var body: some View {
         let accent = model.mediaAccent(media)
+        // The progress bar, shuffle and repeat take the music colour, as the indicator does.
+        let tint = model.musicTint(media)
         let roomy = size.height >= Self.roomyHeight
         let art: CGFloat = roomy ? 72 : size.height >= 110 ? 56 : 40
         let showsSound = !roomy && model.controls.soundRowShown
@@ -44,12 +46,12 @@ struct NowPlayingHero: View {
             }
             Spacer(minLength: Space.xs)
             if media.duration != nil {
-                MediaScrubber(model: model, media: media, accent: accent)
+                MediaScrubber(model: model, media: media, accent: tint)
             }
             if showsSound {
                 SoundControls(model: model).frame(height: TransportControls.height)
             } else {
-                TransportControls(model: model, media: media, accent: accent, wide: size.width >= 330)
+                TransportControls(model: model, media: media, accent: tint, wide: size.width >= 330)
             }
             if roomy {
                 SoundControls(model: model).padding(.top, Space.xs)

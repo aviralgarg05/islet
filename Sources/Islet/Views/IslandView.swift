@@ -543,7 +543,7 @@ struct CompactContentView: View {
                     MoreCount(count: counted)
                 }
             } trailing: {
-                PlayingIndicator(tint: model.visualiserTint(np), playing: np.isPlaying)
+                PlayingIndicator(tint: model.musicTint(np), playing: np.isPlaying)
             }
         case .activity(let a, let others):
             let tint = model.tint(for: a)
@@ -577,7 +577,8 @@ struct CompactContentView: View {
 }
 
 /// The artwork beside the notch: corners from Settings, and dimmed while the music is paused,
-/// in step with the indicator settling.
+/// in step with the indicator settling. With "Show song progress" a thin ring round it fills
+/// as the song plays; it sits outside the artwork, so the artwork doesn't move.
 struct ClosedArtwork: View {
     let media: NowPlaying
     let model: AppModel
@@ -586,9 +587,21 @@ struct ClosedArtwork: View {
 
     /// Fits the menu bar row, up to 20 points.
     static func size(_ metrics: IslandMetrics) -> CGFloat { max(8, min(20, metrics.notch.height - 10)) }
+    /// Space between the artwork and the ring, and the ring's line.
+    static let ringGap: CGFloat = 1.5
+    static let ringLine: CGFloat = 1.5
 
     var body: some View {
-        TrackArtwork(media: media, size: size, corner: model.artworkCorner(size: size, standard: 5))
+        let corner = model.artworkCorner(size: size, standard: 5)
+        TrackArtwork(media: media, size: size, corner: corner)
+            .overlay {
+                if model.settings.songProgressRing, media.duration != nil {
+                    let pad = Self.ringGap + Self.ringLine
+                    SongRing(media: media, tint: model.musicTint(media), corner: corner + pad, lineWidth: Self.ringLine)
+                        .frame(width: size + 2 * pad, height: size + 2 * pad)
+                        .allowsHitTesting(false)
+                }
+            }
             .opacity(media.isPlaying ? 1 : PausedLook.artworkOpacity)
             .animation(motion == .off ? nil : .easeInOut(duration: PausedLook.fade), value: media.isPlaying)
     }
@@ -712,7 +725,7 @@ struct SongPeekView: View {
             Wings(metrics: metrics, wing: geometry.wing) {
                 ClosedArtwork(media: media, model: model, size: ClosedArtwork.size(metrics))
             } trailing: {
-                PlayingIndicator(tint: model.visualiserTint(media), playing: media.isPlaying)
+                PlayingIndicator(tint: model.musicTint(media), playing: media.isPlaying)
             }
             .frame(maxWidth: .infinity)
             TrackText(media: media) {
