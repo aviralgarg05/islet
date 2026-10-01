@@ -306,6 +306,12 @@ struct NotificationsSettings: View {
                 if model.settings.notificationMirroring && !axTrusted {
                     askForAccessibility("Islet needs Accessibility to read banners.")
                 }
+                Toggle(isOn: $model.settings.notificationPeek) {
+                    Text("Peek at new notifications")
+                    Text("Also open a little below the notch. macOS shows its own banner as well, so this is off at first.")
+                }
+                .settingsAnchor("notifications.peek")
+                .disabled(!model.settings.notificationMirroring)
                 Toggle(isOn: $model.settings.unlockSplash) {
                     Text("Welcome back summary when you unlock")
                     Text("What arrived while the screen was locked. Nothing shows when nothing did.")
@@ -323,6 +329,17 @@ struct NotificationsSettings: View {
                     Text("When you change the display's brightness.")
                 }
                 .settingsAnchor("notifications.brightness")
+                if !model.settings.hudOverlap.isEmpty {
+                    AccessRow(text: "macOS shows its own display too, so each press shows two.", button: "Show only Islet's",
+                              symbol: "info.circle", tint: .secondary) {
+                        model.settings.replaceSystemHUD = true
+                    }
+                }
+                Toggle(isOn: $model.settings.outputChangeCard) {
+                    Text("Sound output changes")
+                    Text("A short card when AirPods or another output connects. macOS doesn't show one.")
+                }
+                .settingsAnchor("notifications.outputCard")
                 Toggle(isOn: $model.settings.keyboardHUDEnabled) {
                     Text("Keyboard brightness")
                     Text("When you change the keyboard's light, while Islet replaces the system display.")

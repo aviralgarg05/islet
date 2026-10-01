@@ -153,14 +153,7 @@ public final class ScriptPluginRunner {
         let p = Process()
         p.executableURL = script
         p.currentDirectoryURL = script.deletingLastPathComponent()
-        var env = ProcessInfo.processInfo.environment
-        // Apps launched from Finder get a minimal PATH; plugins expect Homebrew tools.
-        env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:" + (env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin")
-        env["ISLET"] = "1"
-        env["XBARDarkMode"] = "true"
-        env["SWIFTBAR"] = "1"
-        for (k, v) in extraEnv { env[k] = v }
-        p.environment = env
+        p.environment = ScriptPlugins.environment(parent: ProcessInfo.processInfo.environment, extra: extraEnv)
         let out = Pipe(), err = Pipe()
         p.standardOutput = out
         p.standardError = err

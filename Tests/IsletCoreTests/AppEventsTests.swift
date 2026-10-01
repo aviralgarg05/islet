@@ -13,7 +13,9 @@ import Testing
 
     @Test func lifecycleWithLiveTimer() {
         var d = CallDetector()
-        let start = d.update(micUsers: ["us.zoom.xos", "com.apple.VoiceMemos"], cameraOn: true, now: t0)
+        // Nothing until the app has held the microphone a moment; then the call counts from the start.
+        #expect(d.update(micUsers: ["us.zoom.xos", "com.apple.VoiceMemos"], cameraOn: true, now: t0).isEmpty)
+        let start = d.update(micUsers: ["us.zoom.xos", "com.apple.VoiceMemos"], cameraOn: true, now: t0.addingTimeInterval(CallDetector.settle))
         guard case .started(let s) = start.first, start.count == 1 else { Issue.record("expected one start: \(start)"); return }
         #expect(s.title == "Zoom")
         #expect(s.subtitle == "Video call")
@@ -35,14 +37,16 @@ import Testing
 
     @Test func browserCallTitle() {
         var d = CallDetector()
-        let c = d.update(micUsers: ["com.google.Chrome.helper"], cameraOn: false, now: t0)
+        _ = d.update(micUsers: ["com.google.Chrome.helper"], cameraOn: true, now: t0)
+        let c = d.update(micUsers: ["com.google.Chrome.helper"], cameraOn: true, now: t0.addingTimeInterval(4))
         if case .started(let s) = c.first { #expect(s.title == "Call in Chrome") } else { Issue.record("expected start") }
     }
 
     @Test func specIsAcceptedAndCountsUp() throws {
         var d = CallDetector()
         var c = ActivityCenter()
-        for change in d.update(micUsers: ["com.apple.FaceTime"], cameraOn: false, now: t0) {
+        _ = d.update(micUsers: ["com.apple.FaceTime"], cameraOn: false, now: t0)
+        for change in d.update(micUsers: ["com.apple.FaceTime"], cameraOn: false, now: t0.addingTimeInterval(4)) {
             if case .started(let s) = change { try c.apply(s, now: t0) }
         }
         #expect(c.activities.values.first?.trailingText(now: t0.addingTimeInterval(125)) == "2:05")

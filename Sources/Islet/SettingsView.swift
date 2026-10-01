@@ -842,6 +842,22 @@ struct AppRulesSettings: View {
                         }
                     }
                 }
+                // What "Mute" in the island's right-click menu silenced, so it can be heard again.
+                if !model.settings.mutedSources.isEmpty {
+                    Section("Muted") {
+                        Text("Muted from the island's right-click menu. Unmute one to see its activities again.")
+                            .font(.callout).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .settingsAnchor("apps.muted")
+                        ForEach(model.settings.mutedSources, id: \.self) { source in
+                            HStack {
+                                Text(AppModel.mutedName(source)).lineLimit(1)
+                                Spacer(minLength: 8)
+                                Button("Unmute") { model.unmute(source: source) }
+                            }
+                        }
+                    }
+                }
             }
             .formStyle(.grouped)
             // A newly added app goes to the end of the list; bring it into view.
@@ -952,7 +968,7 @@ struct AppRuleRow: View {
             .fixedSize()
         Toggle("Keep it in full screen", isOn: Binding(get: { rule.showInFullscreen ?? false }, set: { rule.showInFullscreen = $0 ? true : nil }))
             .fixedSize()
-        Toggle("Mute notifications", isOn: Binding(get: { rule.muteNotifications ?? false }, set: { rule.muteNotifications = $0 ? true : nil }))
+        Toggle("Mute notifications and calls", isOn: Binding(get: { rule.muteNotifications ?? false }, set: { rule.muteNotifications = $0 ? true : nil }))
             .fixedSize()
     }
 

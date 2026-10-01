@@ -53,7 +53,34 @@ public struct CallDetector: Sendable {
         return nil
     }
 
+    /// Apps that also send voice messages, dictate or sit in a huddle: their microphone use is
+    /// often not a call, so it shows quietly first (`quietFor`).
+    public static let messagingApps: Set<String> = [
+        "com.tinyspeck.slackmacgap", "com.hnc.Discord", "net.whatsapp.WhatsApp", "desktop.WhatsApp",
+        "ru.keepcoder.Telegram", "org.whispersystems.signal-desktop",
+    ]
+
+    /// Seconds an app must hold the microphone before anything shows: a voice note, a dictation
+    /// or a site checking the microphone doesn't raise a call.
+    public static let settle: TimeInterval = 3
+    /// A browser or a messaging app holding the microphone shows a quiet "Microphone in use"
+    /// until the camera comes on or this many seconds pass; then it is a call.
+    public static let quietFor: TimeInterval = 60
+
+    /// What an app's pill shows.
+    enum Shown: Int, Sendable, Comparable {
+        case microphone, call
+        static func < (a: Shown, b: Shown) -> Bool { a.rawValue < b.rawValue }
+    }
+
+    /// Apps using the microphone, and since when, whether or not anything shows yet. A call
+    /// that is joined counts from here (`ongoing`).
     public private(set) var active: [String: Date] = [:]
+    private var shown: [String: Shown] = [:]
+    /// Apps whose pill was dismissed: nothing more until they let go of the microphone.
+    public private(set) var dismissed: Set<String> = []
+    /// Apps muted on the Apps page, from the last update.
+    private var muted: Set<String> = []
 
     public init() {}
 
@@ -67,30 +94,87 @@ public struct CallDetector: Sendable {
         "call-" + bundleID.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" }
     }
 
+    /// Whether an app's microphone use starts quietly (`quietFor`).
+    static func startsQuietly(_ bundleID: String, _ app: App) -> Bool {
+        app.isBrowser || messagingApps.contains(bundleID)
+    }
+
     /// Feed the current set of bundle ids using the microphone and whether a camera is on.
-    public mutating func update(micUsers: Set<String>, cameraOn: Bool, now: Date) -> [Change] {
+    /// - Parameter muted: apps muted on the Apps page; they show nothing.
+    public mutating func update(micUsers: Set<String>, cameraOn: Bool, now: Date, muted: Set<String> = []) -> [Change] {
+        self.muted = muted
         var current: [String: App] = [:]
         for b in micUsers { if let c = Self.classify(b) { current[c.bundleID] = c.app } }
         var changes: [Change] = []
         for (bundle, app) in current.sorted(by: { $0.key < $1.key }) {
-            let isNew = active[bundle] == nil
-            if isNew { active[bundle] = now }
+            if active[bundle] == nil { active[bundle] = now }
+            let since = active[bundle] ?? now
+            if dismissed.contains(bundle) || muted.contains(bundle) {
+                if shown.removeValue(forKey: bundle) != nil { changes.append(.ended(id: Self.activityID(bundle))) }
+                continue
+            }
+            let held = now.timeIntervalSince(since)
+            guard held >= Self.settle else { continue }
+            let quiet = Self.startsQuietly(bundle, app) && !cameraOn && held < Self.quietFor
+            let before = shown[bundle]
+            // Once a call, it stays one when the camera goes off.
+            let next = max(before ?? .microphone, quiet ? .microphone : .call)
+            shown[bundle] = next
+            let spec = Self.spec(bundle: bundle, app: app, shown: next, cameraOn: cameraOn, since: since,
+                                 sneak: next == .call && before != .call)
+            changes.append(before == nil ? .started(spec) : .updated(spec))
+        }
+        for bundle in active.keys.sorted() where current[bundle] == nil {
+            active[bundle] = nil
+            dismissed.remove(bundle)
+            if shown.removeValue(forKey: bundle) != nil { changes.append(.ended(id: Self.activityID(bundle))) }
+        }
+        return changes
+    }
+
+    /// The pill was dismissed (or removed by a script): it stays away until the app lets go of
+    /// the microphone. Returns whether `activityID` was one of the pills on show.
+    @discardableResult
+    public mutating func dismiss(activityID: String) -> Bool {
+        guard let bundle = shown.keys.first(where: { Self.activityID($0) == activityID }) else { return false }
+        shown[bundle] = nil
+        dismissed.insert(bundle)
+        return true
+    }
+
+    /// When an app that holds the microphone shows something, or a quiet pill becomes a call,
+    /// without anything else changing: the next `update` is due then.
+    public func nextDeadline(now: Date) -> Date? {
+        active.compactMap { bundle, since -> Date? in
+            guard !dismissed.contains(bundle), !muted.contains(bundle) else { return nil }
+            switch shown[bundle] {
+            case nil: return max(now, since.addingTimeInterval(Self.settle))
+            case .microphone?: return max(now, since.addingTimeInterval(Self.quietFor))
+            case .call?: return nil
+            }
+        }.min()
+    }
+
+    static func spec(bundle: String, app: App, shown: Shown, cameraOn: Bool, since: Date, sneak: Bool) -> ActivitySpec {
+        switch shown {
+        case .microphone:
+            return ActivitySpec(
+                id: activityID(bundle), source: bundle, title: app.name, subtitle: "Microphone in use",
+                icon: .symbol("mic.fill"), state: .running, tint: "orange", priority: .low, ttl: 0,
+                startedAt: since, sneak: false
+            )
+        case .call:
             var spec = ActivitySpec(
-                id: Self.activityID(bundle), source: bundle,
+                id: activityID(bundle), source: bundle,
                 title: app.isBrowser ? "Call in \(app.name)" : app.name,
                 subtitle: cameraOn ? "Video call" : "Call",
                 icon: .symbol(cameraOn ? "video.fill" : "phone.fill"),
                 state: .running, tint: "green", priority: .high, ttl: 0,
-                startedAt: active[bundle], sneak: isNew
+                startedAt: since, sneak: sneak
             )
             spec.template = ActivityTemplate.liveAudio.rawValue
-            changes.append(isNew ? .started(spec) : .updated(spec))
+            return spec
         }
-        for bundle in active.keys.sorted() where current[bundle] == nil {
-            active[bundle] = nil
-            changes.append(.ended(id: Self.activityID(bundle)))
-        }
-        return changes
     }
 }
 
@@ -112,8 +196,10 @@ public struct MirroredNotification: Equatable, Sendable {
         [appName ?? "", title, subtitle ?? "", body ?? ""].joined(separator: "\u{1F}")
     }
 
-    /// Live activity shown for this notification.
-    public func activity(rule: AppRule?) -> ActivitySpec {
+    /// Live activity shown for this notification. macOS shows its own banner at the same
+    /// moment, so it peeks below the notch only with `peek` ("Peek at new notifications");
+    /// otherwise it sits beside the notch for the time it is shown.
+    public func activity(rule: AppRule?, peek: Bool = false) -> ActivitySpec {
         var h: UInt64 = 1469598103934665603
         for b in fingerprint.utf8 { h = (h ^ UInt64(b)) &* 1099511628211 }
         let detail = [subtitle, body].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
@@ -122,7 +208,7 @@ public struct MirroredNotification: Equatable, Sendable {
             title: appName.map { "\($0): \(title)" } ?? title,
             subtitle: detail.isEmpty ? nil : String(detail.prefix(140)),
             icon: rule?.icon ?? bundleID.map { .app(bundleID: $0) } ?? .symbol("bell.badge.fill"),
-            state: .info, tint: rule?.tint, priority: rule?.priority ?? .normal, ttl: 7, sneak: true
+            state: .info, tint: rule?.tint, priority: rule?.priority ?? .normal, ttl: 7, sneak: peek
         )
     }
 }

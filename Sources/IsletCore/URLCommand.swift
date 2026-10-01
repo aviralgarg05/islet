@@ -44,7 +44,7 @@ public enum URLCommand: Equatable, Sendable {
     /// Any source but the one kept for Live Activities mirrored from the menu bar.
     static func source(_ raw: String?) throws -> String {
         guard let raw else { return "url" }
-        guard raw != MenuBarLiveActivities.source else { throw ParseError.invalid("source", raw) }
+        guard !MenuBarLiveActivities.isMirroredSource(raw) else { throw ParseError.invalid("source", raw) }
         return raw
     }
 

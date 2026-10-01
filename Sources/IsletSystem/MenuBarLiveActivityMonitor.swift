@@ -218,6 +218,11 @@ public final class MenuBarLiveActivityMonitor {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
+    /// Publish the last list again, unchanged (an app was unmuted): no menu bar read.
+    public func refresh() {
+        if observer != nil { onChange?(last) }
+    }
+
     /// Read MenuBarAgent's items off the main thread and publish the Live Activities among them.
     public func scan() {
         guard observer != nil, agent != 0 else { return }

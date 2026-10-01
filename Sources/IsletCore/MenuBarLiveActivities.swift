@@ -107,9 +107,23 @@ public struct MirroredLiveActivity: Equatable, Sendable {
 }
 
 public enum MenuBarLiveActivities {
-    /// `source` of mirrored activities. They may come from the iPhone or from the Mac itself
-    /// (Shortcuts, Clock); macOS doesn't say which.
+    /// The start of every mirrored activity's `source`. They may come from the iPhone or from
+    /// the Mac itself (Shortcuts, Clock); macOS doesn't say which. Each app has its own source
+    /// (`source(for:)`), so muting one app's activity leaves the others.
     public static let source = "live-activity"
+
+    /// The source of one app's mirrored activities: "live-activity:uber".
+    public static func source(for appName: String) -> String {
+        let slug = appName.lowercased().unicodeScalars
+            .map { CharacterSet.alphanumerics.contains($0) ? String($0) : "-" }.joined()
+            .split(separator: "-").joined(separator: "-")
+        return slug.isEmpty ? source : source + ":" + slug
+    }
+
+    /// Whether a source belongs to the mirror (scripts can't use it).
+    public static func isMirroredSource(_ s: String) -> Bool {
+        s == source || s.hasPrefix(source + ":")
+    }
     /// Bundle IDs of the processes that render Live Activity content for MenuBarAgent.
     public static let rendererBundleIDs: Set<String> = ["com.apple.chrono.WidgetRenderer-Activities", "com.apple.ScreenContinuity"]
 
@@ -194,7 +208,7 @@ public enum MenuBarLiveActivities {
     /// Mirrored activities often hold addresses, names and scores, so scripts only read them
     /// when the user shares them.
     public static func isMirrored(_ activity: Activity) -> Bool {
-        activity.source == source || isMirrored(id: activity.id)
+        isMirroredSource(activity.source) || isMirrored(id: activity.id)
     }
 
     /// Menu bar items as diagnostics show them while mirrored activities aren't shared: the text
@@ -217,17 +231,18 @@ public enum MenuBarLiveActivities {
     ///     catalogue also supplies the template, and dark brand tints are lifted to read on black.
     ///   - clock: a running countdown or count-up read from the item, animated locally.
     public static func activity(for m: MirroredLiveActivity, look: (symbol: String, tint: String)?, isNew: Bool,
-                                clock: LiveActivityClock.Reading? = nil) -> ActivitySpec {
+                                clock: LiveActivityClock.Reading? = nil, staleAt: Date? = nil) -> ActivitySpec {
         let suggestion = look ?? SmartIcon.suggest(title: m.appName, subtitle: m.detail).map { ($0.symbol, $0.tint) }
         let tint = suggestion.flatMap { RGBA.parse($0.1) }.map { $0.readableOnBlack().hex }
         // Updates merge, so text the item no longer shows is sent as "" to clear it: otherwise an
         // old "4 min" would stay in the wing after the item moved on to longer text.
         var spec = ActivitySpec(
-            id: activityID(m.key), source: source, title: m.appName, subtitle: m.detail ?? "",
+            id: activityID(m.key), source: source(for: m.appName), title: m.appName, subtitle: m.detail ?? "",
             icon: .symbol(suggestion?.0 ?? "dot.radiowaves.left.and.right"), trailing: shortTrailing(m.detail) ?? "",
             state: .running, tint: tint ?? suggestion?.1 ?? "white", priority: .normal, ttl: 0, sneak: isNew
         )
         spec.template = LiveActivityCatalog.look(for: m.appName)?.template.rawValue
+        spec.staleAt = staleAt
         switch clock {
         case .countdown(let end)?:
             spec.endsAt = end
@@ -309,5 +324,58 @@ public struct LiveActivityClock: Sendable {
     public mutating func forget(_ key: String) {
         last[key] = nil
         known[key] = nil
+    }
+}
+
+/// What the mirror remembers between reads of the menu bar: which items were dismissed in the
+/// island (they stay away until the item leaves the menu bar, even when its text changes) and
+/// when each item's text last changed (one stuck for `staleAfter` dims, like any stale activity).
+public struct MirrorTracker: Sendable {
+    /// An item whose text hasn't changed for this long has probably stopped updating.
+    public static let staleAfter: TimeInterval = 30 * 60
+
+    private var lastChange: [String: (detail: String?, at: Date)] = [:]
+    public private(set) var dismissed: Set<String> = []
+
+    public init() {}
+
+    /// Takes the menu bar's items: the ones to show, and the keys that have left the menu bar.
+    public mutating func sync(_ items: [MirroredLiveActivity], now: Date) -> (show: [MirroredLiveActivity], gone: Set<String>) {
+        let keys = Set(items.map(\.key))
+        let gone = Set(lastChange.keys).union(dismissed).subtracting(keys)
+        for key in gone {
+            lastChange[key] = nil
+            dismissed.remove(key)
+        }
+        for m in items where lastChange[m.key]?.detail != m.detail || lastChange[m.key] == nil {
+            lastChange[m.key] = (m.detail, now)
+        }
+        return (items.filter { !dismissed.contains($0.key) }, gone)
+    }
+
+    /// Dismissed in the island: hidden until it leaves the menu bar.
+    public mutating func dismiss(key: String) {
+        dismissed.insert(key)
+    }
+
+    /// When an item dims if its text doesn't change again.
+    public func staleAt(key: String) -> Date? {
+        lastChange[key].map { $0.at.addingTimeInterval(Self.staleAfter) }
+    }
+}
+
+/// Names for the sources a right-click muted, as Settings → Apps lists them.
+public enum MutedSources {
+    /// "Uber (Live Activity)" for a mirrored app, the app's name for a bundle id, or the source
+    /// itself ("github-actions").
+    public static func displayName(_ source: String, appName: (String) -> String?) -> String {
+        if MenuBarLiveActivities.isMirroredSource(source) {
+            let prefix = MenuBarLiveActivities.source + ":"
+            guard source.hasPrefix(prefix) else { return "Live Activities" }
+            let slug = source.dropFirst(prefix.count).split(separator: "-").map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            return slug.joined(separator: " ") + " (Live Activity)"
+        }
+        if source.contains("."), let name = appName(source) { return name }
+        return source
     }
 }

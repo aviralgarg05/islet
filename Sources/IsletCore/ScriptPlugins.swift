@@ -47,6 +47,26 @@ public enum ScriptPlugins {
         case empty
     }
 
+    /// What a script widget runs with: enough to find its tools and its home folder, and the
+    /// variables xbar and SwiftBar plugins check, but none of Islet's own environment (an API
+    /// token or a key someone exported before launching Islet stays out).
+    public static func environment(parent: [String: String], extra: [String: String] = [:]) -> [String: String] {
+        var env: [String: String] = [:]
+        for key in ["HOME", "USER", "LOGNAME", "TMPDIR", "SHELL", "LANG", "LC_ALL", "LC_CTYPE"] {
+            if let v = parent[key], !v.isEmpty { env[key] = v }
+        }
+        // Apps opened from Finder get a short PATH; plugins expect Homebrew's tools.
+        let base = parent["PATH"].flatMap { $0.isEmpty ? nil : $0 } ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        var seen = Set<String>()
+        env["PATH"] = (["/opt/homebrew/bin", "/usr/local/bin"] + base.split(separator: ":").map(String.init))
+            .filter { !$0.isEmpty && seen.insert($0).inserted }.joined(separator: ":")
+        env["ISLET"] = "1"
+        env["XBARDarkMode"] = "true"
+        env["SWIFTBAR"] = "1"
+        for (k, v) in extra { env[k] = v }
+        return env
+    }
+
     /// Split `text | a=1 b="two words"` into text and params.
     public static func parseLine(_ raw: String) -> Line {
         var depth = 0

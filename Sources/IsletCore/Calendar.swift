@@ -16,17 +16,21 @@ public struct AgendaItem: Codable, Equatable, Sendable, Identifiable {
     public var calendarTitle: String?
     /// You declined the invitation, or the meeting was cancelled: either way it never reminds you.
     public var isDeclined: Bool
+    /// The organiser cancelled it (Exchange and Google keep it in the calendar, marked so).
+    /// It isn't shown at all (`Agenda.visible`).
+    public var isCancelled: Bool
 
     public init(id: String, title: String, start: Date, end: Date, isAllDay: Bool = false,
                 calendarColor: String? = nil, location: String? = nil, meetingURL: URL? = nil,
-                calendarID: String? = nil, calendarTitle: String? = nil, isDeclined: Bool = false) {
+                calendarID: String? = nil, calendarTitle: String? = nil, isDeclined: Bool = false, isCancelled: Bool = false) {
         self.id = id; self.title = title; self.start = start; self.end = end; self.isAllDay = isAllDay
         self.calendarColor = calendarColor; self.location = location; self.meetingURL = meetingURL
-        self.calendarID = calendarID; self.calendarTitle = calendarTitle; self.isDeclined = isDeclined
+        self.calendarID = calendarID; self.calendarTitle = calendarTitle
+        self.isDeclined = isDeclined || isCancelled; self.isCancelled = isCancelled
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, start, end, isAllDay, calendarColor, location, meetingURL, calendarID, calendarTitle, isDeclined
+        case id, title, start, end, isAllDay, calendarColor, location, meetingURL, calendarID, calendarTitle, isDeclined, isCancelled
     }
 
     public init(from decoder: Decoder) throws {
@@ -41,7 +45,8 @@ public struct AgendaItem: Codable, Equatable, Sendable, Identifiable {
         meetingURL = try c.decodeIfPresent(URL.self, forKey: .meetingURL)
         calendarID = try c.decodeIfPresent(String.self, forKey: .calendarID)
         calendarTitle = try c.decodeIfPresent(String.self, forKey: .calendarTitle)
-        isDeclined = try c.decodeIfPresent(Bool.self, forKey: .isDeclined) ?? false
+        isCancelled = try c.decodeIfPresent(Bool.self, forKey: .isCancelled) ?? false
+        isDeclined = try c.decodeIfPresent(Bool.self, forKey: .isDeclined) ?? false || isCancelled
     }
 
     public func isOngoing(at now: Date) -> Bool { start <= now && now < end }
@@ -102,8 +107,17 @@ extension Agenda {
     }
 
     /// Drop events from calendars the user hid.
+    /// The events to show: not on a hidden calendar, and not cancelled.
     public static func visible(_ items: [AgendaItem], hiding hidden: Set<String>) -> [AgendaItem] {
-        hidden.isEmpty ? items : items.filter { !hidden.contains($0.calendarID ?? "") }
+        items.filter { !$0.isCancelled && !hidden.contains($0.calendarID ?? "") }
+    }
+
+    /// An event's id. EventKit leaves `eventIdentifier` out for some events (one just made on
+    /// another device, say); then the calendar item and the start time stand in, so the id
+    /// stays the same from one refresh to the next and an occurrence still alerts once.
+    public static func eventID(eventIdentifier: String?, calendarItemIdentifier: String, start: Date) -> String {
+        if let id = eventIdentifier, !id.isEmpty { return id }
+        return calendarItemIdentifier + "@" + String(Int(start.timeIntervalSince1970.rounded()))
     }
 
     /// The next moment what the agenda shows changes on its own: a timed event starting or

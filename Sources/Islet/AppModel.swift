@@ -137,6 +137,8 @@ final class AppModel {
     let ask: AskController
     private var mirroredKeys: Set<String> = []
     private var mirrorClock = LiveActivityClock()
+    /// Dismissed mirrored items, and when each item's text last changed.
+    private var mirrorTracker = MirrorTracker()
     /// Mirrored activity id → the menu bar item it came from. Clicking one presses that item;
     /// this never goes through a URL, so nothing outside Islet can trigger the press.
     private var mirroredActivityKeys: [String: String] = [:]
@@ -306,19 +308,24 @@ final class AppModel {
 
     /// Show the menu bar's Live Activities (iPhone and Mac) as island activities.
     private func syncMenuBarActivities(_ all: [MirroredLiveActivity]) {
-        let list = settings.mirrorOnlyHiddenActivities ? all.filter(\.hidden) : all
+        let now = Date()
+        // A dismissed item stays away while it is in the menu bar, whatever its text does.
+        let shown = mirrorTracker.sync(all, now: now).show
+        let list = settings.mirrorOnlyHiddenActivities ? shown.filter(\.hidden) : shown
         let keys = Set(list.map(\.key))
         for key in mirroredKeys.subtracting(keys) {
             let id = MenuBarLiveActivities.activityID(key)
-            remove(activityID: id)
+            // Forgotten first, so taking it away doesn't count as the user dismissing it.
             mirroredActivityKeys[id] = nil
+            remove(activityID: id)
             mirrorClock.forget(key)
         }
-        let now = Date()
         for m in list {
             let look = LiveActivityCatalog.look(for: m.appName).map { ($0.symbol, $0.tint) }
             let clock = mirrorClock.update(key: m.key, detail: m.detail, now: now)
-            let spec = MenuBarLiveActivities.activity(for: m, look: look, isNew: !mirroredKeys.contains(m.key), clock: clock)
+            // An item whose text stops changing dims after a while (`MirrorTracker.staleAfter`).
+            let spec = MenuBarLiveActivities.activity(for: m, look: look, isNew: !mirroredKeys.contains(m.key), clock: clock,
+                                                      staleAt: mirrorTracker.staleAt(key: m.key))
             let id = MenuBarLiveActivities.activityID(m.key)
             mirroredActivityKeys[id] = m.key
             // A spec can't clear a date: once the item shows no time at all, stop the clock Islet
@@ -938,6 +945,7 @@ final class AppModel {
         if let d = center.nextDeadline(now: now) { candidates.append(d) }
         if let d = media.nextDeadline(now: now) { candidates.append(d) }
         if let d = songPeek.nextDeadline(now: now) { candidates.append(d) }
+        if settings.callDetection, let d = calls.nextDeadline(now: now) { candidates.append(d) }
         if let d = pausedMusic.nextDeadline(timeout: settings.pausedMusicTimeout, now: now) { candidates.append(d) }
         if let i = playbackIntent { candidates.append(max(now, i.expires)) }
         if let b = batteryEvent { candidates.append(b.until) }
@@ -962,6 +970,7 @@ final class AppModel {
     private func expireNow() {
         let now = Date()
         center.expire(now: now)
+        if settings.callDetection, calls.nextDeadline(now: now).map({ $0 <= now }) ?? false { updateCalls() }
         syncMeetings(now: now)
         checkReminderAlerts(now: now)
         if let b = batteryEvent, b.until <= now { batteryEvent = nil }
@@ -1035,8 +1044,9 @@ final class AppModel {
     private func volumeChanged(_ out: AudioMonitor.Output) {
         let deviceChanged = out.deviceName != outputDeviceName
         outputDeviceName = out.deviceName
-        guard settings.hudEnabled else { return }
         if deviceChanged, let name = out.deviceName {
+            // A new output gets its card (macOS shows none), not a volume HUD.
+            guard settings.outputChangeCard else { return }
             let bt = AudioMonitor.isBluetooth(AudioMonitor.defaultDevice(input: false))
             _ = try? commit(ActivitySpec(
                 id: "audio-route", source: "audio", title: name, subtitle: bt ? "Connected" : "Audio output",
@@ -1044,6 +1054,7 @@ final class AppModel {
                 priority: .normal, ttl: 3, sneak: true
             ))
         } else {
+            guard settings.hudEnabled else { return }
             center.showHUD(.volume, value: out.volume, muted: out.muted, label: out.deviceName, now: Date())
         }
         reschedule()
@@ -1096,7 +1107,7 @@ final class AppModel {
 
     @discardableResult
     func applyLocal(_ spec: ActivitySpec) throws -> Activity? {
-        if let source = spec.source, settings.mutedSources.contains(source) { return nil }
+        if let source = spec.source, settings.isMuted(source: source) { return nil }
         return try commit(spec)
     }
 
@@ -1142,7 +1153,9 @@ final class AppModel {
     private func updateCalls() {
         guard settings.callDetection else { return }
         var started = false
-        for change in calls.update(micUsers: lastMicUsers, cameraOn: cameraInUse, now: Date()) {
+        // Muting an app on the Apps page silences its calls too.
+        let muted = Set(settings.appRules.filter { $0.muteNotifications == true }.map(\.bundleID))
+        for change in calls.update(micUsers: lastMicUsers, cameraOn: cameraInUse, now: Date(), muted: muted) {
             switch change {
             case .started(let spec):
                 _ = try? applyLocal(spec)
@@ -1151,17 +1164,16 @@ final class AppModel {
             case .ended(let id): remove(activityID: id)
             }
         }
-        // A call in a meeting's app counts as joining it (`syncMeetings`).
-        if started {
-            syncMeetings(now: Date())
-            reschedule()
-        }
+        // A call in a meeting's app counts as joining it (`syncMeetings`). An app that has only
+        // just taken the microphone shows once it has held it a moment (`CallDetector.settle`).
+        if started { syncMeetings(now: Date()) }
+        reschedule()
     }
 
     private func mirrored(_ n: MirroredNotification) {
         let rule = settings.rule(for: n.bundleID)
         if rule?.muteNotifications == true { return }
-        guard let a = try? applyLocal(n.activity(rule: rule)) else { return }
+        guard let a = try? applyLocal(n.activity(rule: rule, peek: settings.notificationPeek)) else { return }
         if settings.aiAssist, let body = n.body, body.count > 90 {
             AIAssist.shared.summarize(body) { [weak self] summary in
                 guard let summary else { return }
@@ -1219,6 +1231,22 @@ final class AppModel {
         reschedule()
     }
 
+    /// Settings → Apps → Muted: hear from a source again. Its next activity shows as usual.
+    func unmute(source: String) {
+        settings.mutedSources.removeAll { $0 == source }
+        saveSettings()
+        // Mirrored Live Activities come back at once, rather than at their next change.
+        if MenuBarLiveActivities.isMirroredSource(source) { menuBarActivities.refresh() }
+    }
+
+    /// How a muted source reads in menus and Settings: an app's name rather than its bundle id.
+    static func mutedName(_ source: String) -> String {
+        MutedSources.displayName(source) { id in
+            NSWorkspace.shared.urlForApplication(withBundleIdentifier: id)
+                .map { FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "") }
+        }
+    }
+
     private func startLAN() {
         lan.start(port: settings.lanPort, backend: self, version: Self.version)
     }
@@ -1229,6 +1257,10 @@ final class AppModel {
 
     func remove(activityID: String) {
         center.remove(id: activityID)
+        // A dismissed call stays away until its app lets go of the microphone, and a dismissed
+        // Live Activity until it leaves the menu bar.
+        calls.dismiss(activityID: activityID)
+        if let key = mirroredActivityKeys[activityID] { mirrorTracker.dismiss(key: key) }
         meetingActivityRemoved(activityID)
         reschedule()
         timers.activityRemoved(activityID)
@@ -1426,7 +1458,7 @@ extension AppModel: IsletBackend {
 
     nonisolated func applyActivity(_ spec: ActivitySpec) async throws -> Activity {
         try await MainActor.run {
-            if let source = spec.source, self.settings.mutedSources.contains(source) {
+            if let source = spec.source, self.settings.isMuted(source: source) {
                 // Validate and echo back, but show nothing: muted scripts shouldn't error out.
                 var scratch = ActivityCenter()
                 return try scratch.apply(spec, now: Date())
@@ -1548,7 +1580,7 @@ extension AppModel {
             modules.battery = s.batteryEnabled
         }
 
-        let wantAudio = s.hudEnabled || s.privacyIndicatorsEnabled
+        let wantAudio = s.hudEnabled || s.outputChangeCard || s.privacyIndicatorsEnabled
         if wantAudio != modules.audio {
             if wantAudio {
                 audio.onOutputChange = { [weak self] out in self?.volumeChanged(out) }

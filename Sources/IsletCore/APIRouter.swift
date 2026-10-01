@@ -255,7 +255,7 @@ public struct APIRouter: Sendable {
     /// Every write to an activity goes through here or `remove(id:)`. Mirrored Live Activities
     /// belong to the menu bar mirror, so they are refused, the same way whether or not one exists.
     func apply(_ spec: ActivitySpec) async throws -> Activity {
-        if spec.source == MenuBarLiveActivities.source || spec.id.map(MenuBarLiveActivities.isMirrored(id:)) == true {
+        if spec.source.map(MenuBarLiveActivities.isMirroredSource) == true || spec.id.map(MenuBarLiveActivities.isMirrored(id:)) == true {
             throw ActivityError.mirrored
         }
         if let id = spec.id, await isMeetingReminder(id) { throw ActivityError.notFound(id) }
@@ -333,7 +333,7 @@ public struct APIRouter: Sendable {
                 return .error(400, "pass ?source=<name> to remove all activities from one source")
             }
             // The count would also say how many are showing.
-            guard source != MenuBarLiveActivities.source else { throw ActivityError.mirrored }
+            guard !MenuBarLiveActivities.isMirroredSource(source) else { throw ActivityError.mirrored }
             return .json(["removed": await removeAll(source: source)])
 
         case ("POST", 1, "notify"):

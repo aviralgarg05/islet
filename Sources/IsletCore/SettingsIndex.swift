@@ -339,10 +339,14 @@ public enum SettingsIndex {
 
         SettingsEntry("notifications.mirror", .notifications, "Mirror notifications from every app", section: "Notifications",
                       keywords: ["banners", "iPhone", "messages"]),
+        SettingsEntry("notifications.peek", .notifications, "Peek at new notifications", section: "Notifications",
+                      keywords: ["banner", "sneak", "below the notch"]),
         SettingsEntry("notifications.welcome", .notifications, "Welcome back summary when you unlock", section: "Notifications",
                       keywords: ["unlock", "lock screen"]),
         SettingsEntry("notifications.volume", .notifications, "Volume", section: "HUDs", keywords: ["HUD", "sound", "level"]),
         SettingsEntry("notifications.brightness", .notifications, "Display brightness", section: "HUDs", keywords: ["HUD", "screen", "level"]),
+        SettingsEntry("notifications.outputCard", .notifications, "Sound output changes", section: "HUDs",
+                      keywords: ["AirPods", "headphones", "speaker", "connected", "audio device"]),
         SettingsEntry("notifications.keyboard", .notifications, "Keyboard brightness", section: "HUDs", keywords: ["HUD", "backlight", "keys"]),
         SettingsEntry("notifications.microphone", .notifications, "Microphone", section: "HUDs", keywords: ["HUD", "mic", "mute", "unmute"]),
         SettingsEntry("notifications.hudStyle", .notifications, "HUD style", section: "HUDs",
@@ -433,7 +437,8 @@ public enum SettingsIndex {
         SettingsEntry("apps.tint", .apps, "App colour", keywords: ["color", "tint", "per-app", "custom", "any colour", "colour panel"], anchor: "apps.add"),
         SettingsEntry("apps.hide", .apps, "Hide the island while an app is in front", keywords: ["per-app", "frontmost"], anchor: "apps.add"),
         SettingsEntry("apps.fullscreen", .apps, "Keep the island in full screen", keywords: ["per-app", "fullscreen", "games"], anchor: "apps.add"),
-        SettingsEntry("apps.mute", .apps, "Mute an app's notifications", keywords: ["per-app", "silence"], anchor: "apps.add"),
+        SettingsEntry("apps.mute", .apps, "Mute an app's notifications and calls", keywords: ["per-app", "silence", "microphone"], anchor: "apps.add"),
+        SettingsEntry("apps.muted", .apps, "Muted", keywords: ["unmute", "silenced", "right-click", "sources"]),
         SettingsEntry("apps.priority", .apps, "App priority", keywords: ["per-app", "urgent", "rank", "order", "first"], anchor: "apps.add"),
     ] + PermissionKind.allCases.map { kind in
         SettingsEntry("permissions.\(kind.rawValue)", .permissions, kind.title, keywords: ["privacy", "allow", "access"])

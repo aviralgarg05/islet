@@ -152,7 +152,7 @@ struct AdvancedSettings: View {
         Section {
             Toggle(isOn: $model.settings.pluginsEnabled) {
                 Text("Run scripts from the plugins folder")
-                Text("xbar and SwiftBar scripts show on the Widgets page. They run with Islet's permissions, so add only scripts you trust.")
+                Text("xbar and SwiftBar scripts show on the Widgets page. They can use what you allowed Islet, such as your calendars, the Downloads folder and control of Music or Spotify, so add only scripts you trust.")
             }
             .settingsAnchor("advanced.scripts")
             Group {

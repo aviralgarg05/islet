@@ -561,11 +561,14 @@ struct SettingsLink: View {
 struct AccessRow: View {
     let text: String
     let button: String
+    /// A warning by default; a quiet note can pass "info.circle" and `.secondary`.
+    var symbol = "exclamationmark.triangle.fill"
+    var tint: Color = .orange
     let action: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout)
+            Image(systemName: symbol).foregroundStyle(tint).font(.callout)
             Text(text).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
             Button(button, action: action)

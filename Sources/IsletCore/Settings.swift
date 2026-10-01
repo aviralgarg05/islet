@@ -308,8 +308,11 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// The song peek and the open island's artwork scale it to their size (`artworkCorner`).
     public var artworkCornerRadius: Double = IsletSettings.standardArtworkCorner
     public var disabledMediaSources: [MediaSourceKind] = []
-    public var hudEnabled = true
-    public var brightnessHUDEnabled = true
+    /// Islet's volume and brightness HUDs. Off for new configs: macOS draws its own, so with
+    /// these on and `replaceSystemHUD` off every key press shows two (`hudOverlap`). A file
+    /// from before this that doesn't mention them keeps them on (`decodeLenient`).
+    public var hudEnabled = false
+    public var brightnessHUDEnabled = false
     public var keyboardHUDEnabled = true
     /// Mute and unmute from an app or script (the API's `microphone` HUD).
     public var microphoneHUDEnabled = true
@@ -317,6 +320,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var hudColour: HUDColour = .white
     /// Swallow the volume/brightness keys so only Islet's HUD shows. Needs Accessibility.
     public var replaceSystemHUD = false
+    /// A short card when the sound output changes (AirPods connecting, say), which macOS
+    /// doesn't show. Its own switch, apart from the volume HUD.
+    public var outputChangeCard = true
     public var batteryEnabled = true
     public var calendarEnabled = true
     /// Reminders due today, with an alert at their due time. Asks for Reminders access.
@@ -397,6 +403,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var mutedSources: [String] = []
     /// Mirror every app's notification banners into the island. Needs Accessibility.
     public var notificationMirroring = false
+    /// A mirrored notification also peeks below the notch. Off, it shows beside the notch only,
+    /// since macOS shows its own banner at the same moment.
+    public var notificationPeek = false
     /// Show the Live Activities macOS puts in the menu bar (from your iPhone) in the island.
     /// Needs Accessibility.
     public var mirrorMenuBarActivities = true
@@ -504,6 +513,13 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// Whether any HUD shows at all.
     public var showsAnyHUD: Bool { HUDKind.allCases.contains(where: showsHUD) }
 
+    /// The keys that show two displays at once: Islet's HUD and macOS's own, because Islet
+    /// shows the HUD while leaving the keys to macOS. Settings offers "Show only Islet's".
+    public var hudOverlap: Set<HUDKind> {
+        guard !replaceSystemHUD else { return [] }
+        return Set([HUDKind.volume, .brightness].filter(showsHUD))
+    }
+
     /// Appearance → "Reset appearance": the theme, colours, sizes, motion and the music's look
     /// (the playing indicator, the music colour and the progress ring, which Now Playing also
     /// shows) go back to how Islet came. "Fit to the notch" (a calibration for this Mac's
@@ -537,6 +553,13 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public func fullscreenEffect(isFullscreen: Bool, frontApp: String?) -> FullscreenBehaviour {
         guard isFullscreen, rule(for: frontApp)?.showInFullscreen != true else { return .show }
         return fullscreenBehaviour
+    }
+
+    /// Whether a right-click muted this source. Muting "live-activity" in an older version
+    /// muted every mirrored Live Activity, and still does.
+    public func isMuted(source: String) -> Bool {
+        mutedSources.contains(source)
+            || (MenuBarLiveActivities.isMirroredSource(source) && mutedSources.contains(MenuBarLiveActivities.source))
     }
 
     public func rule(for bundleID: String?) -> AppRule? {
@@ -635,6 +658,12 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         // music and takes its value. The old key isn't written back.
         if !applied.contains("musicColour"), let old = user["visualiserColour"] as? String, let colour = MusicColour(rawValue: old) {
             s.musicColour = colour
+        }
+        // The volume and brightness HUDs were on by default before macOS's own display was
+        // counted. A file from then that leaves them out keeps them; new configs start off.
+        if !user.isEmpty {
+            if user["hudEnabled"] == nil { s.hudEnabled = true }
+            if user["brightnessHUDEnabled"] == nil { s.brightnessHUDEnabled = true }
         }
         // Older configs kept two bundle id lists beside `appRules`. They are folded into the
         // rules and not written back. (`launchAtLogin` is gone too: Login Items is the truth.)

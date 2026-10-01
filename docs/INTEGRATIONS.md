@@ -270,6 +270,6 @@ Turn on **Run scripts from the plugins folder** in *Settings → Advanced → Sc
 - a **priority** for its activities and notifications (low, normal, high or urgent), in place of their own;
 - **hide the island while it's in front** (games, presentations);
 - **keep the island in full screen** (for example, a call app), whatever *General → In full screen* says;
-- **mute its notifications**.
+- **mute its notifications and calls**.
 
-Right-click any activity in the island to dismiss it or mute its source.
+Right-click any activity in the island to dismiss it or mute its source. Muted sources are listed under *Settings → Apps → Muted*, each with **Unmute**. Each app's Live Activities are a source of their own, so muting one leaves the others, and one you dismiss stays away until it leaves the menu bar.

@@ -142,10 +142,12 @@ private func song(playing: Bool, elapsed: Double? = 60, duration: Double? = 240,
 }
 
 @Suite struct HUDChoiceTests {
-    @Test func compactAndEveryKindByDefault() {
+    @Test func compactByDefaultWithMacOSShowingVolumeAndBrightness() {
         let s = IsletSettings()
         #expect(s.hudStyle == .compact)
-        #expect(HUDKind.allCases.allSatisfy(s.showsHUD))
+        // macOS draws its own volume and brightness display, so Islet's start off.
+        #expect(!s.showsHUD(.volume) && !s.showsHUD(.brightness))
+        #expect(s.showsHUD(.keyboardBrightness) && s.showsHUD(.microphone))
         #expect(s.showsAnyHUD)
         #expect(decode(#"{"hudStyle": "detailed"}"#).hudStyle == .detailed)
         #expect(decode(#"{"hudStyle": "huge"}"#).hudStyle == .compact)
