@@ -240,6 +240,7 @@ Claude Code and Codex plan usage come from local files. Nothing polls and nothin
 - Two quirks of the CLT toolchain on the macOS 27 SDK:
   - `@State` is a macro whose plugin only ships with Xcode, so views use the property-wrapper type via `typealias ViewState = SwiftUICore.State`.
   - swift-testing's macro plugin needs `-plugin-path` (the Makefile passes it).
+- It builds with the macOS 26 SDK too (Xcode 26 and Swift 6.3, as on GitHub's runners). APIs only the macOS 27 SDK has sit behind `#if compiler(>=6.4) && canImport(FoundationModels, _version: 2.0)`: FoundationModels is version 2 in the macOS 27 SDK and 1.5 in 26.5. Today that is the on-device model's `LanguageModelError` in `OnDeviceAsk.swift`; a macOS 26 SDK build reads those errors from their description instead.
 
 ## Tests
 

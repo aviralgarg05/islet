@@ -53,7 +53,7 @@ You only need to do this once. On macOS 15 and later, Control-clicking the app a
 
 ## Build from source
 
-To build Islet yourself, you need the Xcode Command Line Tools with the macOS 27 SDK (`xcrun --show-sdk-version` prints 27 or later); full Xcode isn't needed.
+To build Islet yourself, you need the Xcode Command Line Tools or Xcode with the macOS 26 SDK or later (`xcrun --show-sdk-version` prints 26 or later); full Xcode isn't needed.
 
 ```bash
 git clone https://github.com/aviralgarg05/islet.git islet && cd islet

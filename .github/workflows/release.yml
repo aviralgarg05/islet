@@ -15,13 +15,15 @@ jobs:
         with:
           fetch-depth: 0   # bundle.sh uses the commit count as the build number
 
-      # Islet needs the macOS 27 SDK (FoundationModels' LanguageModelError in OnDeviceAsk.swift).
+      # Islet builds with the macOS 26 SDK and later. A release built with the macOS 26 SDK leaves
+      # out the macOS 27-only parts (the on-device model's newer error messages), so say so.
       - name: Select the newest Xcode
         run: |
           sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | grep -vi beta | sort -V | tail -1)"
           swift --version
           sdk="$(xcrun --show-sdk-version)"
-          [ "${sdk%%.*}" -ge 27 ] || { echo "::error::Islet needs the macOS 27 SDK; the newest Xcode here has $sdk."; exit 1; }
+          [ "${sdk%%.*}" -ge 26 ] || { echo "::error::Islet needs the macOS 26 SDK or later; the newest Xcode here has $sdk."; exit 1; }
+          [ "${sdk%%.*}" -ge 27 ] || echo "::warning::Built with the macOS $sdk SDK: the macOS 27-only parts are left out."
 
       - name: Read the version from the tag
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
