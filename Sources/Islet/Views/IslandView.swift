@@ -124,15 +124,19 @@ enum IslandLayout {
         }
     }
 
-    /// Where bubbles go: beside the island in the menu bar row when there's room, otherwise
-    /// just below the row (never on top of menu bar icons). Returns diameter and top offset.
+    /// Bubbles sit beside the island in the menu bar row, level with it. They never hang below
+    /// the row and never cover a menu bar icon: only as many as fit are drawn
+    /// (`AppModel.fittedBubbles`) and the island counts the rest. Returns diameter and top offset.
     static func bubblePlacement(metrics m: IslandMetrics, placement: ClosedPlacement,
                                 count: Int, left: Bool) -> (diameter: CGFloat, top: CGFloat) {
-        guard count > 0 else { return (m.notch.height, 0) }
-        let d = m.notch.height
-        let needed = CGFloat(count) * (d + bubbleGap)
-        let slack = left ? placement.leftSlack : placement.rightSlack
-        return needed <= slack ? (d, 0) : (d - 4, m.notch.height + 3)
+        (m.notch.height, 0)
+    }
+
+    /// How many bubbles of `diameter` fit in `slack` points beside the island.
+    static func bubblesThatFit(_ count: Int, slack: CGFloat, diameter: CGFloat) -> Int {
+        guard count > 0 else { return 0 }
+        guard slack.isFinite else { return count }
+        return max(0, min(count, Int((slack / (diameter + bubbleGap)).rounded(.down))))
     }
 }
 
@@ -159,6 +163,18 @@ struct BubbleSet: Equatable {
 }
 
 extension AppModel {
+    /// The bubbles that fit beside the island on this display, and how many more the island
+    /// counts in its wing ("+2") because the menu bar row has no room for them.
+    func fittedBubbles(for p: IslandPresentation, placement: ClosedPlacement, metrics: IslandMetrics) -> (bubbles: BubbleSet, counted: Int) {
+        let all = bubbles(for: p)
+        guard !all.items.isEmpty else { return (all, 0) }
+        let left = settings.bubblePlacement == .left
+        let fit = IslandLayout.bubblesThatFit(all.items.count, slack: left ? placement.leftSlack : placement.rightSlack,
+                                              diameter: metrics.notch.height)
+        guard fit < all.items.count else { return (all, 0) }
+        return (BubbleSet(items: Array(all.items.prefix(fit)), overflow: 0), all.items.count - fit + all.overflow)
+    }
+
     func bubbles(for p: IslandPresentation) -> BubbleSet {
         guard case .compact(let c) = p, settings.maxConcurrent > 1 else { return .none }
         var acts = activities
@@ -211,7 +227,8 @@ struct IslandView: View {
         let visible = IslandLayout.isVisible(p) || dropTargeted
         let shape = g.shape
         let glow = model.urgentGlow(for: p)
-        let bubbles = model.bubbles(for: p)
+        let fitted = model.fittedBubbles(for: p, placement: placement, metrics: metrics)
+        let bubbles = fitted.bubbles
         let left = model.settings.bubblePlacement == .left
         let bp = IslandLayout.bubblePlacement(metrics: metrics, placement: placement, count: bubbles.items.count, left: left)
         let stale = model.focusedActivity(for: p)?.isStale(at: Date()) ?? false
@@ -374,7 +391,8 @@ struct IslandView: View {
         case .hud(let hud):
             HUDContent(hud: hud, metrics: metrics, geometry: g, tint: model.hudTint(hud.kind))
         case .compact(let c):
-            CompactContentView(content: c, metrics: metrics, geometry: g, model: model)
+            CompactContentView(content: c, metrics: metrics, geometry: g, model: model,
+                               counted: model.fittedBubbles(for: p, placement: model.placement(for: display, metrics: metrics), metrics: metrics).counted)
                 .contentShape(Rectangle())
                 .onTapGesture { activate(p) }
         case .sneak(let a):
@@ -399,6 +417,22 @@ struct Squash: ViewModifier {
 
     func body(content: Content) -> some View {
         content.scaleEffect(x: x, y: y, anchor: anchor)
+    }
+}
+
+/// "+2" in the closed island's wing: other activities without a bubble.
+struct MoreCount: View {
+    let count: Int
+
+    var body: some View {
+        if count > 0 {
+            Text("+\(count)")
+                .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(Color.islandSecondary)
+                .fixedSize()
+                .accessibilityLabel("\(count) more")
+        }
     }
 }
 
@@ -496,13 +530,18 @@ struct CompactContentView: View {
     let metrics: IslandMetrics
     let geometry: IslandGeometry
     let model: AppModel
+    /// Other activities with no room for a bubble beside the island, counted in the wing.
+    var counted = 0
 
     var body: some View {
         switch content {
         case .nowPlaying(let np):
             // A new song swaps the artwork; the equaliser beside it keeps running.
             Wings(metrics: metrics, wing: geometry.wing) {
-                ClosedArtwork(media: np, model: model, size: ClosedArtwork.size(metrics))
+                HStack(spacing: 4) {
+                    ClosedArtwork(media: np, model: model, size: ClosedArtwork.size(metrics))
+                    MoreCount(count: counted)
+                }
             } trailing: {
                 PlayingIndicator(tint: model.visualiserTint(np), playing: np.isPlaying)
             }
@@ -511,10 +550,9 @@ struct CompactContentView: View {
             Wings(metrics: metrics, wing: geometry.wing) {
                 HStack(spacing: 4) {
                     TemplateLeading(activity: a, model: model, tint: tint)
-                    // With bubbles off, count the other activities here instead.
-                    if others > 0, model.settings.maxConcurrent == 1 {
-                        Text("+\(others)").font(.system(size: 9.5, weight: .bold, design: .rounded)).foregroundStyle(Color.islandSecondary)
-                    }
+                    // With bubbles off, or no room for them in the menu bar row, count the
+                    // other activities here instead.
+                    MoreCount(count: model.settings.maxConcurrent == 1 ? others : counted)
                 }
             } trailing: {
                 TemplateTrailing(activity: a, model: model, tint: tint)

@@ -81,7 +81,7 @@ The closed island always sits in the menu bar row, with a wing either side of th
 - 34 pt or more gives wings with an icon and a short value. Anything less still gives icon-only wings of 26 pt, which may cover the nearest menu bar item in part or in full. An overflow chevron a few points from the notch, for example, sits under the right wing while the island is showing something.
 - Without Accessibility nothing can be measured, and the wings are capped at 36 pt. A display without a menu bar row gets wings at the width from Settings.
 - Width changes under 4 pt are ignored, so a status item that retitles itself doesn't make the wings twitch.
-- The room left beyond each wing decides whether bubbles sit in the menu bar row or just below it.
+- The room left beyond each wing decides how many bubbles fit in the menu bar row (`AppModel.fittedBubbles`). Bubbles never hang below the row or cover a menu bar item: those that don't fit are counted in the wing instead ("+2"). The menu bar is measured with either width setting, and until it has been, nothing goes beside the island.
 - A sneak peek keeps the wings in the row and opens a body below it for a moment.
 
 `MenuBarInspector` reads frames only (no titles or values) through Accessibility, off the main thread. On macOS 27 it reads the frontmost app's menus and one MenuBarAgent window, which gives every status item's frame. Items collapsed behind the overflow chevron aren't drawn, so they don't count, but the chevron itself always does. On earlier systems it asks the apps that own status items. That list is built once, rebuilt at the next measurement once it is 15 minutes old and kept current from launch and quit notifications, because asking an app without status items waits for a timeout and wakes it.

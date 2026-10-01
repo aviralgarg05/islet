@@ -145,7 +145,7 @@ final class IslandWindowController {
         if let band = IslandLayout.switcherRect(for: p, geometry: g, showsApproval: model.approvals.current != nil) {
             rects.append(band.offsetBy(dx: midX, dy: top))
         }
-        let bubbles = model.bubbles(for: p)
+        let bubbles = model.fittedBubbles(for: p, placement: placement, metrics: metrics).bubbles
         if !bubbles.items.isEmpty {
             let left = model.settings.bubblePlacement == .left
             let bp = IslandLayout.bubblePlacement(metrics: metrics, placement: placement, count: bubbles.items.count, left: left)
