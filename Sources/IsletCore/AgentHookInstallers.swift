@@ -49,6 +49,11 @@ public enum CodexHookInstaller {
     public static func plan(existing: Data?, executable: String = "isletctl", wait: Int) throws -> ClaudeHookInstaller.Plan {
         try ClaudeHookInstaller.merge(existing: existing, entries: entries(wait: wait), agent: "codex", executable: executable)
     }
+
+    /// Takes Islet's hooks out of `hooks.json`, and nothing else.
+    public static func removal(existing: Data?) throws -> ClaudeHookInstaller.Plan {
+        try ClaudeHookInstaller.removal(existing: existing, agent: "codex")
+    }
 }
 
 /// Cursor keeps hooks in `~/.cursor/hooks.json`: `version`, then `hooks` → event → a flat list
@@ -75,6 +80,7 @@ public enum CursorHookInstaller {
         guard var hooks = (root["hooks"] ?? [String: Any]()) as? [String: Any] else { throw Failure.unexpectedShape("hooks") }
         let exe = ClaudeHookInstaller.quoted(executable)
         var changes: [String] = []
+        var wasConnected = false
         if root["version"] == nil {
             root["version"] = 1
         }
@@ -88,9 +94,8 @@ public enum CursorHookInstaller {
                 return args.contains("--wait") == e.waits
             }
             if let i = found {
-                let current = list[i]
-                if e.waits, (current["command"] as? String).flatMap(ClaudeHookInstaller.isletWait) != ClaudeHookInstaller.isletWait(command)
-                    || (current["timeout"] as? Int) != e.timeout {
+                wasConnected = true
+                if ClaudeHookInstaller.needsUpdate(list[i], to: command, entry: e, executable: executable) {
                     list[i]["command"] = command
                     if let t = e.timeout { list[i]["timeout"] = t }
                     changes.append("Update " + label)
@@ -105,7 +110,39 @@ public enum CursorHookInstaller {
         }
         root["hooks"] = hooks
         let merged = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-        return ClaudeHookInstaller.Plan(merged: merged + Data("\n".utf8), changes: changes)
+        return ClaudeHookInstaller.Plan(merged: merged + Data("\n".utf8), changes: changes, wasConnected: wasConnected)
+    }
+
+    /// Takes Islet's hooks out of `hooks.json`, and nothing else. An event left with no hooks goes too.
+    public static func removal(existing: Data?) throws -> ClaudeHookInstaller.Plan {
+        typealias Failure = ClaudeHookInstaller.InstallError
+        guard let existing, !String(decoding: existing, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return ClaudeHookInstaller.Plan(merged: existing ?? Data(), changes: [])
+        }
+        guard var root = (try? JSONSerialization.jsonObject(with: existing)) as? [String: Any] else { throw Failure.notJSON }
+        guard let hooks = root["hooks"] as? [String: Any] else {
+            if root["hooks"] == nil { return ClaudeHookInstaller.Plan(merged: existing, changes: []) }
+            throw Failure.unexpectedShape("hooks")
+        }
+        var kept: [String: Any] = [:]
+        var changes: [String] = []
+        for (event, value) in hooks {
+            guard let list = value as? [[String: Any]] else {
+                kept[event] = value
+                continue
+            }
+            let others = list.filter { hook in
+                guard let args = (hook["command"] as? String).flatMap(ClaudeHookInstaller.isletArguments),
+                      args.starts(with: ["hook", "cursor"]) else { return true }
+                changes.append("Remove " + event + ": isletctl " + args.joined(separator: " "))
+                return false
+            }
+            if !others.isEmpty || list.isEmpty { kept[event] = others }
+        }
+        guard !changes.isEmpty else { return ClaudeHookInstaller.Plan(merged: existing, changes: []) }
+        root["hooks"] = kept
+        let merged = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+        return ClaudeHookInstaller.Plan(merged: merged + Data("\n".utf8), changes: changes.sorted(), wasConnected: true)
     }
 }
 
@@ -224,7 +261,7 @@ public enum CodexConfigEditor {
     }
 }
 
-/// What connecting an agent would change, file by file.
+/// What connecting (or disconnecting) an agent would change, file by file.
 public struct AgentHookPlan: Equatable, Sendable {
     public struct File: Equatable, Sendable {
         public var url: URL
@@ -240,8 +277,20 @@ public struct AgentHookPlan: Equatable, Sendable {
         }
     }
 
+    public enum Kind: Equatable, Sendable { case connect, disconnect }
+
     public var agent: CodingAgent
     public var files: [File]
+    public var kind: Kind = .connect
+    /// Islet's hooks were already there, so connecting again brings them up to date.
+    public var wasConnected = false
+
+    public init(agent: CodingAgent, files: [File], kind: Kind = .connect, wasConnected: Bool = false) {
+        self.agent = agent
+        self.files = files
+        self.kind = kind
+        self.wasConnected = wasConnected
+    }
 
     public var changes: [String] { files.flatMap(\.changes) }
     public var isUpToDate: Bool { changes.isEmpty }
@@ -253,21 +302,57 @@ public struct AgentHookPlan: Equatable, Sendable {
                             read: (URL) throws -> Data?) throws -> AgentHookPlan {
         let urls = agent.files(home: home)
         var files: [File] = []
+        let hooks: ClaudeHookInstaller.Plan
         switch agent {
         case .claudeCode:
-            let p = try ClaudeHookInstaller.plan(existing: read(urls[0]), executable: executable, wait: wait)
-            files.append(File(url: urls[0], contents: p.merged, changes: p.changes))
+            hooks = try ClaudeHookInstaller.plan(existing: read(urls[0]), executable: executable, wait: wait)
+            files.append(File(url: urls[0], contents: hooks.merged, changes: hooks.changes))
         case .codex:
-            let hooks = try CodexHookInstaller.plan(existing: read(urls[0]), executable: executable, wait: wait)
+            hooks = try CodexHookInstaller.plan(existing: read(urls[0]), executable: executable, wait: wait)
             files.append(File(url: urls[0], contents: hooks.merged, changes: hooks.changes))
             let config = try read(urls[1]).map { String(decoding: $0, as: UTF8.self) }
             let edit = try CodexConfigEditor.enableHooks(in: config)
             files.append(File(url: urls[1], contents: Data(edit.text.utf8), changes: edit.changes))
         case .cursor:
-            let p = try CursorHookInstaller.plan(existing: read(urls[0]), executable: executable, wait: wait)
-            files.append(File(url: urls[0], contents: p.merged, changes: p.changes))
+            hooks = try CursorHookInstaller.plan(existing: read(urls[0]), executable: executable, wait: wait)
+            files.append(File(url: urls[0], contents: hooks.merged, changes: hooks.changes))
         }
-        return AgentHookPlan(agent: agent, files: files)
+        return AgentHookPlan(agent: agent, files: files, wasConnected: hooks.wasConnected)
+    }
+
+    /// Plans disconnecting `agent`: Islet's hooks come out of its hooks file and nothing else
+    /// changes. Codex's `hooks = true` stays, since other hooks may need it.
+    public static func disconnect(_ agent: CodingAgent, home: URL, read: (URL) throws -> Data?) throws -> AgentHookPlan {
+        let url = agent.files(home: home)[0]
+        let existing = try read(url)
+        let p: ClaudeHookInstaller.Plan
+        switch agent {
+        case .claudeCode: p = try ClaudeHookInstaller.removal(existing: existing)
+        case .codex: p = try CodexHookInstaller.removal(existing: existing)
+        case .cursor: p = try CursorHookInstaller.removal(existing: existing)
+        }
+        return AgentHookPlan(agent: agent, files: [File(url: url, contents: p.merged, changes: p.changes)], kind: .disconnect,
+                             wasConnected: p.wasConnected)
+    }
+
+    /// The `isletctl` paths in `agent`'s hooks that no longer exist (Islet.app moved or was
+    /// deleted), from its hooks file. A read that fails counts as no hooks.
+    public static func missingExecutables(_ agent: CodingAgent, home: URL, read: (URL) throws -> Data?,
+                                          exists: (String) -> Bool) -> [String] {
+        let data: Data? = (try? read(agent.files(home: home)[0])) ?? nil
+        let commands = ClaudeHookInstaller.commands(in: data)
+        return Array(Set(ClaudeHookInstaller.missingExecutables(in: commands, agent: agent.hookName, exists: exists))).sorted()
+    }
+}
+
+extension CodingAgent {
+    /// The name in `isletctl hook <name>`.
+    public var hookName: String {
+        switch self {
+        case .claudeCode: return "claude"
+        case .codex: return "codex"
+        case .cursor: return "cursor"
+        }
     }
 }
 
@@ -275,7 +360,8 @@ public struct AgentHookPlan: Equatable, Sendable {
 public enum AgentConnection: Equatable, Sendable {
     /// Islet's hooks are in place.
     case connected
-    /// Connected, but the approval wait changed since: connecting again updates it.
+    /// Connected, but out of date: Islet.app moved, the approval wait changed, or a hook is
+    /// missing. Connecting again updates it.
     case needsUpdate
     case notConnected
     /// The agent hasn't run on this Mac (no settings folder yet).
@@ -293,8 +379,8 @@ public enum AgentConnection: Equatable, Sendable {
             return .problem(error.localizedDescription)
         case .success(let p):
             if p.isUpToDate { return .connected }
-            // Only the approval hooks' wait differs: everything else is there.
-            if p.changes.allSatisfy({ $0.hasPrefix("Update ") }) { return .needsUpdate }
+            // Some of Islet's hooks are there: it was connected, and is out of date.
+            if p.wasConnected { return .needsUpdate }
             return installed ? .notConnected : .notFound
         }
     }

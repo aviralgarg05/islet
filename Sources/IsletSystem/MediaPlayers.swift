@@ -131,13 +131,21 @@ public class ScriptablePlayerProvider {
         if automation.record(status), enrich, observer != nil, AppleScriptRunner.isRunning(bundleID) { refresh() }
     }
 
-    /// Run AppleScript against this player, only once Automation for it is allowed.
+    /// Run AppleScript against this player, only once Automation for it is allowed. The script
+    /// runs only if the player is still open when it starts (`whileRunning`): `tell application`
+    /// would launch a player that quit between its notification and the script.
     /// - Returns: false when nothing was sent.
     @discardableResult
     func runScript(_ source: String, completion: ((NSAppleEventDescriptor?) -> Void)? = nil) -> Bool {
         guard canScript else { return false }
-        scriptRunner(source, completion)
+        scriptRunner(Self.whileRunning(source, bundleID: bundleID), completion)
         return true
+    }
+
+    /// `source` inside a check that the player is open. Asking whether an app is running sends
+    /// it nothing and never launches it.
+    static func whileRunning(_ source: String, bundleID: String) -> String {
+        "if application id \"\(bundleID)\" is running then\n\(source)\nend if"
     }
 
     /// Subclasses convert the notification payload.
@@ -250,6 +258,7 @@ public final class AppleMusicProvider: ScriptablePlayerProvider {
     }
 
     private func fetchDetails(base: NowPlaying) {
+        guard AppleScriptRunner.isRunning(bundleID) else { return }
         runScript("tell application id \"com.apple.Music\" to return player position") { [weak self] result in
             guard let self, let s = result?.stringValue, let pos = Double(s.replacingOccurrences(of: ",", with: ".")) else { return }
             var np = base
@@ -261,6 +270,7 @@ public final class AppleMusicProvider: ScriptablePlayerProvider {
     }
 
     private func fetchArtwork(base: NowPlaying) {
+        guard AppleScriptRunner.isRunning(bundleID) else { return }
         let script = "tell application id \"com.apple.Music\" to if (count of artworks of current track) > 0 then return data of artwork 1 of current track"
         runScript(script) { [weak self] result in
             guard let self, let data = result?.data, !data.isEmpty, NSImage(data: data) != nil else { return }

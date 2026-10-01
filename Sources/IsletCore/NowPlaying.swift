@@ -22,6 +22,33 @@ public enum MediaSourceKind: String, Codable, Sendable, CaseIterable {
     }
 }
 
+/// Islet's own Music and Spotify integrations: when they run, and what to say when their
+/// controls can't reach the player.
+public enum PlayerIntegration {
+    /// Music or Spotify switched off in Settings runs not at all: it reads no notifications
+    /// and sends no AppleScript, whether or not the system bridge is up.
+    public static func runs(_ source: MediaSourceKind, disabled: Set<MediaSourceKind>) -> Bool {
+        !disabled.contains(source)
+    }
+
+    /// Whether it fetches position and artwork itself (AppleScript, or Spotify's cover art):
+    /// only while it runs and the system bridge, which already brings both, is down.
+    public static func enriches(_ source: MediaSourceKind, disabled: Set<MediaSourceKind>, bridgeRunning: Bool) -> Bool {
+        runs(source, disabled: disabled) && !bridgeRunning
+    }
+
+    /// The player to name in "Allow Islet to control …" after a control press went nowhere: the
+    /// bridge is down and macOS hasn't allowed Apple Events to Music or Spotify. Nil otherwise.
+    public static func controlHint(for source: MediaSourceKind, sent: Bool, bridgeRunning: Bool, canScript: Bool) -> String? {
+        guard !sent, !bridgeRunning, !canScript else { return nil }
+        switch source {
+        case .appleMusic: return "Music"
+        case .spotify: return "Spotify"
+        default: return nil
+        }
+    }
+}
+
 public enum PlaybackCommand: String, Codable, Sendable, CaseIterable {
     case play, pause, togglePlayPause, next, previous, seek
     /// Jump 15 s forward or back, computed from the current position so it works with any player.

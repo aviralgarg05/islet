@@ -529,11 +529,16 @@ enum HookFixtures {
         #expect(merged["permissions"]?["allow"] == .array(["Bash(git status)"]))
         #expect(commands(plan.merged, "Stop") == ["afplay /System/Library/Sounds/Glass.aiff", "isletctl hook claude"])
         #expect(commands(plan.merged, "PreToolUse") == ["~/bin/guard.sh", "isletctl hook claude", "isletctl hook claude --wait 300"])
-        // Already there under a full path: left alone.
-        #expect(commands(plan.merged, "SessionStart") == ["/Applications/Islet.app/Contents/MacOS/isletctl hook claude"])
-        #expect(!plan.changes.contains { $0.contains("SessionStart") })
+        // There, but calling an isletctl somewhere else (Islet.app moved): updated in place, not added again.
+        #expect(commands(plan.merged, "SessionStart") == ["isletctl hook claude"])
+        #expect(plan.changes.contains("Update SessionStart: isletctl hook claude"))
         #expect(!plan.changes.contains("Add PreToolUse: isletctl hook claude"))
-        #expect(plan.changes.count == 8)
+        #expect(plan.changes.count == 9)
+        #expect(plan.wasConnected)
+        // The same path is left alone.
+        let same = try ClaudeHookInstaller.plan(existing: Data(existing.utf8), executable: "/Applications/Islet.app/Contents/MacOS/isletctl", wait: 300)
+        #expect(commands(same.merged, "SessionStart") == ["/Applications/Islet.app/Contents/MacOS/isletctl hook claude"])
+        #expect(!same.changes.contains { $0.contains("SessionStart") })
     }
 
     @Test func idempotentAndFollowsTheWait() throws {

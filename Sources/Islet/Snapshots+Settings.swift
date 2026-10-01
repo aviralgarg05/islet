@@ -24,6 +24,8 @@ enum SettingsSnapshots {
         NSApp.setActivationPolicy(.prohibited)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         AppActions.bundleURL = URL(fileURLWithPath: "/Applications/Islet.app")
+        // As if Islet were installed there, so connected agents read as connected.
+        AppActions.isExecutable = { _ in true }
         seedAgents(home: home)
 
         let secrets = MemorySecretStore([AskProviderKind.anthropic.keyAccount ?? "": "snapshot-sample-0000"])
@@ -81,6 +83,26 @@ enum SettingsSnapshots {
             navigation.open(.general)
             shoot("general-click", in: extra, dark: false)
             model.settings = sampleSettings
+            // Let the save that change queued go first: a save that works clears the problem.
+            RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+            // config.json with an error: the last good settings stay, and Advanced says so.
+            model.setSettingsProblemForSnapshot(FileProblem(line: 12, message: "Badly formed object around line 12, column 3."))
+            window.setContentSize(NSSize(width: SettingsWindow.defaultSize.width, height: 1500))
+            navigation.open(.advanced, at: "advanced.config")
+            shoot("advanced-config-error", in: extra)
+            model.setSettingsProblemForSnapshot(nil)
+            // Islet.app moved since Claude Code was connected: Needs an update, and a dot.
+            window.setContentSize(SettingsWindow.defaultSize)
+            AppActions.isExecutable = { _ in false }
+            navigation.open(.general)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+            navigation.open(.agents)
+            shoot("agents-moved", in: extra, dark: false)
+            AppActions.isExecutable = { _ in true }
+            navigation.open(.general)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+            navigation.open(.agents)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.5))
             window.setContentSize(SettingsWindow.minimumSize)
             for (i, page) in SettingsPage.allCases.enumerated() {
                 navigation.open(page)
@@ -101,6 +123,7 @@ enum SettingsSnapshots {
     static var sampleSettings: IsletSettings {
         var s = IsletSettings()
         s.clipboardEnabled = true
+        s.clipboardIgnoredApps = ["com.apple.Notes"]
         s.remindersEnabled = true
         s.pluginsEnabled = true
         s.appRules = [

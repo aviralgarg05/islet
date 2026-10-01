@@ -89,6 +89,25 @@ public final class AudioMonitor {
         return AudioObjectSetPropertyData(device, &addr, 0, nil, UInt32(MemoryLayout<UInt32>.size), &m) == noErr
     }
 
+    /// Whether the output's volume can be set. Fixed-volume outputs (many USB DACs, HDMI and
+    /// DisplayPort audio, some docks) can't, and report a volume of 1.
+    public static func isVolumeSettable(device: AudioObjectID = defaultDevice(input: false)) -> Bool {
+        isSettable(device, address(kAudioHardwareServiceDeviceProperty_VirtualMainVolume, kAudioDevicePropertyScopeOutput))
+    }
+
+    /// Whether the output can be muted.
+    public static func isMuteSettable(device: AudioObjectID = defaultDevice(input: false)) -> Bool {
+        isSettable(device, address(kAudioDevicePropertyMute, kAudioDevicePropertyScopeOutput))
+    }
+
+    private static func isSettable(_ device: AudioObjectID, _ addr: AudioObjectPropertyAddress) -> Bool {
+        guard device != 0 else { return false }
+        var a = addr
+        guard AudioObjectHasProperty(device, &a) else { return false }
+        var settable = DarwinBoolean(false)
+        return AudioObjectIsPropertySettable(device, &a, &settable) == noErr && settable.boolValue
+    }
+
     public static func isRunningSomewhere(_ device: AudioObjectID) -> Bool {
         guard device != 0 else { return false }
         var running = UInt32(0)

@@ -151,13 +151,25 @@ final class AppModel {
     /// Activities already sent to the on-device model for an icon.
     private var iconAttempts: Set<String> = []
     private var settingsWatcher: DispatchSourceFileSystemObject?
+    /// config.json, which is never written over while it doesn't parse.
+    @ObservationIgnored private var configFile: SettingsFile
+    /// Set while config.json doesn't parse: Islet keeps its last good settings and saves
+    /// nothing until the file is fixed or replaced (Settings → Advanced).
+    private(set) var settingsProblem: FileProblem?
 
-    /// `ask` is replaceable so Settings snapshots keep API keys in memory instead of the Keychain.
-    init(settings: IsletSettings = IsletSettings.load(from: IsletPaths.configFile), ask: AskController? = nil) {
+    /// With no `settings`, they are read from config.json. `ask` is replaceable so Settings
+    /// snapshots keep API keys in memory instead of the Keychain.
+    init(settings: IsletSettings? = nil, ask: AskController? = nil) {
+        var file = SettingsFile(url: IsletPaths.configFile)
+        let settings = settings ?? file.read().value ?? IsletSettings()
+        configFile = file
+        settingsProblem = file.problem
         self.settings = settings
         self.ask = ask ?? AskController()
         shelf = shelfService.shelf
         clipboard = ClipboardHistory(limit: settings.clipboardLimit)
+        clipboard.ignoredApps = Set(settings.clipboardIgnoredApps)
+        clipboard.skipsSecrets = settings.clipboardSkipSecrets
         songPeek.duration = settings.alertDuration
     }
 
@@ -177,6 +189,8 @@ final class AppModel {
         timers.start()
         startEventSources()
         watchSettingsFile()
+        // Once per launch: hooks left pointing at an isletctl that moved fail silently.
+        checkAgentHooks()
     }
 
     /// Everything that depends on settings; safe to call again after changes.
@@ -273,12 +287,31 @@ final class AppModel {
             // Fall back to per-player enrichment. It uses AppleScript only where Automation is
             // already allowed, so this never brings up the prompt; Settings → Permissions does.
             NSLog("Islet: %@", reason)
-            self?.music.enrich = true
-            self?.spotify.enrich = true
+            self?.bridgeFailed = true
+            self?.syncPlayers()
         }
+        bridgeFailed = false
         systemMedia.start()
+        syncPlayers()
+    }
+
+    /// The system bridge said it can't deliver (it may still be running), so the players fetch
+    /// their own details. Reset when media starts again.
+    @ObservationIgnored private var bridgeFailed = false
+
+    /// Music and Spotify run only while their source is on in Settings; a source switched off
+    /// sends no AppleScript at all, even with the system bridge down.
+    func syncPlayers() {
+        let disabled = media.disabled
+        let bridgeUp = systemMedia.isRunning && !bridgeFailed
         for p in [music, spotify] as [ScriptablePlayerProvider] {
-            p.enrich = !systemMedia.isRunning
+            guard PlayerIntegration.runs(p.source, disabled: disabled) else {
+                p.enrich = false
+                p.stop()
+                continue
+            }
+            // Before start(), which begins enriching straight away when asked to.
+            p.enrich = PlayerIntegration.enriches(p.source, disabled: disabled, bridgeRunning: bridgeUp)
             p.onUpdate = { [weak self, source = p.source] np in self?.mediaUpdate(np, source: source) }
             p.start()
         }
@@ -390,8 +423,58 @@ final class AppModel {
 
     // MARK: Settings
 
+    /// Writes the settings to config.json, keeping keys this build doesn't know. Writes
+    /// nothing while the file doesn't parse (`settingsProblem`).
     func saveSettings() {
-        try? settings.save(to: IsletPaths.configFile)
+        do {
+            try configFile.save(settings)
+        } catch {
+            NSLog("Islet: couldn't save config.json: %@", error.localizedDescription)
+        }
+        noteSettingsProblem(configFile.problem)
+    }
+
+    /// Settings → Advanced, while config.json doesn't parse: keep a copy of it as
+    /// config.json.broken and write the settings in use over it.
+    func replaceBrokenSettingsFile() {
+        do {
+            try configFile.replace(with: settings)
+        } catch {
+            NSLog("Islet: couldn't replace config.json: %@", error.localizedDescription)
+        }
+        noteSettingsProblem(configFile.problem)
+    }
+
+    /// Settings → Advanced → Reset: every setting back to how Islet came. A config.json that
+    /// doesn't parse is kept as config.json.broken.
+    func resetSettings() {
+        settings = IsletSettings()
+        replaceBrokenSettingsFile()
+        NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
+    }
+
+    private func noteSettingsProblem(_ problem: FileProblem?) {
+        if settingsProblem != problem { settingsProblem = problem }
+    }
+
+    /// `--settings-snapshot` draws Advanced as it looks while config.json has an error.
+    func setSettingsProblemForSnapshot(_ problem: FileProblem?) { settingsProblem = problem }
+
+    /// Agents whose hooks call an `isletctl` that is gone (Islet.app moved or was deleted).
+    /// Settings shows a dot on Coding agents; Update there fixes it.
+    private(set) var agentsNeedingUpdate: Set<CodingAgent> = []
+
+    /// Reads each agent's hooks file once, off the main thread: at launch and when the Coding
+    /// agents page refreshes. Never writes, never polls.
+    func checkAgentHooks() {
+        let home = IsletPaths.home
+        let exists = AppActions.isExecutable
+        Task { @MainActor in
+            let stale = await Task.detached(priority: .utility) {
+                Set(CodingAgent.allCases.filter { !AgentHookSetup.missingExecutables($0, home: home, exists: exists).isEmpty })
+            }.value
+            if agentsNeedingUpdate != stale { agentsNeedingUpdate = stale }
+        }
     }
 
     private static var pendingSettingsCommit: DispatchWorkItem?
@@ -444,9 +527,13 @@ final class AppModel {
         fileWatcher = src
     }
 
+    /// A file that doesn't parse (a typo mid-edit) changes nothing: the last good settings stay,
+    /// and Settings → Advanced says which line. A deleted file changes nothing either; the next
+    /// save writes it again.
     private func reloadSettingsFromDisk() {
-        let fresh = IsletSettings.load(from: IsletPaths.configFile)
-        guard fresh != settings else { return }
+        let read = configFile.read()
+        noteSettingsProblem(configFile.problem)
+        guard case .loaded(let fresh) = read, fresh != settings else { return }
         settings = fresh
         // The app delegate applies the rest (modules, media sources, clipboard size, hotkey, panels)
         // on this notification.
@@ -569,6 +656,7 @@ final class AppModel {
             statsSampler.stop()
             pinned = false
             ask.islandDidCollapse()
+            controlHint = nil
         }
     }
 
@@ -859,15 +947,11 @@ final class AppModel {
             lockedAt = nil
             lockedDigest = [:]
         }
-        guard let since = lockedAt, Date().timeIntervalSince(since) > 60 else { return }
-        let total = lockedDigest.values.reduce(0, +)
-        let summary = total == 0 ? "Nothing new while you were away"
-            : lockedDigest.sorted { $0.value > $1.value }.prefix(3)
-                .map { "\($0.value) from \(Self.friendlySource($0.key))" }.joined(separator: " · ")
-        _ = try? commit(ActivitySpec(
-            id: "welcome-back", source: "system", title: "Welcome back", subtitle: summary,
-            icon: .symbol("lock.open.fill"), state: .info, tint: "white", priority: .normal, ttl: 4, sneak: true
-        ))
+        // Nothing arrived: nothing to say, so the island stays as it was.
+        guard let since = lockedAt,
+              let spec = WelcomeBack.activity(counts: lockedDigest, lockedFor: Date().timeIntervalSince(since), name: Self.friendlySource)
+        else { return }
+        _ = try? commit(spec)
     }
 
     static func friendlySource(_ source: String) -> String {
@@ -929,7 +1013,28 @@ final class AppModel {
             setNowPlaying(media.current(now: now), now: now)
             reschedule()
         }
+        // A press that went nowhere because macOS hasn't allowed Islet to control the player
+        // says so, instead of doing nothing.
+        let hint = nowPlaying.flatMap { np in
+            PlayerIntegration.controlHint(for: np.source, sent: sent, bridgeRunning: systemMedia.isRunning,
+                                          canScript: np.source == .spotify ? spotify.canScript : music.canScript)
+        }
+        if controlHint != hint { controlHint = hint }
         return sent
+    }
+
+    /// "Allow Islet to control Music": the player whose controls just went nowhere, until a
+    /// control works or the island closes.
+    private(set) var controlHint: String?
+
+    /// `--snapshot` draws the hint.
+    func setControlHintForSnapshot(_ player: String?) { controlHint = player }
+
+    /// The hint's Allow button: Settings → Permissions, at that player's row.
+    func openControlPermission() {
+        let kind: PermissionKind = controlHint == "Spotify" ? .automationSpotify : .automationMusic
+        controlHint = nil
+        AppActions.openSettings(.permissions, at: "permissions.\(kind.rawValue)")
     }
 
     private func route(_ command: PlaybackCommand, position: Double?) -> Bool {
@@ -973,6 +1078,7 @@ final class AppModel {
 
     func togglePinClip(_ id: String) { clipboard.togglePin(id: id) }
     func removeClip(_ id: String) { clipboard.remove(id: id) }
+    /// "Clear unpinned" on the Clipboard page.
     func clearClipboard() { clipboard.clear() }
 
     func runPlugin(_ path: String) { pluginRunner?.runNow(path: path) }
@@ -1176,11 +1282,15 @@ extension AppModel {
         // Sources switched off (in Settings or config.json), and the clipboard size, apply without a restart.
         if Set(s.disabledMediaSources) != media.disabled {
             media.disabled = Set(s.disabledMediaSources)
+            // Music or Spotify switched off stops altogether; switched on, it starts.
+            if s.mediaEnabled { syncPlayers() }
             let now = Date()
             setNowPlaying(media.current(now: now), now: now)
             reschedule()
         }
         if clipboard.limit != s.clipboardLimit { clipboard.limit = s.clipboardLimit }
+        if clipboard.ignoredApps != Set(s.clipboardIgnoredApps) { clipboard.ignoredApps = Set(s.clipboardIgnoredApps) }
+        if clipboard.skipsSecrets != s.clipboardSkipSecrets { clipboard.skipsSecrets = s.clipboardSkipSecrets }
 
         let wantCalendar = s.calendarEnabled && CalendarService.eventAccess == .granted
             || s.remindersEnabled && CalendarService.reminderAccess == .granted
@@ -1197,7 +1307,8 @@ extension AppModel {
                 startClipboard()
             } else {
                 clipboardMonitor.stop()
-                clipboard.clear()
+                // Off means nothing is kept, pinned entries included.
+                clipboard.removeAll()
             }
             modules.clipboard = s.clipboardEnabled
         }

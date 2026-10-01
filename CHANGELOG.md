@@ -23,6 +23,8 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 - **Approvals.** Claude Code, Codex and Cursor can ask in the island: Allow, Always for this session, Deny, or answer in the terminal. Commands are shown in full, risky ones (recursive deletes, force pushes, sudo and more) need a second click, and questions and plans can be answered there too. If Islet isn't running or you don't answer, the agent asks in the terminal as usual.
 - **Usage limits.** Claude Code's and Codex's 5-hour and weekly limits appear on Home, with one alert at 90% and at 100%. They come from files the tools write locally; no tokens are read and nothing goes over the network.
 - Claude Code only hands its usage to its status line, so its limits need Islet's status line. When Claude Code is installed without it, Home shows Claude with a **Show usage** button that opens Settings at Usage limits, where a plain note says what changes (only `statusLine` in `~/.claude/settings.json`, with a backup) and nothing is written until you confirm. Home then says it is waiting for Claude Code until the first figures arrive. The "x" hides the hint for good.
+- **Status for every connected agent.** Codex and Cursor, connected from Settings, now show each session in the island (Thinking, the command or tool that's running, Waiting, Done), not only approval cards. Codex's older `notify` setup still works.
+- When Islet.app moves after an agent was connected, Coding agents says **Needs an update** instead of Connected, with a dot in the sidebar (checked once at launch), and **Update…** points the hooks at the new place. **Disconnect…** takes Islet's hooks out again after showing what it removes, and leaves everything else.
 - **MCP.** `isletctl mcp` lets agents show progress, notes and timers in the notch as tools.
 - Commands shown in the notch hide anything that looks like a key or password.
 
@@ -74,7 +76,15 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 
 ### Safer and lighter
 - A crash when the Now Playing helper stopped, and a core spinning at 100% after it did, are fixed.
-- Module switches in Settings take effect at once, and turning clipboard history off clears it.
+- Module switches in Settings take effect at once, and turning clipboard history off clears it, pinned items too.
+- A typo in `config.json` no longer resets every setting. Islet keeps the settings it had and saves nothing over the file until it parses again; Settings → Advanced says which line has the error, and **Replace…** writes the settings in use over it, keeping a copy as `config.json.broken`. Keys Islet doesn't know, from a newer version or added by hand, survive a save.
+- An unreadable `shelf.json` or `timers.json` is moved to `shelf.json.corrupt` or `timers.json.corrupt` before the shelf or timers start empty, instead of being saved over. Files on a disk that isn't connected stay on the shelf, dimmed, until it comes back.
+- Clipboard history leaves out text that looks like a password when a browser copied it, since password manager extensions copy as the browser (**Skip passwords copied in a browser**, on by default), and **Ignore apps** leaves out any app you choose. **Clear unpinned** sits at the end of the Clipboard page.
+- A calmer island: unlocking no longer shows an empty "Welcome back" when nothing arrived, and Clipboard is in the island's menu only while clipboard history is on.
+- **Replace the system volume and brightness display** lets a key through to macOS when Islet can't act on it: brightness on another display or with the lid closed, brightness while BetterDisplay, MonitorControl or Lunar is running, volume on a fixed-volume output, and Option with a key, which opens Sound or Displays settings. Islet's HUD shows only a change that really happened. Allowing Accessibility in System Settings starts it at once, without a relaunch.
+- **Hide from screenshots** says that some screen-sharing and recording apps still show the island, and the island's glass draws solid while it's on, so it can't turn into a black slab.
+- With the Now Playing helper unavailable, a Music or Spotify control that macOS hasn't allowed Islet to use now says **Allow Islet to control Spotify…** in place of the buttons, instead of doing nothing. Music or Spotify switched off in Settings sends no AppleScript at all, and a script can no longer reopen a player that has just quit.
+- An activity's end, a HUD or a peek that fell due just as something else changed no longer stays on screen until the next event.
 - `islet://` links can't replace Islet's own activities or open anything but https. Script widgets are off until you turn them on and only run files you own. Meeting links must be on the real host to get a Join button.
 - Downloads, the clipboard and plugins stop checking while nothing changes or the screen is locked.
 - A browser video no longer stays "playing" in the island after you close its window, and a video that finished without saying so shows as stopped and then goes.

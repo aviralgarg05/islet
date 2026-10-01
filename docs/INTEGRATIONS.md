@@ -22,13 +22,15 @@ Ready-made files live in [`integrations/`](../integrations/). For recipes coveri
 | AirPods / headphones / displays / speakers | "Connected" card when the output device changes | nothing |
 | Safari, Chrome, Firefox, Edge, Brave, Arc downloads | Progress (real % for Safari), then "Downloaded" with Open/Show | Downloads folder access |
 | Notifications from every app, including iPhone notifications forwarded by macOS | App icon + sender + one line; per-app mute, tint and priority; optional on-device summary | Accessibility (experimental) |
-| Screen unlock | "Welcome back" with what arrived while you were away | nothing |
+| Screen unlock | "Welcome back" with what arrived while you were away; nothing when nothing did | nothing |
 
 ---
 
 ## Coding agents
 
-The quickest way: open *Settings → Coding agents* and press **Connect…** beside Claude Code, Codex or Cursor. A sheet lists every change before anything is written, your own hooks and settings stay as they are, and each file is copied to a `.bak` file first. The row then says **Connected**; if you later change how long Islet waits for an answer, it says **Needs an update** and **Update…** brings the hooks in line. The commands themselves are in *Settings → Advanced → Coding agents*, for dotfiles. The sections below do the same by hand.
+The quickest way: open *Settings → Coding agents* and press **Connect…** beside Claude Code, Codex or Cursor. A sheet lists every change before anything is written, your own hooks and settings stay as they are, and each file is copied to a `.bak` file first. The row then says **Connected**. If you later change how long Islet waits for an answer, or Islet.app moves (the hooks call the `isletctl` inside it), it says **Needs an update** and **Update…** brings the hooks in line; Islet checks once at launch and puts a dot on Coding agents when a hook points at an `isletctl` that is gone. **Disconnect…** takes out Islet's hooks and nothing else, after showing what it removes. The commands themselves are in *Settings → Advanced → Coding agents*, for dotfiles. The sections below do the same by hand.
+
+All three show each session in the island: *Thinking…* when you send a prompt (Claude Code and Codex), the command or tool that is running, **Waiting** when one needs your approval, and **Done** when the turn ends. Cursor's sessions are its conversations, and a stop with an error shows as one.
 
 **Claude Code:** add [`integrations/claude-code/settings.json`](../integrations/claude-code/settings.json) to `~/.claude/settings.json` (merge the `hooks` key). The island then shows, per session:
 - *Thinking…* with a spinner;
@@ -36,7 +38,9 @@ The quickest way: open *Settings → Coding agents* and press **Connect…** bes
 - **Waiting** in high priority with a glow when it needs your permission or input;
 - **Done** when the turn ends, before the activity disappears at session end.
 
-**Codex CLI:** add `notify = ["isletctl", "hook", "codex"]` to `~/.codex/config.toml` (see [`integrations/codex/config.toml`](../integrations/codex/config.toml)). You get a "Turn complete" card with the last message.
+**Codex CLI:** add [`integrations/codex/hooks.json`](../integrations/codex/hooks.json) to `~/.codex/hooks.json` and `hooks = true` under `[features]` in `~/.codex/config.toml`, then type `/hooks` in Codex once to trust them. The island shows the same per-session states as for Claude Code. The older `notify = ["isletctl", "hook", "codex"]` in `config.toml` still works and gives a "Turn complete" card with the last message.
+
+**Cursor:** add [`integrations/cursor/hooks.json`](../integrations/cursor/hooks.json) to `~/.cursor/hooks.json`. Shell commands and MCP tools show as they run, and the conversation shows **Done** (or the error) when it stops.
 
 **Any other agent:** post the generic shape to `/v1/hooks/<name>` or pipe it to `isletctl hook <name>`:
 

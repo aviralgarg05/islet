@@ -269,7 +269,7 @@ struct NotificationsSettings: View {
                 }
                 Toggle(isOn: $model.settings.unlockSplash) {
                     Text("Welcome back summary when you unlock")
-                    Text("What arrived while the screen was locked.")
+                    Text("What arrived while the screen was locked. Nothing shows when nothing did.")
                 }
                 .settingsAnchor("notifications.welcome")
             }
@@ -321,7 +321,7 @@ struct NotificationsSettings: View {
                 .disabled(!model.settings.showsAnyHUD)
                 Toggle(isOn: $model.settings.replaceSystemHUD) {
                     Text("Replace the system volume and brightness display")
-                    Text("Shows only Islet's when you press the keys.")
+                    Text("Shows only Islet's when you press the keys. Keys Islet can't act on, such as brightness on another display or volume on a fixed-volume output, still go to macOS.")
                 }
                 .settingsAnchor("notifications.replaceHUD")
                 if model.settings.replaceSystemHUD && !axTrusted {
@@ -402,11 +402,19 @@ struct ShelfSettings: View {
             Section("Clipboard") {
                 Toggle(isOn: $model.settings.clipboardEnabled) {
                     Text("Clipboard history")
-                    Text("What you copy, on the Clipboard page. It stays on this Mac and skips passwords. Turning it off clears it.")
+                    Text("What you copy, on the Clipboard page. It stays on this Mac and skips passwords. Turning it off clears it, pinned items too.")
                 }
                 .settingsAnchor("shelf.clipboard")
-                ClipboardLimitPicker(model: model)
-                    .disabled(!model.settings.clipboardEnabled)
+                Group {
+                    ClipboardLimitPicker(model: model)
+                    Toggle(isOn: $model.settings.clipboardSkipSecrets) {
+                        Text("Skip passwords copied in a browser")
+                        Text("Password manager extensions copy as the browser, so text that looks like a password is left out.")
+                    }
+                    .settingsAnchor("shelf.clipboardSecrets")
+                    ClipboardIgnoredApps(model: model)
+                }
+                .disabled(!model.settings.clipboardEnabled)
             }
         }
         .formStyle(.grouped)

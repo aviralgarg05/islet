@@ -92,6 +92,78 @@ struct ClipboardLimitPicker: View {
     }
 }
 
+/// "Add app": the apps running now, then any app from the Applications folder. Used by the
+/// Apps page and by clipboard history's ignore list.
+struct AddAppMenu: View {
+    var title = "Add app"
+    /// Bundle ids already on the list, which the menu leaves out.
+    let existing: Set<String>
+    let add: (String) -> Void
+
+    private var runningApps: [NSRunningApplication] {
+        NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular && $0.bundleIdentifier.map { !existing.contains($0) } ?? false }
+            .sorted { ($0.localizedName ?? "") < ($1.localizedName ?? "") }
+    }
+
+    var body: some View {
+        Menu(title) {
+            ForEach(runningApps, id: \.processIdentifier) { app in
+                Button(app.localizedName ?? app.bundleIdentifier!) { add(app.bundleIdentifier!) }
+            }
+            if !runningApps.isEmpty { Divider() }
+            Button("Other app…", action: chooseApp)
+        }
+        .fixedSize()
+    }
+
+    private func chooseApp() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.prompt = "Add"
+        guard panel.runModal() == .OK, let url = panel.url, let id = Bundle(url: url)?.bundleIdentifier else { return }
+        add(id)
+    }
+
+    /// An app's name from its bundle id, or the id when it isn't installed.
+    static func name(_ bundleID: String) -> String {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+            .map { FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "") } ?? bundleID
+    }
+}
+
+/// Settings → Shelf & Clipboard: apps whose copies clipboard history never keeps.
+struct ClipboardIgnoredApps: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        LabeledContent {
+            AddAppMenu(existing: Set(model.settings.clipboardIgnoredApps)) { id in
+                if !model.settings.clipboardIgnoredApps.contains(id) { model.settings.clipboardIgnoredApps.append(id) }
+            }
+        } label: {
+            Text("Ignore apps")
+            Text("Nothing copied in these apps is kept. Password managers are always ignored.")
+        }
+        .settingsAnchor("shelf.clipboardIgnore")
+        ForEach(model.settings.clipboardIgnoredApps, id: \.self) { id in
+            HStack(spacing: 10) {
+                AppIconView(bundleID: id, size: 20)
+                Text(AddAppMenu.name(id)).lineLimit(1)
+                Spacer(minLength: 8)
+                Button(role: .destructive) {
+                    model.settings.clipboardIgnoredApps.removeAll { $0 == id }
+                } label: {
+                    Image(systemName: "minus.circle")
+                }
+                .buttonStyle(.borderless)
+                .help("Stop ignoring \(AddAppMenu.name(id))")
+            }
+        }
+    }
+}
+
 /// A global shortcut, set by pressing it. Saved as text ("ctrl+option+i"), the form
 /// config.json uses. Delete turns it off; Esc keeps the one there was. While it records,
 /// Islet's own shortcuts are let through, so one of them can be pressed and recorded.

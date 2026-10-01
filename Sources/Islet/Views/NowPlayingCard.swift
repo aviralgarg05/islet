@@ -48,7 +48,10 @@ struct NowPlayingHero: View {
             if media.duration != nil {
                 MediaScrubber(model: model, media: media, accent: tint)
             }
-            if showsSound {
+            if let player = model.controlHint {
+                ControlPermissionHint(player: player) { model.openControlPermission() }
+                    .frame(height: TransportControls.height)
+            } else if showsSound {
                 SoundControls(model: model).frame(height: TransportControls.height)
             } else {
                 TransportControls(model: model, media: media, accent: tint, wide: size.width >= 330)
@@ -154,6 +157,25 @@ struct ScrubBar: View {
             onCancel()
         }
         .animation(.snappy(duration: 0.15), value: dragging || hovering)
+    }
+}
+
+/// In place of the transport after a press went nowhere: macOS hasn't allowed Islet to control
+/// the player. One button, which opens the right place in Settings.
+struct ControlPermissionHint: View {
+    let player: String
+    let allow: () -> Void
+
+    var body: some View {
+        Button(action: allow) {
+            HStack(spacing: Space.xs) {
+                Image(systemName: "lock.fill").font(.system(size: 10, weight: .semibold))
+                Text("Allow Islet to control \(player)…").lineLimit(1)
+            }
+        }
+        .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
+        .help("Opens Settings → Permissions")
+        .frame(maxWidth: .infinity)
     }
 }
 

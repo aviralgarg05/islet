@@ -290,16 +290,18 @@ final class GlassSheenView: NSView {
 }
 
 /// Liquid Glass on macOS 26 and later, a blurred material before that, and a solid fill when
-/// Reduce Transparency is on or when rendering offline snapshots.
+/// Reduce Transparency is on, when the island is hidden from screenshots, or when rendering
+/// offline snapshots.
 struct GlassSurface<S: Shape>: View {
     let shape: S
     var tint: Color = .clear
     var fallback: Color = Color(white: 0.09)
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.snapshotMode) private var snapshotMode
+    @Environment(\.hiddenFromCapture) private var hiddenFromCapture
 
     var body: some View {
-        if reduceTransparency || snapshotMode {
+        if reduceTransparency || snapshotMode || hiddenFromCapture {
             shape.fill(fallback)
         } else if #available(macOS 26, *) {
             Color.clear.glassEffect(.regular.tint(tint), in: shape)

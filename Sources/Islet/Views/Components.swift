@@ -529,6 +529,19 @@ private struct IslandReduceMotionKey: EnvironmentKey {
     static let defaultValue = false
 }
 
+/// "Hide from screenshots" is on. A window kept out of captures can lose the backdrop Liquid
+/// Glass samples and draw it as a black slab, so glass surfaces use their solid fill instead.
+private struct HiddenFromCaptureKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var hiddenFromCapture: Bool {
+        get { self[HiddenFromCaptureKey.self] }
+        set { self[HiddenFromCaptureKey.self] = newValue }
+    }
+}
+
 extension EnvironmentValues {
     var snapshotMode: Bool {
         get { self[SnapshotModeKey.self] }

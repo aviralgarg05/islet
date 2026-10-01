@@ -399,7 +399,7 @@ Scripts get `ISLET=1`, `SWIFTBAR=1`, `XBARDarkMode=true` and Homebrew on `PATH`,
 
 ## Settings file
 
-Everything in Settings lives in `~/.config/islet/config.json` (or `$XDG_CONFIG_HOME/islet/config.json`) and reloads live when edited, so it can live in your dotfiles. Unknown keys are ignored; a bad value falls back to its default without breaking the rest. Example:
+Everything in Settings lives in `~/.config/islet/config.json` (or `$XDG_CONFIG_HOME/islet/config.json`) and reloads live when edited, so it can live in your dotfiles. Unknown keys are ignored and kept; a bad value falls back to its default without breaking the rest, and a file that doesn't parse is never written over (see the end of this section). Example:
 
 ```json
 {
@@ -456,5 +456,11 @@ Now Playing, closed island, HUD, gestures and battery keys:
 | `batteryLowThreshold` | `20` | Low battery warning, 5–50%. |
 | `batteryCriticalThreshold` | `10` | Second, urgent warning; always below the low one. |
 | `batteryChargedAlert` | `0` | Tell me when charging reaches this level (50–100; `0` = off). |
+| `clipboardEnabled` | `false` | Clipboard history. Switching it off forgets everything, pinned items too. |
+| `clipboardLimit` | `30` | Items kept, 1–500. Pinned items are never dropped. |
+| `clipboardSkipSecrets` | `true` | Skip text that looks like a password (one line, no spaces, 8–128 characters, three of lower case, upper case, digits and symbols) when it is copied in a browser, where password manager extensions copy as the browser. Links, paths, email addresses and domain names are kept. |
+| `clipboardIgnoredApps` | `[]` | Bundle ids whose copies are never kept, beside the password managers that always are. |
 
 The old `hapticFeedback: false` is read as `"hapticsMode": "off"`; use `hapticsMode` from now on.
+
+If `config.json` stops parsing (a missing comma while you edit it), Islet keeps the settings it had and writes nothing over the file until it parses again. Settings → Advanced says which line has the error and offers **Replace…**, which keeps a copy as `config.json.broken` and writes the settings in use. Keys Islet doesn't know, from a newer version or your own notes, survive a save. Keys that were replaced by newer ones (`hapticFeedback`, `showPausedMedia`, `hideInFullscreen`, `showOnNonNotchDisplays`, `visualiserColour`, `fullscreenAllowList`, `hideForApps`, `launchAtLogin`) are read once and dropped on save.

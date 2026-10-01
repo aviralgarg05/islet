@@ -30,6 +30,8 @@ public struct ActivityCenter: Sendable {
     public private(set) var hud: HUDEvent?
     /// The activity currently being "sneak peeked" (briefly expanded) and until when.
     public private(set) var sneak: (id: String, until: Date)?
+    /// When `expire` last ran: moments up to then have been dealt with (`nextDeadline`).
+    private var expiredThrough: Date?
 
     public var maxActivities: Int
     public var sneakDuration: TimeInterval
@@ -218,6 +220,7 @@ public struct ActivityCenter: Sendable {
     /// Drop expired activities, HUD and sneak state. Returns ids of removed activities.
     @discardableResult
     public mutating func expire(now: Date) -> [String] {
+        expiredThrough = max(expiredThrough ?? now, now)
         let dead = activities.values.filter { ($0.expiresAt ?? .distantFuture) <= now }.map(\.id)
         for id in dead { activities[id] = nil }
         if let h = hud, h.until <= now { hud = nil }
@@ -261,11 +264,17 @@ public struct ActivityCenter: Sendable {
 
     /// The next moment the visible state changes on its own. The app schedules one timer
     /// for this instead of polling, which keeps idle CPU at zero.
+    ///
+    /// A moment that has already passed comes back as `now` until `expire` has dealt with it,
+    /// so a timer replaced just before it fired can't lose it: expiries, the HUD and the sneak
+    /// are removed by `expire`, and going stale counts once, until the next `expire`.
     public func nextDeadline(now: Date) -> Date? {
-        var candidates: [Date] = activities.values.compactMap(\.expiresAt) + activities.values.compactMap(\.staleAt)
-        if let h = hud { candidates.append(h.until) }
-        if let s = sneak { candidates.append(s.until) }
-        return candidates.filter { $0 > now }.min()
+        var candidates: [Date] = activities.values.compactMap(\.expiresAt).map { max(now, $0) }
+        if let h = hud { candidates.append(max(now, h.until)) }
+        if let s = sneak { candidates.append(max(now, s.until)) }
+        let since = expiredThrough ?? .distantPast
+        candidates += activities.values.compactMap(\.staleAt).filter { $0 > since }.map { max(now, $0) }
+        return candidates.min()
     }
 
     /// Whether any visible activity needs a once-per-second refresh (live countdown).

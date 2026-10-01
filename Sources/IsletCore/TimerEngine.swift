@@ -460,10 +460,20 @@ public struct TimerEngine: Codable, Equatable, Sendable {
 
     /// Reads timers saved by `save(to:)`; nil when the file is missing or unreadable.
     public static func load(from url: URL) -> TimerEngine? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
+        read(from: url).value
+    }
+
+    /// Timers saved by `save(to:)`, or whether the file is missing or doesn't parse.
+    public static func read(from url: URL) -> FileRead<TimerEngine> {
         let d = JSONDecoder()
         d.dateDecodingStrategy = .secondsSince1970
-        return try? d.decode(TimerEngine.self, from: data)
+        return JSONStore.read(TimerEngine.self, from: url, decoder: d)
+    }
+
+    /// What the timers start from at launch. An unreadable `timers.json` is moved to
+    /// `timers.json.corrupt` first, so starting empty never destroys it.
+    public static func start(from url: URL) -> JSONStore.Start<TimerEngine> {
+        JSONStore.start(url, read: read(from:))
     }
 
     public func save(to url: URL) throws {

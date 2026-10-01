@@ -240,14 +240,16 @@ struct ColumnRule: View {
 }
 
 /// Liquid Glass for controls that float over the desktop (the page switcher). A dark fill in
-/// snapshots, with Reduce Transparency and before macOS 26.
+/// snapshots, with Reduce Transparency, while the island is hidden from screenshots, and
+/// before macOS 26.
 struct FloatingGlass<S: InsettableShape>: ViewModifier {
     let shape: S
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.snapshotMode) private var snapshotMode
+    @Environment(\.hiddenFromCapture) private var hiddenFromCapture
 
     func body(content: Content) -> some View {
-        if reduceTransparency || snapshotMode {
+        if reduceTransparency || snapshotMode || hiddenFromCapture {
             content
                 .background(shape.fill(Color(white: 0.07).opacity(0.92)))
                 .overlay(shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5))

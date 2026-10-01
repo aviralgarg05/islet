@@ -220,8 +220,9 @@ extension AppRule {
 }
 
 /// User settings, persisted as human-editable JSON at `~/.config/islet/config.json`
-/// so they can live in a dotfiles repo. Loading is lenient: unknown keys are ignored and
-/// a missing or malformed value falls back to its default without affecting the others.
+/// so they can live in a dotfiles repo. Loading is lenient: unknown keys are ignored (and kept
+/// on save) and a missing or malformed value falls back to its default without affecting the
+/// others. A file that isn't valid JSON is never overwritten (`SettingsFile`).
 public struct IsletSettings: Codable, Equatable, Sendable {
     // Placement & behaviour
     public var displayMode: DisplayMode = .notchedScreen
@@ -237,7 +238,8 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// What the island does over an app in full screen. Replaces `hideInFullscreen` (false
     /// became `show`). An app's rule can keep the island in full screen whatever this says.
     public var fullscreenBehaviour: FullscreenBehaviour = .hide
-    /// Exclude the island from screenshots and screen sharing.
+    /// Keep the island out of screenshots (`NSWindow.sharingType = .none`). Some screen-sharing
+    /// and recording apps (ScreenCaptureKit) still show it; glass draws solid while it is on.
     public var hideFromScreenCapture = false
 
     // Size
@@ -325,6 +327,11 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// Off by default: clipboard history is sensitive.
     public var clipboardEnabled = false
     public var clipboardLimit = 30
+    /// Apps whose copies clipboard history never keeps (bundle ids), beside the password
+    /// managers it always skips.
+    public var clipboardIgnoredApps: [String] = []
+    /// Skip what looks like a password copied in a browser (`ClipboardHistory.looksLikeSecret`).
+    public var clipboardSkipSecrets = true
     public var privacyIndicatorsEnabled = true
     public var systemStatsEnabled = true
     /// Live call timer when a call app is using the microphone.
@@ -524,6 +531,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         s.openDelay = Self.clamp(s.openDelay, Self.openDelayRange)
         s.closeDelay = Self.clamp(s.closeDelay, Self.closeDelayRange)
         s.clipboardLimit = Self.clamp(s.clipboardLimit, Self.clipboardLimitRange)
+        var seenApps: Set<String> = []
+        s.clipboardIgnoredApps = s.clipboardIgnoredApps.map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && seenApps.insert($0).inserted }
         s.wingWidth = Self.clamp(s.wingWidth, Self.wingWidthRange)
         s.maxConcurrent = min(3, max(1, s.maxConcurrent))
         s.alertDuration = Self.clamp(s.alertDuration, Self.alertDurationRange)
@@ -561,7 +571,7 @@ public struct IsletSettings: Codable, Equatable, Sendable {
               let user = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
             return IsletSettings()
         }
-        let known = Set(Mirror(reflecting: IsletSettings()).children.compactMap(\.label))
+        let known = knownKeys
         let decoder = JSONDecoder()
         // The user's keys that were read; the rest fell back to their defaults.
         var applied: Set<String> = []
@@ -608,17 +618,34 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         return port == other ? "The local API and the iPhone bridge need different ports." : nil
     }
 
+    /// The settings in the file, or the defaults when it is missing or doesn't parse. The app
+    /// uses `SettingsFile` instead, which tells those apart and never overwrites a broken file.
     public static func load(from url: URL) -> IsletSettings {
-        guard let data = try? Data(contentsOf: url) else { return IsletSettings() }
-        return decodeLenient(data)
+        read(from: url).value ?? IsletSettings()
     }
 
-    public func save(to url: URL) throws {
-        let e = JSONEncoder()
-        e.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try e.encode(self).write(to: url, options: .atomic)
+    /// The settings in the file, or whether it is missing or doesn't parse (and on which line).
+    public static func read(from url: URL) -> FileRead<IsletSettings> {
+        var file = SettingsFile(url: url)
+        return file.read()
     }
+
+    /// Writes the settings, keeping keys this build doesn't know. Throws the file's
+    /// `FileProblem`, writing nothing, when the file there doesn't parse.
+    public func save(to url: URL) throws {
+        var file = SettingsFile(url: url)
+        if try file.save(self) == .refused, let problem = file.problem { throw problem }
+    }
+
+    /// The keys this build reads and writes.
+    public static let knownKeys: Set<String> = Set(Mirror(reflecting: IsletSettings()).children.compactMap(\.label))
+
+    /// Keys older builds wrote, read once by `decodeLenient` and folded into newer ones. They
+    /// are dropped on save, so the old value can't come back over a newer choice.
+    public static let retiredKeys: Set<String> = [
+        "hapticFeedback", "showPausedMedia", "hideInFullscreen", "showOnNonNotchDisplays", "visualiserColour",
+        "fullscreenAllowList", "hideForApps", "launchAtLogin",
+    ]
 }
 
 /// Well-known file locations.

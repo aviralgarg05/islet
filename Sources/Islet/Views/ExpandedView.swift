@@ -652,6 +652,8 @@ struct FileTile: View {
 
     var body: some View {
         let url = URL(fileURLWithPath: item.path)
+        // On a disk or share that isn't connected: kept, dimmed, until it comes back.
+        let available = Shelf.isAvailable(item) { FileManager.default.fileExists(atPath: $0) }
         VStack(spacing: Space.xs) {
             Image(nsImage: IconCache.file(item.path, size: 48))
                 .resizable()
@@ -663,6 +665,7 @@ struct FileTile: View {
                 .multilineTextAlignment(.center)
                 .frame(width: 72)
         }
+        .opacity(available ? 1 : 0.4)
         .padding(Space.xs)
         .background(RoundedRectangle(cornerRadius: Radius.s, style: .continuous).fill(hovering ? Wash.subtle : .clear))
         .overlay(alignment: .topTrailing) {
@@ -687,7 +690,7 @@ struct FileTile: View {
             Divider()
             Button("Remove from shelf") { model.removeFromShelf(item.id) }
         }
-        .help(item.path)
+        .help(available ? item.path : item.path + "\nOn a disk that isn't connected")
     }
 }
 
@@ -831,9 +834,23 @@ struct ClipboardTab: View {
         } else if model.clipboard.entries.isEmpty {
             EmptyHint(symbol: "doc.on.clipboard", text: "Copy some text and it shows up here.")
         } else {
-            AdaptiveScroll(scrolls: model.clipboard.entries.count > 4) {
+            let clearable = model.clipboard.hasUnpinned
+            AdaptiveScroll(scrolls: model.clipboard.entries.count + (clearable ? 1 : 0) > 4) {
                 VStack(spacing: 0) {
                     ForEach(model.clipboard.entries) { e in ClipRow(entry: e, model: model) }
+                    // Quiet, after the last item; pinned items stay.
+                    if clearable {
+                        HStack {
+                            Spacer(minLength: 0)
+                            Button("Clear unpinned") { model.clearClipboard() }
+                                .buttonStyle(.plain)
+                                .textStyle(.caption)
+                                .foregroundStyle(Ink.tertiary)
+                                .help("Remove everything you haven't pinned")
+                        }
+                        .padding(.horizontal, Space.s)
+                        .frame(height: 24)
+                    }
                 }
             }
             .padding(.horizontal, -Space.s)

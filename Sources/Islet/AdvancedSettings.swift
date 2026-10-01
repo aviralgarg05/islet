@@ -10,6 +10,7 @@ struct AdvancedSettings: View {
     @Bindable var model: AppModel
     @ViewState private var copiedToken = false
     @ViewState private var confirmingReset = false
+    @ViewState private var confirmingReplace = false
     @Environment(\.snapshotMode) private var snapshotMode
 
     private var cli: String { AppActions.cliPath }
@@ -29,6 +30,19 @@ struct AdvancedSettings: View {
                 Text("Links")
             }
             Section("Settings file") {
+                if let problem = model.settingsProblem {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(problem.sentence(file: "config.json") + " Islet is using your last good settings.")
+                            Text("Nothing is saved over the file until it's fixed. Your changes here still apply.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 8)
+                        Button("Replace…") { confirmingReplace = true }
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                }
                 LabeledContent("Location") {
                     Text((IsletPaths.configFile.path as NSString).abbreviatingWithTildeInPath)
                         .font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
@@ -61,10 +75,16 @@ struct AdvancedSettings: View {
         }
         .formStyle(.grouped)
         .alert("Reset all settings?", isPresented: $confirmingReset) {
-            Button("Reset", role: .destructive) { model.settings = IsletSettings() }
+            Button("Reset", role: .destructive) { model.resetSettings() }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Every setting goes back to how Islet came. This can't be undone.")
+        }
+        .alert("Replace config.json?", isPresented: $confirmingReplace) {
+            Button("Replace", role: .destructive) { model.replaceBrokenSettingsFile() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The settings Islet is using now are written in its place. The file as it is now is kept beside it as config.json.broken.")
         }
     }
 

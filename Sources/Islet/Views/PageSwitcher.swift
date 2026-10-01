@@ -114,18 +114,12 @@ struct PageSwitcher: View {
         .accessibilityLabel(help)
     }
 
-    /// Pages that got a switch in Settings, split between the capsule and the "more" menu.
+    /// Pages whose feature is on, split between the capsule and the "more" menu
+    /// (`IslandPage.switcher`). Clipboard is listed only while clipboard history is on.
     static func pages(_ model: AppModel) -> (main: [IslandTab], more: [IslandTab]) {
-        let s = model.settings
-        var main: [IslandTab] = [.home]
-        if s.calendarEnabled || s.remindersEnabled { main.append(.today) }
-        if s.shelfEnabled { main.append(.shelf) }
-        var more: [IslandTab] = [.clipboard]
-        if s.pluginsEnabled { more.append(.widgets) }
-        if s.systemStatsEnabled { more.append(.stats) }
-        // A page opened some other way (a drop, the API) still shows where you are.
-        if model.tab != .ask, !main.contains(model.tab), !more.contains(model.tab) { more.append(model.tab) }
-        return (main, more)
+        let split = IslandPage.switcher(model.settings, current: IslandPage(rawValue: model.tab.rawValue))
+        func tabs(_ pages: [IslandPage]) -> [IslandTab] { pages.compactMap { IslandTab(rawValue: $0.rawValue) } }
+        return (tabs(split.main), tabs(split.more))
     }
 
     /// The rest of the pages, then keep awake, keep open and Settings.

@@ -392,6 +392,7 @@ struct IslandView: View {
         .environment(\.islandReduceMotion, model.settings.reduceMotion || model.settings.animationStyle == .off)
         .environment(\.islandMotion, style)
         .environment(\.visualiserStyle, model.settings.visualiserStyle)
+        .environment(\.hiddenFromCapture, model.settings.hideFromScreenCapture)
         .environment(\.colorScheme, .dark)
     }
 

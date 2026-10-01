@@ -25,6 +25,16 @@ public struct ClipboardHistory: Codable, Equatable, Sendable {
             trim()
         }
     }
+    /// Apps the user chose to ignore (Settings → Shelf & Clipboard). Adding one also forgets
+    /// what was already kept from it, pinned or not.
+    public var ignoredApps: Set<String> = [] {
+        didSet { entries.removeAll { $0.sourceBundleID.map(ignoredApps.contains) ?? false } }
+    }
+    /// Skip what looks like a password copied in a browser (`looksLikeSecret`), where password
+    /// manager extensions copy as the browser itself.
+    public var skipsSecrets = true
+
+    enum CodingKeys: String, CodingKey { case entries, limit }
 
     /// Pasteboard types that mark content as secret or throwaway (nspasteboard.org).
     public static let ignoredTypes: Set<String> = [
@@ -51,6 +61,14 @@ public struct ClipboardHistory: Codable, Equatable, Sendable {
         "com.dashlane.Dashlane",
     ]
 
+    /// Browsers, whose password manager extensions copy passwords as the browser.
+    public static let browsers: Set<String> = [
+        "com.apple.Safari", "com.apple.SafariTechnologyPreview", "com.google.Chrome", "com.google.Chrome.beta",
+        "com.google.Chrome.canary", "org.chromium.Chromium", "org.mozilla.firefox", "org.mozilla.firefoxdeveloperedition",
+        "com.microsoft.edgemac", "com.brave.Browser", "company.thebrowser.Browser", "com.operasoftware.Opera",
+        "com.vivaldi.Vivaldi", "com.kagi.kagimacOS", "app.zen-browser.zen", "com.duckduckgo.macos.browser",
+    ]
+
     public static let maxTextLength = 100_000
 
     public init(limit: Int = 30) { self.limit = max(1, limit) }
@@ -58,10 +76,8 @@ public struct ClipboardHistory: Codable, Equatable, Sendable {
     public enum Outcome: Equatable, Sendable { case added, moved, ignored }
 
     @discardableResult
-    public mutating func add(_ text: String, types: [String], sourceBundleID: String?, now: Date, extraIgnoredApps: Set<String> = []) -> Outcome {
-        if types.contains(where: Self.ignoredTypes.contains) { return .ignored }
-        if let b = sourceBundleID, Self.ignoredApps.contains(b) || extraIgnoredApps.contains(b) { return .ignored }
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= Self.maxTextLength else { return .ignored }
+    public mutating func add(_ text: String, types: [String], sourceBundleID: String?, now: Date) -> Outcome {
+        guard shouldKeep(text, types: types, sourceBundleID: sourceBundleID) else { return .ignored }
         if let i = entries.firstIndex(where: { $0.text == text }) {
             var e = entries.remove(at: i)
             e.date = now
@@ -79,10 +95,46 @@ public struct ClipboardHistory: Codable, Equatable, Sendable {
         entries[i].pinned.toggle()
     }
 
+    /// Whether a copy is kept: never secret or throwaway types (nspasteboard.org), password
+    /// managers, apps the user ignored, likely passwords from a browser, blank text or text
+    /// over `maxTextLength`.
+    public func shouldKeep(_ text: String, types: [String], sourceBundleID: String?) -> Bool {
+        if types.contains(where: Self.ignoredTypes.contains) { return false }
+        if let b = sourceBundleID, Self.ignoredApps.contains(b) || ignoredApps.contains(b) { return false }
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= Self.maxTextLength else { return false }
+        if skipsSecrets, let b = sourceBundleID, Self.browsers.contains(b), Self.looksLikeSecret(text) { return false }
+        return true
+    }
+
+    /// One line with no spaces, 8 to 128 characters, mixing at least three of lower case,
+    /// upper case, digits and symbols: how a generated password looks. Links, paths, email
+    /// addresses and domain names don't count, however mixed.
+    public static func looksLikeSecret(_ text: String) -> Bool {
+        guard (8...128).contains(text.count), !text.contains(where: { $0.isWhitespace }) else { return false }
+        if text.contains("://") || text.hasPrefix("www.") || text.hasPrefix("/") || text.hasPrefix("~/") { return false }
+        if text.range(of: #"^[^@]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[a-z]{2,24}$"#, options: .regularExpression) != nil { return false }
+        if text.range(of: #"^([A-Za-z0-9-]+\.)+[a-z]{2,24}(/\S*)?$"#, options: .regularExpression) != nil { return false }
+        var lower = false, upper = false, digit = false, symbol = false
+        for c in text.unicodeScalars {
+            switch c.properties.generalCategory {
+            case .lowercaseLetter: lower = true
+            case .uppercaseLetter: upper = true
+            case .decimalNumber: digit = true
+            default: symbol = true
+            }
+        }
+        return [lower, upper, digit, symbol].filter { $0 }.count >= 3
+    }
+
     public mutating func remove(id: String) { entries.removeAll { $0.id == id } }
 
-    /// Clears everything except pinned entries.
+    /// Clears everything except pinned entries ("Clear unpinned").
     public mutating func clear() { entries.removeAll { !$0.pinned } }
+
+    /// Forgets everything, pinned entries too: clipboard history was switched off.
+    public mutating func removeAll() { entries.removeAll() }
+
+    public var hasUnpinned: Bool { entries.contains { !$0.pinned } }
 
     mutating func trim() {
         while entries.count > limit, let i = entries.lastIndex(where: { !$0.pinned }) {
@@ -136,8 +188,28 @@ public struct Shelf: Codable, Equatable, Sendable {
     public mutating func remove(id: String) { items.removeAll { $0.id == id } }
     public mutating func removeAll() { items.removeAll() }
 
-    /// Drop entries whose file no longer exists.
-    public mutating func prune(exists: (String) -> Bool) { items.removeAll { !exists($0.path) } }
+    /// Drop entries whose file no longer exists. Files on a disk or share that isn't mounted
+    /// right now stay (`isAvailable` dims them) until it comes back.
+    public mutating func prune(exists: (String) -> Bool) {
+        items.removeAll { item in
+            guard !exists(item.path) else { return false }
+            if let volume = Self.volume(of: item.path), !exists(volume) { return false }
+            return true
+        }
+    }
+
+    /// The external volume a path is on ("/Volumes/Backup"), or nil for the startup disk.
+    public static func volume(of path: String) -> String? {
+        let parts = (path as NSString).standardizingPath.split(separator: "/", omittingEmptySubsequences: true)
+        guard parts.count >= 3, parts[0] == "Volumes" else { return nil }
+        return "/Volumes/" + parts[1]
+    }
+
+    /// Whether an item can be opened now: false while the volume it is on isn't mounted.
+    public static func isAvailable(_ item: ShelfItem, exists: (String) -> Bool) -> Bool {
+        guard let volume = volume(of: item.path) else { return true }
+        return exists(volume)
+    }
 
     public mutating func updatePath(id: String, to path: String) {
         guard let i = items.firstIndex(where: { $0.id == id }) else { return }
