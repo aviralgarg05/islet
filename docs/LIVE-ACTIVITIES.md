@@ -34,11 +34,11 @@ Islet looks up the app name in its catalogue of apps with Live Activities, the s
 
 | Setting | `config.json` key | Default | What it does |
 |---|---|---|---|
-| Show Live Activities from the menu bar | `mirrorMenuBarActivities` | On (needs Accessibility) | Mirror them into the island. |
-| Only when the notch hides them | `mirrorOnlyHiddenActivities` | Off | Mirror only the activities macOS has collapsed into the overflow, so nothing shows twice. |
-| Let scripts read them through the local API | `shareMirroredActivities` | Off | Include them in `GET /v1/activities` and `GET /v1/state`. They often hold addresses, names and scores, so they're left out unless you allow it. The setting also shows their text in `isletctl debug menubar`. Either way, scripts and links can't change or remove them. |
+| Show Live Activities (Settings → Live Activities) | `mirrorMenuBarActivities` | On (needs Accessibility) | Mirror them into the island. |
+| Only when the notch hides them (Settings → Live Activities) | `mirrorOnlyHiddenActivities` | Off | Mirror only the activities macOS has collapsed into the overflow, so nothing shows twice. |
+| Let scripts read Live Activities (Settings → Advanced → Local API) | `shareMirroredActivities` | Off | Include them in `GET /v1/activities` and `GET /v1/state`. They often hold addresses, names and scores, so they're left out unless you allow it. The setting also shows their text in `isletctl debug menubar`. Either way, scripts and links can't change or remove them. |
 
-The last two appear once the first is on. Shared activities have `"source": "live-activity"` and an `id` starting with `live-`.
+The second is dimmed while the first is off. Shared activities have `"source": "live-activity"` and an `id` starting with `live-`.
 
 The text Islet reads stays in memory. It isn't written to disk or logs. `GET /v1/debug/menubar` (what `isletctl debug menubar` uses) needs the API token and returns the menu bar's layout even with mirroring off, but leaves out the text of Live Activities unless the sharing setting is on.
 

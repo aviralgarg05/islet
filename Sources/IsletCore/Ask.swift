@@ -393,7 +393,7 @@ public enum AskProviderStatus: Equatable, Sendable {
             case .claudeCode, .codex: return "Runs \(kind.title) with your existing login, so it counts towards your plan."
             }
         case .needsKey:
-            return "Add \(kind == .openai ? "an OpenAI" : "an Anthropic") API key in Settings → AI to ask \(kind.title)."
+            return "Add \(kind == .openai ? "an OpenAI" : "an Anthropic") API key in Settings → Ask & AI to ask \(kind.title)."
         case .notInstalled:
             let dirs = kind == .claudeCode ? "~/.local/bin, /opt/homebrew/bin, /usr/local/bin or ~/.claude/local"
                                            : "~/.local/bin, /opt/homebrew/bin or /usr/local/bin"
@@ -450,13 +450,13 @@ public enum AskErrorText {
         case 400:
             return "\(vendor) rejected the request" + (apiMessage.map { ": \($0)" } ?? ".")
         case 401:
-            return "\(vendor) rejected the API key. Enter it again in Settings → AI."
+            return "\(vendor) rejected the API key. Enter it again in Settings → Ask & AI."
         case 402:
             return "\(vendor) reports a billing problem on your account."
         case 403:
             return "This API key isn't allowed to do that" + (apiMessage.map { ": \($0)" } ?? ".")
         case 404:
-            return "Model not found. Pick another one in Settings → AI."
+            return "Model not found. Pick another one in Settings → Ask & AI."
         case 413:
             return "The question is too long."
         case 429:

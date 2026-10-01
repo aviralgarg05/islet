@@ -128,7 +128,8 @@ struct AskView: View {
                 .foregroundStyle(Ink.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if status == .needsKey {
-                Button("Open Settings") { AppActions.openSettings() }
+                // Straight to the key's row on Ask & AI.
+                Button("Add a Key…") { AppActions.openSettings(.ai, at: kind == .openai ? "ai.openai" : "ai.anthropic") }
                     .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
             }
         }
@@ -260,7 +261,7 @@ struct AskProviderChip: View {
                 }
                 .pickerStyle(.inline)
                 Divider()
-                Button("Open Settings…") { AppActions.openSettings() }
+                Button("Ask & AI Settings…") { AppActions.openSettings(.ai) }
             } label: {
                 label
             }

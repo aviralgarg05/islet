@@ -160,6 +160,9 @@ import Testing
         let rt = lan(FakeBackend(now: t0))
         #expect(rt.preflight(req("GET", "/v1/health", token: nil)) == nil)
         #expect(rt.preflight(req("POST", "/v1/notify", token: nil))?.status == 401)
+        // The refusal says where the bridge's token is, by the Settings page's current name.
+        let refusal = String(decoding: rt.preflight(req("POST", "/v1/notify", token: nil))?.body ?? Data(), as: UTF8.self)
+        #expect(refusal.contains("Settings → \(SettingsPage.advanced.title) → iPhone bridge"), "\(refusal)")
         #expect(rt.preflight(req("POST", "/v1/notify", token: lanToken)) == nil)
         #expect(rt.preflight(req("POST", "/v1/media", token: lanToken))?.status == 403)
         var browser = req("POST", "/v1/notify", token: lanToken)

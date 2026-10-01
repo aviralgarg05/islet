@@ -223,7 +223,7 @@ public struct APIRouter: Sendable {
         if Self.isHealthCheck(request) { return nil }
         guard authorized(request) else {
             return scope == .lan
-                ? .error(401, "missing or wrong token; send 'Authorization: Bearer <token>' with the token from Settings → Integrations → iPhone bridge")
+                ? .error(401, "missing or wrong token; send 'Authorization: Bearer <token>' with the token from Settings → Advanced → iPhone bridge")
                 : .error(401, "missing or wrong token; send 'Authorization: Bearer <token>' (see `isletctl token`)")
         }
         if scope == .lan, !Self.lanAllows(request) { return .error(403, Self.lanRefusal) }

@@ -33,7 +33,7 @@ extension Snapshots {
         shoot("26-expanded-ask-streaming")
 
         ask.showForSnapshot(question: "Hello", answer: "", provider: .anthropic, usage: nil,
-                            phase: .failed("Anthropic rejected the API key. Enter it again in Settings → AI."))
+                            phase: .failed("Anthropic rejected the API key. Enter it again in Settings → Ask & AI."))
         shoot("27-expanded-ask-error")
 
         ask.clearForSnapshot()

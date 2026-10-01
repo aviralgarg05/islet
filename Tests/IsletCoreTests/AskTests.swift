@@ -222,7 +222,7 @@ func joinedText(_ events: [AskEvent]) -> String {
     @Test func httpStatuses() {
         let empty = Data()
         #expect(AskErrorText.http(status: 401, body: empty, retryAfter: nil, provider: .anthropic)
-                == "Anthropic rejected the API key. Enter it again in Settings → AI.")
+                == "Anthropic rejected the API key. Enter it again in Settings → Ask & AI.")
         #expect(AskErrorText.http(status: 429, body: empty, retryAfter: "12", provider: .anthropic) == "Rate limited. Try again in 12 s.")
         #expect(AskErrorText.http(status: 429, body: empty, retryAfter: "Wed, 21 Oct 2026 07:28:00 GMT", provider: .openai)
                 == "Rate limited. Try again shortly.")
@@ -477,7 +477,7 @@ func joinedText(_ events: [AskEvent]) -> String {
         #expect(AskProviderKind(alias: "OpenAI") == .openai)
         #expect(AskProviderKind(alias: "claude_code") == .claudeCode)
         #expect(AskProviderKind(alias: "") == nil)
-        #expect(AskProviderStatus.needsKey.message(for: .openai) == "Add an OpenAI API key in Settings → AI to ask ChatGPT.")
+        #expect(AskProviderStatus.needsKey.message(for: .openai) == "Add an OpenAI API key in Settings → Ask & AI to ask ChatGPT.")
         #expect(AskProviderStatus.notInstalled.message(for: .claudeCode).hasSuffix("/usr/local/bin or ~/.claude/local."))
         #expect(AskProviderStatus.unavailable(AskProviderStatus.onDeviceReason("modelNotReady")).message(for: .onDevice)
                 == "Apple Intelligence is still downloading. Pick another provider from the menu.")
