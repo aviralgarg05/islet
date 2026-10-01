@@ -14,18 +14,21 @@ public final class ToolsService: NSObject, URLSessionTaskDelegate, @unchecked Se
         public var data: Data
     }
 
-    /// Replies larger than this are refused (a page of a few hundred orders is well under it).
-    static let maxReply = 8 * 1024 * 1024
+    /// Replies larger than this are refused while they arrive, so a runaway reply is never
+    /// held in full (a page of a few hundred orders is well under it).
+    public static let maxReply = 8 * 1024 * 1024
 
     private let protocolClasses: [AnyClass]
     private let timeout: TimeInterval
+    private let maxReply: Int
     private let lock = NSLock()
     private var made: URLSession?
 
     /// `protocolClasses` lets tests answer requests without the network.
-    public init(protocolClasses: [AnyClass] = [], timeout: TimeInterval = 20) {
+    public init(protocolClasses: [AnyClass] = [], timeout: TimeInterval = 20, maxReply: Int = ToolsService.maxReply) {
         self.protocolClasses = protocolClasses
         self.timeout = timeout
+        self.maxReply = maxReply
     }
 
     private var session: URLSession {
@@ -63,8 +66,21 @@ public final class ToolsService: NSObject, URLSessionTaskDelegate, @unchecked Se
         for (name, value) in r.headers { request.setValue(value, forHTTPHeaderField: name) }
         request.httpBody = r.body
         do {
-            let (data, response) = try await session.data(for: request)
-            guard data.count <= Self.maxReply else { throw WebProblem.unreadable }
+            let (bytes, response) = try await session.bytes(for: request)
+            // Too long by its own account, or once it grows past the cap: stop reading.
+            guard response.expectedContentLength <= Int64(maxReply) else {
+                bytes.task.cancel()
+                throw WebProblem.unreadable
+            }
+            var data = Data()
+            if response.expectedContentLength > 0 { data.reserveCapacity(Int(response.expectedContentLength)) }
+            for try await byte in bytes {
+                data.append(byte)
+                if data.count > maxReply {
+                    bytes.task.cancel()
+                    throw WebProblem.unreadable
+                }
+            }
             return Reply(status: (response as? HTTPURLResponse)?.statusCode ?? 0, data: data)
         } catch let e as WebProblem {
             throw e

@@ -46,6 +46,12 @@ import Testing
         let json = #"{"chart":{"result":null,"error":{"code":"Not Found","description":"No data found, symbol may be delisted"}}}"#
         #expect(throws: WebProblem.message("No data found, symbol may be delisted")) { try StocksAPI.parse(Data(json.utf8)) }
         #expect(throws: WebProblem.unreadable) { try StocksAPI.parse(Data("{}".utf8)) }
+        // Only an unknown symbol is "Not found"; being offline or asked too often says so.
+        #expect(StocksAPI.problemLabel(.message("No data found")) == "Not found")
+        #expect(StocksAPI.problemLabel(.notFound) == "Not found")
+        #expect(StocksAPI.problemLabel(.unreachable) == "Can't connect")
+        #expect(StocksAPI.problemLabel(.rateLimited) == "Try again later")
+        #expect(StocksAPI.problemLabel(.server(503)) == "Couldn't read")
     }
 
     @Test func sparklineFitsItsBox() {
@@ -130,6 +136,14 @@ import Testing
         #expect(r.url.absoluteString == "https://api.github.com/users/octo-cat/settings/billing/premium_request/usage?year=2026&month=9")
         #expect(r.headers["Authorization"] == "Bearer \(token)" && r.headers["X-GitHub-Api-Version"] == "2022-11-28")
         #expect(CopilotUsage.usageRequest(login: "a/b", token: token, now: now) == nil)
+        // GitHub's billing month is UTC's, wherever the Mac is: 23:30 UTC on 30 September is
+        // already October in Tokyo, but September's requests are the ones counted.
+        let lateSeptember = Date(timeIntervalSince1970: 1_790_811_000)
+        var tokyo = Calendar(identifier: .gregorian)
+        tokyo.timeZone = TimeZone(identifier: "Asia/Tokyo")!
+        #expect(tokyo.component(.month, from: lateSeptember) == 10)
+        let billed = try #require(CopilotUsage.usageRequest(login: "octo-cat", token: token, now: lateSeptember))
+        #expect(billed.url.query == "year=2026&month=9")
         let json = """
         {"timePeriod":{"year":2026,"month":9},"user":"octo-cat","usageItems":[
           {"product":"Copilot","sku":"Copilot Premium Request","model":"Claude Sonnet 4.5","grossQuantity":100,"discountQuantity":100,"netQuantity":0},

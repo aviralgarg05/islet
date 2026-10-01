@@ -65,6 +65,22 @@ extension Snapshots {
         model.teleprompter.showDemo("", at: 0)
         shoot("91e-teleprompter-empty")
 
+        // A symbol Yahoo doesn't know, one with no connection and no price yet, and one whose
+        // earlier price stays while the new one can't be read.
+        model.tab = .stocks
+        model.stocks.showDemo(now: now)
+        model.stocks.showDemoProblems(["NVDA": .message("No data found"), "^GSPC": .unreachable, "MSFT": .unreachable],
+                                      stale: ["MSFT"])
+        size(.standard)
+        shoot("92b-stocks-problems-standard")
+        size(.compact)
+
+        // Every store connected: the list scrolls rather than running off the page.
+        model.tab = .sales
+        model.settings.sales.stores = SalesStore.allCases
+        model.sales.showDemo(now: now, stores: SalesStore.allCases)
+        shoot("93c-sales-every-store-compact")
+
         // Sales with no store connected yet.
         model.tab = .sales
         model.settings.sales.stores = []

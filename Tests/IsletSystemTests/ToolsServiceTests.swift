@@ -113,6 +113,24 @@ final class FakeWeb: URLProtocol {
         #expect(FakeWeb.requests(key).first?.url?.host == "openrouter.ai")
     }
 
+    @Test func anOversizedReplyIsRefusedWhileItArrives() async throws {
+        let small = ToolsService(protocolClasses: [FakeWeb.self], timeout: 5, maxReply: 1024)
+        let big = "{\"pad\":\"" + String(repeating: "x", count: 4096) + "\"}"
+        let key = "oversized-0123456789"
+        FakeWeb.script(key, [FakeWeb.Reply(body: big)])
+        await #expect(throws: WebProblem.unreadable) { _ = try await small.send(OpenRouterUsage.request(key: key), hosts: [OpenRouterUsage.host]) }
+        // Saying so up front is enough.
+        let declared = "declared-0123456789"
+        FakeWeb.script(declared, [FakeWeb.Reply(body: big, headers: ["content-type": "application/json", "Content-Length": "4108"])])
+        await #expect(throws: WebProblem.unreadable) { _ = try await small.send(OpenRouterUsage.request(key: declared), hosts: [OpenRouterUsage.host]) }
+        // A reply under the cap arrives whole.
+        let fine = "fine-0123456789"
+        FakeWeb.script(fine, [FakeWeb.Reply(body: #"{"data":{"usage_daily":1}}"#)])
+        let reply = try await small.send(OpenRouterUsage.request(key: fine), hosts: [OpenRouterUsage.host])
+        #expect(String(decoding: reply.data, as: UTF8.self) == #"{"data":{"usage_daily":1}}"#)
+        small.invalidate()
+    }
+
     @Test func noConnectionIsUnreachable() async {
         let key = "offline-0123456789"
         FakeWeb.script(key, [FakeWeb.Reply(fail: .notConnectedToInternet)])

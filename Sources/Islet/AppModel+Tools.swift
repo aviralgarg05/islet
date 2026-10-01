@@ -63,11 +63,14 @@ extension AppModel {
         tab == .teleprompter && settings.teleprompter.enabled && settings.teleprompter.seeThrough
     }
 
-    /// A scroll over the open island while the teleprompter shows moves the script (and stops
-    /// it) instead of counting as a swipe. Returns whether it was used.
-    func teleprompterScroll(deltaY: Double, precise: Bool) -> Bool {
-        guard expandedScreen != nil, tab == .teleprompter, settings.teleprompter.enabled, deltaY != 0 else { return false }
-        teleprompter.scroll(by: -deltaY * (precise ? 1 : 12))
+    /// An up-and-down scroll over the open island while the teleprompter shows a script moves
+    /// it (and stops it) instead of counting as a swipe. Returns whether it was used.
+    func teleprompterScroll(deltaX: Double, deltaY: Double, precise: Bool) -> Bool {
+        guard expandedScreen != nil, tab == .teleprompter, settings.teleprompter.enabled,
+              let distance = Teleprompter.scrollDistance(dx: deltaX, dy: deltaY, precise: precise,
+                                                         hasScript: !teleprompter.script.isEmpty)
+        else { return false }
+        teleprompter.scroll(by: distance)
         return true
     }
 

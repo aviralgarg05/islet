@@ -44,6 +44,9 @@ import Testing
         #expect(polar["created_after"] == "2026-09-30T23:00:00Z" && polar["page"] == "1")
         let paddle = try SalesAPI.request(.paddle, key: Self.key, since: Self.since)
         #expect(paddle.url.host == "api.paddle.com" && Self.query(paddle)["status"] == "completed")
+        // Paddle refuses a page larger than 30 transactions.
+        #expect(Int(Self.query(paddle)["per_page"] ?? "") == 30)
+        #expect(Self.query(paddle)["created_at[GTE]"] == "2026-09-30T23:00:00Z")
         let sandbox = try SalesAPI.request(.paddle, key: "pdl" + "_sdbx_" + "apikey_0123456789", since: Self.since)
         #expect(sandbox.url.host == "sandbox-api.paddle.com")
         #expect(Self.query(try SalesAPI.request(.lemonSqueezy, key: Self.key, since: Self.since, cursor: .page(3)))["page[number]"] == "3")
@@ -207,6 +210,37 @@ import Testing
         var london = Calendar(identifier: .gregorian)
         london.timeZone = TimeZone(identifier: "Europe/London")!
         #expect(SalesSchedule.startOfDay(now, calendar: london) == Self.since)
+    }
+
+    @Test func midnightStartsANewDay() {
+        var london = Calendar(identifier: .gregorian)
+        london.timeZone = TimeZone(identifier: "Europe/London")!
+        // Asked at 23:55: the next ask is at midnight, not 00:10, so "Today" turns over then.
+        let lateLast = Self.since.addingTimeInterval(-5 * 60)
+        #expect(SalesSchedule.nextRefresh(last: lateLast, enabled: true, hasStores: true, locked: false, lowPower: false,
+                                          now: lateLast, calendar: london) == Self.since)
+        // Earlier in the day the quarter hour comes first.
+        let noon = Self.since.addingTimeInterval(12 * 3600)
+        #expect(SalesSchedule.nextRefresh(last: noon, enabled: true, hasStores: true, locked: false, lowPower: false,
+                                          now: noon, calendar: london) == noon.addingTimeInterval(15 * 60))
+        // Locked over midnight: asked as soon as it is unlocked.
+        let morning = Self.since.addingTimeInterval(7 * 3600)
+        #expect(SalesSchedule.nextRefresh(last: lateLast, enabled: true, hasStores: true, locked: false, lowPower: false,
+                                          now: morning, calendar: london) == morning)
+    }
+
+    @Test func aStoreConnectedDuringARefreshKeepsItsFigures() {
+        let stripe = StoreSales(store: .stripe, figures: SalesFigures(amounts: ["GBP": 100], orders: 1))
+        let newStripe = StoreSales(store: .stripe, figures: SalesFigures(amounts: ["GBP": 300], orders: 2))
+        let polar = StoreSales(store: .polar, figures: SalesFigures(amounts: ["USD": 50], orders: 1))
+        // Polar was connected in Settings while Stripe's refresh was under way.
+        let merged = SalesSummary.merged([newStripe], into: [stripe, polar], order: [.stripe, .polar])
+        #expect(merged.stores == [newStripe, polar] && !merged.missing)
+        // A store added by hand with nothing yet is asked for next; one removed goes.
+        let added = SalesSummary.merged([newStripe], into: [polar], order: [.paddle, .stripe])
+        #expect(added.stores == [newStripe] && added.missing)
+        // Shown in the order they were connected.
+        #expect(SalesSummary.merged([newStripe, polar], into: [], order: [.polar, .stripe]).stores.map(\.store) == [.polar, .stripe])
     }
 
     @Test func problemsReadPlainly() {

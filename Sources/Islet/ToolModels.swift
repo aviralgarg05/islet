@@ -26,6 +26,9 @@ final class SalesModel {
     /// The deadline may have moved.
     @ObservationIgnored var onChange: (() -> Void)?
     @ObservationIgnored private let lockMonitor = UnlockMonitor()
+    /// Low Power Mode turning off brings the 15-minute rhythm back without waiting for
+    /// something else to move the deadline.
+    @ObservationIgnored private var powerObserver: NSObjectProtocol?
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored var calendar = Calendar.current
 
@@ -42,9 +45,17 @@ final class SalesModel {
             lockMonitor.onLock = { [weak self] in self?.setLocked(true) }
             lockMonitor.onUnlock = { [weak self] in self?.setLocked(false) }
             lockMonitor.start()
+            if powerObserver == nil {
+                powerObserver = NotificationCenter.default.addObserver(forName: .NSProcessInfoPowerStateDidChange, object: nil,
+                                                                       queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.onChange?() }
+                }
+            }
         } else {
             lockMonitor.stop()
             locked = false
+            if let powerObserver { NotificationCenter.default.removeObserver(powerObserver) }
+            powerObserver = nil
         }
         if !s.enabled {
             task?.cancel()
@@ -55,8 +66,8 @@ final class SalesModel {
         } else {
             stores = stores.filter { s.stores.contains($0.store) }
             // A store with no figures yet: ask again soon. (Connecting in Settings already
-            // brought the new store's figures.)
-            if s.stores.contains(where: { store in !stores.contains { $0.store == store } }) { lastRefresh = nil }
+            // brought the new store's figures.) While a refresh is under way, `finish` checks.
+            if !refreshing, s.stores.contains(where: { store in !stores.contains { $0.store == store } }) { lastRefresh = nil }
         }
         onChange?()
     }
@@ -69,7 +80,8 @@ final class SalesModel {
     func nextRefresh(now: Date) -> Date? {
         guard !refreshing else { return nil }
         return SalesSchedule.nextRefresh(last: lastRefresh, enabled: settings.enabled, hasStores: !settings.stores.isEmpty,
-                                         locked: locked, lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled, now: now)
+                                         locked: locked, lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled, now: now,
+                                         calendar: calendar)
     }
 
     func refreshIfDue(now: Date) {
@@ -109,9 +121,10 @@ final class SalesModel {
 
     private func finish(_ results: [StoreSales]) {
         refreshing = false
-        let order = settings.stores
-        stores = results.filter { order.contains($0.store) }
-            .sorted { (order.firstIndex(of: $0.store) ?? 0) < (order.firstIndex(of: $1.store) ?? 0) }
+        let merged = SalesSummary.merged(results, into: stores, order: settings.stores)
+        stores = merged.stores
+        // A store added while this refresh was under way is asked for next.
+        if merged.missing { lastRefresh = nil }
         onChange?()
     }
 
@@ -138,8 +151,8 @@ final class SalesModel {
     }
 
     /// Fixed figures for offline snapshots.
-    func showDemo(now: Date) {
-        settings = SalesSettings(enabled: true, stores: [.stripe, .shopify, .gumroad], shopifyStore: "example")
+    func showDemo(now: Date, stores connected: [SalesStore] = [.stripe, .shopify, .gumroad]) {
+        settings = SalesSettings(enabled: true, stores: connected, shopifyStore: "example")
         stores = [
             StoreSales(store: .stripe, figures: SalesFigures(amounts: ["GBP": 128_450], orders: 23), updatedAt: now),
             StoreSales(store: .shopify, figures: SalesFigures(amounts: ["GBP": 46_200, "EUR": 8_900], orders: 7), updatedAt: now),
@@ -247,6 +260,15 @@ final class StocksModel {
         ]
         problems = [:]
         lastRefresh = now.addingTimeInterval(-40)
+    }
+
+    /// Snapshots: these symbols couldn't be read; those in `stale` keep the price from before.
+    func showDemoProblems(_ list: [String: WebProblem], stale: Set<String>) {
+        for (symbol, problem) in list {
+            if !symbols.contains(symbol) { symbols.append(symbol) }
+            problems[symbol] = problem
+            if !stale.contains(symbol) { quotes[symbol] = nil }
+        }
     }
 }
 

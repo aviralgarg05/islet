@@ -166,8 +166,11 @@ public struct StoreSales: Equatable, Sendable, Identifiable {
 /// only: paid orders or payments created since the start of today, less refunds, with test
 /// orders left out.
 public enum SalesAPI {
-    /// Pages read at most per store and refresh (a few thousand orders).
+    /// Pages read at most per store and refresh (a few thousand orders; Paddle's pages are
+    /// smaller).
     public static let maxPages = 10
+    /// Paddle's largest page for transactions: a bigger `per_page` is refused.
+    static let paddlePageSize = 30
     static let shopifyVersion = "2025-07"
 
     /// The hosts a store's requests may go to.
@@ -259,7 +262,8 @@ public enum SalesAPI {
             }
             let host = key.contains("_sdbx_") ? "sandbox-api.paddle.com" : "api.paddle.com"
             return WebRequest(url: WebRequest.url("https://\(host)/transactions", [
-                ("status", "completed"), ("created_at[GTE]", ToolJSON.iso(since)), ("per_page", "200"), ("order_by", "created_at[DESC]"),
+                ("status", "completed"), ("created_at[GTE]", ToolJSON.iso(since)), ("per_page", String(paddlePageSize)),
+                ("order_by", "created_at[DESC]"),
             ]), headers: bearer)
         }
     }
@@ -416,6 +420,18 @@ public enum SalesSummary {
         return all
     }
 
+    /// The stores to show after a refresh, in the order they were connected: each one's new
+    /// result, or else the one it already had (a store connected in Settings while the refresh
+    /// was under way keeps the figures it was checked with). `missing` says a connected store
+    /// has nothing to show yet, so it is asked for straight away.
+    public static func merged(_ results: [StoreSales], into previous: [StoreSales],
+                              order: [SalesStore]) -> (stores: [StoreSales], missing: Bool) {
+        let shown = order.compactMap { store in
+            results.first { $0.store == store } ?? previous.first { $0.store == store }
+        }
+        return (shown, shown.count < order.count)
+    }
+
     /// The headline amount (the user's own currency when there are takings in it, else the
     /// largest) and the rest, largest first. Nil with nothing taken yet.
     public static func headline(_ figures: SalesFigures, preferred: String?) -> (main: Money, others: [Money])? {
@@ -429,13 +445,20 @@ public enum SalesSummary {
 
 /// When sales are asked for again: every 15 minutes while the feature is on, a store is
 /// connected and the Mac is unlocked, and not in Low Power Mode (opening the page still does).
+/// Midnight also counts, so "Today" never shows yesterday's takings for long.
 public enum SalesSchedule {
     public static let interval: TimeInterval = 15 * 60
 
-    public static func nextRefresh(last: Date?, enabled: Bool, hasStores: Bool, locked: Bool, lowPower: Bool, now: Date) -> Date? {
+    public static func nextRefresh(last: Date?, enabled: Bool, hasStores: Bool, locked: Bool, lowPower: Bool, now: Date,
+                                   calendar: Calendar = .current) -> Date? {
         guard enabled, hasStores, !locked, !lowPower else { return nil }
         guard let last else { return now }
-        return max(now, last.addingTimeInterval(interval))
+        return max(now, min(last.addingTimeInterval(interval), nextDay(after: last, calendar: calendar)))
+    }
+
+    /// The midnight after `date` in `calendar`'s time zone.
+    static func nextDay(after date: Date, calendar: Calendar) -> Date {
+        calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: date)) ?? date.addingTimeInterval(86_400)
     }
 
     /// Opening the page asks again once the figures are a minute old.

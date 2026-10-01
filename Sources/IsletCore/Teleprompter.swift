@@ -46,6 +46,17 @@ public enum Teleprompter {
         return "About \(Int(minutes.rounded())) min"
     }
 
+    /// Points a line of a classic mouse wheel moves the script.
+    public static let wheelLine: Double = 12
+
+    /// How far a scroll over the page moves the script, in points (positive goes on in the
+    /// script), or nil when the scroll isn't the script's: with no script to move, or a mostly
+    /// sideways scroll. Then it stays a swipe, so swiping up still closes the island.
+    public static func scrollDistance(dx: Double, dy: Double, precise: Bool, hasScript: Bool) -> Double? {
+        guard hasScript, dy != 0, dx.isFinite, dy.isFinite, abs(dy) >= abs(dx) else { return nil }
+        return -dy * (precise ? 1 : wheelLine)
+    }
+
     /// The script as kept: no trailing blank lines or spaces, and no longer than the limit.
     public static func normalised(_ script: String) -> String {
         var s = script.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")

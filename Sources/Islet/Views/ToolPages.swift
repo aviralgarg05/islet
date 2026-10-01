@@ -140,7 +140,8 @@ struct TeleprompterTab: View {
                       text: "Paste a script, then press play. It moves up just under the camera, so you read while looking into it.") {
                 Button("Paste") { paste() }
                     .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
-                    .disabled(NSPasteboard.general.string(forType: .string)?.isEmpty ?? true)
+                    // Only whether there is text, never the text itself, until Paste is pressed.
+                    .disabled(NSPasteboard.general.availableType(from: [.string]) == nil)
                 Button("Write in Settings") { AppActions.openSettings(.tools, at: "tools.teleprompter") }
                     .buttonStyle(CapsuleButtonStyle())
             }
@@ -279,7 +280,8 @@ struct StockRow: View {
                     .textStyle(.body, emphasized: true)
                     .foregroundStyle(Ink.primary)
                     .lineLimit(1)
-                Text(problem.map { _ in "Not found" } ?? quote.map { symbol.hasPrefix("^") ? symbol : $0.displayName } ?? " ")
+                // A price from earlier stays with its name; without one, why it is missing.
+                Text(quote.map { symbol.hasPrefix("^") ? symbol : $0.displayName } ?? problem.map(StocksAPI.problemLabel) ?? " ")
                     .textStyle(.caption)
                     .foregroundStyle(Ink.tertiary)
                     .lineLimit(1)
@@ -341,6 +343,7 @@ struct SparklineView: View {
 struct SalesTab: View {
     let model: AppModel
     let size: CGSize
+    @Environment(\.snapshotMode) private var snapshotMode
 
     var body: some View {
         let sales = model.sales
@@ -351,12 +354,16 @@ struct SalesTab: View {
             }
         } else {
             let left = (size.width * 0.44).rounded()
+            let connected = model.settings.sales.stores
+            let fits = Self.fitting(in: size.height)
+            // Snapshots can't scroll, so they show what fits.
+            let shown = snapshotMode ? Array(connected.prefix(fits)) : connected
             HStack(alignment: .top, spacing: 0) {
                 summary(sales).frame(width: left, height: size.height, alignment: .topLeading)
                 ColumnRule().frame(height: size.height).padding(.horizontal, Space.l)
-                AdaptiveScroll(scrolls: sales.stores.count > 3) {
+                AdaptiveScroll(scrolls: connected.count > fits) {
                     VStack(alignment: .leading, spacing: Space.s) {
-                        ForEach(model.settings.sales.stores) { store in
+                        ForEach(shown) { store in
                             StoreRow(store: store, sales: sales.stores.first { $0.store == store })
                         }
                     }
@@ -365,6 +372,9 @@ struct SalesTab: View {
             }
         }
     }
+
+    /// Store rows that fit without scrolling.
+    static func fitting(in height: CGFloat) -> Int { max(1, Int((height + Space.s) / (StoreRow.height + Space.s))) }
 
     private func summary(_ sales: SalesModel) -> some View {
         let figures = sales.total
@@ -408,6 +418,8 @@ struct StoreRow: View {
     let store: SalesStore
     let sales: StoreSales?
 
+    static let height: CGFloat = 20
+
     var body: some View {
         HStack(spacing: Space.s) {
             Circle().fill(Color(tint: store.tint)).frame(width: 6, height: 6)
@@ -426,7 +438,7 @@ struct StoreRow: View {
                 Text("…").textStyle(.body).foregroundStyle(Ink.tertiary)
             }
         }
-        .frame(height: 20)
+        .frame(height: Self.height)
         .accessibilityElement(children: .combine)
     }
 }

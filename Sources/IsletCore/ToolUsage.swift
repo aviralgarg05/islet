@@ -195,7 +195,14 @@ public enum CopilotUsage {
         (1...39).contains(s.count) && s.unicodeScalars.allSatisfy { $0.isASCII && (CharacterSet.alphanumerics.contains($0) || $0 == "-") }
     }
 
-    public static func usageRequest(login: String, token: String, now: Date, calendar: Calendar = .current) -> WebRequest? {
+    /// GitHub's billing months run in UTC, so this month is UTC's unless a test says otherwise.
+    public static let billingCalendar: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "UTC") ?? TimeZone(secondsFromGMT: 0)!
+        return c
+    }()
+
+    public static func usageRequest(login: String, token: String, now: Date, calendar: Calendar = billingCalendar) -> WebRequest? {
         guard isLogin(login) else { return nil }
         let c = calendar.dateComponents([.year, .month], from: now)
         let url = WebRequest.url("https://\(host)/users/\(login)/settings/billing/premium_request/usage",

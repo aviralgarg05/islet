@@ -169,6 +169,19 @@ import Testing
         #expect(!still.isPlaying)
     }
 
+    @Test func onlyAnUpAndDownScrollOverAScriptMovesIt() {
+        // Fingers up (natural scrolling reports a negative delta) go on in the script.
+        #expect(Teleprompter.scrollDistance(dx: 0, dy: -6, precise: true, hasScript: true) == 6)
+        #expect(Teleprompter.scrollDistance(dx: 1, dy: 4, precise: true, hasScript: true) == -4)
+        // A wheel counts in lines.
+        #expect(Teleprompter.scrollDistance(dx: 0, dy: -1, precise: false, hasScript: true) == Teleprompter.wheelLine)
+        // Sideways, still, or with no script to move: it stays a swipe.
+        #expect(Teleprompter.scrollDistance(dx: 8, dy: 2, precise: true, hasScript: true) == nil)
+        #expect(Teleprompter.scrollDistance(dx: 0, dy: 0, precise: true, hasScript: true) == nil)
+        #expect(Teleprompter.scrollDistance(dx: 0, dy: -6, precise: true, hasScript: false) == nil)
+        #expect(Teleprompter.scrollDistance(dx: .nan, dy: -6, precise: true, hasScript: true) == nil)
+    }
+
     @Test func scriptIsNormalised() {
         #expect(Teleprompter.normalised("Hello\r\nthere\n\n  \n") == "Hello\nthere")
         #expect(Teleprompter.normalised(String(repeating: "a", count: Teleprompter.maxScriptLength + 10)).count == Teleprompter.maxScriptLength)

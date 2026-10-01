@@ -76,6 +76,17 @@ public enum StocksAPI {
         return WebRequest(url: url, headers: ["Accept": "application/json"])
     }
 
+    /// A word or two for a row whose price couldn't be read. Only a symbol Yahoo doesn't know
+    /// is "Not found"; no connection or a busy server says so instead.
+    public static func problemLabel(_ problem: WebProblem) -> String {
+        switch problem {
+        case .notFound, .message: return "Not found"
+        case .unreachable: return "Can't connect"
+        case .rateLimited: return "Try again later"
+        default: return "Couldn't read"
+        }
+    }
+
     public static func parse(_ data: Data) throws -> StockQuote {
         let o = try ToolJSON.object(data)
         let chart = o["chart"] as? [String: Any]

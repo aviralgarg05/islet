@@ -115,7 +115,8 @@ final class TeleprompterController {
     }
 }
 
-/// The Mirror page's camera: on while the page shows, off as soon as it doesn't.
+/// The Mirror page's camera: on while the page shows, off as soon as it doesn't, and off while
+/// the screen is locked or asleep even if the page was left open.
 @MainActor
 @Observable
 final class MirrorModel {
@@ -123,6 +124,14 @@ final class MirrorModel {
     private(set) var access: PermissionStatus = .notDetermined
 
     @ObservationIgnored private var showing = false
+    /// The screen is locked, or asleep: nobody is looking, so the camera stays off. Waking
+    /// to the lock screen keeps it off until the Mac is unlocked.
+    @ObservationIgnored private var locked = false
+    @ObservationIgnored private var asleep = false
+    private var away: Bool { locked || asleep }
+    /// Watched only while the page shows.
+    @ObservationIgnored private let lockMonitor = UnlockMonitor()
+    @ObservationIgnored private var sleepObservers: [NSObjectProtocol] = []
     /// Made the first time the page shows, so an Islet that never opens it never loads the camera.
     @ObservationIgnored private var made: CameraMirror?
 
@@ -138,14 +147,53 @@ final class MirrorModel {
 
     func show() {
         showing = true
+        watchAway(true)
         access = CameraMirror.access
-        if access == .granted { camera.start() } else { state = .needsAccess }
+        if access != .granted {
+            state = .needsAccess
+        } else if !away {
+            camera.start()
+        }
     }
 
     func hide() {
         showing = false
+        watchAway(false)
         made?.stop()
         if state == .needsAccess { state = .off }
+    }
+
+    /// The screen locked or slept, or came back, while the page shows.
+    private func setAway(locked: Bool? = nil, asleep: Bool? = nil) {
+        if let locked { self.locked = locked }
+        if let asleep { self.asleep = asleep }
+        guard showing else { return }
+        if away {
+            made?.stop()
+        } else if CameraMirror.access == .granted {
+            camera.start()
+        }
+    }
+
+    private func watchAway(_ on: Bool) {
+        guard on else {
+            lockMonitor.stop()
+            sleepObservers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
+            sleepObservers = []
+            locked = false
+            asleep = false
+            return
+        }
+        lockMonitor.onLock = { [weak self] in self?.setAway(locked: true) }
+        lockMonitor.onUnlock = { [weak self] in self?.setAway(locked: false) }
+        lockMonitor.start()
+        guard sleepObservers.isEmpty else { return }
+        let center = NSWorkspace.shared.notificationCenter
+        for (name, value) in [(NSWorkspace.screensDidSleepNotification, true), (NSWorkspace.screensDidWakeNotification, false)] {
+            sleepObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.setAway(asleep: value) }
+            })
+        }
     }
 
     /// "Allow camera": macOS asks the first time; after a no, System Settings opens at Camera.
