@@ -138,6 +138,76 @@ private func scratchFolder(_ name: String) throws -> URL {
         #expect(try Data(contentsOf: url) == Data("[1, 2]".utf8))
     }
 
+    /// A file already broken when Islet starts (edited while it was quit, or before a restart)
+    /// gives the settings from the last time it parsed, not the defaults.
+    @Test func aFileBrokenAtLaunchStartsFromTheLastGoodCopy() throws {
+        let dir = try scratchFolder("config")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("config/config.json")
+        let copy = dir.appendingPathComponent("support/config-last-good.json")
+        var mine = IsletSettings()
+        mine.hideFromScreenCapture = true
+        mine.theme = .graphite
+        // A session that saves, then quits.
+        var first = SettingsFile(url: url, lastGood: copy)
+        try first.save(mine)
+        #expect(FileManager.default.fileExists(atPath: copy.path))
+        // A typo made while Islet wasn't running.
+        let broken = Data("{\n  \"theme\": \"graphite\",\n  \"hideFromScreenCapture\": true\n  \"outline\": true\n}\n".utf8)
+        try broken.write(to: url)
+        var next = SettingsFile(url: url, lastGood: copy)
+        let opened = next.open()
+        #expect(opened.origin == .lastGood)
+        #expect(opened.settings == mine)
+        #expect(next.problem?.line == 4)
+        // The broken file is left alone, and so is the copy.
+        #expect(try next.save(IsletSettings()) == .refused)
+        #expect(try Data(contentsOf: url) == broken)
+        #expect(IsletSettings.read(from: copy).value == mine)
+        // Replace writes those settings back, keeping config.json.broken.
+        try next.replace(with: opened.settings)
+        #expect(try Data(contentsOf: next.brokenCopy) == broken)
+        #expect(next.read().value == mine)
+    }
+
+    @Test func aFileBrokenAtLaunchWithNoCopySaysItIsOnDefaults() throws {
+        let dir = try scratchFolder("config")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("config.json")
+        let copy = dir.appendingPathComponent("config-last-good.json")
+        try Data("{ \"theme\": ".utf8).write(to: url)
+        var file = SettingsFile(url: url, lastGood: copy)
+        let opened = file.open()
+        #expect(opened.origin == .defaults)
+        #expect(opened.settings == IsletSettings())
+        // A copy that doesn't parse either counts as none.
+        try Data("not json".utf8).write(to: copy)
+        #expect(file.open().origin == .defaults)
+        // Missing, and good, files come from the file.
+        try FileManager.default.removeItem(at: url)
+        #expect(file.open().origin == .file)
+        try Data(#"{"outline": true}"#.utf8).write(to: url)
+        let good = file.open()
+        #expect(good.origin == .file && good.settings.outline)
+        // Reading a good file refreshes the copy.
+        #expect(IsletSettings.read(from: copy).value?.outline == true)
+    }
+
+    @Test func aBrokenReadNeverReachesTheCopy() throws {
+        let dir = try scratchFolder("config")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("config.json")
+        let copy = dir.appendingPathComponent("config-last-good.json")
+        try Data(#"{"outline": true}"#.utf8).write(to: url)
+        var file = SettingsFile(url: url, lastGood: copy)
+        _ = file.read()
+        let kept = try Data(contentsOf: copy)
+        try Data("{ oops".utf8).write(to: url)
+        _ = file.read()
+        #expect(try file.save(IsletSettings()) == .refused)
+        #expect(try Data(contentsOf: copy) == kept)
+    }
+
     @Test func lineNumbersFromTheParser() {
         #expect(FileProblem.line(described: "Badly formed object around line 12, column 3.") == 12)
         #expect(FileProblem.line(described: "No line here") == nil)

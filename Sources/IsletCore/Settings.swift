@@ -674,6 +674,10 @@ public enum IsletPaths {
     /// Discovery file written by the app: `{"port": 47831, "token": "…"}` (mode 0600).
     public static var apiDiscoveryFile: URL { supportDirectory.appendingPathComponent("api.json") }
 
+    /// A copy of the last `config.json` that parsed (`SettingsFile.lastGood`), kept here rather
+    /// than beside it so a dotfiles repo never sees it.
+    public static var lastGoodConfigFile: URL { supportDirectory.appendingPathComponent("config-last-good.json") }
+
     /// The iPhone bridge's own token, `{"token": "…"}` (mode 0600), written the first time the
     /// bridge is turned on and kept when it is turned off.
     public static var lanTokenFile: URL { supportDirectory.appendingPathComponent("lan.json") }

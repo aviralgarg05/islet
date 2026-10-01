@@ -90,14 +90,23 @@ enum SettingsSnapshots {
             window.setContentSize(NSSize(width: SettingsWindow.defaultSize.width, height: 1500))
             navigation.open(.advanced, at: "advanced.config")
             shoot("advanced-config-error", in: extra)
+            // Already broken at launch, with no copy of a good one: the defaults, said plainly.
+            model.setSettingsProblemForSnapshot(FileProblem(line: 3, message: "Unexpected character around line 3, column 1."),
+                                                origin: .defaults)
+            shoot("advanced-config-error-defaults", in: extra, dark: false)
             model.setSettingsProblemForSnapshot(nil)
-            // Islet.app moved since Claude Code was connected: Needs an update, and a dot.
+            // Islet.app moved since Claude Code was connected: it runs from a new place, and the
+            // isletctl the hooks call is gone. Needs an update, and a dot.
             window.setContentSize(SettingsWindow.defaultSize)
-            AppActions.isExecutable = { _ in false }
+            let installed = AppActions.bundleURL
+            AppActions.bundleURL = URL(fileURLWithPath: "/Users/Shared/Apps/Islet.app")
+            let movedCLI = AppActions.cliPath
+            AppActions.isExecutable = { $0 == movedCLI }
             navigation.open(.general)
             RunLoop.main.run(until: Date().addingTimeInterval(0.2))
             navigation.open(.agents)
             shoot("agents-moved", in: extra, dark: false)
+            AppActions.bundleURL = installed
             AppActions.isExecutable = { _ in true }
             navigation.open(.general)
             RunLoop.main.run(until: Date().addingTimeInterval(0.2))

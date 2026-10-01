@@ -53,6 +53,57 @@ import Testing
         #expect(KeyInterceptPolicy.shouldIntercept(key, state) == taken, "\(what)")
     }
 
+    /// Option let go before the volume key: the press went to macOS (Sound settings), so the
+    /// release must too, though the policy would now take it.
+    @Test func aReleaseFollowsItsPress() {
+        var latch = KeyInterceptLatch()
+        var asked = 0
+        func take(down: Bool, _ s: KeyInterceptState) -> Bool {
+            latch.take(.volumeUp, isDown: down, isRepeat: false) {
+                asked += 1
+                return KeyInterceptPolicy.shouldIntercept(.volumeUp, s)
+            }
+        }
+        let optionDown = KeyInterceptState(optionHeld: true), plain = KeyInterceptState()
+        let press = take(down: true, optionDown), release = take(down: false, plain)
+        #expect(!press && !release)
+        #expect(asked == 1)
+        // The next press decides afresh.
+        let press2 = take(down: true, plain), release2 = take(down: false, optionDown)
+        #expect(press2 && release2)
+        #expect(asked == 2)
+    }
+
+    /// Holding brightness up while the pointer crosses to another display: the held key stays
+    /// Islet's until it is let go.
+    @Test func repeatsFollowTheirPress() {
+        var latch = KeyInterceptLatch()
+        let builtIn = KeyInterceptState(), external = KeyInterceptState(pointerOnBuiltInDisplay: false)
+        func brightness(down: Bool, repeating: Bool, _ s: KeyInterceptState) -> Bool {
+            latch.take(.brightnessUp, isDown: down, isRepeat: repeating) { KeyInterceptPolicy.shouldIntercept(.brightnessUp, s) }
+        }
+        var answers = [brightness(down: true, repeating: false, builtIn)]
+        for _ in 0..<3 { answers.append(brightness(down: true, repeating: true, external)) }
+        answers.append(brightness(down: false, repeating: false, external))
+        #expect(answers == [true, true, true, true, true])
+        // Pressed again on the external display, it goes to macOS.
+        #expect(!brightness(down: true, repeating: false, external))
+        // Each key keeps its own answer.
+        let volumePress = latch.take(.volumeDown, isDown: true, isRepeat: false) { false }
+        let mutePress = latch.take(.mute, isDown: true, isRepeat: false) { true }
+        let volumeRelease = latch.take(.volumeDown, isDown: false, isRepeat: false) { true }
+        let muteRelease = latch.take(.mute, isDown: false, isRepeat: false) { false }
+        #expect(!volumePress && mutePress && !volumeRelease && muteRelease)
+    }
+
+    /// The tap started while a key was held: with no press seen, the policy answers.
+    @Test func aReleaseWithNoPressSeenAsks() {
+        var latch = KeyInterceptLatch()
+        let release = latch.take(.mute, isDown: false, isRepeat: false) { true }
+        let repeating = latch.take(.mute, isDown: true, isRepeat: true) { false }
+        #expect(release && !repeating)
+    }
+
     @Test func displayTools() {
         #expect(KeyInterceptPolicy.displayToolRunning(["com.apple.finder", "me.guillaumeb.MonitorControl"]))
         #expect(KeyInterceptPolicy.displayToolRunning(["pro.betterdisplay.BetterDisplay"]))

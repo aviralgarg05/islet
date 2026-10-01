@@ -34,7 +34,10 @@ struct AdvancedSettings: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(problem.sentence(file: "config.json") + " Islet is using your last good settings.")
+                            // Already broken at launch with no copy of a good one: say so plainly.
+                            Text(problem.sentence(file: "config.json") + (model.settingsOrigin == .defaults
+                                ? " Islet is using its default settings for now."
+                                : " Islet is using your last good settings."))
                             Text("Nothing is saved over the file until it's fixed. Your changes here still apply.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
@@ -84,7 +87,10 @@ struct AdvancedSettings: View {
             Button("Replace", role: .destructive) { model.replaceBrokenSettingsFile() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The settings Islet is using now are written in its place. The file as it is now is kept beside it as config.json.broken.")
+            Text((model.settingsOrigin == .defaults
+                  ? "Islet's default settings are written in its place."
+                  : "The settings Islet is using now are written in its place.")
+                 + " The file as it is now is kept beside it as config.json.broken.")
         }
     }
 

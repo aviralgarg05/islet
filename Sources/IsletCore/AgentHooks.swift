@@ -191,7 +191,8 @@ public enum AgentHooks {
             state: .success, tint: "#10A37F", priority: .normal, ttl: 30, sneak: true
         )
         if let msg = o["last-assistant-message"] as? String, !msg.isEmpty {
-            spec.subtitle = truncate(msg, 70)
+            // The agent's own words can quote a key it just used; they show in the island.
+            spec.subtitle = truncate(redactSecrets(msg), 70)
         } else {
             spec.subtitle = "Turn complete"
         }
@@ -219,7 +220,7 @@ public enum AgentHooks {
             spec.state = .waiting; spec.subtitle = "Needs approval: " + describeCodexTool(tool, input: o["tool_input"])
             spec.progress = 0; spec.trailing = "Waiting"; spec.priority = .high; spec.sneak = false; spec.ttl = 0
         case "Stop":
-            let last = (o["last_assistant_message"] as? String).map { truncate($0, 70) }
+            let last = (o["last_assistant_message"] as? String).map { truncate(redactSecrets($0), 70) }
             spec.state = .success; spec.subtitle = (last?.isEmpty == false ? last : nil) ?? "Done. Your turn."
             spec.progress = 1; spec.trailing = "Done"; spec.priority = .normal; spec.sneak = true; spec.ttl = 30
         case "SessionEnd":

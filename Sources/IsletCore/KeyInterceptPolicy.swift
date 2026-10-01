@@ -71,3 +71,25 @@ public enum KeyInterceptPolicy {
         bundleIDs.contains(where: displayTools.contains)
     }
 }
+
+/// One answer for a whole key press. The press decides (`KeyInterceptPolicy`); its repeats and
+/// its release get the same answer, even if Option was let go first or the pointer moved to
+/// another display meanwhile, so macOS never sees a release without its press, or the reverse.
+public struct KeyInterceptLatch: Sendable {
+    private var taken: [MediaKey: Bool] = [:]
+
+    public init() {}
+
+    /// Whether to take this event. `decide` is asked on a new press, and on a repeat or release
+    /// whose press wasn't seen (the tap started mid-press).
+    public mutating func take(_ key: MediaKey, isDown: Bool, isRepeat: Bool, decide: () -> Bool) -> Bool {
+        let answer: Bool
+        if isDown && !isRepeat {
+            answer = decide()
+        } else {
+            answer = taken[key] ?? decide()
+        }
+        taken[key] = isDown ? answer : nil
+        return answer
+    }
+}

@@ -156,14 +156,28 @@ final class AppModel {
     /// Set while config.json doesn't parse: Islet keeps its last good settings and saves
     /// nothing until the file is fixed or replaced (Settings → Advanced).
     private(set) var settingsProblem: FileProblem?
+    /// Where the settings in use came from while `settingsProblem` is set: the last good copy,
+    /// or the defaults when config.json was already broken at launch and there was no copy.
+    private(set) var settingsOrigin: SettingsFile.Origin = .file
 
-    /// With no `settings`, they are read from config.json. `ask` is replaceable so Settings
-    /// snapshots keep API keys in memory instead of the Keychain.
+    /// With no `settings`, they are read from config.json (or, when it doesn't parse, from the
+    /// copy of the last one that did). `ask` is replaceable so Settings snapshots keep API keys
+    /// in memory instead of the Keychain.
     init(settings: IsletSettings? = nil, ask: AskController? = nil) {
-        var file = SettingsFile(url: IsletPaths.configFile)
-        let settings = settings ?? file.read().value ?? IsletSettings()
+        var file = SettingsFile(url: IsletPaths.configFile, lastGood: IsletPaths.lastGoodConfigFile)
+        var origin = SettingsFile.Origin.file
+        let start: IsletSettings
+        if let settings {
+            start = settings
+        } else {
+            let opened = file.open()
+            start = opened.settings
+            origin = opened.origin
+        }
+        let settings = start
         configFile = file
         settingsProblem = file.problem
+        settingsOrigin = origin
         self.settings = settings
         self.ask = ask ?? AskController()
         shelf = shelfService.shelf
@@ -455,10 +469,15 @@ final class AppModel {
 
     private func noteSettingsProblem(_ problem: FileProblem?) {
         if settingsProblem != problem { settingsProblem = problem }
+        // A file that parses again (or was replaced) is where the settings come from once more.
+        if problem == nil, settingsOrigin != .file { settingsOrigin = .file }
     }
 
     /// `--settings-snapshot` draws Advanced as it looks while config.json has an error.
-    func setSettingsProblemForSnapshot(_ problem: FileProblem?) { settingsProblem = problem }
+    func setSettingsProblemForSnapshot(_ problem: FileProblem?, origin: SettingsFile.Origin = .lastGood) {
+        settingsProblem = problem
+        settingsOrigin = problem == nil ? .file : origin
+    }
 
     /// Agents whose hooks call an `isletctl` that is gone (Islet.app moved or was deleted).
     /// Settings shows a dot on Coding agents; Update there fixes it.

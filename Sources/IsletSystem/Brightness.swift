@@ -120,9 +120,12 @@ public final class MediaKeyInterceptor {
 
     /// Called on the main thread with the key and whether a fine step (⇧⌥) was requested.
     public var onKey: ((Key, Bool) -> Void)?
-    /// Asked on the main thread, for each key press and release, whether to take it
-    /// (`KeyInterceptPolicy`). With none set, every key is taken.
+    /// Asked on the main thread, for each key press, whether to take it (`KeyInterceptPolicy`);
+    /// its repeats and release get the same answer (`KeyInterceptLatch`). With none set, every
+    /// key is taken.
     public var shouldIntercept: ((Key, NSEvent.ModifierFlags) -> Bool)?
+    /// The answer each key's press got, for its repeats and release. Main thread only.
+    fileprivate var latch = KeyInterceptLatch()
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
 
@@ -171,10 +174,14 @@ public final class MediaKeyInterceptor {
             }
             let code = Int((ns.data1 & 0xFFFF_0000) >> 16)
             guard let key = MediaKeyInterceptor.key(for: code) else { return Unmanaged.passUnretained(event) }
-            // The tap's source is on the main run loop, so this runs on the main thread. Press and
-            // release get the same answer, so macOS never sees half a key.
-            if let ask = me.shouldIntercept, !ask(key, ns.modifierFlags) { return Unmanaged.passUnretained(event) }
             let isDown = ((ns.data1 & 0xFF00) >> 8) == 0xA
+            let isRepeat = ns.data1 & 0x1 != 0
+            // The tap's source is on the main run loop, so this runs on the main thread. The press
+            // decides, and its repeats and release follow it, so macOS never sees half a key.
+            if let ask = me.shouldIntercept,
+               !me.latch.take(key, isDown: isDown, isRepeat: isRepeat, decide: { ask(key, ns.modifierFlags) }) {
+                return Unmanaged.passUnretained(event)
+            }
             if isDown {
                 let fine = ns.modifierFlags.contains(.shift) && ns.modifierFlags.contains(.option)
                 DispatchQueue.main.async { me.onKey?(key, fine) }

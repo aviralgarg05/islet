@@ -44,6 +44,17 @@ private func spec(_ provider: String, _ json: String) throws -> ActivitySpec {
         #expect(try AgentHooks.map(provider: "codex", payload: Data(#"{"type":"something-else"}"#.utf8)) == .ignore)
     }
 
+    /// Codex's last message is shown in the island, so a key it quotes is hidden as in commands.
+    @Test func codexLastMessageHidesSecrets() throws {
+        // Assembled so the source holds nothing shaped like a real key.
+        let key = ["sk", "proj", String(repeating: "x", count: 24)].joined(separator: "-")
+        let base = #""session_id":"019a-codex","cwd":"/Users/me/code/api""#
+        let stop = try spec("codex", "{\(base),\"hook_event_name\":\"Stop\",\"last_assistant_message\":\"Set it to \(key) in .env\"}")
+        #expect(stop.subtitle == "Set it to ••• in .env")
+        let notify = try spec("codex", "{\"type\":\"agent-turn-complete\",\"thread-id\":\"t1\",\"last-assistant-message\":\"Used \(key) once\"}")
+        #expect(notify.subtitle == "Used ••• once")
+    }
+
     @Test func codexToolsInAFewWords() {
         #expect(AgentHooks.describeCodexTool("shell", input: ["command": ["git", "status"]]) == "Running git status")
         #expect(AgentHooks.describeCodexTool("exec_command", input: ["cmd": "make test"]) == "Running make test")
@@ -106,6 +117,21 @@ private func spec(_ provider: String, _ json: String) throws -> ActivitySpec {
             let updated = Dictionary(uniqueKeysWithValues: moved.files.map { ($0.url, $0.contents) })
             let again = try AgentHookPlan.make(agent, home: home, executable: new, wait: 300) { updated[$0] }
             #expect(AgentConnection.decide(agent, installed: true, plan: .success(again)) == .connected)
+        }
+    }
+
+    /// Hooks set up by hand from the examples call `isletctl` by name. That isn't a moved app:
+    /// they read as Connected, and nothing is rewritten to a path.
+    @Test func hooksCallingIsletctlByNameStayConnected() throws {
+        for agent in CodingAgent.allCases {
+            let byName = try AgentHookPlan.make(agent, home: home, executable: "isletctl", wait: 300) { _ in nil }
+            let installed = Dictionary(uniqueKeysWithValues: byName.files.map { ($0.url, $0.contents) })
+            let plan = try AgentHookPlan.make(agent, home: home, executable: new, wait: 300) { installed[$0] }
+            #expect(plan.isUpToDate, "\(agent): \(plan.changes)")
+            #expect(AgentConnection.decide(agent, installed: true, plan: .success(plan)) == .connected)
+            // A wait that changed still needs an update, by name as before.
+            let longer = try AgentHookPlan.make(agent, home: home, executable: new, wait: 600) { installed[$0] }
+            #expect(AgentConnection.decide(agent, installed: true, plan: .success(longer)) == .needsUpdate)
         }
     }
 

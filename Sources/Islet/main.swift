@@ -258,7 +258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keys.start()
     }
 
-    /// Whether the key tap takes `key` (`KeyInterceptPolicy`). Read fresh for each key, so a
+    /// Whether the key tap takes `key` (`KeyInterceptPolicy`). Read fresh for each press, so a
     /// display, output or app that changed since is always counted.
     private func shouldIntercept(_ key: MediaKeyInterceptor.Key, flags: NSEvent.ModifierFlags) -> Bool {
         var s = KeyInterceptState(optionHeld: flags.contains(.option), shiftHeld: flags.contains(.shift))

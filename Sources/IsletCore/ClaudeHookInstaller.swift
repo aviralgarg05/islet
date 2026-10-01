@@ -122,11 +122,14 @@ public enum ClaudeHookInstaller {
         return Plan(merged: merged + Data("\n".utf8), changes: changes, wasConnected: found)
     }
 
-    /// Whether Islet's existing hook needs rewriting: it calls an `isletctl` somewhere else
+    /// Whether Islet's existing hook needs rewriting: it calls an `isletctl` at another path
     /// (Islet.app moved, or was updated in a new place), or an approval hook's wait changed.
+    /// A hook that calls `isletctl` by name, from PATH as the examples in `integrations/` do, is
+    /// the user's choice and isn't moved anywhere; nor is anything compared when this build
+    /// has no path of its own to offer (a development build).
     static func needsUpdate(_ hook: [String: Any], to command: String, entry e: Entry, executable: String) -> Bool {
         let current = hook["command"] as? String
-        if current.flatMap(isletExecutable) != executable { return true }
+        if let exe = current.flatMap(isletExecutable), exe.contains("/"), executable.contains("/"), exe != executable { return true }
         guard e.waits else { return false }
         return current.flatMap(isletWait) != isletWait(command) || (hook["timeout"] as? Int) != e.timeout
     }

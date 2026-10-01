@@ -179,12 +179,60 @@ enum RawJSON: Codable, Equatable, Sendable {
 /// last good settings, and `save` refuses until the file parses again or the user replaces it
 /// (`replace(with:)`, which keeps a copy as `config.json.broken`). Keys this build doesn't
 /// know, written by a newer Islet or by hand, survive a save.
+///
+/// With `lastGood`, a copy of the file is kept each time it parses or is saved, so a file that
+/// is already broken when Islet starts still gives the last good settings (`open()`).
 public struct SettingsFile: Sendable {
     public let url: URL
+    /// Where the copy of the last file that parsed is kept: outside the config folder, so a
+    /// dotfiles repo never sees it. Nil keeps no copy.
+    public let lastGood: URL?
     /// Set while the file on disk doesn't parse.
     public private(set) var problem: FileProblem?
+    /// What `lastGood` holds, once known, so an unchanged file isn't copied again.
+    private var lastGoodData: Data?
 
-    public init(url: URL) { self.url = url }
+    public init(url: URL, lastGood: URL? = nil) {
+        self.url = url
+        self.lastGood = lastGood
+    }
+
+    /// Where the settings Islet starts with came from (`open()`).
+    public enum Origin: Equatable, Sendable {
+        /// config.json, or the defaults when there is no file yet (nothing to lose by writing one).
+        case file
+        /// config.json doesn't parse: the copy kept the last time it did.
+        case lastGood
+        /// config.json doesn't parse and there is no copy: the defaults, until it is fixed.
+        case defaults
+    }
+
+    /// The settings to start with: the file's; or, when it doesn't parse, the last good copy's;
+    /// or the defaults. The file itself is left as it is either way.
+    public mutating func open() -> (settings: IsletSettings, origin: Origin) {
+        switch read() {
+        case .loaded(let s): return (s, .file)
+        case .missing: return (IsletSettings(), .file)
+        case .unreadable:
+            guard let lastGood, let data = try? Data(contentsOf: lastGood),
+                  (try? JSONSerialization.jsonObject(with: data)) is [String: Any] else { return (IsletSettings(), .defaults) }
+            lastGoodData = data
+            return (IsletSettings.decodeLenient(data), .lastGood)
+        }
+    }
+
+    /// Copies `data`, which parsed, to `lastGood`. Best effort: a copy that can't be written
+    /// only means a broken file at the next launch starts from an older copy, or the defaults.
+    private mutating func keepLastGood(_ data: Data) {
+        guard let lastGood else { return }
+        if lastGoodData == nil { lastGoodData = try? Data(contentsOf: lastGood) }
+        guard data != lastGoodData else { return }
+        do {
+            try FileManager.default.createDirectory(at: lastGood.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: lastGood, options: .atomic)
+            lastGoodData = data
+        } catch {}
+    }
 
     public enum SaveOutcome: Equatable, Sendable {
         case saved
@@ -209,6 +257,7 @@ public struct SettingsFile: Sendable {
             return .unreadable(p)
         case .loaded(let (data, _)):
             problem = nil
+            keepLastGood(data)
             return .loaded(IsletSettings.decodeLenient(data))
         }
     }
@@ -232,9 +281,13 @@ public struct SettingsFile: Sendable {
         }
         problem = nil
         let data = try Self.encode(settings, keeping: kept)
-        if data == before { return .unchanged }
+        if data == before {
+            keepLastGood(data)
+            return .unchanged
+        }
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: url, options: .atomic)
+        keepLastGood(data)
         return .saved
     }
 
@@ -246,7 +299,9 @@ public struct SettingsFile: Sendable {
                 throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: brokenCopy.path])
             }
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try Self.encode(settings, keeping: [:]).write(to: url, options: .atomic)
+            let data = try Self.encode(settings, keeping: [:])
+            try data.write(to: url, options: .atomic)
+            keepLastGood(data)
             problem = nil
             return
         }
