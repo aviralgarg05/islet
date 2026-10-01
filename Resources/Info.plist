@@ -32,6 +32,11 @@
     <string>Islet can show reminders that are due soon. Reminders never leave your Mac.</string>
     <key>NSDownloadsFolderUsageDescription</key>
     <string>Islet shows download progress in the notch. It reads file names and sizes only.</string>
+    <!-- Ollama listens on plain HTTP at 127.0.0.1:11434; nothing else Islet asks for uses HTTP. -->
+    <key>NSAppTransportSecurity</key>
+    <dict><key>NSAllowsLocalNetworking</key><true/></dict>
+    <key>NSCameraUsageDescription</key>
+    <string>Islet shows your camera on the Mirror page, for a quick look before a call. The camera is on only while that page is open, and nothing is recorded or sent anywhere.</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>Islet controls Music or Spotify (play, pause, skip) when you use the media controls in the notch.</string>
 </dict>
