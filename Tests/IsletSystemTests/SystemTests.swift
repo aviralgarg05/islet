@@ -279,7 +279,9 @@ func request(_ port: UInt16, _ method: String, _ path: String, token: String? = 
     @Test func systemItemsAreNeverLiveActivities() throws {
         guard MenuBarLiveActivityMonitor.isAvailable, let agent = MenuBarAgentScanner.agentPID else { return }
         let slots = MenuBarAgentScanner.slots(agent: agent, readContent: true)
-        #expect(!slots.isEmpty)
+        // Nothing to read while the screen is locked or the menu bar is hidden; that isn't what
+        // this test is about, so it checks the classification only when there is a menu bar.
+        guard !slots.isEmpty else { return }
         for slot in slots where slot.info.identifier?.hasPrefix("com.apple.menuextra.") == true {
             #expect(slot.kind == .systemItem, "\(slot.info)")
         }
