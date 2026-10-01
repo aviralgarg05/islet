@@ -220,7 +220,7 @@ public enum SettingsIndex {
     // MARK: Entries
 
     private static let general: [SettingsEntry] = [
-        SettingsEntry("general.login", .general, "Launch at login", section: "Behaviour", keywords: ["startup", "login items", "start automatically", "move to Applications"]),
+        SettingsEntry("general.login", .general, "Launch at login", section: "Behaviour", keywords: ["startup", "login items", "start automatically", "move to Applications", "Downloads"]),
         SettingsEntry("general.open", .general, "Open the island", section: "Behaviour", keywords: ["hover", "click"]),
         SettingsEntry("general.hoverDelay", .general, "Hover delay", section: "Behaviour", keywords: ["open delay", "wait"], anchor: "general.open"),
         SettingsEntry("general.peekOnHover", .general, "Peek at what's playing", section: "Behaviour",

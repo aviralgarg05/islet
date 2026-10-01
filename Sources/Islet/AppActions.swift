@@ -110,6 +110,74 @@ enum AppActions {
     /// Where Islet.app is. Settings snapshots show the installed location, not the build folder.
     static var bundleURL = Bundle.main.bundleURL
 
+    /// Whether this is the app itself rather than a build run from the command line, which has
+    /// no Applications folder to belong in. Settings snapshots say yes to draw the offer to move.
+    static var runsAsApp = Bundle.main.bundleIdentifier != nil && Bundle.main.bundlePath.hasSuffix(".app")
+
+    // MARK: Moving to Applications
+
+    enum MoveAnswer: Equatable {
+        /// Islet is where it should be (or this moment doesn't ask).
+        case notNeeded
+        case declined
+        /// Moved: Islet quits and opens again from Applications.
+        case moving
+    }
+
+    /// Offer to move Islet to Applications when it runs from Downloads (`AppLocation`): at
+    /// launch, before connecting a coding agent, or when asked in Settings. Moving copies Islet
+    /// there, puts the downloaded copy in the Bin, and opens Islet again from its new place.
+    @discardableResult
+    static func offerMoveToApplications(_ moment: AppLocation.MoveMoment) -> MoveAnswer {
+        let home = NSHomeDirectory()
+        let bundle = bundleURL
+        guard AppLocation.offersMove(bundlePath: bundle.path, home: home, isAppBundle: runsAsApp, moment: moment) else { return .notNeeded }
+        let translocated = AppLocation.isTranslocated(bundlePath: bundle.path)
+        // Where it was downloaded to; for a copy that wasn't translocated, the copy itself.
+        let original = translocated ? AppMover.originalURL(of: bundle) : bundle
+        let destination = URL(fileURLWithPath: AppLocation.destination(
+            appName: bundle.lastPathComponent, home: home,
+            canWriteSharedApplications: FileManager.default.isWritableFile(atPath: "/Applications")))
+        let alert = moveAlert(moment, folder: original.map(folderName), translocated: translocated, destination: destination,
+                              replacing: FileManager.default.fileExists(atPath: destination.path))
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return .declined }
+        do {
+            try AppMover.move(bundle, to: destination, original: original, trash: AppMover.moveToBin)
+            try AppMover.reopen(at: destination)
+        } catch {
+            let failed = NSAlert()
+            failed.messageText = "Islet couldn't move itself"
+            failed.informativeText = "\(error.localizedDescription) You can drag Islet into Applications in Finder instead."
+            failed.addButton(withTitle: "Show in Finder")
+            failed.addButton(withTitle: "OK")
+            if failed.runModal() == .alertFirstButtonReturn {
+                NSWorkspace.shared.activateFileViewerSelecting([original ?? bundle])
+            }
+            return .declined
+        }
+        NSApp.terminate(nil)
+        return .moving
+    }
+
+    /// The offer itself, also drawn by `--settings-snapshot`.
+    static func moveAlert(_ moment: AppLocation.MoveMoment, folder: String?, translocated: Bool, destination: URL,
+                          replacing: Bool) -> NSAlert {
+        let words = AppLocation.prompt(for: moment, folder: folder, translocated: translocated, destination: destination.path,
+                                       home: NSHomeDirectory(), replacing: replacing)
+        let alert = NSAlert()
+        alert.messageText = words.title
+        alert.informativeText = words.message
+        alert.addButton(withTitle: words.confirm)
+        alert.addButton(withTitle: words.cancel)
+        return alert
+    }
+
+    /// The folder a copy sits in, as Finder names it ("Downloads").
+    private static func folderName(_ url: URL) -> String {
+        FileManager.default.displayName(atPath: url.deletingLastPathComponent().path)
+    }
+
     /// Handle an `islet://` URL.
     static func handle(url: URL, model: AppModel) {
         do {
