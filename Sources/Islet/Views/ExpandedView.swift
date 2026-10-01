@@ -111,6 +111,9 @@ struct HomePlan {
         case usage(AgentUsage)
         /// Claude before its figures arrive: an offer to show them, or waiting for them.
         case claudeHint(ClaudeUsageHint)
+        /// The calendar is on but macOS doesn't let Islet read it (turned off in System
+        /// Settings, restricted, or "Add events only"): what is wrong and the button that helps.
+        case calendarAccess(CalendarAccessAdvice)
 
         var id: String {
             switch self {
@@ -119,6 +122,7 @@ struct HomePlan {
             case .activity(let a): return "activity-\(a.id)"
             case .usage(let u): return "usage-\(u.id)"
             case .claudeHint: return "usage-claude-hint"
+            case .calendarAccess: return "calendar-access"
             }
         }
 
@@ -167,6 +171,10 @@ struct HomePlan {
         glances += timers.filter { $0.id != shownTimer }.map(Glance.timer)
         // The next event, unless it is the meeting leading the page.
         if let e = model.upcomingEvent, !Self.leads(e, primary) { glances.append(.event(e)) }
+        // Where the next event would be: a calendar that is on but can't be read, once macOS has
+        // said so (not before it has been asked; the Today page offers Allow then).
+        let access = model.calendarAdvice(.calendars)
+        if model.settings.calendarEnabled, !access.isAllowed, access.action != .ask { glances.append(.calendarAccess(access)) }
         glances += rest.filter { !Self.needsYou($0) }.map(Glance.activity)
         // Claude's hint sits where its card will be, before Codex's.
         if let hint = model.agentUsage.claudeHint { glances.append(.claudeHint(hint)) }
@@ -356,6 +364,18 @@ struct GlanceColumn: View {
             TimelineView(.everyMinute) { _ in AgentUsageGlance(usage: u, now: Date()) }
         case .claudeHint(let hint):
             ClaudeUsageHintRow(hint: hint, model: model)
+        case .calendarAccess(let advice):
+            GlanceRow(title: "Calendar") {
+                Image(systemName: "calendar").font(.system(size: 12, weight: .semibold)).foregroundStyle(Ink.tertiary)
+            } trailing: {
+                Button(advice.button == "Open System Settings" ? "Open" : advice.button ?? "Open") {
+                    model.requestCalendarAccess(.calendars)
+                }
+                .buttonStyle(CapsuleButtonStyle(tint: .blue))
+                .help(advice.detail ?? "")
+            } detail: {
+                Text(advice.status)
+            }
         }
     }
 }

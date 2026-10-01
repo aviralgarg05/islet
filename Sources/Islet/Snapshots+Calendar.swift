@@ -59,6 +59,9 @@ extension Snapshots {
         model.tab = .today
         model.setCalendarAccessForSnapshot(events: .writeOnly, reminders: .denied)
         shoot("76-expanded-today-write-only")
+        model.tab = .home
+        shoot("76d-expanded-home-calendar-blocked")
+        model.tab = .today
         model.setCalendarAccessForSnapshot(events: .notDetermined, reminders: .notDetermined)
         shoot("76b-expanded-today-not-asked")
         model.setCalendarAccessForSnapshot(events: .notDetermined, reminders: .notDetermined, refused: [.calendars])
