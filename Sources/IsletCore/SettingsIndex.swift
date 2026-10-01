@@ -404,7 +404,7 @@ public enum SettingsIndex {
         SettingsEntry("shelf.clipboardLimit", .shelf, "Items kept", section: "Clipboard", keywords: ["history size", "clipboard"],
                       anchor: "shelf.clipboard"),
         SettingsEntry("shelf.clipboardSecrets", .shelf, "Skip passwords copied in a browser", section: "Clipboard",
-                      keywords: ["password manager", "extension", "privacy", "clipboard"]),
+                      keywords: ["password manager", "extension", "generated password", "privacy", "clipboard"]),
         SettingsEntry("shelf.clipboardIgnore", .shelf, "Ignore apps", section: "Clipboard",
                       keywords: ["exclude", "privacy", "clipboard", "skip"]),
 

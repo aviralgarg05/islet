@@ -11,7 +11,9 @@ import IsletCore
 /// `changeCount` (a cheap integer read) with a tolerant timer, only while enabled, and not
 /// while the screen is locked or the displays sleep (nothing can be copied then).
 public final class ClipboardMonitor {
-    public var onCopy: ((_ text: String, _ types: [String], _ sourceBundleID: String?) -> Void)?
+    /// `sourceURL` is the page or extension a Chromium browser says the copy came from
+    /// (`ClipboardHistory.sourceURLType`), for the decision only.
+    public var onCopy: ((_ text: String, _ types: [String], _ sourceBundleID: String?, _ sourceURL: String?) -> Void)?
     private var timer: Timer?
     private var lastChange = NSPasteboard.general.changeCount
     private var interval: TimeInterval = 1
@@ -80,7 +82,9 @@ public final class ClipboardMonitor {
         // is wrong for copies from menu bar extras.
         let source = pb.string(forType: NSPasteboard.PasteboardType("org.nspasteboard.source"))
             ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        onCopy?(text, types, source)
+        let page = types.contains(ClipboardHistory.sourceURLType)
+            ? pb.string(forType: NSPasteboard.PasteboardType(ClipboardHistory.sourceURLType)) : nil
+        onCopy?(text, types, source, page)
     }
 
     /// Put text on the pasteboard without our own monitor recording it.

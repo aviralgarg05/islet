@@ -655,8 +655,8 @@ final class AppModel {
     }
 
     private func startClipboard() {
-        clipboardMonitor.onCopy = { [weak self] text, types, bundle in
-            self?.clipboard.add(text, types: types, sourceBundleID: bundle, now: Date())
+        clipboardMonitor.onCopy = { [weak self] text, types, bundle, page in
+            self?.clipboard.add(text, types: types, sourceBundleID: bundle, sourceURL: page, now: Date())
         }
         clipboardMonitor.start()
     }
