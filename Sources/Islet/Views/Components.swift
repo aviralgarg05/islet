@@ -22,18 +22,26 @@ struct IslandShape: Shape {
     var stemWidth: CGFloat = 0
     /// Height of the menu bar row part.
     var stemHeight: CGFloat = 0
+    /// A floating pill: a capsule this far inside the frame, top and bottom (0 = hangs from the
+    /// top edge, with the flare).
+    var inset: CGFloat = 0
 
-    var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
-        get { AnimatablePair(AnimatablePair(topRadius, bottomRadius), AnimatablePair(stemWidth, stemHeight)) }
+    var animatableData: AnimatablePair<AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>>, CGFloat> {
+        get { AnimatablePair(AnimatablePair(AnimatablePair(topRadius, bottomRadius), AnimatablePair(stemWidth, stemHeight)), inset) }
         set {
-            topRadius = newValue.first.first
-            bottomRadius = newValue.first.second
-            stemWidth = newValue.second.first
-            stemHeight = newValue.second.second
+            topRadius = newValue.first.first.first
+            bottomRadius = newValue.first.first.second
+            stemWidth = newValue.first.second.first
+            stemHeight = newValue.first.second.second
+            inset = newValue.second
         }
     }
 
     func path(in rect: CGRect) -> Path {
+        if inset > 0.01 {
+            let pill = rect.insetBy(dx: 0, dy: min(inset, rect.height / 3))
+            return Path(roundedRect: pill, cornerRadius: min(bottomRadius, pill.height / 2, pill.width / 2), style: .continuous)
+        }
         let t = min(topRadius, rect.width / 4)
         let bodyL = rect.minX + t, bodyR = rect.maxX - t
         let bodyW = bodyR - bodyL

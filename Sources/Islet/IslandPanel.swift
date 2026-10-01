@@ -67,7 +67,8 @@ final class IslandWindowController {
             for: descriptor,
             expandedSize: CGSize(width: size.width, height: size.height),
             wingWidth: model.settings.effectiveWingWidth,
-            adjust: model.settings.notchAdjust
+            adjust: model.settings.notchAdjust,
+            notchless: model.settings.notchlessStyle
         )
         panel = IslandPanel(frame: IslandLayout.windowFrame(for: descriptor, metrics: metrics))
         panel.sharingType = model.settings.hideFromScreenCapture ? .none : .readOnly
@@ -145,7 +146,7 @@ final class IslandWindowController {
         if let band = IslandLayout.switcherRect(for: p, geometry: g, showsApproval: model.approvals.current != nil) {
             rects.append(band.offsetBy(dx: midX, dy: top))
         }
-        let bubbles = model.fittedBubbles(for: p, placement: placement, metrics: metrics).bubbles
+        let bubbles = model.fittedBubbles(for: p, placement: placement, metrics: metrics, display: display).bubbles
         if !bubbles.items.isEmpty {
             let left = model.settings.bubblePlacement == .left
             let bp = IslandLayout.bubblePlacement(metrics: metrics, placement: placement, count: bubbles.items.count, left: left)

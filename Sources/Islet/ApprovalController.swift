@@ -160,7 +160,7 @@ final class ApprovalController {
         case .notchedScreen:
             candidates = [screens.first { $0.safeAreaInsets.top > 0 } ?? screens.first].compactMap { $0 }
         }
-        if !s.showOnNonNotchDisplays { candidates = candidates.filter { $0.safeAreaInsets.top > 0 } }
+        if s.notchlessStyle == .hidden { candidates = candidates.filter { $0.safeAreaInsets.top > 0 } }
         return candidates.first?.displayID
     }
 

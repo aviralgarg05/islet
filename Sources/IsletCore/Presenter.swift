@@ -89,6 +89,17 @@ public enum Presenter {
         return .idle
     }
 
+    /// "Only on hover" on a display without a notch, while the pointer is elsewhere: the closed
+    /// island and its peeks wait. HUDs (you caused them), critical alerts and the open island
+    /// still show.
+    public static func untilHover(_ p: IslandPresentation) -> IslandPresentation {
+        switch p {
+        case .compact, .songPeek: return .idle
+        case .sneak(let a) where a.priority < .critical: return .idle
+        default: return p
+        }
+    }
+
     /// The song to peek at while the pointer rests on the closed island ("Peek at what's
     /// playing"): only while the island opens on click (hovering opens it otherwise), and
     /// playing or paused alike. It shows as a song peek, for as long as the pointer stays.

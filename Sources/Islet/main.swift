@@ -100,7 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .mainScreen: chosen = Array(screens.prefix(1))
         case .notchedScreen: chosen = [screens.first { $0.safeAreaInsets.top > 0 } ?? screens.first].compactMap { $0 }
         }
-        if !s.showOnNonNotchDisplays { chosen = chosen.filter { $0.safeAreaInsets.top > 0 } }
+        if s.notchlessStyle == .hidden { chosen = chosen.filter { $0.safeAreaInsets.top > 0 } }
         return chosen
     }
 
@@ -138,6 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controllers = screens.map { IslandWindowController(model: model, screen: $0) }
         pointer.controllers = controllers
         model.islandDisplays = controllers.sorted { ($0.metrics.isSynthetic ? 1 : 0) < ($1.metrics.isSynthetic ? 1 : 0) }.map(\.display)
+        model.notchlessDisplays = Set(controllers.filter(\.metrics.isSynthetic).map(\.display))
         // The display the island was open on may be gone (unplugged, lid closed, new ID after wake).
         if let open = model.expandedScreen, !model.islandDisplays.contains(open) {
             model.pinned = false
@@ -151,7 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var displayMode: DisplayMode
         var size: SizePreset
         var width: Double, height: Double, wing: Double
-        var nonNotch: Bool, hideFromCapture: Bool
+        var notchless: NotchlessStyle, hideFromCapture: Bool
         var layout: ClosedLayoutPreference
         /// "Fit to the notch" moves the notch, and everything placed from it.
         var notchAdjust: CGSize
@@ -159,7 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         init(_ s: IsletSettings) {
             displayMode = s.displayMode; size = s.sizePreset
             width = s.expandedWidth; height = s.expandedHeight; wing = s.wingWidth
-            nonNotch = s.showOnNonNotchDisplays; hideFromCapture = s.hideFromScreenCapture
+            notchless = s.notchlessStyle; hideFromCapture = s.hideFromScreenCapture
             layout = s.closedLayout
             notchAdjust = s.notchAdjust
         }

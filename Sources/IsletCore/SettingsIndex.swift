@@ -223,8 +223,10 @@ public enum SettingsIndex {
                       keywords: ["hover", "quick peek", "song", "music", "point", "click"], anchor: "general.open"),
         SettingsEntry("general.closeDelay", .general, "Close delay", section: "Behaviour", keywords: ["collapse", "dismiss", "wait"]),
         SettingsEntry("general.display", .general, "Show the island on", section: "Placement", keywords: ["display", "screen", "monitor", "external", "notched"]),
-        SettingsEntry("general.nonNotch", .general, "Show on displays without a notch", section: "Placement", keywords: ["external", "monitor"]),
-        SettingsEntry("general.fullscreen", .general, "Hide when an app is fullscreen", section: "Placement", keywords: ["full screen", "games", "video"]),
+        SettingsEntry("general.nonNotch", .general, "On displays without a notch", section: "Placement",
+                      keywords: ["external", "monitor", "pill", "floating", "notch shape", "only on hover", "hidden", "don't show"]),
+        SettingsEntry("general.fullscreen", .general, "In full screen", section: "Placement",
+                      keywords: ["fullscreen", "games", "video", "hide music", "keep showing", "hide everything"]),
         SettingsEntry("general.capture", .general, "Hide from screenshots and screen sharing", section: "Placement",
                       keywords: ["screen recording", "capture", "privacy"]),
         SettingsEntry("general.gestures", .general, "Two-finger swipes on the island", section: "Gestures", keywords: ["trackpad", "gesture", "swipe"]),
@@ -371,7 +373,7 @@ public enum SettingsIndex {
         SettingsEntry("apps.add", .apps, "Add an app", keywords: ["app rules", "per-app", "application"]),
         SettingsEntry("apps.tint", .apps, "App colour", keywords: ["color", "tint", "per-app", "custom", "any colour", "colour panel"], anchor: "apps.add"),
         SettingsEntry("apps.hide", .apps, "Hide the island while an app is in front", keywords: ["per-app", "frontmost"], anchor: "apps.add"),
-        SettingsEntry("apps.fullscreen", .apps, "Keep the island in fullscreen", keywords: ["per-app", "full screen", "games"], anchor: "apps.add"),
+        SettingsEntry("apps.fullscreen", .apps, "Keep the island in full screen", keywords: ["per-app", "fullscreen", "games"], anchor: "apps.add"),
         SettingsEntry("apps.mute", .apps, "Mute an app's notifications", keywords: ["per-app", "silence"], anchor: "apps.add"),
     ] + PermissionKind.allCases.map { kind in
         SettingsEntry("permissions.\(kind.rawValue)", .permissions, kind.title, keywords: ["privacy", "allow", "access"])

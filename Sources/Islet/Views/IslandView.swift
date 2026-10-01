@@ -37,8 +37,10 @@ struct IslandGeometry: Equatable {
     var stemHeight: CGFloat = 0
     /// Wing width inside the menu bar row (content beside the notch).
     var wing: CGFloat = 0
+    /// A floating pill sits this far inside the row, top and bottom (0 = hangs from the top edge).
+    var inset: CGFloat = 0
 
-    var shape: IslandShape { IslandShape(topRadius: top, bottomRadius: bottom, stemWidth: stemWidth, stemHeight: stemHeight) }
+    var shape: IslandShape { IslandShape(topRadius: top, bottomRadius: bottom, stemWidth: stemWidth, stemHeight: stemHeight, inset: inset) }
     var outerWidth: CGFloat { size.width + 2 * top }
 }
 
@@ -65,7 +67,10 @@ enum IslandLayout {
         let row = n.width + 2 * wing
         switch p {
         case .hidden, .idle:
+            if m.floats { return pill(width: n.width, metrics: m, wing: 0) }
             return IslandGeometry(size: n, top: 6, bottom: small)
+        case .compact where m.floats, .hud where m.floats && !look.detailedHUD:
+            return pill(width: row, metrics: m, wing: wing)
         case .expanded:
             return IslandGeometry(size: m.expanded, top: Radius.flare, bottom: Radius.shell)
         case .hud where look.detailedHUD:
@@ -87,6 +92,14 @@ enum IslandLayout {
         let width = max(row + 32, 276)
         return IslandGeometry(size: CGSize(width: width, height: n.height + 46 + extra), top: 8, bottom: 18,
                               stemWidth: width > row ? row : 0, stemHeight: n.height, wing: wing)
+    }
+
+    /// On a display without a notch: a capsule floating inside the menu bar row, clear of the
+    /// screen's top edge and of the row's bottom.
+    private static func pill(width: CGFloat, metrics m: IslandMetrics, wing: CGFloat) -> IslandGeometry {
+        let inset = NotchGeometry.pillInset
+        return IslandGeometry(size: CGSize(width: width, height: m.notch.height), top: 0, bottom: (m.notch.height - 2 * inset) / 2,
+                              wing: wing, inset: inset)
     }
 
     /// The detailed HUD: a notch-wide stem in the menu bar row, so the menu bar beside the notch
@@ -157,7 +170,9 @@ enum IslandLayout {
     /// (`AppModel.fittedBubbles`) and the island counts the rest. Returns diameter and top offset.
     static func bubblePlacement(metrics m: IslandMetrics, placement: ClosedPlacement,
                                 count: Int, left: Bool) -> (diameter: CGFloat, top: CGFloat) {
-        (m.notch.height, 0)
+        // Beside a floating pill, bubbles float with it at its height.
+        if m.floats { return (m.notch.height - 2 * NotchGeometry.pillInset, NotchGeometry.pillInset) }
+        return (m.notch.height, 0)
     }
 
     /// How many bubbles of `diameter` fit in `slack` points beside the island.
@@ -193,8 +208,9 @@ struct BubbleSet: Equatable {
 extension AppModel {
     /// The bubbles that fit beside the island on this display, and how many more the island
     /// counts in its wing ("+2") because the menu bar row has no room for them.
-    func fittedBubbles(for p: IslandPresentation, placement: ClosedPlacement, metrics: IslandMetrics) -> (bubbles: BubbleSet, counted: Int) {
-        let all = bubbles(for: p)
+    func fittedBubbles(for p: IslandPresentation, placement: ClosedPlacement, metrics: IslandMetrics,
+                       display: CGDirectDisplayID? = nil) -> (bubbles: BubbleSet, counted: Int) {
+        let all = bubbles(for: p, display: display)
         guard !all.items.isEmpty else { return (all, 0) }
         let left = settings.bubblePlacement == .left
         let fit = IslandLayout.bubblesThatFit(all.items.count, slack: left ? placement.leftSlack : placement.rightSlack,
@@ -203,7 +219,9 @@ extension AppModel {
         return (BubbleSet(items: Array(all.items.prefix(fit)), overflow: 0), all.items.count - fit + all.overflow)
     }
 
-    func bubbles(for p: IslandPresentation) -> BubbleSet {
+    /// - Parameter display: the island's display; music has no bubble where "In full screen"
+    ///   hides it.
+    func bubbles(for p: IslandPresentation, display: CGDirectDisplayID? = nil) -> BubbleSet {
         guard case .compact(let c) = p, settings.maxConcurrent > 1 else { return .none }
         var acts = activities
         var items: [IslandBubble] = []
@@ -211,7 +229,7 @@ extension AppModel {
         case .activity(let a, _):
             acts.removeAll { $0.id == a.id }
             // Music paused a moment ago keeps its bubble (dimmed) for "Hide paused music after".
-            if settings.mediaEnabled,
+            if settings.mediaEnabled, display.map({ fullscreenBehaviour(on: $0) != .hideMusic }) ?? true,
                let np = Presenter.mediaInView(nowPlaying, pausedMedia: pausedMusic.show(timeout: settings.pausedMusicTimeout, now: Date())) {
                 items.append(.media(np))
             }
@@ -256,7 +274,7 @@ struct IslandView: View {
         let visible = IslandLayout.isVisible(p) || dropTargeted
         let shape = g.shape
         let glow = model.urgentGlow(for: p)
-        let fitted = model.fittedBubbles(for: p, placement: placement, metrics: metrics)
+        let fitted = model.fittedBubbles(for: p, placement: placement, metrics: metrics, display: display)
         let bubbles = fitted.bubbles
         let left = model.settings.bubblePlacement == .left
         let bp = IslandLayout.bubblePlacement(metrics: metrics, placement: placement, count: bubbles.items.count, left: left)
@@ -425,7 +443,8 @@ struct IslandView: View {
             }
         case .compact(let c):
             CompactContentView(content: c, metrics: metrics, geometry: g, model: model,
-                               counted: model.fittedBubbles(for: p, placement: model.placement(for: display, metrics: metrics), metrics: metrics).counted)
+                               counted: model.fittedBubbles(for: p, placement: model.placement(for: display, metrics: metrics), metrics: metrics,
+                                                            display: display).counted)
                 .contentShape(Rectangle())
                 .onTapGesture { activate(p) }
         case .sneak(let a):

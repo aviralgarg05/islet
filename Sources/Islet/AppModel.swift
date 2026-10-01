@@ -459,7 +459,8 @@ final class AppModel {
         _ = tick
         if let forcedPresentation { return forcedPresentation }
         let now = Date()
-        let showsMedia = settings.mediaEnabled
+        // "Hide music only" over a full screen app: the music goes, everything else stays.
+        let showsMedia = settings.mediaEnabled && fullscreenBehaviour(on: display) != .hideMusic
         let inputs = PresenterInputs(
             now: now,
             center: center,
@@ -469,10 +470,21 @@ final class AppModel {
             isSuppressed: isSuppressed(display) && expandedScreen != display,
             pausedMedia: showsMedia ? pausedMusic.show(timeout: settings.pausedMusicTimeout, now: now) : .hidden,
             focusedActivityID: controls.focusedActivityID,
-            songPeek: Presenter.hoverPeek(nowPlaying, hovering: hoverPeekDisplay == display, settings: settings)
+            songPeek: Presenter.hoverPeek(showsMedia ? nowPlaying : nil, hovering: hoverPeekDisplay == display, settings: settings)
                 ?? (showsMedia && settings.songChangePeek ? songPeek.current(now: now) : nil)
         )
-        return Presenter.present(inputs)
+        let p = Presenter.present(inputs)
+        // "Only on hover" on a display without a notch: nothing until the pointer is there.
+        if settings.notchlessStyle == .hover, notchlessDisplays.contains(display), hoverDisplay != display {
+            return Presenter.untilHover(p)
+        }
+        return p
+    }
+
+    /// What full screen asks of the island on `display` now (`show` when nothing is in full
+    /// screen there, or the front app's rule keeps the island).
+    func fullscreenBehaviour(on display: CGDirectDisplayID) -> FullscreenBehaviour {
+        settings.fullscreenEffect(isFullscreen: fullscreenDisplays.contains(display), frontApp: frontBundleID)
     }
 
     /// The pointer reached the closed island on `display`, or left it (nil).
@@ -488,12 +500,12 @@ final class AppModel {
         hoverPeekDisplay = display
     }
 
-    /// The island on `display` gets out of the way: a fullscreen app is in front (unless its
-    /// rule keeps the island), or the front app's rule hides it.
+    /// The island on `display` gets out of the way: an app is in full screen there and "In full
+    /// screen" says to hide everything (unless the app's rule keeps the island), or the front
+    /// app's rule hides it.
     func isSuppressed(_ display: CGDirectDisplayID) -> Bool {
-        let frontRule = settings.rule(for: frontBundleID)
-        if frontRule?.hideIsland == true { return true }
-        return settings.hideInFullscreen && fullscreenDisplays.contains(display) && frontRule?.showInFullscreen != true
+        if settings.rule(for: frontBundleID)?.hideIsland == true { return true }
+        return fullscreenBehaviour(on: display) == .hide
     }
 
     /// What the island is doing, for deciding whether a new song may show.
@@ -501,7 +513,7 @@ final class AppModel {
         SongPeek.Context(
             enabled: settings.mediaEnabled && settings.songChangePeek,
             isOpen: expandedScreen != nil,
-            isHidden: !islandDisplays.isEmpty && islandDisplays.allSatisfy(isSuppressed),
+            isHidden: !islandDisplays.isEmpty && islandDisplays.allSatisfy { isSuppressed($0) || fullscreenBehaviour(on: $0) == .hideMusic },
             isBusy: center.currentHUD(now: now) != nil || center.currentSneak(now: now) != nil
         )
     }
@@ -528,6 +540,8 @@ final class AppModel {
 
     /// Displays that have an island, notched ones first. Set when panels are rebuilt.
     var islandDisplays: [CGDirectDisplayID] = []
+    /// The displays among them without a notch.
+    var notchlessDisplays: Set<CGDirectDisplayID> = []
 
     /// Where the island opens when asked from a hotkey, the menu, a URL or the API: the display
     /// under the pointer if it has one, otherwise the first (notched) one.

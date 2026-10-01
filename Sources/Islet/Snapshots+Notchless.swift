@@ -1,0 +1,59 @@
+import AppKit
+import IsletCore
+import SwiftUI
+
+@MainActor
+extension Snapshots {
+    /// An external display: no notch, a 24 pt menu bar.
+    static let notchlessScreen = ScreenDescriptor(
+        id: 2, name: "External", frame: CGRect(x: 0, y: 0, width: 1920, height: 1080),
+        safeAreaTop: 0, menuBarHeight: 24, isBuiltIn: false
+    )
+
+    /// `<dir>/50-notchless-*.png`: the island on a display without a notch, as a floating pill
+    /// and as a notch shape, with music, a timer, a HUD and a peek.
+    static func renderNotchless(to dir: URL, model: AppModel, now: Date) {
+        let saved = model.settings
+        defer {
+            model.settings = saved
+            model.closedPlacements[2] = nil
+        }
+        var center = ActivityCenter()
+        let timer = try! center.apply(ActivitySpec(id: "tea", source: "timer", title: "Tea", icon: .symbol("timer"), tint: "orange",
+                                                   endsAt: now.addingTimeInterval(272)), now: now)
+        let hud = HUDEvent(kind: .volume, value: 0.62, until: now.addingTimeInterval(2))
+        let states: [(String, IslandPresentation)] = [
+            ("media", .compact(.nowPlaying(model.nowPlaying!))),
+            ("timer", .compact(.activity(timer, others: 0))),
+            ("hud", .hud(hud)),
+            ("song-peek", .songPeek(model.nowPlaying!)),
+        ]
+        for style in [NotchlessStyle.pill, .notch] {
+            model.settings.notchlessStyle = style
+            let s = model.settings
+            let metrics = NotchGeometry.metrics(for: notchlessScreen, expandedSize: CGSize(width: s.expandedSize.width, height: s.expandedSize.height),
+                                                wingWidth: s.effectiveWingWidth, adjust: s.notchAdjust, notchless: style)
+            model.closedPlacements[2] = ClosedPlacement(wing: metrics.wingWidth, slack: .infinity)
+            for (name, presentation) in states {
+                model.forcedPresentation = presentation
+                shootNotchless("50-notchless-\(style.rawValue)-\(name)", model: model, metrics: metrics, dir: dir)
+            }
+        }
+    }
+
+    static func shootNotchless(_ name: String, model: AppModel, metrics: IslandMetrics, dir: URL) {
+        let view = IslandView(model: model, display: 2, metrics: metrics)
+            .frame(width: 760, height: 140, alignment: .top)
+            .background(notchlessBackdrop(metrics: metrics))
+        write(view, to: dir.appendingPathComponent("\(name).png"))
+    }
+
+    /// A wallpaper with a menu bar strip and no notch.
+    static func notchlessBackdrop(metrics: IslandMetrics) -> some View {
+        ZStack(alignment: .top) {
+            LinearGradient(colors: [Color(red: 0.36, green: 0.42, blue: 0.62), Color(red: 0.62, green: 0.45, blue: 0.55)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+            Rectangle().fill(Color.white.opacity(0.18)).frame(height: metrics.notch.height)
+        }
+    }
+}

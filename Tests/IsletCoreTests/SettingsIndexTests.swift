@@ -127,6 +127,8 @@ import Testing
         ("keyboard brightness", .notifications),
         ("hud style", .notifications),
         ("animation speed", .appearance),
+        ("full screen", .general),
+        ("floating pill", .general),
     ])
     func queryFindsPage(query: String, page: SettingsPage) {
         let groups = SettingsIndex.search(query)

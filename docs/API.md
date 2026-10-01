@@ -415,10 +415,12 @@ Everything in Settings lives in `~/.config/islet/config.json` (or `$XDG_CONFIG_H
 }
 ```
 
-Look and motion keys:
+Placement, look and motion keys:
 
 | Key | Default | Meaning |
 |---|---|---|
+| `notchlessStyle` | `"pill"` | Displays without a notch: `"pill"` (floating in the menu bar), `"notch"` (a notch shape at the top edge), `"hover"` (nothing until the pointer reaches the top edge) or `"hidden"`. Replaces `showOnNonNotchDisplays`, which is read once: `false` becomes `"hidden"`. |
+| `fullscreenBehaviour` | `"hide"` | Over a full screen app: `"show"`, `"hideMusic"` (activities, timers and HUDs stay) or `"hide"` (only HUDs and critical alerts). An app rule's `showInFullscreen` keeps everything. Replaces `hideInFullscreen`, which is read once: `false` becomes `"show"`. |
 | `animationSpeed` | `"normal"` | `"relaxed"`, `"normal"` or `"quick"`: how long the island's springs and fades take. The playing indicator keeps its own pace. |
 
 An app rule's `tint` is a colour name or any hex value (`"#2F7CF6"`); anything else means the app's own colour.

@@ -10,6 +10,31 @@ public enum DisplayMode: String, Codable, Sendable, CaseIterable {
     case allScreens
 }
 
+/// What the island does while an app is in full screen on its display.
+public enum FullscreenBehaviour: String, Codable, Sendable, CaseIterable {
+    /// It stays as it is.
+    case show
+    /// Music goes; activities, timers and HUDs stay.
+    case hideMusic
+    /// It hides, except for HUDs and critical alerts.
+    case hide
+}
+
+/// How the island looks on a display without a notch.
+public enum NotchlessStyle: String, Codable, Sendable, CaseIterable {
+    /// A pill floating in the menu bar, clear of the screen's top edge.
+    case pill
+    /// A notch drawn at the top edge, like a MacBook's.
+    case notch
+    /// Nothing until the pointer reaches the top edge, then the pill.
+    case hover
+    /// No island on displays without a notch.
+    case hidden
+
+    /// Whether the closed island floats as a pill rather than hanging from the top edge.
+    public var floats: Bool { self == .pill || self == .hover }
+}
+
 /// Overall island size.
 public enum SizePreset: String, Codable, Sendable, CaseIterable {
     case compact, standard, large, custom
@@ -186,14 +211,18 @@ extension AppRule {
 public struct IsletSettings: Codable, Equatable, Sendable {
     // Placement & behaviour
     public var displayMode: DisplayMode = .notchedScreen
-    public var showOnNonNotchDisplays = true
+    /// How the island looks on displays without a notch. Replaces `showOnNonNotchDisplays`
+    /// (false became `hidden`).
+    public var notchlessStyle: NotchlessStyle = .pill
     public var hoverToOpen = true
     /// While the island opens on click, resting the pointer on the notch shows what's playing
     /// for as long as it stays there (a song peek without opening).
     public var peekOnHover = true
     public var openDelay: Double = 0.18
     public var closeDelay: Double = 0.35
-    public var hideInFullscreen = true
+    /// What the island does over an app in full screen. Replaces `hideInFullscreen` (false
+    /// became `show`). An app's rule can keep the island in full screen whatever this says.
+    public var fullscreenBehaviour: FullscreenBehaviour = .hide
     /// Exclude the island from screenshots and screen sharing.
     public var hideFromScreenCapture = false
 
@@ -421,6 +450,13 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// Whether any HUD shows at all.
     public var showsAnyHUD: Bool { HUDKind.allCases.contains(where: showsHUD) }
 
+    /// What full screen asks of the island on a display: nothing (`show`) unless an app is in
+    /// full screen there and the front app's rule doesn't keep the island.
+    public func fullscreenEffect(isFullscreen: Bool, frontApp: String?) -> FullscreenBehaviour {
+        guard isFullscreen, rule(for: frontApp)?.showInFullscreen != true else { return .show }
+        return fullscreenBehaviour
+    }
+
     public func rule(for bundleID: String?) -> AppRule? {
         guard let bundleID else { return nil }
         return appRules.first { $0.bundleID == bundleID }
@@ -497,6 +533,10 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         // false (or no key) now means the new default, and the old key isn't written back. A
         // `pausedMusicTimeout` that can't be read doesn't count, so the old choice still carries.
         if !applied.contains("pausedMusicTimeout"), user["showPausedMedia"] as? Bool == true { s.pausedMusicTimeout = Self.neverHide }
+        // `hideInFullscreen` and `showOnNonNotchDisplays` were switches; their choices replaced
+        // them. Only an explicit false changes anything, and the old keys aren't written back.
+        if !applied.contains("fullscreenBehaviour"), user["hideInFullscreen"] as? Bool == false { s.fullscreenBehaviour = .show }
+        if !applied.contains("notchlessStyle"), user["showOnNonNotchDisplays"] as? Bool == false { s.notchlessStyle = .hidden }
         // `visualiserColour` coloured the playing indicator alone; `musicColour` colours all the
         // music and takes its value. The old key isn't written back.
         if !applied.contains("musicColour"), let old = user["visualiserColour"] as? String, let colour = MusicColour(rawValue: old) {

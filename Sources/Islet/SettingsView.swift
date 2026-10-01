@@ -53,11 +53,23 @@ struct GeneralSettings: View {
                     Text("Every display").tag(DisplayMode.allScreens)
                 }
                 .settingsAnchor("general.display")
-                Toggle("Show on displays without a notch", isOn: $model.settings.showOnNonNotchDisplays)
-                    .settingsAnchor("general.nonNotch")
-                Toggle(isOn: $model.settings.hideInFullscreen) {
-                    Text("Hide when an app is fullscreen")
-                    Text("Apps can keep it in fullscreen from the Apps page.")
+                Picker(selection: $model.settings.notchlessStyle) {
+                    Text("Floating pill").tag(NotchlessStyle.pill)
+                    Text("Notch shape").tag(NotchlessStyle.notch)
+                    Text("Only on hover").tag(NotchlessStyle.hover)
+                    Text("Don't show").tag(NotchlessStyle.hidden)
+                } label: {
+                    Text("On displays without a notch")
+                    Text(Self.notchlessDetail(model.settings.notchlessStyle))
+                }
+                .settingsAnchor("general.nonNotch")
+                Picker(selection: $model.settings.fullscreenBehaviour) {
+                    Text("Keep showing").tag(FullscreenBehaviour.show)
+                    Text("Hide music only").tag(FullscreenBehaviour.hideMusic)
+                    Text("Hide everything").tag(FullscreenBehaviour.hide)
+                } label: {
+                    Text("In full screen")
+                    Text(Self.fullscreenDetail(model.settings.fullscreenBehaviour))
                 }
                 .settingsAnchor("general.fullscreen")
                 Toggle("Hide from screenshots and screen sharing", isOn: $model.settings.hideFromScreenCapture)
@@ -73,6 +85,25 @@ struct GeneralSettings: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+extension GeneralSettings {
+    static func notchlessDetail(_ style: NotchlessStyle) -> String {
+        switch style {
+        case .pill: return "A pill floating in the menu bar, clear of the screen's edge."
+        case .notch: return "A notch drawn at the top edge, like a MacBook's."
+        case .hover: return "Nothing until the pointer reaches the top edge, then the pill."
+        case .hidden: return "The island shows only on a display with a notch."
+        }
+    }
+
+    static func fullscreenDetail(_ behaviour: FullscreenBehaviour) -> String {
+        switch behaviour {
+        case .show: return "The island stays over full screen apps."
+        case .hideMusic: return "What's playing goes; timers, activities and HUDs stay. Apps can keep everything from the Apps page."
+        case .hide: return "Only HUDs and urgent alerts show. Apps can keep the island from the Apps page."
+        }
     }
 }
 
@@ -899,7 +930,7 @@ struct AppRuleRow: View {
     @ViewBuilder private var options: some View {
         Toggle("Hide the island in front", isOn: Binding(get: { rule.hideIsland ?? false }, set: { rule.hideIsland = $0 ? true : nil }))
             .fixedSize()
-        Toggle("Keep it in fullscreen", isOn: Binding(get: { rule.showInFullscreen ?? false }, set: { rule.showInFullscreen = $0 ? true : nil }))
+        Toggle("Keep it in full screen", isOn: Binding(get: { rule.showInFullscreen ?? false }, set: { rule.showInFullscreen = $0 ? true : nil }))
             .fixedSize()
         Toggle("Mute notifications", isOn: Binding(get: { rule.muteNotifications ?? false }, set: { rule.muteNotifications = $0 ? true : nil }))
             .fixedSize()

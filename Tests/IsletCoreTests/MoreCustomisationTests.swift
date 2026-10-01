@@ -189,3 +189,87 @@ private func song(playing: Bool, elapsed: Double? = 60, duration: Double? = 240,
         #expect(s.appRules.map(\.bundleID) == ["a.b", "c.d"])
     }
 }
+
+@Suite struct FullscreenBehaviourTests {
+    @Test func hidesEverythingByDefault() {
+        #expect(IsletSettings().fullscreenBehaviour == .hide)
+        #expect(decode(#"{"fullscreenBehaviour": "hideMusic"}"#).fullscreenBehaviour == .hideMusic)
+        #expect(decode(#"{"fullscreenBehaviour": "sometimes"}"#).fullscreenBehaviour == .hide)
+    }
+
+    @Test func hideInFullscreenMigrates() throws {
+        // false kept the island over full screen apps: "Keep showing".
+        let kept = decode(#"{"hideInFullscreen": false}"#)
+        #expect(kept.fullscreenBehaviour == .show)
+        #expect(decode(#"{"hideInFullscreen": true}"#).fullscreenBehaviour == .hide)
+        #expect(decode(#"{"hideInFullscreen": "no"}"#).fullscreenBehaviour == .hide)
+        // The new key wins, and a new key that can't be read doesn't count.
+        #expect(decode(#"{"hideInFullscreen": false, "fullscreenBehaviour": "hideMusic"}"#).fullscreenBehaviour == .hideMusic)
+        #expect(decode(#"{"hideInFullscreen": false, "fullscreenBehaviour": 7}"#).fullscreenBehaviour == .show)
+        let keys = try writtenKeys(kept)
+        #expect(keys["hideInFullscreen"] == nil)
+        #expect(keys["fullscreenBehaviour"] as? String == "show")
+        #expect(IsletSettings.decodeLenient(try JSONEncoder().encode(kept)) == kept)
+    }
+
+    @Test func onlyAppliesInFullScreenAndAnAppRuleKeepsTheIsland() {
+        var s = IsletSettings()
+        s.fullscreenBehaviour = .hideMusic
+        #expect(s.fullscreenEffect(isFullscreen: false, frontApp: nil) == .show)
+        #expect(s.fullscreenEffect(isFullscreen: true, frontApp: "com.apple.TV") == .hideMusic)
+        s.appRules = [AppRule(bundleID: "us.zoom.xos", showInFullscreen: true)]
+        #expect(s.fullscreenEffect(isFullscreen: true, frontApp: "us.zoom.xos") == .show)
+        s.fullscreenBehaviour = .hide
+        #expect(s.fullscreenEffect(isFullscreen: true, frontApp: "com.apple.TV") == .hide)
+    }
+}
+
+@Suite struct NotchlessStyleTests {
+    private let external = ScreenDescriptor(id: 2, name: "External", frame: CGRect(x: 0, y: 0, width: 1920, height: 1080),
+                                            safeAreaTop: 0, menuBarHeight: 24)
+    private let macBook = ScreenDescriptor(id: 1, name: "Built-in", frame: CGRect(x: 0, y: 0, width: 1512, height: 982),
+                                           safeAreaTop: 32, auxiliaryLeftWidth: 663.5, auxiliaryRightWidth: 663.5, menuBarHeight: 33)
+
+    @Test func floatingPillByDefault() {
+        #expect(IsletSettings().notchlessStyle == .pill)
+        #expect(decode(#"{"notchlessStyle": "hover"}"#).notchlessStyle == .hover)
+        #expect(decode(#"{"notchlessStyle": "ghost"}"#).notchlessStyle == .pill)
+    }
+
+    @Test func showOnNonNotchDisplaysMigrates() throws {
+        let hidden = decode(#"{"showOnNonNotchDisplays": false}"#)
+        #expect(hidden.notchlessStyle == .hidden)
+        #expect(decode(#"{"showOnNonNotchDisplays": true}"#).notchlessStyle == .pill)
+        #expect(decode(#"{"showOnNonNotchDisplays": false, "notchlessStyle": "notch"}"#).notchlessStyle == .notch)
+        let keys = try writtenKeys(hidden)
+        #expect(keys["showOnNonNotchDisplays"] == nil)
+        #expect(keys["notchlessStyle"] as? String == "hidden")
+        #expect(IsletSettings.decodeLenient(try JSONEncoder().encode(hidden)) == hidden)
+    }
+
+    @Test func onlyDisplaysWithoutANotchFloat() {
+        #expect(NotchGeometry.metrics(for: external, notchless: .pill).floats)
+        #expect(NotchGeometry.metrics(for: external, notchless: .hover).floats)
+        #expect(!NotchGeometry.metrics(for: external, notchless: .notch).floats)
+        // A MacBook's notch is hardware: the island never floats there.
+        #expect(!NotchGeometry.metrics(for: macBook, notchless: .pill).floats)
+        // The pill stays inside the menu bar row: the same height as the notch it replaces.
+        #expect(NotchGeometry.metrics(for: external, notchless: .pill).notch.height == 24)
+    }
+
+    @Test func onlyOnHoverWaitsForThePointer() {
+        let np = NowPlaying(source: .spotify, title: "Midnight City", isPlaying: true, timestamp: t0)
+        var center = ActivityCenter()
+        let normal = try! center.apply(ActivitySpec(id: "a", source: "s", title: "Build"), now: t0)
+        let critical = try! center.apply(ActivitySpec(id: "b", source: "s", title: "Battery", priority: .critical), now: t0)
+        #expect(Presenter.untilHover(.compact(.nowPlaying(np))) == .idle)
+        #expect(Presenter.untilHover(.songPeek(np)) == .idle)
+        #expect(Presenter.untilHover(.sneak(normal)) == .idle)
+        // What you caused, what's urgent and the open island still show.
+        #expect(Presenter.untilHover(.sneak(critical)) == .sneak(critical))
+        let hud = HUDEvent(kind: .volume, value: 0.5, until: t0)
+        #expect(Presenter.untilHover(.hud(hud)) == .hud(hud))
+        #expect(Presenter.untilHover(.expanded) == .expanded)
+        #expect(Presenter.untilHover(.hidden) == .hidden)
+    }
+}

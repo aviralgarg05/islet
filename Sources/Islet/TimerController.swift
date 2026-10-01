@@ -179,14 +179,10 @@ final class TimerController {
         return islands.first
     }
 
-    /// The same rules as the presentation: hidden for the app in front, or over a fullscreen
-    /// app whose rule doesn't keep the island.
+    /// The same rules as the presentation: hidden for the app in front, or over a full screen
+    /// app when "In full screen" hides everything and the app's rule doesn't keep the island.
     private func islandHidden(on display: CGDirectDisplayID) -> Bool {
-        let s = model.settings
-        let rule = s.rule(for: model.frontBundleID)
-        if rule?.hideIsland == true { return true }
-        guard s.hideInFullscreen, model.fullscreenDisplays.contains(display) else { return false }
-        return rule?.showInFullscreen != true
+        model.isSuppressed(display)
     }
 
     /// Nothing rings any more: let the island close normally when the pointer leaves.

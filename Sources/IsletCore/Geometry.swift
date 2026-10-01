@@ -50,6 +50,9 @@ public struct IslandMetrics: Equatable, Sendable {
     public var expanded: CGSize
     /// Whether the notch is real hardware or a drawn pill.
     public var isSynthetic: Bool
+    /// The closed island floats as a pill inside the menu bar instead of hanging from the top
+    /// edge (a display without a notch, "Floating pill" or "Only on hover").
+    public var floats: Bool = false
 
     public var compact: CGSize {
         CGSize(width: notch.width + wingWidth * 2, height: notch.height)
@@ -63,6 +66,9 @@ public enum NotchGeometry {
     public static let syntheticHeight: CGFloat = 24
     public static let syntheticWidth: CGFloat = 180
 
+    /// How far a floating pill sits inside the menu bar, top and bottom.
+    public static let pillInset: CGFloat = 1.5
+
     /// The narrowest and shortest notch an adjustment can leave.
     public static let minimumNotch = CGSize(width: 40, height: 12)
 
@@ -73,11 +79,13 @@ public enum NotchGeometry {
     ///   - adjust: points added to the notch's width and height ("Fit to the notch"), so the
     ///     closed island lines up with the hardware. Everything placed from the notch follows:
     ///     the wings, hit-testing, the hover zone and the trigger window.
+    ///   - notchless: how the island looks on a display without a notch.
     public static func metrics(
         for screen: ScreenDescriptor,
         expandedSize: CGSize = CGSize(width: 640, height: 200),
         wingWidth: CGFloat = 84,
-        adjust: CGSize = .zero
+        adjust: CGSize = .zero,
+        notchless: NotchlessStyle = .notch
     ) -> IslandMetrics {
         var notch: CGSize
         let synthetic: Bool
@@ -111,7 +119,8 @@ public enum NotchGeometry {
             height: min(max(expandedSize.height, notch.height * 2), maxHeight)
         )
         let clampedWing = max(0, min(wingWidth, (maxWidth - notch.width) / 2))
-        return IslandMetrics(notch: notch, wingWidth: clampedWing, expanded: expanded, isSynthetic: synthetic)
+        return IslandMetrics(notch: notch, wingWidth: clampedWing, expanded: expanded, isSynthetic: synthetic,
+                             floats: synthetic && notchless.floats)
     }
 
     /// Frame (global AppKit coordinates) of the transparent host window. The window is
