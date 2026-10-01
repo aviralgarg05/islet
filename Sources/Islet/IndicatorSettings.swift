@@ -129,14 +129,16 @@ struct StickerGallery: View {
 
     var body: some View {
         let library = model.stickers
+        // The one the island shows: the cat stands in for one of yours whose file has gone.
+        let shown = library.resolved(model.settings.sticker)
         VStack(alignment: .leading, spacing: 6) {
             Text("Sticker")
             LazyVGrid(columns: Self.columns, alignment: .leading, spacing: 8) {
                 ForEach(BuiltInSticker.allCases, id: \.self) { b in
-                    tile(.builtIn(b), name: b.title)
+                    tile(.builtIn(b), name: b.title, selected: shown == .builtIn(b))
                 }
                 ForEach(Array(library.custom.enumerated()), id: \.element) { i, id in
-                    tile(.custom(id), name: "Yours \(i + 1)")
+                    tile(.custom(id), name: "Yours \(i + 1)", selected: shown == .custom(id))
                         .contextMenu {
                             Button("Remove", role: .destructive) { remove(id) }
                         }
@@ -159,12 +161,13 @@ struct StickerGallery: View {
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .onAppear { library.loadIfNeeded() }
+        // Read the folder each time the gallery shows, so a sticker removed in Finder doesn't
+        // linger as an empty tile.
+        .onAppear { library.reload() }
     }
 
-    private func tile(_ choice: StickerChoice, name: String) -> some View {
-        let selected = model.settings.sticker.choice == choice
-        return Button {
+    private func tile(_ choice: StickerChoice, name: String, selected: Bool) -> some View {
+        Button {
             model.settings.sticker.id = choice.id
             model.stickers.problem = nil
         } label: {

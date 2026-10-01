@@ -92,6 +92,18 @@ import UniformTypeIdentifiers
         #expect(none.delays.allSatisfy { $0 >= StickerLimits.minDelay && $0 <= StickerLimits.maxDelay })
     }
 
+    /// A GIF saved with 10 ms frames plays at a browser's 100 ms, in the island and in the
+    /// copy that is kept; one with 20 ms frames keeps them.
+    @Test func tenMillisecondGIFsKeepTheirBrowserPace() throws {
+        let (store, root) = store()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fast = try store.add(data: Self.animation(frames: 4, delay: 0.01))
+        let kept = try #require(StickerDecoder.decode(url: store.url(for: fast)!, maxPixel: 32))
+        #expect(kept.delays.allSatisfy { abs($0 - 0.1) < 0.005 }, "\(kept.delays)")
+        let brisk = try #require(StickerDecoder.decode(data: Self.animation(frames: 4, delay: 0.02), maxPixel: 32))
+        #expect(brisk.delays.allSatisfy { abs($0 - 0.02) < 0.005 }, "\(brisk.delays)")
+    }
+
     @Test func filesThatArentStickersAreTurnedAway() throws {
         let (store, root) = store()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -116,6 +128,24 @@ import UniformTypeIdentifiers
         #expect(store.ids().isEmpty, "nothing half-written is left behind")
         let leftovers = (try? FileManager.default.contentsOfDirectory(atPath: store.directory.path)) ?? []
         #expect(leftovers.isEmpty)
+    }
+
+    /// A symbolic link is the file it points to: a GIF behind one is added, and a big file
+    /// behind one is still turned away by its own size.
+    @Test func linksAreFollowedToTheirFile() throws {
+        let (store, root) = store()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let gif = write(Self.animation(frames: 3), "dance.gif", in: root)
+        let link = root.appendingPathComponent("link.gif")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: gif)
+        let id = try store.add(from: link)
+        #expect(store.ids() == [id])
+        var big = Self.animation(frames: 2)
+        big.append(Data(count: StickerLimits.maxFileBytes))
+        let huge = write(big, "huge.gif", in: root)
+        let bigLink = root.appendingPathComponent("big-link.gif")
+        try FileManager.default.createSymbolicLink(at: bigLink, withDestinationURL: huge)
+        #expect(throws: StickerImportError.tooLarge) { try store.add(from: bigLink) }
     }
 
     @Test func bigFilesAreTurnedAwayUnread() throws {

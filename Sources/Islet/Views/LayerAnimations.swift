@@ -782,16 +782,33 @@ struct VinylArtwork: View {
     }
 
     /// The song's artwork as a picture: from its bytes, or from the copy the island already
-    /// loaded from its address (never a new download).
+    /// loaded from its address (never a new download). Made once per artwork and kept for
+    /// the last few, so a redraw of the island neither decodes it again nor hands the record
+    /// a new picture.
     static func image(_ np: NowPlaying) -> CGImage? {
-        if let data = np.artworkData, let img = ArtworkCache.image(for: data) {
-            return img.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        if let data = np.artworkData {
+            let key = "data-\(ArtworkCache.key(data))"
+            if let image = images[key] { return image }
+            guard let image = ArtworkCache.image(for: data)?.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+            remember(image, key)
+            return image
         }
-        if let url = np.artworkURL, let cached = URLCache.shared.cachedResponse(for: URLRequest(url: url)),
-           let img = NSImage(data: cached.data) {
-            return img.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        if let url = np.artworkURL {
+            let key = "url-\(url.absoluteString)"
+            if let image = images[key] { return image }
+            guard let cached = URLCache.shared.cachedResponse(for: URLRequest(url: url)),
+                  let image = NSImage(data: cached.data)?.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+            remember(image, key)
+            return image
         }
         return nil
+    }
+
+    private static var images: [String: CGImage] = [:]
+
+    private static func remember(_ image: CGImage, _ key: String) {
+        if images.count >= 3 { images.removeAll() }
+        images[key] = image
     }
 }
 

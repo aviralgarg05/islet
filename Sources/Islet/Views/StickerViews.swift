@@ -4,12 +4,6 @@ import IsletSystem
 import QuartzCore
 import SwiftUI
 
-/// What the sticker is doing: playing with the music, frozen and dim while it is paused, or
-/// resting, still, beside the notch when nothing plays ("Also when nothing is playing").
-enum StickerMode: Equatable {
-    case playing, paused, idle
-}
-
 /// The sticker in the closed island's right wing (the GIF look). It takes the wing's room and
 /// sits where `StickerLayout` puts it, always inside the menu bar row.
 struct StickerWing: View {
@@ -139,8 +133,11 @@ final class StickerNSView: NSView {
         if window == nil { release() } else { load() }
     }
 
-    /// Lets the frames go: the island no longer shows this sticker.
+    /// Lets the frames go: the island no longer shows this sticker. They linger until the
+    /// main queue's next turn, so a view SwiftUI swaps for a new one in the same update (the
+    /// end of a cross-morph) finds them ready instead of drawing nothing while it decodes.
     func release() {
+        if let animation { library?.linger(animation) }
         sprite.removeAllAnimations()
         sprite.contents = nil
         animation = nil
@@ -193,12 +190,16 @@ final class StickerNSView: NSView {
         let first = appliedState == nil
         appliedState = state
         let fromOpacity = sprite.presentation()?.opacity ?? sprite.opacity
-        let opacity: Float = mode == .paused ? PausedLook.indicatorOpacity : 1
-        if mode == .playing && !still {
+        let opacity = StickerPlayback.opacity(mode, paused: PausedLook.indicatorOpacity)
+        let plan = StickerPlayback.plan(mode: mode, animated: a.isAnimated, reduceMotion: reduceMotion, lowPower: lowPower,
+                                        current: currentFrame(a))
+        switch plan {
+        case .loop(let from):
+            frozen = min(from, a.frames.count - 1)
             startLoop(a)
-        } else {
+        case .hold(let frame):
             // Frozen where it had got to; Reduce Motion and the resting sticker show the first frame.
-            frozen = reduceMotion || mode == .idle ? 0 : currentFrame(a)
+            frozen = min(frame, a.frames.count - 1)
             loopBegan = nil
             CATransaction.begin()
             CATransaction.setDisableActions(true)
@@ -236,7 +237,7 @@ final class StickerNSView: NSView {
         loop.repeatCount = .infinity
         loop.timeOffset = offset
         // As often as the quickest frame needs, and never more than 30 a second.
-        let rate = Float(min(30, max(1, (1 / (a.delays.min() ?? 0.1)).rounded(.up))))
+        let rate = StickerTiming.frameRate(a.delays)
         loop.preferredFrameRateRange = CAFrameRateRange(minimum: min(10, rate), maximum: 30, preferred: rate)
         CATransaction.begin()
         CATransaction.setDisableActions(true)

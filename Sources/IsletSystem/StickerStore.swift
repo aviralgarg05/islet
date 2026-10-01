@@ -159,10 +159,12 @@ public final class StickerStore: @unchecked Sendable {
     /// Reads a picture the user chose, scales it to the wing, keeps at most `maxFrames`
     /// frames, and saves it as a new sticker. Returns its id. Slow work: call off the main thread.
     @discardableResult
-    public func add(from source: URL) throws -> String {
+    public func add(from chosen: URL) throws -> String {
         lock.lock()
         defer { lock.unlock() }
         guard ids().count < StickerLimits.maxCustom else { throw StickerImportError.full }
+        // A link dropped from Finder is the file it points to: its size and kind are that file's.
+        let source = chosen.resolvingSymlinksInPath()
         let values = try? source.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
         guard values?.isRegularFile == true else { throw StickerImportError.unreadable }
         // Turned away by its size before a byte of it is read.

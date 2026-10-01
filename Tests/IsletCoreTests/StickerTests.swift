@@ -88,8 +88,26 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
 
 @Suite struct StickerTimingTests {
     @Test func delaysAreMadeSafe() {
-        let d = StickerTiming.delays([0.05, 0, nil, -1, .nan, 0.001, 60, 0.02])
-        #expect(d == [0.05, 0.1, 0.1, 0.1, 0.1, 0.02, 10, 0.02])
+        let d = StickerTiming.delays([0.05, 0, nil, -1, .nan, .infinity, 60, 0.02, 0.015])
+        #expect(d == [0.05, 0.1, 0.1, 0.1, 0.1, 0.1, 10, 0.02, 0.02])
+    }
+
+    /// Old tools wrote 0 or 10 ms for "as fast as you can", and every browser plays those at
+    /// 100 ms, so that is how the GIF was meant to look; 20 ms and up is taken as asked.
+    @Test func tenMillisecondFramesPlayAsBrowsersPlayThem() {
+        #expect(StickerTiming.delays([0.01, 0.001, 0.0109]) == [0.1, 0.1, 0.1])
+        #expect(StickerTiming.delays([0.011, 0.02, 0.03]) == [0.02, 0.02, 0.03])
+    }
+
+    @Test func theLoopAsksForNoMoreThanThirtyFramesASecond() {
+        #expect(StickerTiming.frameRate([0.02, 0.05]) == 30, "50 a second asked, 30 given")
+        #expect(StickerTiming.frameRate([0.05, 0.1]) == 20)
+        #expect(StickerTiming.frameRate([0.1]) == 10)
+        #expect(StickerTiming.frameRate([4, 10]) == 1)
+        #expect(StickerTiming.frameRate([]) == 10)
+        for d in StickerTiming.delays([0, 0.001, 0.01, 0.02, nil]) {
+            #expect(StickerTiming.frameRate([d]) <= 30)
+        }
     }
 
     @Test func keyTimesStartEachFrameAtItsShare() {
@@ -134,6 +152,49 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         for i in d.indices {
             #expect(StickerTiming.frame(at: StickerTiming.start(of: i, delays: d) + 0.001, delays: d) == i)
         }
+    }
+}
+
+@Suite struct StickerPlaybackTests {
+    private func plan(_ mode: StickerMode, animated: Bool = true, reduceMotion: Bool = false, lowPower: Bool = false,
+                      current: Int = 7) -> StickerPlayback {
+        StickerPlayback.plan(mode: mode, animated: animated, reduceMotion: reduceMotion, lowPower: lowPower, current: current)
+    }
+
+    @Test func itLoopsOnlyWhileTheMusicPlays() {
+        #expect(plan(.playing) == .loop(from: 7), "carries on from the frame it was on")
+        #expect(plan(.paused) == .hold(7), "paused: frozen on the frame it had reached")
+        #expect(plan(.idle) == .hold(0), "resting with nothing playing: the first frame")
+    }
+
+    @Test func reduceMotionShowsTheFirstFrameAndLowPowerHoldsTheCurrentOne() {
+        for mode in [StickerMode.playing, .paused, .idle] {
+            #expect(plan(mode, reduceMotion: true) == .hold(0), "\(mode)")
+            #expect(plan(mode, reduceMotion: true, lowPower: true) == .hold(0), "\(mode)")
+        }
+        #expect(plan(.playing, lowPower: true) == .hold(7))
+        #expect(plan(.paused, lowPower: true) == .hold(7))
+        #expect(plan(.idle, lowPower: true) == .hold(0))
+    }
+
+    @Test func aStillPictureNeverLoops() {
+        #expect(plan(.playing, animated: false, current: 0) == .hold(0))
+        #expect(plan(.playing, current: -3) == .loop(from: 0))
+    }
+
+    @Test func pausedDimsAsTheBarsDo() {
+        #expect(StickerPlayback.opacity(.paused, paused: 0.55) == 0.55)
+        #expect(StickerPlayback.opacity(.playing, paused: 0.55) == 1)
+        #expect(StickerPlayback.opacity(.idle, paused: 0.55) == 1)
+    }
+
+    @Test func oneOfYoursThatHasGoneShowsTheCat() {
+        let mine = CustomStickerID.make()
+        let s = StickerSettings(id: StickerChoice.custom(mine).id)
+        #expect(s.shown { $0 == mine } == .custom(mine))
+        #expect(s.shown { _ in false } == .builtIn(.cat))
+        // Islet's own are always there; the existence check isn't asked about them.
+        #expect(StickerSettings(id: "star").shown { _ in Issue.record("asked about a built-in"); return false } == .builtIn(.star))
     }
 }
 

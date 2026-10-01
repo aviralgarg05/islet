@@ -18,8 +18,9 @@ final class StickerLibrary {
     @ObservationIgnored private var loaded = false
     /// A plain message about the last file that couldn't be added, until the next try.
     var problem: String?
-    /// An import is under way.
-    private(set) var adding = false
+    /// An import is under way (a drop can arrive while another is still being read).
+    var adding: Bool { importing > 0 }
+    private var importing = 0
     @ObservationIgnored private var cache: [String: Weak] = [:]
 
     private final class Weak {
@@ -70,9 +71,7 @@ final class StickerLibrary {
 
     /// The sticker to show for these settings: the chosen one, or the cat if that has gone.
     func resolved(_ s: StickerSettings) -> StickerChoice {
-        let choice = s.choice
-        if case .custom = choice, url(for: choice) == nil { return .builtIn(.cat) }
-        return choice
+        s.shown { store.url(for: $0) != nil }
     }
 
     // MARK: Frames
@@ -126,6 +125,17 @@ final class StickerLibrary {
 
     private func key(_ choice: StickerChoice, _ pixel: Int) -> String { "\(choice.id)@\(pixel)" }
 
+    /// Frames a view has just let go, kept until the main queue's next turn: a view SwiftUI
+    /// puts in the old one's place in the same update finds them in the cache.
+    func linger(_ animation: StickerAnimation) {
+        lingering.append(animation)
+        guard lingering.count == 1 else { return }
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated { self?.lingering.removeAll() }
+        }
+    }
+    @ObservationIgnored private var lingering: [StickerAnimation] = []
+
     // MARK: The user's stickers
 
     /// Copies pictures in as stickers, one after another, and returns the last one added.
@@ -134,8 +144,8 @@ final class StickerLibrary {
     func add(_ urls: [URL]) async -> String? {
         loadIfNeeded()
         problem = nil
-        adding = true
-        defer { adding = false }
+        importing += 1
+        defer { importing -= 1 }
         var last: String?
         for url in urls {
             let store = self.store

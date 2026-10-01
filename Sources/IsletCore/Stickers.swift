@@ -121,6 +121,43 @@ public struct StickerSettings: Codable, Equatable, Sendable {
     }
 
     public var choice: StickerChoice { StickerChoice(id: id) ?? .builtIn(.cat) }
+
+    /// The sticker that shows: the chosen one, or the cat when it is one of yours whose file
+    /// has gone (removed, or a config.json from another Mac). The island and the gallery's
+    /// selection both follow this, so they never disagree.
+    public func shown(customExists: (String) -> Bool) -> StickerChoice {
+        if case .custom(let name) = choice, !customExists(name) { return .builtIn(.cat) }
+        return choice
+    }
+}
+
+/// What the sticker is doing: playing with the music, frozen and dim while it is paused, or
+/// resting, still, beside the notch when nothing plays ("Also when nothing is playing").
+public enum StickerMode: Equatable, Sendable {
+    case playing, paused, idle
+}
+
+/// How the sticker's frames are shown in a given state: looping, or one frame held still.
+public enum StickerPlayback: Equatable, Sendable {
+    /// Play the loop, starting at this frame.
+    case loop(from: Int)
+    /// Hold this frame.
+    case hold(Int)
+
+    /// It loops only while the music plays, for a picture with more than one frame, without
+    /// Reduce Motion (or animation style Off) and outside Low Power Mode. Otherwise it holds a
+    /// frame: the first with Reduce Motion and when resting with nothing playing, the one it
+    /// had reached when paused or in Low Power Mode. `current` is the frame on show now.
+    public static func plan(mode: StickerMode, animated: Bool, reduceMotion: Bool, lowPower: Bool, current: Int) -> StickerPlayback {
+        let frame = max(0, current)
+        if mode == .playing, animated, !reduceMotion, !lowPower { return .loop(from: frame) }
+        return .hold(reduceMotion || mode == .idle ? 0 : frame)
+    }
+
+    /// Paused music dims the sticker as it does the bars; playing and resting are whole.
+    public static func opacity(_ mode: StickerMode, paused: Float) -> Float {
+        mode == .paused ? paused : 1
+    }
 }
 
 /// What an imported sticker may be.
@@ -137,8 +174,11 @@ public enum StickerLimits {
     /// wide for wide ones.
     public static let storedHeight = 80
     public static let storedWidth = 160
-    /// The quickest a frame may go, as browsers treat a GIF that asks for less.
+    /// The quickest a frame may go.
     public static let minDelay = 0.02
+    /// A frame that asks for this little time or less (0 or 10 ms, old tools' "as fast as you
+    /// can") gets `defaultDelay` instead, as browsers play it.
+    public static let browserFloor = 0.011
     /// A frame that says nothing about its time, or something unreadable, gets this.
     public static let defaultDelay = 0.1
     /// No frame waits longer than this.
@@ -169,17 +209,24 @@ public enum StickerImportError: Error, Equatable, Sendable {
 /// The frame-timing maths: each frame's time, the key times for the animation that plays them,
 /// thinning very long animations, and where a paused sticker is in its loop.
 public enum StickerTiming {
-    /// Each frame's delay, as the file asks, made safe: at least `minDelay` (browsers treat
-    /// 0 and 10 ms GIFs the same way), a missing or unreadable one `defaultDelay`, none longer
-    /// than `maxDelay`.
+    /// Each frame's delay, as the file asks, made safe and played as a browser plays it: 0 or
+    /// 10 ms (under `browserFloor`), missing or unreadable is `defaultDelay`; anything else is
+    /// at least `minDelay` and at most `maxDelay`.
     public static func delays(_ raw: [Double?]) -> [Double] {
         raw.map { d in
-            guard let d, d.isFinite, d > 0 else { return StickerLimits.defaultDelay }
+            guard let d, d.isFinite, d >= StickerLimits.browserFloor else { return StickerLimits.defaultDelay }
             return min(StickerLimits.maxDelay, max(StickerLimits.minDelay, d))
         }
     }
 
     public static func duration(_ delays: [Double]) -> Double { delays.reduce(0, +) }
+
+    /// The frame rate the loop asks Core Animation for: as often as its quickest frame needs,
+    /// and never more than 30 a second.
+    public static func frameRate(_ delays: [Double]) -> Float {
+        guard let quickest = delays.filter({ $0.isFinite && $0 > 0 }).min() else { return 10 }
+        return Float(min(30, max(1, (1 / quickest).rounded(.up))))
+    }
 
     /// Key times for a discrete keyframe animation over `delays`: one more than the frames,
     /// from 0 to 1, each frame starting at its share of the loop.
