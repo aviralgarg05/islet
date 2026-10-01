@@ -84,6 +84,13 @@ public struct NowPlaying: Codable, Equatable, Sendable {
         return pos / duration
     }
 
+    /// When a playing track reaches its end, extrapolated from the last report. Nil when it
+    /// isn't playing or has no length (a live stream).
+    public var endsAt: Date? {
+        guard isPlaying, let duration, duration > 0, let elapsed, playbackRate > 0 else { return nil }
+        return timestamp.addingTimeInterval(max(0, duration - elapsed) / playbackRate)
+    }
+
     /// Identity of the track, ignoring position/playing state. Used to detect track changes.
     public var trackKey: String {
         [title, artist ?? "", album ?? ""].joined(separator: "\u{1F}")
@@ -98,16 +105,30 @@ public struct NowPlaying: Codable, Equatable, Sendable {
 /// 3. Direct app integrations beat the generic system bridge when they describe the same
 ///    track, because they carry richer data (artwork URL, reliable state).
 /// 4. Paused players are forgotten after `pausedTimeout` so a stale track doesn't linger forever.
+/// 4a. A track that still says it is playing well past its end (a browser often never reports
+///     that a video finished) counts as paused from its end and goes after `endedTimeout`.
 /// 5. Sources switched off in settings are ignored. Music and Spotify count as themselves even
 ///    when the system bridge reports them (`setting(for:)`).
 public struct MediaArbiter: Sendable {
     public private(set) var snapshots: [MediaSourceKind: NowPlaying] = [:]
     public var pausedTimeout: TimeInterval
+    /// Seconds past a track's end before a player that still says "playing" is believed to have
+    /// stopped, so a slow report of the next track doesn't flicker the island.
+    public var endedGrace: TimeInterval
+    /// Seconds after its end that such a track is forgotten.
+    public var endedTimeout: TimeInterval
     /// Sources the user switched off in settings.
     public var disabled: Set<MediaSourceKind>
 
-    public init(pausedTimeout: TimeInterval = 15 * 60, disabled: Set<MediaSourceKind> = []) {
+    /// The kinds the system-wide bridge reports. It describes one player at a time, so each of
+    /// its reports replaces all of them.
+    public static let bridgeSources: Set<MediaSourceKind> = [.system, .browser]
+
+    public init(pausedTimeout: TimeInterval = 15 * 60, endedGrace: TimeInterval = 5, endedTimeout: TimeInterval = 120,
+                disabled: Set<MediaSourceKind> = []) {
         self.pausedTimeout = pausedTimeout
+        self.endedGrace = endedGrace
+        self.endedTimeout = endedTimeout
         self.disabled = disabled
     }
 
@@ -118,6 +139,29 @@ public struct MediaArbiter: Sendable {
     /// A provider reports that its player quit or has nothing loaded.
     public mutating func clear(_ source: MediaSourceKind) {
         snapshots[source] = nil
+    }
+
+    /// A report from the system-wide bridge: what plays now, or nil for nothing. It replaces
+    /// whatever the bridge said before, under either kind, so a browser video doesn't stay
+    /// "playing" after its window closes because the bridge's "nothing" was filed under the
+    /// other kind.
+    public mutating func updateFromBridge(_ snapshot: NowPlaying?) {
+        for source in Self.bridgeSources { snapshots[source] = nil }
+        if let snapshot { snapshots[snapshot.source] = snapshot }
+    }
+
+    /// Whether a snapshot is really playing at `now`: it says so and hasn't run past its end.
+    public func isPlaying(_ s: NowPlaying, now: Date) -> Bool {
+        guard s.isPlaying else { return false }
+        guard let end = s.endsAt else { return true }
+        return now < end.addingTimeInterval(endedGrace)
+    }
+
+    /// When a snapshot stops counting: paused ones `pausedTimeout` after their last report,
+    /// ones stuck at their end `endedTimeout` after it, playing ones never.
+    func forgetAt(_ s: NowPlaying) -> Date? {
+        if !s.isPlaying { return s.timestamp.addingTimeInterval(pausedTimeout) }
+        return s.endsAt?.addingTimeInterval(endedTimeout)
     }
 
     /// The switch in settings a snapshot answers to. Music and Spotify reported by the system
@@ -132,17 +176,25 @@ public struct MediaArbiter: Sendable {
     /// so the track goes on time instead of at the next media update. One already due and not yet
     /// forgotten comes back as `now`: another input can replace the timer just before it fires,
     /// and the track must still go.
+    ///
+    /// A track still "playing" past its end also has a deadline: when it starts to show as
+    /// paused, then when it goes.
     public func nextDeadline(now: Date) -> Date? {
-        snapshots.values
-            .filter { !$0.isPlaying }
-            .map { max(now, $0.timestamp.addingTimeInterval(pausedTimeout)) }
-            .min()
+        var dates: [Date] = []
+        for s in snapshots.values {
+            // Due and not yet forgotten: now. `expire` removes it, so this can't repeat.
+            if let forget = forgetAt(s) { dates.append(max(now, forget)) }
+            // Showing as stopped changes nothing stored, so only a moment still ahead counts.
+            if let end = s.endsAt, end.addingTimeInterval(endedGrace) > now { dates.append(end.addingTimeInterval(endedGrace)) }
+        }
+        return dates.min()
     }
 
-    /// Forget paused players that have timed out. Returns whether any were forgotten.
+    /// Forget paused players that have timed out, and ones stuck past their end. Returns
+    /// whether any were forgotten.
     @discardableResult
     public mutating func expire(now: Date) -> Bool {
-        let dead = snapshots.filter { !$0.value.isPlaying && now.timeIntervalSince($0.value.timestamp) >= pausedTimeout }.keys
+        let dead = snapshots.filter { forgetAt($0.value).map { $0 <= now } == true }.keys
         for source in dead { snapshots[source] = nil }
         return !dead.isEmpty
     }
@@ -150,8 +202,16 @@ public struct MediaArbiter: Sendable {
     public func current(now: Date) -> NowPlaying? {
         let live = snapshots.values.filter { s in
             guard !disabled.contains(Self.setting(for: s)) else { return false }
-            if s.isPlaying { return true }
-            return now.timeIntervalSince(s.timestamp) < pausedTimeout
+            guard let forget = forgetAt(s) else { return true }
+            return now < forget
+        }.map { s -> NowPlaying in
+            // Past its end: show it as stopped where it ended.
+            guard s.isPlaying, !isPlaying(s, now: now), let end = s.endsAt else { return s }
+            var stopped = s
+            stopped.isPlaying = false
+            stopped.elapsed = s.duration
+            stopped.timestamp = end
+            return stopped
         }
         guard !live.isEmpty else { return nil }
         let best = live.max { a, b in

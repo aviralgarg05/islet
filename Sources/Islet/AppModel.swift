@@ -644,7 +644,10 @@ final class AppModel {
     }
 
     private func mediaUpdate(_ np: NowPlaying?, source: MediaSourceKind) {
-        if let np { media.update(np) } else { media.clear(source) }
+        if source == .system {
+            // The bridge files browsers under .browser; each report replaces both kinds.
+            media.updateFromBridge(np)
+        } else if let np { media.update(np) } else { media.clear(source) }
         let now = Date()
         setNowPlaying(media.current(now: now), now: now)
         reschedule()

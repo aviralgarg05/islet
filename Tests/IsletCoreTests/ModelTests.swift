@@ -168,6 +168,66 @@ import Testing
         #expect(a.nextDeadline(now: t0.addingTimeInterval(70)) == nil)
     }
 
+    @Test func closingABrowserWindowClearsItsVideo() {
+        // The bridge files a Chrome video under .browser; its "nothing playing" must clear it.
+        var a = MediaArbiter()
+        a.updateFromBridge(NowPlaying(source: .browser, bundleID: "com.google.Chrome", title: "Clip", isPlaying: true,
+                                      duration: 38.9, elapsed: 10, timestamp: t0))
+        #expect(a.current(now: t0.addingTimeInterval(1))?.title == "Clip")
+        a.updateFromBridge(nil)
+        #expect(a.current(now: t0.addingTimeInterval(2)) == nil)
+        #expect(a.nextDeadline(now: t0.addingTimeInterval(2)) == nil)
+    }
+
+    @Test func theBridgeMovingToAnotherAppDropsTheBrowserVideo() {
+        var a = MediaArbiter()
+        a.update(np(.spotify, "song", playing: false, at: 0))
+        a.updateFromBridge(np(.browser, "video", playing: true, at: 1))
+        a.updateFromBridge(np(.system, "podcast", playing: true, at: 2))
+        #expect(a.snapshots[.browser] == nil)
+        #expect(a.current(now: t0.addingTimeInterval(3))?.title == "podcast")
+        // Other providers are not the bridge's to replace.
+        #expect(a.snapshots[.spotify]?.title == "song")
+    }
+
+    @Test func aVideoStuckPastItsEndShowsStoppedThenGoes() {
+        // Chrome kept saying "playing" at 38.9 of 38.9 s after the video finished.
+        var a = MediaArbiter(endedGrace: 5, endedTimeout: 120)
+        let video = NowPlaying(source: .browser, title: "Clip", isPlaying: true, duration: 38.9, elapsed: 30, timestamp: t0)
+        a.updateFromBridge(video)
+        let end = t0.addingTimeInterval(8.9)
+        #expect(a.current(now: end.addingTimeInterval(4))?.isPlaying == true)
+        #expect(a.nextDeadline(now: end) == end.addingTimeInterval(5))
+        let stopped = a.current(now: end.addingTimeInterval(6))
+        #expect(stopped?.isPlaying == false)
+        #expect(stopped?.position(at: end.addingTimeInterval(60)) == 38.9)
+        // Once it shows as stopped, the next deadline is when it goes, not a loop at `now`.
+        #expect(a.nextDeadline(now: end.addingTimeInterval(6)) == end.addingTimeInterval(120))
+        let early = a.expire(now: end.addingTimeInterval(119))
+        let due = a.expire(now: end.addingTimeInterval(120))
+        #expect(!early)
+        #expect(due)
+        #expect(a.current(now: end.addingTimeInterval(120)) == nil)
+    }
+
+    @Test func aRealPlayerBeatsOneStuckPastItsEnd() {
+        var a = MediaArbiter()
+        a.update(NowPlaying(source: .browser, title: "Clip", isPlaying: true, duration: 10, elapsed: 10, timestamp: t0))
+        a.update(np(.spotify, "song", playing: false, at: 1))
+        // Both count as stopped now; the newer report wins, as among paused players.
+        #expect(a.current(now: t0.addingTimeInterval(30))?.title == "song")
+    }
+
+    @Test func liveStreamsAndUnknownPositionsNeverEnd() {
+        var a = MediaArbiter()
+        a.update(NowPlaying(source: .browser, title: "Live", isPlaying: true, duration: 0, elapsed: 500, timestamp: t0))
+        a.update(NowPlaying(source: .system, title: "Radio", isPlaying: true, duration: 100, timestamp: t0))
+        #expect(a.nextDeadline(now: t0) == nil)
+        #expect(a.current(now: t0.addingTimeInterval(10_000))?.isPlaying == true)
+        let forgot = a.expire(now: t0.addingTimeInterval(10_000))
+        #expect(!forgot)
+    }
+
     @Test func expireForgetsTimedOutPausedPlayers() {
         var a = MediaArbiter(pausedTimeout: 60)
         a.update(np(.spotify, "s", playing: false, at: 0))
