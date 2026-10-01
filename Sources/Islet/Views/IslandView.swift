@@ -422,25 +422,23 @@ struct IslandView: View {
         // back by this much so they fade where they were instead of drifting over the menu bar.
         let shift = (g.outerWidth - fromWidth) / 2
 
-        HStack(alignment: .top, spacing: IslandLayout.bubbleGap) {
-            // Bubbles on one side are balanced by invisible spacers on the other,
-            // so the island itself stays centred on the notch.
-            if left {
-                bubbleViews(slots, diameter: bp.diameter, top: bp.top, geometry: g, shift: shift)
-            } else {
-                spacers(slots.count, diameter: bp.diameter)
-            }
-            VStack(spacing: PageSwitcher.gap) {
-                island(p, geometry: g, from: fromG, move: move, counted: fitted.counted)
-                switcher(p)
-            }
-            // Above the bubbles, so a bubble's goo flows out from under the island's edge.
-            .zIndex(1)
-            if left {
-                spacers(slots.count, diameter: bp.diameter)
-            } else {
-                bubbleViews(slots, diameter: bp.diameter, top: bp.top, geometry: g, shift: shift)
-            }
+        VStack(spacing: PageSwitcher.gap) {
+            island(p, geometry: g, from: fromG, move: move, counted: fitted.counted)
+                // Bubbles hang off the island's edge, behind it (so a bubble's goo flows out from
+                // under the edge), and take no part in centring it: nothing a bubble does, coming
+                // or going, can move the island. (Balancing them with spacers on the other side
+                // let the island slide sideways while the two sides animated at different speeds.)
+                .background(alignment: left ? .topLeading : .topTrailing) {
+                    HStack(alignment: .top, spacing: IslandLayout.bubbleGap) {
+                        bubbleViews(slots, diameter: bp.diameter, top: bp.top, geometry: g, shift: shift)
+                    }
+                    .fixedSize()
+                    // The row's inner edge sits one gap outside the island's edge.
+                    .alignmentGuide(left ? HorizontalAlignment.leading : HorizontalAlignment.trailing) { d in
+                        left ? d[HorizontalAlignment.trailing] + IslandLayout.bubbleGap : d[HorizontalAlignment.leading] - IslandLayout.bubbleGap
+                    }
+                }
+            switcher(p)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         // Shape first: opening springs open at once; closing waits for the content to go.
@@ -615,11 +613,6 @@ struct IslandView: View {
             PageSwitcher(model: model)
                 .transition(SwitcherReveal.transition(style))
         }
-    }
-
-    @ViewBuilder
-    private func spacers(_ count: Int, diameter: CGFloat) -> some View {
-        ForEach(0..<count, id: \.self) { _ in Color.clear.frame(width: diameter, height: 1) }
     }
 
     /// A bubble beside the island, as drawn in this update: where it sits (0 next to the
