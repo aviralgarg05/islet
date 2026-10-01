@@ -346,3 +346,71 @@ private func song(playing: Bool, elapsed: Double? = 60, duration: Double? = 240,
         #expect(IsletSettings().resettingAppearance() == IsletSettings())
     }
 }
+
+@Suite struct NothingHangsLowerTests {
+    @Test func theHoverResponseOnlyWidens() {
+        // Resting on the closed island widens it a little; it never grows below the notch.
+        let notch = CGSize(width: 185, height: 32)
+        let grown = NotchGeometry.hoverGrown(notch)
+        #expect(grown.height == notch.height)
+        #expect(grown.width == notch.width + 2 * NotchGeometry.hoverGrow)
+        #expect(NotchGeometry.hoverGrown(notch, by: 0) == notch)
+        #expect(NotchGeometry.hoverGrown(notch, by: -4) == notch)
+    }
+
+    @Test func theBlackUnderTheStemIsShortByDefault() {
+        let level = IsletSettings().glassLevel
+        // Every size of open island, up to the tallest Settings allows.
+        for height in [IsletSettings.expandedHeightRange.lowerBound, 200, 260, IsletSettings.expandedHeightRange.upperBound] {
+            let body = CGFloat(height) - 32
+            let depth = GlassMelt.depth(body: body, level: level)
+            #expect(depth < 20, "a \(height) pt island melts \(depth) pt below the menu bar")
+            #expect(GlassMelt.depth(body: body, level: 1) == GlassMelt.shortest)
+            // Towards Black it reaches further, up to half the body.
+            #expect(GlassMelt.depth(body: body, level: 0) == body / 2)
+            var last = GlassMelt.depth(body: body, level: 0)
+            for step in 1...10 {
+                let next = GlassMelt.depth(body: body, level: Double(step) / 10)
+                #expect(next <= last)
+                last = next
+            }
+        }
+        #expect(GlassMelt.depth(body: -10, level: 0) == GlassMelt.shortest)
+        #expect(GlassMelt.depth(body: 168, level: .nan) == GlassMelt.shortest)
+    }
+
+    @Test func theSmokeNeverDropsBelowItsFloor() {
+        for step in 0...10 {
+            #expect(GlassMelt.smoke(level: Double(step) / 10) >= GlassMelt.smokeFloor)
+        }
+        #expect(GlassMelt.smoke(level: IsletSettings().glassLevel) == GlassMelt.smokeFloor)
+        #expect(GlassMelt.smoke(level: 0) > 0.8)
+        #expect(GlassMelt.smoke(level: -3) == GlassMelt.smoke(level: 0))
+        #expect(GlassMelt.smoke(level: .infinity) == GlassMelt.smokeFloor)
+    }
+}
+
+@Suite struct AppRuleLeniencyTests {
+    @Test func aMisspeltPriorityKeepsEveryRule() {
+        let s = decode(##"{"appRules": [{"bundleID": "a.b", "tint": "#2F7CF6", "priority": "highest", "hideIsland": true},"## +
+                       ##" {"bundleID": "c.d", "priority": "urgent", "muteNotifications": "yes"}]}"##)
+        #expect(s.appRules.map(\.bundleID) == ["a.b", "c.d"])
+        // Only the value that can't be read falls back to "its own".
+        #expect(s.rule(for: "a.b")?.priority == nil)
+        #expect(s.rule(for: "a.b")?.tint == "#2F7CF6")
+        #expect(s.rule(for: "a.b")?.hideIsland == true)
+        #expect(s.rule(for: "c.d")?.priority == .critical)
+        #expect(s.rule(for: "c.d")?.muteNotifications == nil)
+    }
+
+    @Test func aRuleStillNeedsItsApp() {
+        // Without a bundle id there is nothing to apply the rule to: the list falls back as before.
+        #expect(decode(#"{"appRules": [{"tint": "red"}]}"#).appRules.isEmpty)
+    }
+
+    @Test func rulesRoundTrip() throws {
+        let rule = AppRule(bundleID: "a.b", tint: "teal", hideIsland: true, showInFullscreen: true, muteNotifications: true, priority: .high)
+        let data = try JSONEncoder().encode(rule)
+        #expect(try JSONDecoder().decode(AppRule.self, from: data) == rule)
+    }
+}

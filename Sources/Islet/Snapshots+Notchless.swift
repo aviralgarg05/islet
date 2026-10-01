@@ -56,6 +56,50 @@ extension Snapshots {
         }
     }
 
+    /// `<dir>/52-notchless-pill-morph-*.png`: the silhouette part of the way from the floating
+    /// pill to the open island and to a song peek, one frame per row. Every frame should be a
+    /// step between its neighbours: no jump from the pill to the hanging shape at the end.
+    static func renderPillMorph(to dir: URL, model: AppModel) {
+        let s = model.settings
+        let metrics = NotchGeometry.metrics(for: notchlessScreen, expandedSize: CGSize(width: s.expandedSize.width, height: s.expandedSize.height),
+                                            wingWidth: s.effectiveWingWidth, adjust: s.notchAdjust, notchless: .pill)
+        guard let np = model.nowPlaying else { return }
+        let wing = metrics.wingWidth
+        let pill = IslandLayout.geometry(for: .compact(.nowPlaying(np)), metrics: metrics, wing: wing)
+        let targets: [(String, IslandGeometry)] = [
+            ("open", IslandLayout.geometry(for: .expanded, metrics: metrics, wing: wing, look: IslandLook(stemmedOpen: true))),
+            ("song-peek", IslandLayout.geometry(for: .songPeek(np), metrics: metrics, wing: wing)),
+        ]
+        let steps: [Double] = [0, 0.2, 0.5, 0.8, 0.95, 0.99, 1]
+        for (name, end) in targets {
+            let frames = VStack(spacing: 0) {
+                ForEach(steps, id: \.self) { k in
+                    let g = morph(pill, end, k)
+                    ZStack(alignment: .top) {
+                        notchlessBackdrop(metrics: metrics)
+                        g.shape.fill(Color.black).frame(width: g.outerWidth, height: g.size.height)
+                    }
+                    .frame(width: 760, height: end.size.height + 8)
+                    .clipped()
+                }
+            }
+            write(frames, to: dir.appendingPathComponent("52-notchless-pill-morph-\(name).png"))
+        }
+    }
+
+    /// `a` moved `k` of the way to `b`, as the island's spring moves it.
+    private static func morph(_ a: IslandGeometry, _ b: IslandGeometry, _ k: Double) -> IslandGeometry {
+        func mix(_ x: CGFloat, _ y: CGFloat) -> CGFloat { x + (y - x) * CGFloat(k) }
+        var g = b
+        g.size = CGSize(width: mix(a.size.width, b.size.width), height: mix(a.size.height, b.size.height))
+        g.top = mix(a.top, b.top)
+        g.bottom = mix(a.bottom, b.bottom)
+        g.stemWidth = mix(a.stemWidth, b.stemWidth)
+        g.stemHeight = mix(a.stemHeight, b.stemHeight)
+        g.inset = mix(a.inset, b.inset)
+        return g
+    }
+
     static func shootNotchless(_ name: String, model: AppModel, metrics: IslandMetrics, dir: URL) {
         let view = IslandView(model: model, display: 2, metrics: metrics)
             .frame(width: 760, height: 140, alignment: .top)

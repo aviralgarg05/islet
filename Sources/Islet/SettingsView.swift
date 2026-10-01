@@ -286,7 +286,7 @@ struct AppearanceSettings: View {
                         .disabled(s.resettingAppearance() == s)
                 } label: {
                     Text("Back to the original look")
-                    Text("Theme, colours, sizes, motion and the playing indicator. Fit to the notch stays as it is.")
+                    Text("Theme, colours, sizes, motion and the music's look. Fit to the notch stays as it is.")
                 }
                 .settingsAnchor("appearance.reset")
                 .confirmationDialog("Reset the island's appearance?", isPresented: $confirmingReset) {
@@ -295,7 +295,7 @@ struct AppearanceSettings: View {
                     }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text("Everything on this page goes back to how Islet came, apart from Fit to the notch. Other pages don't change.")
+                    Text("Everything on this page goes back to how Islet came, and so do the playing indicator, the music colour and the song progress ring on Now Playing. Fit to the notch stays as it is.")
                 }
             } header: {
                 Text("Reset")

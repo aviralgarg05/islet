@@ -56,11 +56,11 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 ### Look
 - A calmer open island. The pages move out of the menu bar row into a small glass switcher under the island (Home, Today, Shelf and a menu for the rest), with a timer button on one side and Ask on the other. Home shows one main thing large, usually what's playing, with a quiet column beside it. Cards lost their borders, and spacing, corners and type follow one set of sizes.
 - Dynamic Glass is the default theme. The open island takes a stem-and-body shape: only a notch-wide black stem sits in the menu bar row, so the menu bar beside the notch stays in view, and the island is Liquid Glass from the bottom of the menu bar (a blurred material before macOS 26), with the black melting a little way down under the stem. A faint smoke keeps text readable, and a slow sheen drifts across unless Reduce Motion or Low Power Mode is on. **Glass level** in Settings sets how far the black melts and how dark the glass is. The pin moves to the page switcher's menu as **Keep open**. Black and Graphite keep the full-width row.
-- The closed island grows a little while the pointer rests on it, before it opens. Not with Reduce Motion.
+- The closed island widens a little while the pointer rests on it, before it opens. It never grows downwards, and not at all with Reduce Motion.
 - **Subtle outline** (Appearance) draws a faint edge round the island for dark wallpapers; Increase Contrast always draws it. **Glass on displays without a notch** makes the closed pill glass too with the Glass theme.
 - **Animation speed** (Appearance) makes every move Relaxed, Normal or Quick, whatever the animation style.
 - An app on the Apps page can take any colour from the system colour panel, as the accent can, and a priority for its activities and notifications (low to urgent).
-- **Reset appearance…** at the end of Appearance puts the look back as Islet came, after asking. Fit to the notch and other pages stay as they are.
+- **Reset appearance…** at the end of Appearance puts the look back as Islet came, after asking: everything on that page and the music's look. Fit to the notch stays as it is.
 - **Artwork corners** (Appearance) go from square to round beside the notch, in a new song's peek and in the open island.
 - **Fit to the notch** (Appearance) nudges the notch's width by up to 20 points and its height by up to 4, so the closed island lines up with the hardware. Hovering and clicking follow.
 - Volume and brightness HUDs can be white, the accent colour or colourful (volume green, brightness yellow, keyboard light blue).

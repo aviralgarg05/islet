@@ -113,29 +113,28 @@ enum IslandLayout {
                               stemWidth: min(row, width), stemHeight: n.height, wing: wing)
     }
 
-    /// How much the closed island grows on each side while the pointer rests on it.
-    static let hoverGrow: CGFloat = 3
+    /// How much the closed island widens on each side while the pointer rests on it.
+    static let hoverGrow: CGFloat = NotchGeometry.hoverGrow
     /// The stem's flare where it meets the top of the screen, in the stem-and-body shape.
     static let stemFlare: CGFloat = 10
 
-    /// The closed island a little bigger: `d` points wider on each side and a point taller,
-    /// so it answers the pointer without hanging any lower.
+    /// The closed island a little bigger: `d` points wider on each side and no taller, so it
+    /// answers the pointer without hanging any lower than the notch or out of the menu bar row.
     private static func grown(_ g: IslandGeometry, by d: CGFloat) -> IslandGeometry {
         guard d > 0 else { return g }
         var g = g
-        g.size.width += 2 * d
-        g.size.height += 1
+        g.size = NotchGeometry.hoverGrown(g.size, by: d)
         g.stemWidth += 2 * d
-        g.stemHeight += 1
         return g
     }
 
     /// On a display without a notch: a capsule floating inside the menu bar row, clear of the
-    /// screen's top edge and of the row's bottom.
+    /// screen's top edge and of the row's bottom. Like the other closed shapes its stem is its
+    /// own width, so opening or peeking widens it smoothly instead of through a thin stem.
     private static func pill(width: CGFloat, metrics m: IslandMetrics, wing: CGFloat) -> IslandGeometry {
         let inset = NotchGeometry.pillInset
         return IslandGeometry(size: CGSize(width: width, height: m.notch.height), top: 0, bottom: (m.notch.height - 2 * inset) / 2,
-                              wing: wing, inset: inset)
+                              stemWidth: width, stemHeight: m.notch.height, wing: wing, inset: inset)
     }
 
     /// The detailed HUD: a notch-wide stem in the menu bar row, so the menu bar beside the notch

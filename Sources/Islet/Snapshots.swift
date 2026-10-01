@@ -103,6 +103,7 @@ enum Snapshots {
         }
         renderClosedLooks(to: dir, model: model, metrics: metrics, now: now, metricsFor: metricsFor, shoot: shoot)
         renderNotchless(to: dir, model: model, now: now)
+        renderPillMorph(to: dir, model: model)
         renderShapes(to: dir, model: model)
         model.closedPlacements[1] = nil
 

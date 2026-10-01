@@ -42,56 +42,66 @@ struct IslandShape: Shape {
     /// The silhouette; open (`closed: false`) leaves out the top edge, which sits at the top of
     /// the screen, so an outline traces only the sides and the bottom. A floating pill is
     /// always closed.
+    ///
+    /// A floating pill is the same outline `inset` points inside the frame, top and bottom,
+    /// with its top corners rounded like its bottom ones instead of flared. The inset, that
+    /// rounding and the flare all change together, so opening from the pill, or a peek growing
+    /// out of it, morphs smoothly instead of jumping to the hanging shape at the end.
     func outline(in rect: CGRect, closed: Bool) -> Path {
-        if inset > 0.01 {
-            let pill = rect.insetBy(dx: 0, dy: min(inset, rect.height / 3))
-            return Path(roundedRect: pill, cornerRadius: min(bottomRadius, pill.height / 2, pill.width / 2), style: .continuous)
-        }
-        let t = min(topRadius, rect.width / 4)
-        let bodyL = rect.minX + t, bodyR = rect.maxX - t
+        let inset = min(max(0, self.inset), rect.height / 3)
+        // 1 for a floating pill, 0 for a shape hanging from the top edge.
+        let float = min(1, inset / NotchGeometry.pillInset)
+        let frame = rect.insetBy(dx: 0, dy: inset)
+        let t = min(max(0, topRadius), frame.width / 4)
+        let bodyL = frame.minX + t, bodyR = frame.maxX - t
         let bodyW = bodyR - bodyL
         let stem = stemWidth <= 0 ? bodyW : min(stemWidth, bodyW)
-        let stemH = min(max(0, stemHeight), rect.height)
+        let stemH = min(max(0, stemHeight - inset), frame.height)
+        let top = frame.minY
         var p = Path()
 
-        guard stem < bodyW - 1, stemH > 0, rect.height - stemH > 4 else {
-            let b = min(bottomRadius, bodyW / 2, rect.height / 2)
-            p.move(to: CGPoint(x: rect.minX, y: rect.minY))
-            p.addQuadCurve(to: CGPoint(x: bodyL, y: rect.minY + t), control: CGPoint(x: bodyL, y: rect.minY))
-            p.addLine(to: CGPoint(x: bodyL, y: rect.maxY - b))
-            p.addQuadCurve(to: CGPoint(x: bodyL + b, y: rect.maxY), control: CGPoint(x: bodyL, y: rect.maxY))
-            p.addLine(to: CGPoint(x: bodyR - b, y: rect.maxY))
-            p.addQuadCurve(to: CGPoint(x: bodyR, y: rect.maxY - b), control: CGPoint(x: bodyR, y: rect.maxY))
-            p.addLine(to: CGPoint(x: bodyR, y: rect.minY + t))
-            p.addQuadCurve(to: CGPoint(x: rect.maxX, y: rect.minY), control: CGPoint(x: bodyR, y: rect.minY))
-            if closed { p.closeSubpath() }
+        guard stem < bodyW - 1, stemH > 0, frame.height - stemH > 4 else {
+            let b = min(bottomRadius, bodyW / 2, frame.height / 2)
+            // The pill's rounded top corners; none once it hangs from the top edge.
+            let r = float * b
+            p.move(to: CGPoint(x: bodyL - t + r, y: top))
+            p.addQuadCurve(to: CGPoint(x: bodyL, y: top + t + r), control: CGPoint(x: bodyL, y: top))
+            p.addLine(to: CGPoint(x: bodyL, y: frame.maxY - b))
+            p.addQuadCurve(to: CGPoint(x: bodyL + b, y: frame.maxY), control: CGPoint(x: bodyL, y: frame.maxY))
+            p.addLine(to: CGPoint(x: bodyR - b, y: frame.maxY))
+            p.addQuadCurve(to: CGPoint(x: bodyR, y: frame.maxY - b), control: CGPoint(x: bodyR, y: frame.maxY))
+            p.addLine(to: CGPoint(x: bodyR, y: top + t + r))
+            p.addQuadCurve(to: CGPoint(x: bodyR + t - r, y: top), control: CGPoint(x: bodyR, y: top))
+            if closed || inset > 0.01 { p.closeSubpath() }
             return p
         }
 
         let sL = rect.midX - stem / 2, sR = rect.midX + stem / 2
-        let bodyH = rect.maxY - (rect.minY + stemH)
+        let row = top + stemH
+        let bodyH = frame.maxY - row
         let shoulder = min(8, (bodyW - stem) / 2, stemH / 2)
         let corner = min(bottomRadius * 0.6, bodyH / 3, (bodyW - stem) / 2 - shoulder)
         let b = min(bottomRadius, bodyW / 2, bodyH / 2)
-        let top = rect.minY, row = rect.minY + stemH
+        // The stem's top corners while it still floats as a pill.
+        let r = float * min(b, stem / 2, max(0, stemH - shoulder))
 
-        p.move(to: CGPoint(x: sL - t, y: top))
-        p.addQuadCurve(to: CGPoint(x: sL, y: top + t), control: CGPoint(x: sL, y: top))
+        p.move(to: CGPoint(x: sL - t + r, y: top))
+        p.addQuadCurve(to: CGPoint(x: sL, y: top + t + r), control: CGPoint(x: sL, y: top))
         p.addLine(to: CGPoint(x: sL, y: row - shoulder))
         p.addQuadCurve(to: CGPoint(x: sL - shoulder, y: row), control: CGPoint(x: sL, y: row))
         p.addLine(to: CGPoint(x: bodyL + max(0, corner), y: row))
         p.addQuadCurve(to: CGPoint(x: bodyL, y: row + max(0, corner)), control: CGPoint(x: bodyL, y: row))
-        p.addLine(to: CGPoint(x: bodyL, y: rect.maxY - b))
-        p.addQuadCurve(to: CGPoint(x: bodyL + b, y: rect.maxY), control: CGPoint(x: bodyL, y: rect.maxY))
-        p.addLine(to: CGPoint(x: bodyR - b, y: rect.maxY))
-        p.addQuadCurve(to: CGPoint(x: bodyR, y: rect.maxY - b), control: CGPoint(x: bodyR, y: rect.maxY))
+        p.addLine(to: CGPoint(x: bodyL, y: frame.maxY - b))
+        p.addQuadCurve(to: CGPoint(x: bodyL + b, y: frame.maxY), control: CGPoint(x: bodyL, y: frame.maxY))
+        p.addLine(to: CGPoint(x: bodyR - b, y: frame.maxY))
+        p.addQuadCurve(to: CGPoint(x: bodyR, y: frame.maxY - b), control: CGPoint(x: bodyR, y: frame.maxY))
         p.addLine(to: CGPoint(x: bodyR, y: row + max(0, corner)))
         p.addQuadCurve(to: CGPoint(x: bodyR - max(0, corner), y: row), control: CGPoint(x: bodyR, y: row))
         p.addLine(to: CGPoint(x: sR + shoulder, y: row))
         p.addQuadCurve(to: CGPoint(x: sR, y: row - shoulder), control: CGPoint(x: sR, y: row))
-        p.addLine(to: CGPoint(x: sR, y: top + t))
-        p.addQuadCurve(to: CGPoint(x: sR + t, y: top), control: CGPoint(x: sR, y: top))
-        if closed { p.closeSubpath() }
+        p.addLine(to: CGPoint(x: sR, y: top + t + r))
+        p.addQuadCurve(to: CGPoint(x: sR + t - r, y: top), control: CGPoint(x: sR, y: top))
+        if closed || inset > 0.01 { p.closeSubpath() }
         return p
     }
 }

@@ -156,11 +156,11 @@ private struct GlassBody: View {
     var closedGlass = false
     /// The stem's width when the open island has the stem-and-body shape: then only the stem is
     /// black, and the glass starts right at the bottom of the menu bar, with a short melt under
-    /// the stem whose depth follows the glass level.
+    /// the stem whose depth follows the glass level (`GlassMelt`).
     var stem: CGFloat? = nil
 
     /// The least black left over the glass, so text always has a floor of contrast.
-    static let smoke = 0.3
+    static let smoke = GlassMelt.smokeFloor
     @Environment(\.snapshotMode) private var snapshotMode
 
     var body: some View {
@@ -169,8 +169,8 @@ private struct GlassBody: View {
                 GlassSurface(shape: shape, tint: Color.black.opacity(0.2), fallback: Color(white: 0.13).opacity(0.78))
                     .transition(.asymmetric(insertion: .identity, removal: .opacity.animation(.linear(duration: 0.12))))
                 if let stem {
-                    shape.fill(Color.black.opacity(Self.stemSmoke(level: level)))
-                    StemMelt(stem: stem, row: row, depth: Self.melt(body: height - row, level: level))
+                    shape.fill(Color.black.opacity(GlassMelt.smoke(level: level)))
+                    StemMelt(stem: stem, row: row, depth: GlassMelt.depth(body: height - row, level: level))
                         .clipShape(shape)
                 } else {
                     shape.fill(LinearGradient(stops: Self.stops(row: row, height: height, level: level), startPoint: .top, endPoint: .bottom))
@@ -188,19 +188,6 @@ private struct GlassBody: View {
                 .animation(expanded ? .easeOut(duration: 0.18 * Motion.pace).delay(0.15 * Motion.pace)
                                     : .easeIn(duration: 0.08 * Motion.pace), value: expanded)
         }
-    }
-
-    /// The smoke over the stem-and-body glass: the usual floor from the default level up, and
-    /// darker towards Black, so that end of the slider is still mostly black.
-    static func stemSmoke(level: Double) -> Double {
-        let l = min(1, max(0, level))
-        return smoke + 0.55 * max(0, (0.6 - l) / 0.6)
-    }
-
-    /// How far the black melts down under the stem: a few points at level 1, half the body
-    /// at level 0.
-    static func melt(body: CGFloat, level: Double) -> CGFloat {
-        6 + max(0, body) * 0.5 * CGFloat(1 - min(1, max(0, level)))
     }
 
     /// Black down to the row, then a fade to the smoke. The fade is short at level 1 and runs

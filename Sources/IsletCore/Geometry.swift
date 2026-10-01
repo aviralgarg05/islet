@@ -69,6 +69,16 @@ public enum NotchGeometry {
     /// How far a floating pill sits inside the menu bar, top and bottom.
     public static let pillInset: CGFloat = 1.5
 
+    /// How far the closed island widens on each side while the pointer rests on it, before it
+    /// opens (the hover response).
+    public static let hoverGrow: CGFloat = 3
+
+    /// A closed island of `size` answering a resting pointer: wider by `grow` on each side and
+    /// no taller, so it never hangs lower than the notch or out of the menu bar row.
+    public static func hoverGrown(_ size: CGSize, by grow: CGFloat = hoverGrow) -> CGSize {
+        CGSize(width: size.width + 2 * max(0, grow), height: size.height)
+    }
+
     /// The narrowest and shortest notch an adjustment can leave.
     public static let minimumNotch = CGSize(width: 40, height: 12)
 
