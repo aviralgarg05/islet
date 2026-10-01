@@ -232,9 +232,15 @@ public struct MediaArbiter: Sendable {
         s.bundleID ?? "source:\(s.source.rawValue)"
     }
 
-    /// The player the bridge last reported, which is the one its commands reach.
+    /// The player the bridge last reported, which is the one its commands reach. A report that
+    /// doesn't name its app is the player on the same track (as in `grouped`), so Spotify stays
+    /// on the bridge, needing no Automation, even when macOS leaves the app out.
     public var bridgePlayer: String? {
-        (snapshots[.system] ?? snapshots[.browser]).map(Self.playerID)
+        guard let b = snapshots[.system] ?? snapshots[.browser] else { return nil }
+        if b.bundleID == nil, let same = snapshots.values.first(where: { $0.bundleID != nil && $0.trackKey == b.trackKey }) {
+            return Self.playerID(same)
+        }
+        return Self.playerID(b)
     }
 
     /// The live players, one per app, newest first. The island offers the others as chips.

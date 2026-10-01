@@ -230,7 +230,7 @@ struct CalendarSettings: View {
                 .disabled(!remindsBeforeMeetings)
                 Toggle(isOn: $model.settings.meetingRemindersNeedLink) {
                     Text("Only meetings with a call link")
-                    Text("Zoom, Google Meet, Teams, Webex, FaceTime and other calls. All-day events and invitations you declined never remind you.")
+                    Text("Zoom, Google Meet, Teams, Webex, FaceTime and other calls. All-day events, cancelled meetings and invitations you declined never remind you.")
                 }
                 .settingsAnchor("calendar.needsLink")
                 .disabled(!remindsBeforeMeetings)

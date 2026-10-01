@@ -505,25 +505,6 @@ private struct WingRoomKey: EnvironmentKey {
     static let defaultValue: CGFloat = .infinity
 }
 
-/// How a value is shown when the wing is narrow: words become a glyph, numbers shrink.
-enum NarrowValue {
-    /// Below this width a word no longer reads, so it becomes a glyph.
-    static let wordRoom: CGFloat = 34
-
-    /// A glyph for a status word ("Waiting", "Done", "Failed"); nil for anything with digits.
-    static func glyph(for text: String, state: ActivityState) -> String? {
-        guard !text.contains(where: \.isNumber) else { return nil }
-        switch state {
-        case .waiting: return "exclamationmark.bubble.fill"
-        case .success: return "checkmark.circle.fill"
-        case .failure: return "xmark.circle.fill"
-        case .warning: return "exclamationmark.triangle.fill"
-        case .running: return "ellipsis"
-        case .info: return text.count <= 3 ? nil : "info.circle.fill"
-        }
-    }
-}
-
 /// Islet's own "Reduce motion" or "Animation: Off", on top of the system setting.
 private struct IslandReduceMotionKey: EnvironmentKey {
     static let defaultValue = false

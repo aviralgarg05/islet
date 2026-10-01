@@ -231,13 +231,22 @@ public struct MeetingReminders: Codable, Equatable, Sendable {
 
     public func outcome(of item: AgendaItem) -> Record.Outcome? { records[Self.key(for: item)]?.outcome }
 
-    /// A call started in `bundleID` (from call detection): the meetings it joins. Only meetings
-    /// about to start (within five minutes) or started, and only in the call's own app, or in a
-    /// browser for meetings that run there (Google Meet, other web calls).
-    public static func joinedByCall(bundleID: String, isBrowser: Bool, live: [MeetingReminder], now: Date) -> [MeetingReminder] {
+    /// How long before a meeting's start a call may begin and still count as joining it: people
+    /// join a little early. A call that began before that is another meeting running on.
+    public static let joinWindow: TimeInterval = 10 * 60
+
+    /// The calls going on now (from call detection): the meetings on show that they join. A call
+    /// joins a meeting when it is in the meeting's own app, or in a browser for meetings that run
+    /// there (Google Meet, other web calls), and began no earlier than `joinWindow` before the
+    /// start. It counts whenever Islet looks, so a call joined early, before the reminder showed
+    /// or before the urgent "Now", takes the reminder away too.
+    public static func joinedByCalls(_ calls: [OngoingCall], live: [MeetingReminder]) -> [MeetingReminder] {
         live.filter { r in
-            guard let app = r.app, r.phase == .now || r.item.start.timeIntervalSince(now) <= 5 * 60 else { return false }
-            return isBrowser ? app.bundleIDs.isEmpty : app.bundleIDs.contains(bundleID)
+            guard let app = r.app else { return false }
+            let earliest = r.item.start.addingTimeInterval(-joinWindow)
+            return calls.contains { call in
+                call.since >= earliest && (call.isBrowser ? app.bundleIDs.isEmpty : app.bundleIDs.contains(call.bundleID))
+            }
         }
     }
 
@@ -299,4 +308,29 @@ public struct MeetingReminders: Codable, Equatable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey { case records }
+}
+
+/// A call going on now, as call detection sees it.
+public struct OngoingCall: Equatable, Sendable {
+    /// The call's app (a browser's own id for a web call).
+    public var bundleID: String
+    public var isBrowser: Bool
+    /// When its microphone use began.
+    public var since: Date
+
+    public init(bundleID: String, isBrowser: Bool, since: Date) {
+        self.bundleID = bundleID
+        self.isBrowser = isBrowser
+        self.since = since
+    }
+}
+
+extension CallDetector {
+    /// The calls going on now, for meeting reminders (`MeetingReminders.joinedByCalls`).
+    public var ongoing: [OngoingCall] {
+        active.compactMap { bundle, since in
+            Self.classify(bundle).map { OngoingCall(bundleID: $0.bundleID, isBrowser: $0.app.isBrowser, since: since) }
+        }
+        .sorted { $0.bundleID < $1.bundleID }
+    }
 }

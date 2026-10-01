@@ -134,6 +134,21 @@ import Testing
         #expect(MediaRoute.route(for: pushed, bridgeRunning: true, bridgePlayer: Self.chromeID) == .none)
     }
 
+    @Test func aBridgeReportWithoutItsAppStillReachesThePlayerOnItsTrack() {
+        var m = MediaArbiter()
+        m.update(Self.spotify(true, at: t0))
+        // macOS left the app out of the bridge's report of the same song.
+        m.updateFromBridge(NowPlaying(source: .system, title: "Song", artist: "Band", isPlaying: true, timestamp: t0.addingTimeInterval(1)))
+        #expect(m.bridgePlayer == Self.spotifyID)
+        let shown = m.current(now: t0.addingTimeInterval(2))
+        #expect(shown?.bundleID == Self.spotifyID)
+        #expect(MediaRoute.route(for: shown!, bridgeRunning: true, bridgePlayer: m.bridgePlayer) == .bridge)
+        // Another song entirely is another player.
+        m.updateFromBridge(NowPlaying(source: .system, title: "Talk", isPlaying: true, timestamp: t0.addingTimeInterval(3)))
+        #expect(m.bridgePlayer == "source:system")
+        #expect(MediaRoute.route(for: Self.spotify(), bridgeRunning: true, bridgePlayer: m.bridgePlayer) == .player(.spotify))
+    }
+
     @Test func askingForAutomationOnlyWhenItWouldHelp() {
         #expect(PlayerIntegration.controlHint(route: .player(.spotify), sent: false, canScript: false) == "Spotify")
         #expect(PlayerIntegration.controlHint(route: .player(.appleMusic), sent: false, canScript: false) == "Music")

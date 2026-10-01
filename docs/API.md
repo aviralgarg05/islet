@@ -222,7 +222,7 @@ curl -s -X POST http://127.0.0.1:47831/v1/activities \
   -d '{"id":"backup","title":"Backing up","progress":0.3}'
 ```
 
-`GET /v1/state` (and `isletctl state`) includes `"calendar": {"events": "fullAccess", "reminders": "notDetermined", "upcoming": 3}`: what macOS allows for calendars and for reminders (`notDetermined`, `fullAccess`, `writeOnly` for "Add events only", `denied` or `restricted`), read afresh for each request, and how many timed events are left today. It never includes a title. Meeting reminders (ids starting with `meeting-`, source `calendar`) carry the meeting's title, so `GET /v1/activities` and `/v1/state` always leave them out.
+`GET /v1/state` (and `isletctl state`) includes `"calendar": {"events": "fullAccess", "reminders": "notDetermined", "upcoming": 3}`: what macOS allows for calendars and for reminders (`notDetermined`, `fullAccess`, `writeOnly` for "Add events only", `denied` or `restricted`), read afresh for each request, and how many timed events are left today. It never includes a title. Meeting reminders (ids starting with `meeting-`, source `calendar`) carry the meeting's title, so `GET /v1/activities` and `/v1/state` always leave them out. To a script they aren't there: changing or removing one by its id gets a `404`, and `DELETE /v1/activities?source=calendar` removes only your own `calendar` activities and counts only those.
 
 Live Activities mirrored from the menu bar (ids starting with `live-`, source `live-activity`) belong to the mirror. Creating, changing or removing one, or sending that source, gets a `403` whether or not the id exists. `GET /v1/activities` and `/v1/state` leave them out, and `/v1/debug/menubar` leaves out their text, unless **Share mirrored activities with scripts** is on; see [LIVE-ACTIVITIES.md](LIVE-ACTIVITIES.md).
 
@@ -443,7 +443,7 @@ Now Playing, closed island, HUD, gestures and battery keys:
 | `songProgressRing` | `false` | A thin ring round the artwork beside the notch that fills as the song plays. |
 | `meetingReminderMinutes` | `10` | Minutes before a meeting that it shows beside the notch, counting down: `0` (off), `5`, `10`, `15` or `30`. Other values become the nearest. |
 | `meetingRemindUntilJoined` | `true` | A meeting that has started stays, glowing, until you join it, dismiss it or it ends. `false`: it goes 5 minutes after the start. |
-| `meetingRemindersNeedLink` | `true` | Only meetings with a call link remind you. All-day events and declined invitations never do. |
+| `meetingRemindersNeedLink` | `true` | Only meetings with a call link remind you. All-day events, cancelled meetings and declined invitations never do. |
 | `pausedMusicTimeout` | `10` | Seconds the closed island keeps paused music before it hides (0–300; `0` = right away, `-1` = never). Replaces `showPausedMedia`, which is read once: `true` becomes `-1`. |
 | `visualiserStyle` | `"bars"` | The playing indicator: `"bars"`, `"slim"`, `"dots"`, `"wave"`, `"pulse"` or `"off"`. |
 | `musicColour` | `"artwork"` | The playing indicator, the progress ring and the open island's progress bar: `"artwork"`, `"accent"` (the artwork's colour while `accentColor` is `"auto"`) or `"white"`. Replaces `visualiserColour`, which is read once. |

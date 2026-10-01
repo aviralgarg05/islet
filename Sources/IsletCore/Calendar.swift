@@ -14,7 +14,7 @@ public struct AgendaItem: Codable, Equatable, Sendable, Identifiable {
     /// Identifier of the calendar it belongs to (for hiding calendars).
     public var calendarID: String?
     public var calendarTitle: String?
-    /// You declined the invitation.
+    /// You declined the invitation, or the meeting was cancelled: either way it never reminds you.
     public var isDeclined: Bool
 
     public init(id: String, title: String, start: Date, end: Date, isAllDay: Bool = false,

@@ -504,10 +504,21 @@ final class AppModel {
     /// Only real changes are applied (the countdown once a minute), so the island doesn't redraw
     /// or reorder for nothing.
     private func syncMeetings(now: Date) {
-        let live = meetings.live(visibleAgenda, now: now, options: MeetingReminderOptions(settings))
+        let options = MeetingReminderOptions(settings)
         // Worked on a copy, so views watching `meetings` redraw only when something changed.
         var updated = meetings
         updated.forget(before: now)
+        var live = updated.live(visibleAgenda, now: now, options: options)
+        // A call already going on in the meeting's app counts as joining it, however it was
+        // joined and however early (within `joinWindow`), so the reminder never glows at you
+        // while you are in the meeting.
+        if settings.callDetection {
+            let joined = MeetingReminders.joinedByCalls(calls.ongoing, live: live)
+            if !joined.isEmpty {
+                for r in joined { updated.join(r.item) }
+                live = updated.live(visibleAgenda, now: now, options: options)
+            }
+        }
         let announce = updated.announce(live)
         let changed = updated != meetings
         if changed { meetings = updated }
@@ -529,8 +540,12 @@ final class AppModel {
         if changed { saveMeetings() }
     }
 
-    /// The meeting reminder an activity shows, if it is one.
-    func meetingReminder(for activityID: String) -> MeetingReminder? { shownMeetings[activityID]?.reminder }
+    /// The meeting reminder an activity shows, if it is one and still on show (muting the
+    /// calendar takes it away before the next sync).
+    func meetingReminder(for activityID: String) -> MeetingReminder? {
+        guard center.activities[activityID] != nil else { return nil }
+        return shownMeetings[activityID]?.reminder
+    }
 
     /// Join: open the call link and count the meeting as joined, so its reminder goes.
     func join(_ item: AgendaItem) {
@@ -549,17 +564,6 @@ final class AppModel {
         guard let shown = shownMeetings.removeValue(forKey: id) else { return }
         meetings.dismiss(shown.reminder.item)
         saveMeetings()
-    }
-
-    /// A call started (call detection): meetings about to start in that app count as joined.
-    private func callStarted(bundleID: String) {
-        guard let app = CallDetector.classify(bundleID) else { return }
-        let joined = MeetingReminders.joinedByCall(bundleID: app.bundleID, isBrowser: app.app.isBrowser, live: liveMeetings, now: Date())
-        guard !joined.isEmpty else { return }
-        for r in joined { meetings.join(r.item) }
-        saveMeetings()
-        syncMeetings(now: Date())
-        reschedule()
     }
 
     /// `--snapshot`: these events, and the meeting reminders they would show at `now`.
@@ -1105,14 +1109,20 @@ final class AppModel {
 
     private func updateCalls() {
         guard settings.callDetection else { return }
+        var started = false
         for change in calls.update(micUsers: lastMicUsers, cameraOn: cameraInUse, now: Date()) {
             switch change {
             case .started(let spec):
                 _ = try? applyLocal(spec)
-                if let bundle = spec.source { callStarted(bundleID: bundle) }
+                started = true
             case .updated(let spec): _ = try? applyLocal(spec)
             case .ended(let id): remove(activityID: id)
             }
+        }
+        // A call in a meeting's app counts as joining it (`syncMeetings`).
+        if started {
+            syncMeetings(now: Date())
+            reschedule()
         }
     }
 

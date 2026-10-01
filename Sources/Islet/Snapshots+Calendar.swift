@@ -42,6 +42,10 @@ extension Snapshots {
         if let a = reminder("Weekly planning") {
             model.forcedPresentation = .compact(.activity(a, others: 0))
             shoot("73-compact-meeting-now")
+            // "Now" stays a word even in the narrowest wing.
+            placement(ClosedPlacement(wing: MenuBarLayoutEngine.iconOnlyWing, slack: 0))
+            shoot("i73-compact-meeting-now")
+            placement(nil)
             model.forcedPresentation = .sneak(a)
             shoot("74-sneak-meeting-now")
             model.forcedPresentation = .expanded
@@ -60,7 +64,10 @@ extension Snapshots {
         model.setCalendarAccessForSnapshot(events: .writeOnly, reminders: .denied)
         shoot("76-expanded-today-write-only")
         model.tab = .home
+        // Without access there is nothing to read, so no next event beside the line saying why.
+        model.showMeetingsForSnapshot([], now: now)
         shoot("76d-expanded-home-calendar-blocked")
+        model.showMeetingsForSnapshot(demoAgenda, now: now)
         model.tab = .today
         model.setCalendarAccessForSnapshot(events: .notDetermined, reminders: .notDetermined)
         shoot("76b-expanded-today-not-asked")

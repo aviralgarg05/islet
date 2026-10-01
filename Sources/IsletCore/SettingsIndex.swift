@@ -322,7 +322,7 @@ public enum SettingsIndex {
         SettingsEntry("calendar.keepReminding", .calendar, "Keep reminding until I join", section: "Meeting reminders",
                       keywords: ["meeting reminder", "stay", "nag", "urgent", "dismiss"]),
         SettingsEntry("calendar.needsLink", .calendar, "Only meetings with a call link", section: "Meeting reminders",
-                      keywords: ["meeting reminder", "video call", "link", "Meet", "Teams"]),
+                      keywords: ["meeting reminder", "video call", "link", "Meet", "Teams", "declined", "cancelled", "all-day"]),
         SettingsEntry("calendar.reminders", .calendar, "Reminders due today", keywords: ["to-do", "tasks"]),
         SettingsEntry("calendar.remindersAccess", .calendar, "Reminders access", section: "Reminders",
                       keywords: ["permission", "privacy", "allow", "System Settings"]),

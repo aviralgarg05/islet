@@ -185,19 +185,60 @@ import Testing
         #expect(broken.setAside != nil)
     }
 
-    @Test func aCallStartingInTheMeetingsAppCountsAsJoining() {
+    @Test func aCallInTheMeetingsAppCountsAsJoining() {
         let zoom = Self.meeting("z")
         let meet = Self.meeting("m", link: Self.meet)
         let teams = Self.meeting("t", link: URL(string: "https://teams.microsoft.com/l/meetup-join/abc")!)
         let live = MeetingReminders().live([zoom, meet, teams], now: at(-3), options: options)
         #expect(live.count == 3)
-        #expect(MeetingReminders.joinedByCall(bundleID: "us.zoom.xos", isBrowser: false, live: live, now: at(-3)).map(\.item.id) == ["z"])
-        #expect(MeetingReminders.joinedByCall(bundleID: "com.google.Chrome", isBrowser: true, live: live, now: at(-3)).map(\.item.id) == ["m"])
-        #expect(MeetingReminders.joinedByCall(bundleID: "com.microsoft.teams2", isBrowser: false, live: live, now: at(-3)).map(\.item.id) == ["t"])
-        // Another app's call, or one well before the start, joins nothing.
-        #expect(MeetingReminders.joinedByCall(bundleID: "com.tinyspeck.slackmacgap", isBrowser: false, live: live, now: at(-3)).isEmpty)
-        let early = MeetingReminders().live([zoom], now: at(-8), options: options)
-        #expect(MeetingReminders.joinedByCall(bundleID: "us.zoom.xos", isBrowser: false, live: early, now: at(-8)).isEmpty)
+        func joined(_ bundle: String, browser: Bool = false, since: Double) -> [String] {
+            MeetingReminders.joinedByCalls([OngoingCall(bundleID: bundle, isBrowser: browser, since: at(since))], live: live).map(\.item.id)
+        }
+        #expect(joined("us.zoom.xos", since: -3) == ["z"])
+        #expect(joined("com.google.Chrome", browser: true, since: -3) == ["m"])
+        #expect(joined("com.microsoft.teams2", since: -3) == ["t"])
+        // Another app's call joins nothing.
+        #expect(joined("com.tinyspeck.slackmacgap", since: -3).isEmpty)
+        // Several calls at once: each joins its own.
+        let both = MeetingReminders.joinedByCalls([OngoingCall(bundleID: "us.zoom.xos", isBrowser: false, since: at(-2)),
+                                                   OngoingCall(bundleID: "com.google.Chrome", isBrowser: true, since: at(-1))], live: live)
+        #expect(both.map(\.item.id) == ["m", "z"] || both.map(\.item.id) == ["z", "m"])
+    }
+
+    @Test func aCallJoinedEarlyStillCountsButOneLeftOverFromAnEarlierMeetingDoesnt() {
+        let zoom = Self.meeting("z")
+        // Joined from the calendar 9 minutes early, before the urgent "Now": the reminder
+        // that appeared at -10 goes when Islet next looks, and never glows at you.
+        let soon = MeetingReminders().live([zoom], now: at(-8), options: options)
+        let early = OngoingCall(bundleID: "us.zoom.xos", isBrowser: false, since: at(-9))
+        #expect(MeetingReminders.joinedByCalls([early], live: soon).map(\.item.id) == ["z"])
+        let started = MeetingReminders().live([zoom], now: at(1), options: options)
+        #expect(MeetingReminders.joinedByCalls([early], live: started).map(\.item.id) == ["z"])
+        // Joined before the reminder even showed (a 5 minute lead): still counts once it shows.
+        var short = options
+        short.lead = 5 * 60
+        let late = MeetingReminders().live([zoom], now: at(-5), options: short)
+        #expect(MeetingReminders.joinedByCalls([early], live: late).map(\.item.id) == ["z"])
+        // A Zoom call from the meeting before, running on since half an hour earlier, doesn't:
+        // that reminder is for the next meeting, which you haven't joined.
+        let leftOver = OngoingCall(bundleID: "us.zoom.xos", isBrowser: false, since: at(-30))
+        #expect(MeetingReminders.joinedByCalls([leftOver], live: started).isEmpty)
+        #expect(MeetingReminders.joinedByCalls([OngoingCall(bundleID: "us.zoom.xos", isBrowser: false, since: at(-10.5))], live: soon).isEmpty)
+        // A meeting without a link has no app to join it in.
+        var any = options
+        any.onlyWithLink = false
+        let plain = MeetingReminders().live([Self.meeting("p", link: nil)], now: at(1), options: any)
+        #expect(MeetingReminders.joinedByCalls([OngoingCall(bundleID: "com.google.Chrome", isBrowser: true, since: at(0))], live: plain).isEmpty)
+    }
+
+    @Test func callDetectionReportsEachCallWithItsApp() {
+        var calls = CallDetector()
+        _ = calls.update(micUsers: ["us.zoom.xos", "com.google.Chrome.helper", "com.example.dictation"], cameraOn: false, now: at(-4))
+        #expect(calls.ongoing == [OngoingCall(bundleID: "com.google.Chrome", isBrowser: true, since: at(-4)),
+                                  OngoingCall(bundleID: "us.zoom.xos", isBrowser: false, since: at(-4))])
+        // A call keeps the moment it began.
+        _ = calls.update(micUsers: ["us.zoom.xos"], cameraOn: true, now: at(2))
+        #expect(calls.ongoing == [OngoingCall(bundleID: "us.zoom.xos", isBrowser: false, since: at(-4))])
     }
 
     @Test func theActivityCountsDownThenNeedsYou() throws {
@@ -225,6 +266,18 @@ import Testing
         let a = try center.apply(urgent, now: at(1))
         #expect(MeetingReminders.isReminder(a))
         #expect(!MeetingReminders.isReminder(try center.apply(ActivitySpec(id: "meeting-notes", source: "api", title: "Notes"), now: at(1))))
+    }
+
+    @Test func aNarrowWingStillSaysNow() {
+        // The started meeting's "Now" stays a word in the narrowest wing, like "9 min" does.
+        #expect(NarrowValue.glyph(for: "Now", state: .waiting) == nil)
+        #expect(NarrowValue.glyph(for: "9 min", state: .info) == nil)
+        // Longer status words still become a glyph there, and so does a value with no word.
+        #expect(NarrowValue.glyph(for: "Waiting", state: .waiting) == "exclamationmark.bubble.fill")
+        #expect(NarrowValue.glyph(for: "Done", state: .success) == "checkmark.circle.fill")
+        #expect(NarrowValue.glyph(for: "", state: .running) == "ellipsis")
+        #expect(NarrowValue.glyph(for: "", state: .info) == nil)
+        #expect(NarrowValue.glyph(for: "Stopped", state: .info) == "info.circle.fill")
     }
 
     @Test func iconIsTheCallAppWhenInstalled() throws {
@@ -379,5 +432,40 @@ extension APIRouterTests {
         await b.share(true)
         let shared = await rt.handle(request("GET", "/v1/state"))
         #expect(!String(decoding: shared.body, as: UTF8.self).contains("Standup"))
+    }
+
+    @Test func scriptsCantChangeOrDismissAMeetingReminder() async throws {
+        let b = FakeBackend(now: t0)
+        let item = MeetingReminderTests.meeting()
+        let reminder = try #require(MeetingReminders().live([item], now: item.start, options: MeetingReminderOptions(lead: 600)).first)
+        _ = try await b.applyActivity(MeetingReminders.activity(for: reminder, now: item.start, icon: .symbol("video.fill"), sneak: false) { _ in "10:00" })
+        // A script's own activity under the same source name.
+        _ = try await b.applyActivity(ActivitySpec(id: "sync", source: "calendar", title: "Calendar synced"))
+        let rt = router(b)
+
+        // Clearing the source removes the script's own, never the reminder, and counts only its own.
+        let cleared = await rt.handle(request("DELETE", "/v1/activities?source=calendar"))
+        #expect(cleared.status == 200)
+        #expect(String(decoding: cleared.body, as: UTF8.self).contains(#""removed":1"#))
+        #expect(await b.listActivities().map(\.id) == [reminder.id])
+
+        // By its id, it isn't there as far as a script can tell: not removed, not changed, and
+        // the answer doesn't carry its title.
+        let delete = await rt.handle(request("DELETE", "/v1/activities/\(reminder.id)"))
+        #expect(delete.status == 404)
+        for method in ["PUT", "PATCH", "POST"] {
+            let put = await rt.handle(request(method, "/v1/activities/\(reminder.id)", body: #"{"source":"mine"}"#))
+            #expect(put.status == 404)
+            #expect(!String(decoding: put.body, as: UTF8.self).contains("Standup"))
+        }
+        let post = await rt.handle(request("POST", "/v1/activities", body: #"{"id":"\#(reminder.id)","title":"Mine"}"#))
+        #expect(post.status == 404)
+        let still = try #require(await b.listActivities().first { $0.id == reminder.id })
+        #expect(still.title == "Standup" && still.source == MeetingReminders.source)
+
+        // Other sources clear as before.
+        _ = try await b.applyActivity(ActivitySpec(id: "build", source: "ci", title: "Build"))
+        let ci = await rt.handle(request("DELETE", "/v1/activities?source=ci"))
+        #expect(String(decoding: ci.body, as: UTF8.self).contains(#""removed":1"#))
     }
 }

@@ -153,7 +153,8 @@ public final class CalendarService {
             meetingURL: Agenda.meetingLink(in: [e.url?.absoluteString, e.location, e.notes]),
             calendarID: e.calendar?.calendarIdentifier,
             calendarTitle: e.calendar?.title,
-            isDeclined: e.attendees?.first(where: \.isCurrentUser)?.participantStatus == .declined
+            // A cancelled meeting (Exchange keeps it in the calendar) is no more to join than one declined.
+            isDeclined: e.status == .canceled || e.attendees?.first(where: \.isCurrentUser)?.participantStatus == .declined
         )
     }
 }
