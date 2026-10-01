@@ -25,6 +25,8 @@ public enum PermissionProbe {
             completion(status(CalendarService.eventAccess))
         case .reminders:
             completion(status(CalendarService.reminderAccess))
+        case .location:
+            completion(status(LocationProvider.access))
         case .downloadsFolder:
             guard readDownloads else { return completion(.unknown) }
             readFolder(completion)
@@ -46,8 +48,22 @@ public enum PermissionProbe {
             readFolder(completion)
         case .automationMusic, .automationSpotify:
             automation(kind, ask: true, completion: completion)
+        case .location:
+            // Asking for a position is what brings up macOS's question; the answer is the status.
+            let provider = LocationProvider()
+            provider.requestLocation { _ in
+                withExtendedLifetime(provider) { completion(status(LocationProvider.access)) }
+            }
         case .calendars, .reminders:
             status(of: kind, readDownloads: false, completion: completion)
+        }
+    }
+
+    static func status(_ access: LocationProvider.Access) -> PermissionStatus {
+        switch access {
+        case .granted: return .granted
+        case .denied: return .denied
+        case .notDetermined: return .notDetermined
         }
     }
 

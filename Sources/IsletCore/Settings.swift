@@ -340,6 +340,27 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// Pomodoro lengths in minutes and how often the long break comes.
     public var pomodoro = PomodoroSchedule()
 
+    // Tools. Each starts off; the pages among them live under More once on.
+    /// A stopwatch with laps beside the timers.
+    public var stopwatchEnabled = false
+    /// What plays during a Pomodoro focus round: noise Islet makes, or the user's own music.
+    public var focusSound: FocusSound = .off
+    /// Loudness of the generated focus sounds, 0...1.
+    public var focusSoundVolume: Double = 0.4
+    /// Time-synced lyrics beside what's playing. Sends the song's title, artist, album and
+    /// length to LRCLIB, so it waits to be turned on.
+    public var lyricsEnabled = false
+    /// A month calendar beside today's events on the Today page.
+    public var monthCalendar = false
+    /// A page that searches and runs the user's shortcuts, also offered in the Ask box.
+    public var shortcutsEnabled = false
+    /// A Weather page from Open-Meteo, for `weatherPlace` or, with `weatherUsesLocation`, for
+    /// where the Mac is (asks for Location).
+    public var weatherEnabled = false
+    public var weatherUsesLocation = false
+    public var weatherPlace: WeatherPlace?
+    public var temperatureUnit: TemperatureUnit = .automatic
+
     // Now Playing controls, gestures and battery alerts
     /// Show the time left (rather than the track length) right of the scrubber. Tap the label to switch.
     public var mediaShowsRemainingTime = true
@@ -540,6 +561,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         s.batteryCriticalThreshold = min(s.batteryLowThreshold - 1, max(1, s.batteryCriticalThreshold))
         if s.batteryChargedAlert != 0 { s.batteryChargedAlert = min(100, max(50, s.batteryChargedAlert)) }
         s.approvalWait = min(3600, max(30, s.approvalWait))
+        s.focusSoundVolume = s.focusSoundVolume.isFinite ? Self.clamp(s.focusSoundVolume, 0...1) : 0.4
+        // A hand-edited place off the globe means no place.
+        if let p = s.weatherPlace, !(abs(p.latitude) <= 90 && abs(p.longitude) <= 180) { s.weatherPlace = nil }
         let d = IsletSettings()
         if !Self.portRange.contains(s.apiPort) { s.apiPort = d.apiPort }
         if !Self.portRange.contains(s.lanPort) || s.lanPort == s.apiPort {

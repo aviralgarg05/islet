@@ -126,6 +126,8 @@ final class TimerController {
         if openedForAlarm, !engine.isRinging { alarmHandled() }
         if let storeURL { try? engine.save(to: storeURL) }
         scheduleWakeUp()
+        // A focus round starting, pausing or giving way to a break moves the focus sound.
+        if storeURL != nil { model.tools.focus.update() }
     }
 
     private func scheduleWakeUp() {

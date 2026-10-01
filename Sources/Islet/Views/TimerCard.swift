@@ -166,26 +166,11 @@ struct TimerComposer: View {
                     .disabled(parsed == nil)
                 IconButton(symbol: "xmark", help: "Close", size: 24, glyph: 10, ink: Ink.tertiary) { close() }
             }
-            HStack(spacing: Space.s) {
-                ForEach([1, 5, 10, 25], id: \.self) { m in
-                    Button("\(m) min") {
-                        Haptics.play(.tap)
-                        model.timers.start(minutes: Double(m))
-                        close()
-                    }
-                    .buttonStyle(CapsuleButtonStyle())
-                    .help("Start a \(m)-minute timer")
-                }
-                Spacer(minLength: Space.s)
-                Button {
-                    Haptics.play(.tap)
-                    model.timers.togglePomodoro()
-                    close()
-                } label: {
-                    Label(pomodoro ? "Stop Pomodoro" : "Pomodoro", systemImage: pomodoro ? "stop.fill" : "leaf.fill")
-                }
-                .buttonStyle(CapsuleButtonStyle(tint: pomodoro ? Color(tint: "red") : nil))
-                .help(pomodoro ? "Stop the Pomodoro" : "Start a Pomodoro (\(focus) min focus, then a break)")
+            // The presets give way first when the stopwatch needs the room.
+            ViewThatFits(in: .horizontal) {
+                startRow(presets: [1, 5, 10, 25], pomodoro: pomodoro, focus: focus)
+                startRow(presets: [5, 10, 25], pomodoro: pomodoro, focus: focus)
+                startRow(presets: [5, 25], pomodoro: pomodoro, focus: focus)
             }
         }
         .frame(maxHeight: .infinity)
@@ -199,6 +184,63 @@ struct TimerComposer: View {
             IslandKeyboard.giveBack()
             model.timers.isEntering = false
         }
+    }
+
+    private func startRow(presets: [Int], pomodoro: Bool, focus: Int) -> some View {
+        HStack(spacing: Space.s) {
+            ForEach(presets, id: \.self) { m in
+                Button("\(m) min") {
+                    Haptics.play(.tap)
+                    model.timers.start(minutes: Double(m))
+                    close()
+                }
+                .buttonStyle(CapsuleButtonStyle())
+                .help("Start a \(m)-minute timer")
+            }
+            Spacer(minLength: Space.s)
+            if model.settings.stopwatchEnabled {
+                Button {
+                    if !model.tools.stopwatch.stopwatch.isActive { model.tools.stopwatch.toggle() }
+                    close()
+                } label: {
+                    Label("Stopwatch", systemImage: "stopwatch")
+                }
+                .buttonStyle(CapsuleButtonStyle())
+                .help(model.tools.stopwatch.stopwatch.isActive ? "Show the stopwatch" : "Start the stopwatch")
+            }
+            HStack(spacing: 2) {
+                Button {
+                    Haptics.play(.tap)
+                    model.timers.togglePomodoro()
+                    close()
+                } label: {
+                    Label(pomodoro ? "Stop Pomodoro" : "Pomodoro", systemImage: pomodoro ? "stop.fill" : "leaf.fill")
+                }
+                .buttonStyle(CapsuleButtonStyle(tint: pomodoro ? Color(tint: "red") : nil))
+                .help(pomodoro ? "Stop the Pomodoro" : "Start a Pomodoro (\(focus) min focus, then a break)")
+                if !pomodoro {
+                    IconButton(symbol: "chevron.down", help: "Pomodoro lengths", size: 20, glyph: 9, ink: Ink.tertiary) {
+                        showPomodoroLengths()
+                    }
+                }
+            }
+        }
+    }
+
+    /// 25 / 5, 50 / 10 or 90 / 20: picking one starts it and keeps those lengths for next time.
+    private func showPomodoroLengths() {
+        let current = PomodoroPreset.matching(model.settings.pomodoro)
+        var items = PomodoroPreset.all.map { preset in
+            IslandMenu.Item(title: preset.title, checked: preset == current) {
+                model.settings.pomodoro = preset.applied(to: model.settings.pomodoro)
+                model.saveSettings()
+                model.timers.togglePomodoro()
+                close()
+            }
+        }
+        items.append(.separator)
+        items.append(IslandMenu.Item(title: "Pomodoro settings…") { AppActions.openSettings(.timers, at: "timers.lengths") })
+        IslandMenu.show(items, model: model)
     }
 
     private var field: some View {

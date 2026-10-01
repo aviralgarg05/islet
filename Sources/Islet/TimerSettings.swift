@@ -32,6 +32,7 @@ struct TimersSettings: View {
             }
             // Each value sits beside its stepper, on the right, like System Settings.
             Section("Pomodoro") {
+                PomodoroLengthsPicker(model: model)
                 minutes("Focus", $model.settings.pomodoro.focusMinutes, 1...240, step: 5)
                     .settingsAnchor("timers.focus")
                 minutes("Short break", $model.settings.pomodoro.shortBreakMinutes, 1...60, step: 1)
@@ -44,6 +45,8 @@ struct TimersSettings: View {
                     }
                 }
             }
+            FocusSoundSettingsSection(model: model)
+            StopwatchSettingsSection(model: model)
         }
         .formStyle(.grouped)
     }

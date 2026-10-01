@@ -161,6 +161,7 @@ private struct PermissionRow: View {
         case .accessibility: return "accessibility"
         case .calendars: return "calendar"
         case .reminders: return "checklist"
+        case .location: return "location.fill"
         case .downloadsFolder: return "arrow.down.circle"
         case .automationMusic, .automationSpotify: return "applescript"
         }

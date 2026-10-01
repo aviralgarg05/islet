@@ -12,6 +12,7 @@ struct NowPlayingHero: View {
     let media: NowPlaying
     /// The space the hero may use.
     let size: CGSize
+    @Environment(\.snapshotMode) private var snapshotMode
 
     /// Tall enough for artwork, transport and the volume row together.
     static let roomyHeight: CGFloat = 150
@@ -58,6 +59,9 @@ struct NowPlayingHero: View {
             }
         }
         .frame(height: size.height, alignment: .top)
+        // Lyrics are looked up while Now Playing is on show, once per song.
+        .onAppear { if !snapshotMode { model.tools.lyrics.want(media) } }
+        .onChange(of: media.trackKey) { _, _ in if !snapshotMode { model.tools.lyrics.want(media) } }
     }
 }
 

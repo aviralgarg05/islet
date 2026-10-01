@@ -103,6 +103,8 @@ enum SettingsSnapshots {
         s.clipboardEnabled = true
         s.remindersEnabled = true
         s.pluginsEnabled = true
+        s.weatherEnabled = true
+        s.weatherPlace = WeatherPlace(name: "London", region: "England", country: "United Kingdom", latitude: 51.51, longitude: -0.13)
         s.appRules = [
             // A colour from the colour panel shows as "Custom".
             AppRule(bundleID: "com.apple.Safari", tint: "#2F7CF6"),

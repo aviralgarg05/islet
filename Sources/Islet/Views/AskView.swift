@@ -21,7 +21,11 @@ struct AskView: View {
             }
             .frame(height: AskView.fieldHeight)
             if ask.phase == .idle && ask.answer.isEmpty {
-                hint(kind: kind, status: status)
+                // A shortcut whose name matches what is typed, while Shortcuts is on. It takes
+                // the hint's place unless the hint says something needs doing.
+                let shortcut = AskShortcutSuggestion.match(model)
+                if let shortcut { AskShortcutSuggestion(model: model, item: shortcut) }
+                if shortcut == nil || !status.isReady { hint(kind: kind, status: status) }
             } else {
                 AskAnswerView(model: model)
             }
@@ -34,6 +38,7 @@ struct AskView: View {
         }
         .onAppear {
             if !snapshotMode { ask.refreshStatuses() }
+            if !snapshotMode { model.tools.shortcuts.refresh() }
             if ask.wantsKeyboard { focusSoon() }
         }
         .onDisappear { ask.releaseKeyboard() }

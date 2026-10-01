@@ -37,7 +37,7 @@ final class SettingsNavigation {
 enum SettingsWindow {
     static let sidebarWidth: CGFloat = 216
     /// Tall enough for every page in the sidebar without scrolling.
-    static let defaultSize = NSSize(width: 780, height: 570)
+    static let defaultSize = NSSize(width: 780, height: 596)
     /// Wide enough for the sidebar and the widest rows (segmented pickers), tall enough for a
     /// page's first sections. Both columns scroll below that.
     static let minimumSize = NSSize(width: 700, height: 440)
@@ -207,6 +207,7 @@ struct SettingsTile: View {
         case "orange": return .orange
         case "cyan": return .cyan
         case "mint": return .mint
+        case "yellow": return .yellow
         case "brown": return .brown
         case "purple": return .purple
         case "graphite": return Color(white: 0.32)
@@ -344,6 +345,7 @@ struct SettingsPageView: View {
         case .notifications: NotificationsSettings(model: model)
         case .shelf: ShelfSettings(model: model)
         case .downloads: DownloadsSettings(model: model)
+        case .tools: ToolsSettings(model: model)
         case .ai: AISettingsView(model: model)
         case .agents: CodingAgentsSettings(model: model)
         case .apps: AppRulesSettings(model: model)

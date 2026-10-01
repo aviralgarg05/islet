@@ -36,6 +36,8 @@ struct ExpandedView: View {
         case .widgets: WidgetsTab(model: model)
         case .clipboard: ClipboardTab(model: model)
         case .stats: StatsTab(model: model)
+        case .shortcuts: ShortcutsTab(model: model)
+        case .weather: WeatherTab(model: model)
         case .ask: AskView(model: model)
         }
     }
@@ -92,6 +94,7 @@ struct HomePlan {
         case ringing(TimerItem)
         case media(NowPlaying)
         case timer(TimerItem)
+        case stopwatch(Stopwatch)
         case activity(Activity)
         case clock
 
@@ -104,6 +107,7 @@ struct HomePlan {
 
     enum Glance: Identifiable {
         case timer(TimerItem)
+        case stopwatch(Stopwatch)
         case event(AgendaItem)
         case activity(Activity)
         case usage(AgentUsage)
@@ -113,6 +117,7 @@ struct HomePlan {
         var id: String {
             switch self {
             case .timer(let t): return "timer-\(t.id)"
+            case .stopwatch: return "stopwatch"
             case .event(let e): return "event-\(e.id)"
             case .activity(let a): return "activity-\(a.id)"
             case .usage(let u): return "usage-\(u.id)"
@@ -136,9 +141,11 @@ struct HomePlan {
 
     init(model: AppModel, now: Date = Date()) {
         let timers = model.timers.timers
-        let activities = model.activities.filter { !model.timers.owns($0) }
+        let stopwatch = model.tools.stopwatch.stopwatch
+        let activities = model.activities.filter { !model.timers.owns($0) && !model.tools.stopwatch.owns($0) }
         var shownTimer: String?
         var shownActivity: String?
+        var shownStopwatch = false
         if let ringing = timers.first(where: { $0.status == .ringing }) {
             primary = .ringing(ringing)
             shownTimer = ringing.id
@@ -147,6 +154,9 @@ struct HomePlan {
         } else if let t = timers.first {
             primary = .timer(t)
             shownTimer = t.id
+        } else if stopwatch.isActive {
+            primary = .stopwatch(stopwatch)
+            shownStopwatch = true
         } else if let a = activities.first {
             primary = .activity(a)
             shownActivity = a.id
@@ -157,6 +167,7 @@ struct HomePlan {
         let rest = activities.filter { $0.id != shownActivity }
         var glances: [Glance] = rest.filter(Self.needsYou).map(Glance.activity)
         glances += timers.filter { $0.id != shownTimer }.map(Glance.timer)
+        if stopwatch.isActive && !shownStopwatch { glances.append(.stopwatch(stopwatch)) }
         if let e = model.upcomingEvent { glances.append(.event(e)) }
         glances += rest.filter { !Self.needsYou($0) }.map(Glance.activity)
         // Claude's hint sits where its card will be, before Codex's.
@@ -181,7 +192,9 @@ struct HomeTab: View {
             TimerComposer(model: model)
         } else {
             let plan = HomePlan(model: model)
-            let split = !plan.glances.isEmpty
+            // Lyrics, when on and found, take the glances' column beside the music.
+            let lyrics = LyricsColumn.lyrics(for: plan, model: model)
+            let split = !plan.glances.isEmpty || lyrics != nil
             // The primary thing gets the larger share; the glances the rest, past a hairline.
             let share: CGFloat = size.width < 480 ? 0.47 : 0.56
             let primaryWidth = split ? (size.width * share).rounded() : size.width
@@ -193,8 +206,13 @@ struct HomeTab: View {
                     ColumnRule()
                         .frame(height: size.height)
                         .padding(.horizontal, Space.l)
-                    GlanceColumn(model: model, glances: plan.glances, height: size.height)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    if let lyrics {
+                        LyricsColumn(model: model, media: lyrics.0, lyrics: lyrics.1)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    } else {
+                        GlanceColumn(model: model, glances: plan.glances, height: size.height)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    }
                 }
             }
         }
@@ -205,6 +223,7 @@ struct HomeTab: View {
         switch p {
         case .media(let np): NowPlayingHero(model: model, media: np, size: CGSize(width: width, height: size.height))
         case .ringing(let t), .timer(let t): TimerHero(model: model, timer: t)
+        case .stopwatch(let s): StopwatchHero(model: model, stopwatch: s)
         case .activity(let a): ActivityHero(activity: a, model: model)
         case .clock: ClockHero(model: model)
         }
@@ -334,6 +353,7 @@ struct GlanceColumn: View {
     private func glance(_ g: HomePlan.Glance) -> some View {
         switch g {
         case .timer(let t): TimerGlance(timer: t, model: model)
+        case .stopwatch(let s): StopwatchGlance(stopwatch: s, model: model)
         case .event(let e): EventGlance(item: e)
         case .activity(let a): ActivityGlance(activity: a, model: model)
         case .usage(let u):
@@ -475,10 +495,18 @@ struct TodayTab: View {
     }
 
     var body: some View {
+        if model.settings.monthCalendar {
+            TodayWithMonth(model: model)
+        } else {
+            dayAndReminders
+        }
+    }
+
+    private var dayAndReminders: some View {
         let now = Date()
         let rest = Agenda.restOfToday(model.visibleAgenda, now: now)
         let reminders = model.dueReminders
-        GeometryReader { geo in
+        return GeometryReader { geo in
             let h = geo.size.height
             let events = Self.rows(in: h, taken: rest.allDay.isEmpty ? 0 : Self.allDayHeight + Space.s)
             let todos = Self.rows(in: h)

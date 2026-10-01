@@ -59,6 +59,8 @@ struct NowPlayingSettings: View {
                 .settingsAnchor("nowPlaying.remaining")
             }
             .disabled(!on)
+            LyricsSettingsSection(model: model)
+                .disabled(!on)
             Section {
                 IndicatorStylePicker(model: model)
                     .settingsAnchor("nowPlaying.indicator")
@@ -227,6 +229,7 @@ struct CalendarSettings: View {
             } header: {
                 Text("Reminders")
             }
+            MonthCalendarSettingsSection(model: model)
         }
         .formStyle(.grouped)
         .onAppear {

@@ -123,6 +123,7 @@ struct PageSwitcher: View {
         var more: [IslandTab] = [.clipboard]
         if s.pluginsEnabled { more.append(.widgets) }
         if s.systemStatsEnabled { more.append(.stats) }
+        more += ToolPages.on(s)
         // A page opened some other way (a drop, the API) still shows where you are.
         if model.tab != .ask, !main.contains(model.tab), !more.contains(model.tab) { more.append(model.tab) }
         return (main, more)
@@ -130,11 +131,21 @@ struct PageSwitcher: View {
 
     /// The rest of the pages, then keep awake, keep open and Settings.
     private func showMore(_ tabs: [IslandTab]) {
-        var items = tabs.map { tab in
+        // Tools still switched off wait together in one submenu, so the menu stays short.
+        let off = ToolPages.off(model.settings)
+        var items = tabs.filter { !off.contains($0) }.map { tab in
             IslandMenu.Item(title: tab.title, symbol: tab.symbol, checked: model.tab == tab) {
                 model.timers.isEntering = false
                 model.select(tab: tab)
             }
+        }
+        if !off.isEmpty {
+            items.append(IslandMenu.Item(title: "More tools", symbol: "puzzlepiece", children: off.map { tab in
+                IslandMenu.Item(title: tab.title, symbol: tab.symbol, checked: model.tab == tab) {
+                    model.timers.isEntering = false
+                    model.select(tab: tab)
+                }
+            }))
         }
         items.append(.separator)
         let awake = model.controls.awake

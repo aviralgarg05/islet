@@ -6,6 +6,8 @@ import Observation
 
 enum IslandTab: String, CaseIterable, Identifiable {
     case home, today, shelf, widgets, clipboard, stats
+    /// Tools: under More once turned on, under More tools until then.
+    case shortcuts, weather
     case ask
     var id: String { rawValue }
 
@@ -17,6 +19,8 @@ enum IslandTab: String, CaseIterable, Identifiable {
         case .widgets: return "square.grid.2x2.fill"
         case .clipboard: return "doc.on.clipboard.fill"
         case .stats: return "gauge.with.dots.needle.33percent"
+        case .shortcuts: return "square.stack.3d.up.fill"
+        case .weather: return "cloud.sun.fill"
         case .ask: return "sparkles"
         }
     }
@@ -29,6 +33,8 @@ enum IslandTab: String, CaseIterable, Identifiable {
         case .widgets: return "Widgets"
         case .clipboard: return "Clipboard"
         case .stats: return "System"
+        case .shortcuts: return "Shortcuts"
+        case .weather: return "Weather"
         case .ask: return "Ask"
         }
     }
@@ -110,6 +116,8 @@ final class AppModel {
     @ObservationIgnored lazy var timers = TimerController(model: self)
     /// Coding-agent approval cards (ApprovalController.swift).
     @ObservationIgnored lazy var approvals = ApprovalController(model: self)
+    /// Lyrics, shortcuts, weather, the month calendar, the stopwatch and focus sounds (Tools.swift).
+    @ObservationIgnored lazy var tools = Tools(model: self)
     let ask: AskController
     private var mirroredKeys: Set<String> = []
     private var mirrorClock = LiveActivityClock()
@@ -175,6 +183,7 @@ final class AppModel {
         fullscreen.start()
         applyTiming()
         timers.start()
+        tools.stopwatch.start()
         startEventSources()
         watchSettingsFile()
     }
@@ -222,6 +231,7 @@ final class AppModel {
             syncMenuBarActivities([])
         }
         agentUsage.apply(settings) { [weak self] spec in _ = try? self?.applyLocal(spec) }
+        applyTools()
     }
 
     /// Show the menu bar's Live Activities (iPhone and Mac) as island activities.
@@ -261,6 +271,7 @@ final class AppModel {
 
     func stop() {
         releaseKeepAwake()
+        tools.focus.stopAll()
         ask.stop()  // Quitting stops a running claude/codex rather than leaving it behind.
         guard server != nil else { return }
         server?.stop()
@@ -904,6 +915,7 @@ final class AppModel {
         center.remove(id: activityID)
         reschedule()
         timers.activityRemoved(activityID)
+        tools.stopwatch.activityRemoved(activityID)
     }
 
     func perform(_ action: ActivityAction, activityID: String) {
@@ -1045,6 +1057,7 @@ extension AppModel: IsletBackend {
             let removed = self.center.remove(id: id) != nil
             self.reschedule()
             self.timers.activityRemoved(id)
+            self.tools.stopwatch.activityRemoved(id)
             return removed
         }
     }
@@ -1054,6 +1067,7 @@ extension AppModel: IsletBackend {
             let n = self.center.removeAll(source: source)
             self.reschedule()
             self.timers.activitiesRemoved(source: source)
+            if source == Stopwatch.source { self.tools.stopwatch.activityRemoved(Stopwatch.activityID) }
             return n
         }
     }

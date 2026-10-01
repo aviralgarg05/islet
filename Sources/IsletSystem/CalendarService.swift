@@ -87,6 +87,14 @@ public final class CalendarService {
         onAgenda?(items)
     }
 
+    /// Events between two moments from every calendar (the month calendar on Today reads a
+    /// month at a time, while it is on screen). Empty without Calendar access.
+    public func events(from start: Date, to end: Date) -> [AgendaItem] {
+        guard Self.eventAccess == .granted, start < end else { return [] }
+        let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
+        return store.events(matching: predicate).map(Self.item(from:))
+    }
+
     private func refreshReminders() {
         guard includeReminders, Self.reminderAccess == .granted else { return }
         let end = Calendar.current.date(byAdding: .day, value: 2, to: Calendar.current.startOfDay(for: Date())) ?? Date()

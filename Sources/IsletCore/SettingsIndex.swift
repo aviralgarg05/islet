@@ -3,7 +3,7 @@ import Foundation
 /// A page in the Settings window, in sidebar order.
 public enum SettingsPage: String, CaseIterable, Sendable, Identifiable {
     case general, appearance, shortcuts
-    case nowPlaying, liveActivities, calendar, timers, notifications, shelf, downloads, ai, agents
+    case nowPlaying, liveActivities, calendar, timers, notifications, shelf, downloads, tools, ai, agents
     case apps, permissions, about
     case advanced
 
@@ -21,6 +21,7 @@ public enum SettingsPage: String, CaseIterable, Sendable, Identifiable {
         case .notifications: return "Notifications & HUDs"
         case .shelf: return "Shelf & Clipboard"
         case .downloads: return "Downloads"
+        case .tools: return "Tools"
         case .ai: return "Ask & AI"
         case .agents: return "Coding agents"
         case .apps: return "Apps"
@@ -43,6 +44,7 @@ public enum SettingsPage: String, CaseIterable, Sendable, Identifiable {
         case .notifications: return "Notifications, volume, brightness, battery, calls, camera and microphone."
         case .shelf: return "Keep files handy, share them, and find what you copied."
         case .downloads: return "Browser downloads with their progress, then Open and Show when they finish."
+        case .tools: return "Extra pages for the island, each off until you turn it on."
         case .ai: return "Ask a question from anywhere, answered on this Mac or by Claude or ChatGPT."
         case .agents: return "See what your coding agents are doing and answer their questions in the notch."
         case .apps: return "Give an app a colour or a priority, hide the island for it, or mute its notifications."
@@ -65,6 +67,7 @@ public enum SettingsPage: String, CaseIterable, Sendable, Identifiable {
         case .notifications: return "bell.badge.fill"
         case .shelf: return "tray.full.fill"
         case .downloads: return "arrow.down"
+        case .tools: return "puzzlepiece.fill"
         case .ai: return "sparkles"
         case .agents: return "chevron.left.forwardslash.chevron.right"
         case .apps: return "square.grid.2x2.fill"
@@ -86,6 +89,7 @@ public enum SettingsPage: String, CaseIterable, Sendable, Identifiable {
         case .timers: return "orange"
         case .shelf: return "cyan"
         case .downloads: return "teal"
+        case .tools: return "yellow"
         case .ai: return "purple"
         case .agents: return "brown"
         case .apps: return "mint"
@@ -96,7 +100,7 @@ public enum SettingsPage: String, CaseIterable, Sendable, Identifiable {
     public var group: SettingsPageGroup {
         switch self {
         case .general, .appearance, .shortcuts: return .basics
-        case .nowPlaying, .liveActivities, .calendar, .timers, .notifications, .shelf, .downloads, .ai, .agents: return .features
+        case .nowPlaying, .liveActivities, .calendar, .timers, .notifications, .shelf, .downloads, .tools, .ai, .agents: return .features
         case .apps, .permissions, .about: return .system
         case .advanced: return .advanced
         }
@@ -308,6 +312,8 @@ public enum SettingsIndex {
                       keywords: ["equaliser", "equalizer", "visualiser", "bars", "dots", "wave", "waves", "pulse", "circle", "animation"]),
         SettingsEntry("nowPlaying.musicColour", .nowPlaying, "Music colour", section: "Look",
                       keywords: ["color", "artwork", "indicator colour", "progress bar", "scrubber", "tint"]),
+        SettingsEntry("nowPlaying.lyrics", .nowPlaying, "Show lyrics", section: "Lyrics",
+                      keywords: ["words", "sing along", "karaoke", "synced", "LRCLIB", "Spotify", "Music"]),
 
         SettingsEntry("live.enabled", .liveActivities, "Show Live Activities",
                       keywords: ["iPhone", "rides", "deliveries", "scores", "flights", "Uber"]),
@@ -316,12 +322,21 @@ public enum SettingsIndex {
         SettingsEntry("calendar.enabled", .calendar, "Calendar", keywords: ["events", "meetings", "join", "agenda"]),
         SettingsEntry("calendar.shown", .calendar, "Calendars shown", keywords: ["hide calendar"], anchor: "calendar.enabled"),
         SettingsEntry("calendar.reminders", .calendar, "Reminders due today", keywords: ["to-do", "tasks"]),
+        SettingsEntry("calendar.month", .calendar, "Month calendar on Today", section: "Today page",
+                      keywords: ["month view", "dates", "grid", "week", "days"]),
 
         SettingsEntry("timers.sound", .timers, "Sound when a timer ends", keywords: ["alarm", "chime", "ring"]),
         SettingsEntry("timers.focus", .timers, "Focus", section: "Pomodoro", keywords: ["work", "length"]),
         SettingsEntry("timers.shortBreak", .timers, "Short break", section: "Pomodoro", anchor: "timers.focus"),
         SettingsEntry("timers.longBreak", .timers, "Long break", section: "Pomodoro", anchor: "timers.focus"),
         SettingsEntry("timers.every", .timers, "Long break after", section: "Pomodoro", keywords: ["rounds"], anchor: "timers.focus"),
+        SettingsEntry("timers.lengths", .timers, "Lengths", section: "Pomodoro",
+                      keywords: ["25/5", "50/10", "90/20", "preset", "classic", "deep work"]),
+        SettingsEntry("timers.focusSound", .timers, "Play during focus", section: "Focus sound",
+                      keywords: ["noise", "brown noise", "rain", "waves", "ambient", "music", "concentrate", "Pomodoro"]),
+        SettingsEntry("timers.focusVolume", .timers, "Sound volume", section: "Focus sound",
+                      keywords: ["loudness", "quieter", "louder", "listen", "try"]),
+        SettingsEntry("timers.stopwatch", .timers, "Stopwatch", keywords: ["count up", "laps", "elapsed"]),
 
         SettingsEntry("notifications.mirror", .notifications, "Mirror notifications from every app", section: "Notifications",
                       keywords: ["banners", "iPhone", "messages"]),
@@ -357,6 +372,15 @@ public enum SettingsIndex {
                       anchor: "shelf.clipboard"),
 
         SettingsEntry("downloads.enabled", .downloads, "Download progress", keywords: ["files", "Safari", "Chrome", "browser"]),
+
+        SettingsEntry("tools.shortcuts", .tools, "Run your shortcuts", section: "Shortcuts",
+                      keywords: ["Shortcuts app", "automation", "run", "workflow"]),
+        SettingsEntry("tools.weather", .tools, "Show the weather", section: "Weather",
+                      keywords: ["forecast", "temperature", "rain", "sun", "week", "Open-Meteo"]),
+        SettingsEntry("tools.weatherLocation", .tools, "Weather location", section: "Weather",
+                      keywords: ["where I am", "my location", "city", "town", "place"]),
+        SettingsEntry("tools.temperature", .tools, "Temperature in", section: "Weather",
+                      keywords: ["Celsius", "Fahrenheit", "units", "degrees"]),
 
         SettingsEntry("ai.provider", .ai, "Answer with", section: "Ask", keywords: ["provider", "Claude", "ChatGPT", "on-device", "default"]),
         SettingsEntry("ai.effort", .ai, "Effort", section: "Ask", keywords: ["reasoning", "thinking"]),

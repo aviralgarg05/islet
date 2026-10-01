@@ -28,6 +28,8 @@ let package = Package(
                 .linkedFramework("Network"),
                 .linkedFramework("IOBluetooth"),
                 .linkedFramework("CoreMediaIO"),
+                .linkedFramework("CoreLocation"),
+                .linkedFramework("AVFoundation"),
             ]
         ),
         // The menu-bar agent app: notch panel, SwiftUI views, settings.
