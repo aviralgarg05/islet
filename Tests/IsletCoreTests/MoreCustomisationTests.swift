@@ -99,3 +99,44 @@ private func song(playing: Bool, elapsed: Double? = 60, duration: Double? = 240,
         #expect(peek.current(now: t0.addingTimeInterval(15.6)) == nil)
     }
 }
+
+@Suite struct HoverPeekTests {
+    private var clickToOpen: IsletSettings {
+        var s = IsletSettings()
+        s.hoverToOpen = false
+        return s
+    }
+
+    @Test func onByDefaultForClickToOpen() {
+        #expect(IsletSettings().peekOnHover)
+        #expect(decode(#"{"peekOnHover": false}"#).peekOnHover == false)
+        let np = song(playing: true)
+        #expect(Presenter.hoverPeek(np, hovering: true, settings: clickToOpen) == np)
+        // Paused music is still what's playing.
+        #expect(Presenter.hoverPeek(song(playing: false), hovering: true, settings: clickToOpen) != nil)
+    }
+
+    @Test func onlyWhileHoveringAndOnlyWhenHoverDoesNotOpen() {
+        let np = song(playing: true)
+        #expect(Presenter.hoverPeek(np, hovering: false, settings: clickToOpen) == nil)
+        // Hovering opens the island, so there is nothing to peek at.
+        #expect(Presenter.hoverPeek(np, hovering: true, settings: IsletSettings()) == nil)
+        var off = clickToOpen
+        off.peekOnHover = false
+        #expect(Presenter.hoverPeek(np, hovering: true, settings: off) == nil)
+        var noMedia = clickToOpen
+        noMedia.mediaEnabled = false
+        #expect(Presenter.hoverPeek(np, hovering: true, settings: noMedia) == nil)
+        #expect(Presenter.hoverPeek(nil, hovering: true, settings: clickToOpen) == nil)
+    }
+
+    @Test func showsAsASongPeekBelowAHUD() {
+        let np = song(playing: true)
+        var center = ActivityCenter()
+        let peek = Presenter.present(PresenterInputs(now: t0, center: center, nowPlaying: np, songPeek: np))
+        #expect(peek == .songPeek(np))
+        center.showHUD(.volume, value: 0.5, now: t0)
+        let hud = Presenter.present(PresenterInputs(now: t0, center: center, nowPlaying: np, songPeek: np))
+        if case .hud = hud {} else { Issue.record("expected the HUD, got \(hud)") }
+    }
+}

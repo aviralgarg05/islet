@@ -35,6 +35,12 @@ struct GeneralSettings: View {
                 if model.settings.hoverToOpen {
                     SettingsSlider(title: "Hover delay", value: $model.settings.openDelay, range: IsletSettings.openDelayRange,
                                    step: 0.05, format: SettingsSlider.seconds)
+                } else {
+                    Toggle(isOn: $model.settings.peekOnHover) {
+                        Text("Peek at what's playing")
+                        Text("While the pointer rests on the notch, the island shows the song without opening.")
+                    }
+                    .settingsAnchor("general.peekOnHover")
                 }
                 SettingsSlider(title: "Close delay", value: $model.settings.closeDelay, range: IsletSettings.closeDelayRange,
                                step: 0.05, format: SettingsSlider.seconds)

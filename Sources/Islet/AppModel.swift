@@ -77,6 +77,12 @@ final class AppModel {
     /// When a new song shows for a moment below the notch, for as long as "New activities stay
     /// open for" says.
     private(set) var songPeek = SongPeek()
+    /// The display whose closed island the pointer rests on (nil when it's elsewhere, or the
+    /// island is open). The island grows a little while it is there.
+    private(set) var hoverDisplay: CGDirectDisplayID?
+    /// The display showing what's playing because the pointer has rested on its notch while
+    /// the island opens on click ("Peek at what's playing"). Ends when the pointer leaves.
+    private(set) var hoverPeekDisplay: CGDirectDisplayID?
     /// When the music was paused, so the closed island keeps it for `pausedMusicTimeout`.
     private(set) var pausedMusic = PausedMusic()
     /// Play or pause just clicked, shown before the player confirms it.
@@ -462,9 +468,23 @@ final class AppModel {
             isSuppressed: isSuppressed(display) && expandedScreen != display,
             pausedMedia: showsMedia ? pausedMusic.show(timeout: settings.pausedMusicTimeout, now: now) : .hidden,
             focusedActivityID: controls.focusedActivityID,
-            songPeek: showsMedia && settings.songChangePeek ? songPeek.current(now: now) : nil
+            songPeek: Presenter.hoverPeek(nowPlaying, hovering: hoverPeekDisplay == display, settings: settings)
+                ?? (showsMedia && settings.songChangePeek ? songPeek.current(now: now) : nil)
         )
         return Presenter.present(inputs)
+    }
+
+    /// The pointer reached the closed island on `display`, or left it (nil).
+    func setHover(_ display: CGDirectDisplayID?) {
+        if hoverDisplay != display { hoverDisplay = display }
+        if hoverPeekDisplay != nil, hoverPeekDisplay != display { hoverPeekDisplay = nil }
+    }
+
+    /// The pointer has rested on the notch long enough: peek at what's playing there.
+    func peekOnHover(_ display: CGDirectDisplayID) {
+        guard expandedScreen == nil, hoverDisplay == display, hoverPeekDisplay != display,
+              Presenter.hoverPeek(nowPlaying, hovering: true, settings: settings) != nil else { return }
+        hoverPeekDisplay = display
     }
 
     /// The island on `display` gets out of the way: a fullscreen app is in front (unless its
@@ -525,6 +545,8 @@ final class AppModel {
         if display != nil {
             center.cancelSneak()
             songPeek.cancel()
+            hoverDisplay = nil
+            hoverPeekDisplay = nil
             agentUsage.refreshClaudeHint()
             Haptics.play(.open)
             if tab == .stats && settings.systemStatsEnabled { statsSampler.start() }

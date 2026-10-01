@@ -89,6 +89,14 @@ public enum Presenter {
         return .idle
     }
 
+    /// The song to peek at while the pointer rests on the closed island ("Peek at what's
+    /// playing"): only while the island opens on click (hovering opens it otherwise), and
+    /// playing or paused alike. It shows as a song peek, for as long as the pointer stays.
+    public static func hoverPeek(_ np: NowPlaying?, hovering: Bool, settings s: IsletSettings) -> NowPlaying? {
+        guard hovering, !s.hoverToOpen, s.peekOnHover, s.mediaEnabled else { return nil }
+        return np
+    }
+
     /// The music that holds its place in the closed island, and in a bubble beside an activity:
     /// playing, or paused a moment ago, so the pause is seen in either. Music kept paused for
     /// good waits behind everything else.

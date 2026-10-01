@@ -422,6 +422,7 @@ final class PointerCoordinator {
     }
 
     private func deactivate() {
+        model.setHover(nil)
         monitors.forEach(NSEvent.removeMonitor)
         monitors.removeAll()
         restTimer?.invalidate()
@@ -444,6 +445,7 @@ final class PointerCoordinator {
             let p = location
             // On a display without an island: that's leaving, so a pending open is cancelled and
             // an open island starts its close grace period instead of waiting for the pointer.
+            model.setHover(nil)
             if let display = activeDisplay {
                 let decision = intent.sample(point: p, now: now, inTrigger: false, inExpanded: false,
                                              isOpen: model.expandedScreen == display)
@@ -461,7 +463,10 @@ final class PointerCoordinator {
 
         let inTrigger = c.hoverZone.contains(p) || (inIsland && !expandedHere)
         if !inTrigger { model.controls.hoverOpenBlocked = false }
-        if model.settings.hoverToOpen || expandedHere {
+        // Resting on the closed island: it grows a little, and may peek at what's playing.
+        model.setHover(inTrigger && !expandedHere && model.expandedScreen == nil ? c.display : nil)
+        // The dwell opens the island, or with "open on click", peeks at the song.
+        if model.settings.hoverToOpen || expandedHere || model.settings.peekOnHover {
             let decision = intent.sample(point: p, now: now, inTrigger: inTrigger,
                                          inExpanded: expandedHere && c.expandedRect.insetBy(dx: -6, dy: -6).contains(p), isOpen: expandedHere)
             activeDisplay = c.display
@@ -481,7 +486,11 @@ final class PointerCoordinator {
     private func apply(_ d: HoverIntent.Decision, display: CGDirectDisplayID) {
         switch d {
         case .open:
-            if model.settings.hoverToOpen, !model.controls.hoverOpenBlocked { model.setExpanded(display) }
+            if model.settings.hoverToOpen {
+                if !model.controls.hoverOpenBlocked { model.setExpanded(display) }
+            } else if model.settings.peekOnHover {
+                model.peekOnHover(display)
+            }
         case .close:
             if !model.pinned, !model.isDraggingFile, !model.controls.holdsOpen, !model.ask.wantsKeyboard { model.setExpanded(nil) }
             intent.reset()

@@ -421,6 +421,7 @@ Now Playing, closed island, HUD, gestures and battery keys:
 |---|---|---|
 | `mediaShowsRemainingTime` | `true` | Time left (rather than the track length) right of the scrubber. Tapping the label switches it. |
 | `songChangePeek` | `true` | Show a new song for a moment below the notch when the track changes, for as long as `alertDuration`. |
+| `peekOnHover` | `true` | While the island opens on click (`hoverToOpen: false`), resting the pointer on the notch shows what's playing until it leaves. |
 | `songProgressRing` | `false` | A thin ring round the artwork beside the notch that fills as the song plays. |
 | `pausedMusicTimeout` | `10` | Seconds the closed island keeps paused music before it hides (0–300; `0` = right away, `-1` = never). Replaces `showPausedMedia`, which is read once: `true` becomes `-1`. |
 | `visualiserStyle` | `"bars"` | The playing indicator: `"bars"`, `"slim"`, `"dots"`, `"wave"`, `"pulse"` or `"off"`. |

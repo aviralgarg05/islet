@@ -166,6 +166,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var displayMode: DisplayMode = .notchedScreen
     public var showOnNonNotchDisplays = true
     public var hoverToOpen = true
+    /// While the island opens on click, resting the pointer on the notch shows what's playing
+    /// for as long as it stays there (a song peek without opening).
+    public var peekOnHover = true
     public var openDelay: Double = 0.18
     public var closeDelay: Double = 0.35
     public var hideInFullscreen = true

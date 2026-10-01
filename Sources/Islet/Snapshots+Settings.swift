@@ -74,6 +74,12 @@ enum SettingsSnapshots {
             model.settings = custom
             navigation.open(.appearance)
             shoot("appearance-custom", in: extra)
+            // Opening on click: the peek at what's playing takes the hover delay's place.
+            var click = sampleSettings
+            click.hoverToOpen = false
+            model.settings = click
+            navigation.open(.general)
+            shoot("general-click", in: extra, dark: false)
             model.settings = sampleSettings
             window.setContentSize(SettingsWindow.minimumSize)
             for (i, page) in SettingsPage.allCases.enumerated() {

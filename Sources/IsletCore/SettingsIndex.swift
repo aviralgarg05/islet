@@ -219,6 +219,8 @@ public enum SettingsIndex {
         SettingsEntry("general.login", .general, "Launch at login", section: "Behaviour", keywords: ["startup", "login items", "start automatically"]),
         SettingsEntry("general.open", .general, "Open the island", section: "Behaviour", keywords: ["hover", "click"]),
         SettingsEntry("general.hoverDelay", .general, "Hover delay", section: "Behaviour", keywords: ["open delay", "wait"], anchor: "general.open"),
+        SettingsEntry("general.peekOnHover", .general, "Peek at what's playing", section: "Behaviour",
+                      keywords: ["hover", "quick peek", "song", "music", "point", "click"], anchor: "general.open"),
         SettingsEntry("general.closeDelay", .general, "Close delay", section: "Behaviour", keywords: ["collapse", "dismiss", "wait"]),
         SettingsEntry("general.display", .general, "Show the island on", section: "Placement", keywords: ["display", "screen", "monitor", "external", "notched"]),
         SettingsEntry("general.nonNotch", .general, "Show on displays without a notch", section: "Placement", keywords: ["external", "monitor"]),

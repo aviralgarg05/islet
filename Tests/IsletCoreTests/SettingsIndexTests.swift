@@ -123,6 +123,7 @@ import Testing
         ("airdrop", .shelf),
         ("music colour", .nowPlaying),
         ("song progress", .nowPlaying),
+        ("peek", .general),
     ])
     func queryFindsPage(query: String, page: SettingsPage) {
         let groups = SettingsIndex.search(query)

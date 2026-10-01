@@ -46,6 +46,7 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 - **Show song progress** (off by default) draws a thin ring round the artwork beside the notch that fills as the song plays. Core Animation fills it, so Islet does nothing while the song plays on.
 - One **Music colour** now colours the playing indicator, the progress ring and the open island's progress bar, shuffle and repeat. It replaces the indicator's own colour setting (`visualiserColour` becomes `musicColour`).
 - A new song stays on show for as long as **New activities stay open for** says, instead of a fixed 2.5 seconds.
+- When the island opens on click, resting the pointer on the notch peeks at what's playing until the pointer leaves (**Peek at what's playing**, in General).
 
 ### Calendar and reminders
 - A Today tab with the rest of the day's events, Join buttons and reminders you can tick off. Repeating meetings now alert every time, and the agenda rolls over at midnight.
