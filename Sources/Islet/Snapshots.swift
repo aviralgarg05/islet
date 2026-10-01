@@ -20,7 +20,7 @@ enum Snapshots {
         settings.remindersEnabled = true
         // Static renders: no transitions, so nothing is captured mid-animation.
         settings.animationStyle = .off
-        let model = AppModel(settings: settings)
+        let model = AppModel(settings: settings, secrets: MemorySecretStore(), scriptFile: nil)
         model.loadDemo(includeActivities: true)
         // Drawn as if macOS allowed both; the access states have shots of their own.
         model.setCalendarAccessForSnapshot(events: .fullAccess, reminders: .fullAccess)
@@ -214,6 +214,7 @@ enum Snapshots {
         shoot("24-sneak-usage-alert")
         model.forcedPresentation = .compact(.activity(usageAlert, others: 0))
         shoot("25-compact-usage-alert")
+        renderTools(model: model, now: now, shoot: shoot) { model.settings.sizePreset = $0; metrics = metricsFor(model.settings) }
         TemplateSnapshots.render(to: dir, model: model)
         renderApprovals(model: model, shoot: shoot)
         renderWings(to: dir)

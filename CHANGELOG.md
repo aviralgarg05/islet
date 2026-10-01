@@ -27,6 +27,7 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 - When Islet.app moves after an agent was connected, Coding agents says **Needs an update** instead of Connected, with a dot in the sidebar (checked once at launch), and **Update…** points the hooks at the new place. Hooks that call `isletctl` by name, as the examples in `integrations/` do, stay Connected. **Disconnect…** takes Islet's hooks out again after showing what it removes, and leaves everything else.
 - **MCP.** `isletctl mcp` lets agents show progress, notes and timers in the notch as tools.
 - Commands shown in the notch, and Codex's last message, hide anything that looks like a key or password.
+- **More usage on Home**, each off until switched on in Settings → Coding agents → Usage limits: **OpenRouter spending** (today's spend and what's left of the key's limit, with your own key), **Copilot premium requests** (this month's count against your plan, with a GitHub key that can read Plan) and **Ollama models** (what Ollama has loaded on this Mac and the memory it takes). They are asked for when the island opens, at most every few minutes, and never between. Keys are checked once, then kept in the Keychain. No other app's sign-in is read; Cursor offers usage only to team admins, so it isn't included.
 
 ### Ask
 - An Ask box answered on the Mac by Apple Intelligence, by Claude or ChatGPT with your own API key (kept in the Keychain), or by the Claude Code and Codex command-line tools with the login you already have. ⌃⌥A opens it from anywhere.
@@ -36,6 +37,14 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 ### Timers and Siri
 - Timers you can start, pause, extend and stop from the island, the API, the URL scheme or `isletctl`, including phrases like "tea 4m" or "in 20 minutes to check the oven". A Pomodoro cycle. Timers survive a relaunch and ring with a sound of your choice.
 - Siri reaches Islet through Shortcuts; [docs/SHORTCUTS.md](docs/SHORTCUTS.md) has the recipes.
+
+### Tools
+Four new pages, each off until you turn it on in Settings → Tools, then listed under More in the page switcher. Nothing about them shows in the closed island.
+- **Camera mirror.** Your camera centred under the notch, for a quick look before a call. It runs only while the Mirror page is open, so the camera light is on exactly then, stops while the screen is locked or asleep, and nothing is recorded. **Flip like a mirror** is on by default. macOS asks for the camera the first time you press **Allow camera**, and Settings → Permissions lists it.
+- **Teleprompter.** Your script moves up just under the camera at the pace you choose (60 to 300 words a minute, with − and + on the page), so you read while looking into the lens. Scroll over it to move it by hand; play again from the end starts from the top. **See-through while reading** turns the open island to clear glass on that page. The script stays in a private file on the Mac. The text moves with one linear animation and stops at the end through Islet's single deadline timer, so nothing ticks while it plays.
+- **Stocks.** A watchlist (up to 12 shares, indices such as ^GSPC, or currencies such as EURUSD=X) with each price, the day's change and a line for the day against the previous close. Prices come from Yahoo Finance without an account, only while the Stocks page is open: when it opens, then every two minutes.
+- **Sales.** Today's takings from Stripe, Shopify, Lemon Squeezy, Gumroad, Dodo Payments, Polar and Paddle, as one total (in your own currency when there are takings in it, with other currencies beside it) and per store, with the number of orders. Paste a read-only key for each store (Lemon Squeezy's keys can't be limited, and Islet only reads); it is checked, then kept in the Keychain. Paid orders since midnight count, less refunds, without test orders. Islet asks every 15 minutes while Sales is on and the Mac is unlocked, not in Low Power Mode, at midnight, and when you open the page.
+- Requests for sales, stocks and usage go only to the service each one names, over HTTPS (Ollama over plain HTTP on 127.0.0.1), with no cookies or cache, and never follow a redirect, so a key can't be sent anywhere else.
 
 ### Now Playing and controls
 - The scrubber seeks. ±15 seconds, shuffle and repeat where the player supports them, the system volume and an output picker.
@@ -99,6 +108,7 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 - The iPhone bridge has its own token, separate from the local API's, with Copy and New Token in Settings → Advanced. It only accepts notifications, timers, Focus and simple activities (no links, buttons or image files), refuses a wrong token before reading the body, and limits bodies to 16 KB and connections to 8, 2 per client. Connections whose headers take longer than 2 seconds are closed. Bonjour advertises it as "Islet" rather than the Mac's name. `isletctl token --lan` prints its token.
 - A request refused from its headers alone (a wrong token, a refused route, a body that's too large) now gets its answer through to clients still sending a large body, such as URLSession, instead of ending in a timeout or a lost connection.
 - Calendar and Reminders access works in the app bundle: the hardened runtime needed the calendars entitlement, without which macOS refused access and never asked.
+- The camera mirror has the camera entitlement and a usage description for the same reason.
 - Hovering opens the island when the pointer is pushed against the top edge of the screen. Settings can switch it to open on click instead.
 
 ### Measured on an M3 Pro MacBook Pro, macOS 27.0.1

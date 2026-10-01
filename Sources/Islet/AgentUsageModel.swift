@@ -84,6 +84,13 @@ final class AgentUsageModel {
         [claude, codex].compactMap { $0 }.filter { $0.isRelevant(at: now) }
     }
 
+    /// No figures and no hint, for offline snapshots of what else Home shows.
+    func clearForSnapshot() {
+        claude = nil
+        codex = nil
+        claudeHint = nil
+    }
+
     /// A fixed hint for offline snapshots (nothing is read).
     func showDemoHint(_ hint: ClaudeUsageHint?) {
         claude = nil

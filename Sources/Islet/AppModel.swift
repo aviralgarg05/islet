@@ -6,6 +6,7 @@ import Observation
 
 enum IslandTab: String, CaseIterable, Identifiable {
     case home, today, shelf, widgets, clipboard, stats
+    case mirror, teleprompter, stocks, sales
     case ask
     var id: String { rawValue }
 
@@ -17,6 +18,10 @@ enum IslandTab: String, CaseIterable, Identifiable {
         case .widgets: return "square.grid.2x2.fill"
         case .clipboard: return "doc.on.clipboard.fill"
         case .stats: return "gauge.with.dots.needle.33percent"
+        case .mirror: return "person.crop.square"
+        case .teleprompter: return "text.alignleft"
+        case .stocks: return "chart.line.uptrend.xyaxis"
+        case .sales: return "banknote"
         case .ask: return "sparkles"
         }
     }
@@ -29,6 +34,10 @@ enum IslandTab: String, CaseIterable, Identifiable {
         case .widgets: return "Widgets"
         case .clipboard: return "Clipboard"
         case .stats: return "System"
+        case .mirror: return "Mirror"
+        case .teleprompter: return "Teleprompter"
+        case .stocks: return "Stocks"
+        case .sales: return "Sales"
         case .ask: return "Ask"
         }
     }
@@ -115,6 +124,13 @@ final class AppModel {
     let menuBarActivities = MenuBarLiveActivityMonitor()
     let agentUsage = AgentUsageModel()
     let controls = IslandControls()
+    /// The tools under "More" and the extra AI usage on Home (ToolModels.swift, AppModel+Tools.swift).
+    let toolsService: ToolsService
+    let sales: SalesModel
+    let stocks: StocksModel
+    let toolUsage: ToolUsageModel
+    let teleprompter: TeleprompterController
+    let mirror = MirrorModel()
     @ObservationIgnored lazy var timers = TimerController(model: self)
     /// Coding-agent approval cards (ApprovalController.swift).
     @ObservationIgnored lazy var approvals = ApprovalController(model: self)
@@ -174,9 +190,11 @@ final class AppModel {
     private(set) var settingsOrigin: SettingsFile.Origin = .file
 
     /// With no `settings`, they are read from config.json (or, when it doesn't parse, from the
-    /// copy of the last one that did). `ask` is replaceable so Settings snapshots keep API keys
-    /// in memory instead of the Keychain.
-    init(settings: IsletSettings? = nil, ask: AskController? = nil) {
+    /// copy of the last one that did). `ask` and `secrets` are replaceable so snapshots keep API
+    /// keys in memory instead of the Keychain; `scriptFile` nil keeps the teleprompter's script
+    /// in memory too.
+    init(settings: IsletSettings? = nil, ask: AskController? = nil, secrets: SecretStore? = nil,
+         scriptFile: TeleprompterScriptFile? = .standard) {
         var file = SettingsFile(url: IsletPaths.configFile, lastGood: IsletPaths.lastGoodConfigFile)
         var origin = SettingsFile.Origin.file
         let start: IsletSettings
@@ -193,6 +211,13 @@ final class AppModel {
         settingsOrigin = origin
         self.settings = settings
         self.ask = ask ?? AskController()
+        let keys = secrets ?? KeychainStore()
+        let service = ToolsService()
+        toolsService = service
+        sales = SalesModel(service: service, secrets: keys)
+        stocks = StocksModel(service: service)
+        toolUsage = ToolUsageModel(service: service, secrets: keys)
+        teleprompter = TeleprompterController(file: scriptFile)
         shelf = shelfService.shelf
         clipboard = ClipboardHistory(limit: settings.clipboardLimit)
         clipboard.ignoredApps = Set(settings.clipboardIgnoredApps)
@@ -276,6 +301,7 @@ final class AppModel {
             syncMenuBarActivities([])
         }
         agentUsage.apply(settings) { [weak self] spec in _ = try? self?.applyLocal(spec) }
+        applyTools()
     }
 
     /// Show the menu bar's Live Activities (iPhone and Mac) as island activities.
@@ -858,8 +884,13 @@ final class AppModel {
             if calendarIsBlocked { recheckCalendarAccess() }
             Haptics.play(.open)
             if tab == .stats && settings.systemStatsEnabled { statsSampler.start() }
+            toolsIslandOpened()
         } else {
             statsSampler.stop()
+            toolsIslandClosed()
+            // The camera only ever starts because someone picked Mirror: closing on it leaves
+            // the island on Home, so a later hover never turns the camera and its light on.
+            if tab == .mirror { tab = .home }
             pinned = false
             ask.islandDidCollapse()
             controlHint = nil
@@ -867,7 +898,9 @@ final class AppModel {
     }
 
     func select(tab: IslandTab) {
+        let previous = self.tab
         self.tab = tab
+        toolsTabChanged(from: previous)
         if tab == .stats {
             statsSampler.onSample = { [weak self] s in self?.stats = s }
             statsSampler.start()
@@ -900,7 +933,7 @@ final class AppModel {
     // MARK: Time
 
     /// Schedule exactly one timer for the next state change instead of polling.
-    private func reschedule() {
+    func reschedule() {
         deadlineTimer?.invalidate()
         deadlineTimer = nil
         let now = Date()
@@ -919,6 +952,7 @@ final class AppModel {
             if settings.calendarEnabled, let d = Agenda.nextChange(visible, now: now) { candidates.append(d) }
         }
         if settings.remindersEnabled, let d = Reminders.nextDue(reminders, now: now) { candidates.append(d) }
+        candidates += toolDeadlines(now: now)
         guard let next = candidates.min() else { return }
         let t = Timer(fire: next.addingTimeInterval(0.01), interval: 0, repeats: false) { [weak self] _ in
             Task { @MainActor in self?.expireNow() }
@@ -943,6 +977,7 @@ final class AppModel {
         // A click whose window has ended never arms the timer again, even if the player went.
         if let i = playbackIntent, now >= i.expires { playbackIntent = nil }
         songPeek.advance(now: now, context: songPeekContext(now: now))
+        advanceTools(now: now)
         tick &+= 1
         reschedule()
     }
@@ -1614,6 +1649,8 @@ extension AppModel {
         // A tab whose module was switched off falls back to Home.
         if tab == .stats && !s.systemStatsEnabled || tab == .shelf && !s.shelfEnabled
             || tab == .widgets && !s.pluginsEnabled || tab == .clipboard && !s.clipboardEnabled {
+            select(tab: .home)
+        } else if let page = IslandPage(rawValue: tab.rawValue), !page.isAvailable(s), page != .today {
             select(tab: .home)
         }
     }

@@ -16,6 +16,7 @@
 - **Calendar and Reminders**: meeting reminders that count down beside the notch and stay until you join, a large Join button, the rest of today, and reminders you can tick off. When macOS hasn't allowed Islet to read your calendar, it says why and opens the right page of System Settings.
 - **Calls, HUDs and system events**: call timers, volume and brightness, charging and battery, Focus, keep awake, a summary when you unlock.
 - **A file shelf, clipboard history, download progress and script widgets** (xbar and SwiftBar plugins run unchanged).
+- **Tools you turn on when you want them**: a camera mirror and a teleprompter just under the camera, a stocks watchlist with sparklines, and today's sales from Stripe, Shopify, Lemon Squeezy, Gumroad, Dodo Payments, Polar and Paddle. Home can also show OpenRouter, Copilot and Ollama usage. See [Tools](docs/TOOLS.md).
 - **Your own activities** from the command line, a local HTTP API, the `islet://` URL scheme or iPhone Shortcuts. See the [API](docs/API.md).
 
 ## How it stays out of the way
@@ -23,7 +24,7 @@
 - **It sits beside the notch, like the iPhone's.** It always stays in the menu bar row. With Accessibility it measures the menu bar and shrinks to the free space, down to just an icon each side, so it covers a menu bar icon only when the bar is packed right up to the notch.
 - **It costs nothing when idle.** Everything is driven by events, looping animations run in Core Animation, and the pointer isn't watched until it reaches the notch. `make perf` checks each state against a CPU budget; the latest figures are in the [changelog](CHANGELOG.md).
 - **It asks for nothing up front.** Each permission is requested when you turn on the feature that needs it.
-- **It keeps things on your Mac.** No account, no telemetry, no licence server. Questions go to an AI provider only when you ask one, with your own key.
+- **It keeps things on your Mac.** No account, no telemetry, no licence server. Questions go to an AI provider only when you ask one, with your own key. Sales, stocks and OpenRouter or Copilot usage reach the network only once you turn them on, and Islet never reads another app's sign-in.
 - **It's free and MIT-licensed**, written from scratch.
 
 ## Download

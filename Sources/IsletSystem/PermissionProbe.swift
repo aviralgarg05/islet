@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import AVFoundation
 import CoreServices
 import IsletCore
 
@@ -25,6 +26,8 @@ public enum PermissionProbe {
             completion(.calendar(CalendarService.eventAccess))
         case .reminders:
             completion(.calendar(CalendarService.reminderAccess))
+        case .camera:
+            completion(CameraMirror.access)
         case .downloadsFolder:
             guard readDownloads else { return completion(.unknown) }
             readFolder(completion)
@@ -46,6 +49,8 @@ public enum PermissionProbe {
             readFolder(completion)
         case .automationMusic, .automationSpotify:
             automation(kind, ask: true, completion: completion)
+        case .camera:
+            CameraMirror.requestAccess(completion)
         case .calendars, .reminders:
             status(of: kind, readDownloads: false, completion: completion)
         }

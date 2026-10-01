@@ -28,8 +28,13 @@ enum SettingsSnapshots {
         AppActions.isExecutable = { _ in true }
         seedAgents(home: home)
 
-        let secrets = MemorySecretStore([AskProviderKind.anthropic.keyAccount ?? "": "snapshot-sample-0000"])
-        let model = AppModel(settings: sampleSettings, ask: AskController(service: AskService(secrets: secrets)))
+        let secrets = MemorySecretStore([AskProviderKind.anthropic.keyAccount ?? "": "snapshot-sample-0000",
+                                         ToolUsageSource.openRouter.keyAccount ?? "": "snapshot-sample-0001",
+                                         SalesStore.stripe.keyAccount: "snapshot-sample-0002",
+                                         SalesStore.shopify.keyAccount: "snapshot-sample-0003"])
+        let model = AppModel(settings: sampleSettings, ask: AskController(service: AskService(secrets: secrets)), secrets: secrets,
+                             scriptFile: nil)
+        model.teleprompter.setScript(Snapshots.teleprompterDemo)
         model.apiStatus = "Listening on 127.0.0.1:\(model.settings.apiPort)"
         // Drawn as if macOS allowed calendars and reminders; the other states have shots of their own.
         model.setCalendarAccessForSnapshot(events: .fullAccess, reminders: .fullAccess)
@@ -149,6 +154,13 @@ enum SettingsSnapshots {
         s.clipboardIgnoredApps = ["com.apple.Notes"]
         s.remindersEnabled = true
         s.pluginsEnabled = true
+        // Every tool on, so the Tools page shows what each offers.
+        s.mirror.enabled = true
+        s.teleprompter.enabled = true
+        s.stocks.enabled = true
+        s.sales = SalesSettings(enabled: true, stores: [.stripe, .shopify], shopifyStore: "example.myshopify.com")
+        s.openRouterUsageEnabled = true
+        s.copilotUsageEnabled = true
         s.appRules = [
             // A colour from the colour panel shows as "Custom".
             AppRule(bundleID: "com.apple.Safari", tint: "#2F7CF6"),
