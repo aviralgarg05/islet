@@ -133,27 +133,31 @@ struct AddAppMenu: View {
     }
 }
 
-/// Settings → Shelf & Clipboard: apps whose copies clipboard history never keeps.
-struct ClipboardIgnoredApps: View {
-    @Bindable var model: AppModel
+/// A list of apps with an Add menu and a minus button on each: the apps clipboard history never
+/// keeps copies from, or whose media Now Playing never shows.
+struct IgnoredAppsList: View {
+    @Binding var apps: [String]
+    let title: String
+    let detail: String
+    let anchor: String
 
     var body: some View {
         LabeledContent {
-            AddAppMenu(existing: Set(model.settings.clipboardIgnoredApps)) { id in
-                if !model.settings.clipboardIgnoredApps.contains(id) { model.settings.clipboardIgnoredApps.append(id) }
+            AddAppMenu(existing: Set(apps)) { id in
+                if !apps.contains(id) { apps.append(id) }
             }
         } label: {
-            Text("Ignore apps")
-            Text("Nothing copied in these apps is kept. Password managers are always ignored.")
+            Text(title)
+            Text(detail)
         }
-        .settingsAnchor("shelf.clipboardIgnore")
-        ForEach(model.settings.clipboardIgnoredApps, id: \.self) { id in
+        .settingsAnchor(anchor)
+        ForEach(apps, id: \.self) { id in
             HStack(spacing: 10) {
                 AppIconView(bundleID: id, size: 20)
                 Text(AddAppMenu.name(id)).lineLimit(1)
                 Spacer(minLength: 8)
                 Button(role: .destructive) {
-                    model.settings.clipboardIgnoredApps.removeAll { $0 == id }
+                    apps.removeAll { $0 == id }
                 } label: {
                     Image(systemName: "minus.circle")
                 }
@@ -161,6 +165,17 @@ struct ClipboardIgnoredApps: View {
                 .help("Stop ignoring \(AddAppMenu.name(id))")
             }
         }
+    }
+}
+
+/// Settings → Shelf & Clipboard: apps whose copies clipboard history never keeps.
+struct ClipboardIgnoredApps: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        IgnoredAppsList(apps: $model.settings.clipboardIgnoredApps, title: "Ignore apps",
+                        detail: "Nothing copied in these apps is kept. Password managers are always ignored.",
+                        anchor: "shelf.clipboardIgnore")
     }
 }
 

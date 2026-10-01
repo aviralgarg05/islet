@@ -232,6 +232,7 @@ final class AppModel {
     func start() {
         Haptics.mode = settings.hapticsMode
         media.disabled = Set(settings.disabledMediaSources)
+        media.hidden = Set(settings.hiddenMediaApps)
         shelfService.onChange = { [weak self] s in self?.shelf = s }
 
         fullscreen.onChange = { [weak self] displays, bundle in
@@ -252,11 +253,20 @@ final class AppModel {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.recheckCalendarAccess() }
         })
+        systemObservers.append(NotificationCenter.default.addObserver(
+            forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled }
+        })
         // Timers don't count time asleep: catch up on what fell due (a meeting that started).
         systemObservers.append(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.expireNow() }
+            MainActor.assumeIsolated {
+                self?.expireNow()
+                // The helper may have given up while the Mac slept (mediaremoted restarts on wake).
+                if self?.systemMedia.gaveUp == true { self?.retryMedia() }
+            }
         })
     }
 
@@ -368,9 +378,23 @@ final class AppModel {
         syncPlayers()
     }
 
+    /// Low Power Mode: the island's loops hold still (`IslandLoops`). Follows the system's
+    /// notification; never polled.
+    private(set) var lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+
     /// The system bridge said it can't deliver (it may still be running), so the players fetch
-    /// their own details. Reset when media starts again.
-    @ObservationIgnored private var bridgeFailed = false
+    /// their own details. Reset when media starts again. Settings → Now Playing says so, with
+    /// Try again.
+    private(set) var bridgeFailed = false
+
+    /// Settings → Now Playing → Try again, and waking from sleep after the bridge gave up: a
+    /// fresh set of tries for the system-wide Now Playing helper.
+    func retryMedia() {
+        guard settings.mediaEnabled else { return }
+        bridgeFailed = false
+        systemMedia.retry()
+        syncPlayers()
+    }
 
     /// Music and Spotify run only while their source is on in Settings; a source switched off
     /// sends no AppleScript at all, even with the system bridge down.
@@ -779,13 +803,14 @@ final class AppModel {
 
     // MARK: Presentation
 
-    func presentation(for display: CGDirectDisplayID) -> IslandPresentation {
+    /// - Parameter ignoringHUD: what shows under a HUD (`PresenterInputs.ignoresHUD`).
+    func presentation(for display: CGDirectDisplayID, ignoringHUD: Bool = false) -> IslandPresentation {
         _ = tick
         if let forcedPresentation { return forcedPresentation }
         let now = Date()
         // "Hide music only" over a full screen app: the music goes, everything else stays.
         let showsMedia = settings.mediaEnabled && fullscreenBehaviour(on: display) != .hideMusic
-        let inputs = PresenterInputs(
+        var inputs = PresenterInputs(
             now: now,
             center: center,
             nowPlaying: showsMedia ? nowPlaying : nil,
@@ -797,6 +822,7 @@ final class AppModel {
             songPeek: Presenter.hoverPeek(showsMedia ? nowPlaying : nil, hovering: hoverPeekDisplay == display, settings: settings)
                 ?? (showsMedia && settings.songChangePeek ? songPeek.current(now: now) : nil)
         )
+        inputs.ignoresHUD = ignoringHUD
         let p = Presenter.present(inputs)
         // "Only on hover" on a display without a notch: nothing until the pointer is there.
         if settings.notchlessStyle == .hover, notchlessDisplays.contains(display), hoverDisplay != display {
@@ -1366,6 +1392,7 @@ final class AppModel {
     /// none, back to the demo's song alone.
     func loadPlayersForSnapshot(_ list: [NowPlaying], bridge: NowPlaying?, now: Date, song: NowPlaying? = nil) {
         media = MediaArbiter(disabled: media.disabled)
+        media.hidden = Set(settings.hiddenMediaApps)
         for np in list { media.update(np) }
         media.updateFromBridge(bridge)
         nowPlaying = song ?? media.current(now: now)
@@ -1623,6 +1650,11 @@ extension AppModel {
             let now = Date()
             setNowPlaying(media.current(now: now), now: now)
             reschedule()
+        }
+        if Set(s.hiddenMediaApps) != media.hidden {
+            media.hidden = Set(s.hiddenMediaApps)
+            let now = Date()
+            setNowPlaying(media.current(now: now), now: now)
         }
         if clipboard.limit != s.clipboardLimit { clipboard.limit = s.clipboardLimit }
         if clipboard.ignoredApps != Set(s.clipboardIgnoredApps) { clipboard.ignoredApps = Set(s.clipboardIgnoredApps) }

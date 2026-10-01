@@ -436,3 +436,12 @@ public struct EaseCurve: Equatable, Sendable {
         return 3 * u * u * a + 6 * u * s * (b - a) + 3 * s * s * (1 - b)
     }
 }
+
+/// Whether the island's looping decorations (the playing indicator, spinners, the urgent glow,
+/// the glass sheen) hold still. They stop for Reduce Motion (the system's or Islet's), with the
+/// animation style Off, in Low Power Mode, and on content that is out of date.
+public enum IslandLoops {
+    public static func holdStill(reduceMotion: Bool, animationOff: Bool, lowPower: Bool, stale: Bool = false) -> Bool {
+        reduceMotion || animationOff || lowPower || stale
+    }
+}

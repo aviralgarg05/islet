@@ -266,7 +266,8 @@ import Testing
     @Test func liveStreamsAndUnknownPositionsNeverEnd() {
         var a = MediaArbiter()
         a.update(NowPlaying(source: .browser, title: "Live", isPlaying: true, duration: 0, elapsed: 500, timestamp: t0))
-        a.update(NowPlaying(source: .system, title: "Radio", isPlaying: true, duration: 100, timestamp: t0))
+        // (With a station name: a bare title from an unknown app has a moment to settle first.)
+        a.update(NowPlaying(source: .system, title: "Radio", artist: "Station", isPlaying: true, duration: 100, timestamp: t0))
         #expect(a.nextDeadline(now: t0) == nil)
         #expect(a.current(now: t0.addingTimeInterval(10_000))?.isPlaying == true)
         let forgot = a.expire(now: t0.addingTimeInterval(10_000))

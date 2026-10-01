@@ -62,12 +62,7 @@ public struct ClipboardHistory: Codable, Equatable, Sendable {
     ]
 
     /// Browsers, whose password manager extensions copy passwords as the browser.
-    public static let browsers: Set<String> = [
-        "com.apple.Safari", "com.apple.SafariTechnologyPreview", "com.google.Chrome", "com.google.Chrome.beta",
-        "com.google.Chrome.canary", "org.chromium.Chromium", "org.mozilla.firefox", "org.mozilla.firefoxdeveloperedition",
-        "com.microsoft.edgemac", "com.brave.Browser", "company.thebrowser.Browser", "com.operasoftware.Opera",
-        "com.vivaldi.Vivaldi", "com.kagi.kagimacOS", "app.zen-browser.zen", "com.duckduckgo.macos.browser",
-    ]
+    public static var browsers: Set<String> { Browsers.bundleIDs }
 
     public static let maxTextLength = 100_000
 

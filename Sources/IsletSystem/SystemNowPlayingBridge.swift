@@ -18,7 +18,7 @@ public final class SystemNowPlayingBridge {
     private var buffer = Data()
     private var lastArtwork: Data?
     private var lastArtworkHash: Int?
-    private var restarts = 0
+    private var restarts = HelperRestarts()
     private var stopped = false
 
     public private(set) var isRunning = false
@@ -53,6 +53,15 @@ public final class SystemNowPlayingBridge {
             }
         }
         return nil
+    }
+
+    /// Whether it gave up after the helper kept exiting (`HelperRestarts`).
+    public var gaveUp: Bool { restarts.gaveUp }
+
+    /// Start again with a fresh set of tries: the user asked, or the Mac woke after it gave up.
+    public func retry() {
+        restarts.reset()
+        start()
     }
 
     public func start() {
@@ -116,13 +125,14 @@ public final class SystemNowPlayingBridge {
         guard !stopped else { return }
         // Restart with backoff if the helper crashed (e.g. mediaremoted restarted). A helper
         // that ran for a while earns a fresh set of retries; one that keeps dying doesn't.
-        if Date().timeIntervalSince(startedAt) > 60 { restarts = 0 }
-        restarts += 1
-        guard restarts <= 5 else {
+        guard let delay = restarts.exited(ranFor: Date().timeIntervalSince(startedAt)) else {
             onUnavailable?("MediaRemote helper keeps exiting (status \(status)).")
             return
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + Double(restarts * restarts)) { [weak self] in self?.start() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self, !self.stopped else { return }
+            self.start()
+        }
     }
 
     /// Send a transport command. Returns false when the helper isn't running.
@@ -205,7 +215,7 @@ public final class SystemNowPlayingBridge {
         if o["empty"] as? Bool == true { return (nil, nil, nil) }
         guard let title = o["title"] as? String, !title.isEmpty else { return (nil, nil, nil) }
         let bundle = o["bundleID"] as? String
-        let source: MediaSourceKind = Self.browserBundles.contains(bundle ?? "") ? .browser : .system
+        let source: MediaSourceKind = bundle.flatMap(Browsers.browser(for:)) != nil ? .browser : .system
         let rate = (o["rate"] as? Double) ?? 1
         let playing = (o["playing"] as? Bool) ?? (rate > 0)
         let np = NowPlaying(
@@ -221,9 +231,4 @@ public final class SystemNowPlayingBridge {
         return (np, o["artworkHash"] as? Int, art)
     }
 
-    static let browserBundles: Set<String> = [
-        "com.apple.Safari", "com.google.Chrome", "company.thebrowser.Browser", "org.mozilla.firefox",
-        "com.microsoft.edgemac", "com.brave.Browser", "com.operasoftware.Opera", "com.vivaldi.Vivaldi",
-        "app.zen-browser.zen", "com.kagi.kagimacOS", "ai.perplexity.comet", "com.openai.atlas",
-    ]
 }

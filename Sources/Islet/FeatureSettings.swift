@@ -19,14 +19,26 @@ struct NowPlayingSettings: View {
                 SettingsHero(page: .nowPlaying, switchTitle: "Show what's playing", isOn: $model.settings.mediaEnabled)
                     .settingsAnchor("nowPlaying.enabled")
             }
+            if on && model.bridgeFailed {
+                Section {
+                    AccessRow(text: "Islet can't see what other apps are playing right now. Music and Spotify still show.",
+                              button: "Try again") { model.retryMedia() }
+                        .settingsAnchor("nowPlaying.status")
+                }
+            }
             Section {
                 IslandPreview(settings: model.settings, showsOpen: false)
                     .settingsAnchor("nowPlaying.preview")
             }
             Section {
                 MediaSourceToggles(model: model)
+                IgnoredAppsList(apps: $model.settings.hiddenMediaApps, title: "Ignore apps",
+                                detail: "What these apps play never shows, such as a game's music or a video that plays by itself.",
+                                anchor: "nowPlaying.ignore")
             } header: {
                 Text("Sources").settingsAnchor("nowPlaying.sources")
+            } footer: {
+                SettingsFooter("A short sound from an app that isn't a music or video player, such as a voice message, shows only once it has played for a few seconds.")
             }
             .disabled(!on)
             Section("Closed island") {

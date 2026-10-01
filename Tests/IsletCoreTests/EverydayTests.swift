@@ -257,3 +257,173 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         #expect(!a.isStale(at: at(1799)) && a.isStale(at: at(1800)))
     }
 }
+
+@Suite struct BrowserListTests {
+    @Test func diaAndOtherBrowsersCountAsBrowsers() {
+        #expect(Browsers.browser(for: "company.thebrowser.dia")?.name == "Dia")
+        #expect(Browsers.browser(for: "com.google.Chrome.beta.helper")?.name == "Chrome Beta")
+        #expect(Browsers.browser(for: "com.google.Chrome.helper.renderer")?.name == "Chrome")
+        #expect(Browsers.browser(for: "com.spotify.client") == nil)
+        // A call held in Dia is a browser call, and so is one in Safari's GPU process.
+        #expect(CallDetector.classify("company.thebrowser.dia.helper")?.app == CallDetector.App(name: "Dia", isBrowser: true))
+        #expect(CallDetector.classify("com.apple.WebKit.GPU")?.app.name == "Safari")
+        #expect(ClipboardHistory.browsers.contains("company.thebrowser.dia"))
+    }
+}
+
+@Suite struct MediaFilterTests {
+    func at(_ s: TimeInterval) -> Date { t0.addingTimeInterval(s) }
+    func clip(_ bundle: String = "com.example.chat", artist: String? = nil, playing: Bool = true, at t: TimeInterval) -> NowPlaying {
+        NowPlaying(source: .system, bundleID: bundle, title: "Voice message", artist: artist, isPlaying: playing, duration: 4, elapsed: 0, timestamp: at(t))
+    }
+
+    @Test func aHiddenAppNeverShows() {
+        var m = MediaArbiter()
+        m.hidden = ["com.apple.TV"]
+        m.updateFromBridge(NowPlaying(source: .system, bundleID: "com.apple.TV", title: "Trailer", artist: "Apple", isPlaying: true, timestamp: at(0)))
+        #expect(m.current(now: at(1)) == nil)
+        #expect(m.available(now: at(1)).isEmpty)
+        // Spotify, through its own integration, still shows.
+        m.update(NowPlaying(source: .spotify, bundleID: "com.spotify.client", title: "Song", artist: "Band", isPlaying: true, timestamp: at(0)))
+        #expect(m.current(now: at(1))?.title == "Song")
+    }
+
+    @Test func aBareClipFromAnUnknownAppWaitsBeforeShowing() {
+        var m = MediaArbiter()
+        m.updateFromBridge(clip(at: 0))
+        #expect(m.current(now: at(1)) == nil)
+        #expect(m.nextDeadline(now: at(1)) == at(MediaArbiter.settle))
+        // Still playing after 3 seconds: it shows, and stays once paused.
+        #expect(m.current(now: at(3))?.title == "Voice message")
+        m.updateFromBridge(clip(playing: false, at: 5))
+        #expect(m.current(now: at(6))?.title == "Voice message")
+    }
+
+    @Test func aShortClipNeverTakesOver() {
+        var m = MediaArbiter()
+        m.update(NowPlaying(source: .appleMusic, bundleID: "com.apple.Music", title: "Album track", artist: "Band", isPlaying: false, timestamp: at(-10)))
+        m.updateFromBridge(clip(at: 0))
+        m.updateFromBridge(clip(playing: false, at: 2))
+        #expect(m.current(now: at(4))?.title == "Album track")
+    }
+
+    @Test func knownPlayersAndClipsWithDetailsShowAtOnce() {
+        var m = MediaArbiter()
+        m.updateFromBridge(clip("com.apple.podcasts", artist: "A podcast", at: 0))
+        #expect(m.current(now: at(0.5))?.title == "Voice message")
+        var b = MediaArbiter()
+        b.updateFromBridge(NowPlaying(source: .browser, bundleID: "com.google.Chrome", title: "A video", isPlaying: true, timestamp: at(0)))
+        #expect(b.current(now: at(0.5))?.title == "A video")
+        #expect(MediaArbiter.needsSettling(clip(at: 0)))
+        #expect(!MediaArbiter.needsSettling(NowPlaying(source: .system, bundleID: "com.apple.Music", title: "x", isPlaying: true, timestamp: at(0))))
+    }
+}
+
+@Suite struct HelperRestartTests {
+    @Test func fiveQuickExitsGiveUpUntilAskedAgain() {
+        var r = HelperRestarts()
+        var delays: [TimeInterval?] = []
+        for _ in 1...6 { delays.append(r.exited(ranFor: 1)) }
+        #expect(delays == [1, 4, 9, 16, 25, nil])
+        #expect(r.gaveUp)
+        r.reset()
+        let first = r.exited(ranFor: 1)
+        #expect(!r.gaveUp && first == 1)
+    }
+
+    @Test func aHelperThatRanAWhileStartsAfresh() {
+        var r = HelperRestarts()
+        for _ in 1...4 { _ = r.exited(ranFor: 1) }
+        let next = r.exited(ranFor: HelperRestarts.healthyRun + 1)
+        #expect(next == 1)
+        #expect(!r.gaveUp)
+    }
+}
+
+@Suite struct SwipeUnderHUDTests {
+    @Test func aSidewaysSwipeOverAVolumeHUDChangesTrack() {
+        var center = ActivityCenter()
+        center.showHUD(.volume, value: 0.4, now: t0)
+        let np = NowPlaying(source: .spotify, title: "Song", artist: "Band", isPlaying: true, timestamp: t0)
+        var inputs = PresenterInputs(now: t0, center: center, nowPlaying: np)
+        if case .hud = Presenter.present(inputs) {} else { Issue.record("expected the HUD") }
+        inputs.ignoresHUD = true
+        let under = Presenter.present(inputs)
+        #expect(under == .compact(.nowPlaying(np)))
+        let surface = GestureSurface.from(under, homeShowsMedia: false)
+        #expect(GestureMap.action(for: .left, on: surface!, settings: IsletSettings()) == .nextTrack)
+        // Nothing under it: a sideways swipe does nothing, down still opens.
+        let bare = Presenter.present(PresenterInputs(now: t0, center: center))
+        if case .hud = bare {} else { Issue.record("expected the HUD") }
+        var empty = PresenterInputs(now: t0, center: center)
+        empty.ignoresHUD = true
+        #expect(Presenter.present(empty) == .idle)
+        #expect(GestureMap.action(for: .down, on: .closed, settings: IsletSettings()) == .expand)
+    }
+}
+
+@Suite struct IslandHoldTests {
+    @Test func onlyNothingHoldingLetsItClose() {
+        #expect(IslandHold().allowsClose)
+        let holds: [IslandHold] = [IslandHold(pinned: true), IslandHold(draggingIn: true), IslandHold(draggingOut: true),
+                                   IslandHold(control: true), IslandHold(menu: true), IslandHold(typing: true)]
+        for h in holds { #expect(!h.allowsClose, "\(h)") }
+    }
+
+    @Test func closingOnTheNotchBlocksReopeningThere() {
+        #expect(HoverIntent.blocksReopen(wasOpen: true, isOpen: false, pointerOnNotch: true))
+        // Closed because the pointer left: it isn't on the notch.
+        #expect(!HoverIntent.blocksReopen(wasOpen: true, isOpen: false, pointerOnNotch: false))
+        #expect(!HoverIntent.blocksReopen(wasOpen: false, isOpen: false, pointerOnNotch: true))
+        #expect(!HoverIntent.blocksReopen(wasOpen: true, isOpen: true, pointerOnNotch: true))
+    }
+}
+
+@Suite struct PeekPointerGuardTests {
+    /// Feeds the guard in order; what it said each time.
+    func run(_ g: inout PeekPointerGuard, _ steps: [(String?, Bool)]) -> [Bool] {
+        steps.map { g.update(peek: $0.0, pointerInBody: $0.1) }
+    }
+
+    @Test func aPeekUnderThePointerIsIgnoredUntilThePointerLeaves() {
+        var g = PeekPointerGuard()
+        // Under the pointer, still there, left the body, back again: only then does it count.
+        let said = run(&g, [("sneak-a", true), ("sneak-a", true), ("sneak-a", false), ("sneak-a", true)])
+        #expect(said == [false, false, true, true])
+    }
+
+    @Test func aPeekAwayFromThePointerCountsAtOnce() {
+        var g = PeekPointerGuard()
+        // A new peek arriving under a pointer already resting there is ignored again.
+        let said = run(&g, [("song-peek", false), ("song-peek", true), ("sneak-b", true), (nil, false)])
+        #expect(said == [true, true, false, false])
+        #expect(g.ignoring == nil)
+    }
+}
+
+@Suite struct LoopTests {
+    @Test func loopsHoldStillForLessMotionLowPowerAndStaleContent() {
+        #expect(!IslandLoops.holdStill(reduceMotion: false, animationOff: false, lowPower: false))
+        #expect(IslandLoops.holdStill(reduceMotion: false, animationOff: false, lowPower: true))
+        #expect(IslandLoops.holdStill(reduceMotion: true, animationOff: false, lowPower: false))
+        #expect(IslandLoops.holdStill(reduceMotion: false, animationOff: true, lowPower: false))
+        #expect(IslandLoops.holdStill(reduceMotion: false, animationOff: false, lowPower: false, stale: true))
+    }
+}
+
+@Suite struct ApprovalBackToTerminalTests {
+    @Test func theAgentsStatusSaysWhereToAnswer() {
+        let claude = ApprovalRequest(provider: .claude, hook: .permissionRequest, sessionID: "ABC-123-def-456-xyz", toolName: "Bash")
+        let expired = claude.statusUpdate(backToTerminal: .expired)
+        #expect(expired.id == "claude-abc-123-def")
+        #expect(expired.subtitle == "Answer in the terminal")
+        #expect(expired.state == .waiting && expired.sneak == false)
+        // It only changes the agent's own activity: with none, nothing new appears.
+        #expect(expired.title == nil)
+        var center = ActivityCenter()
+        #expect(throws: ActivityError.self) { try center.apply(expired, now: t0) }
+        let cursor = ApprovalRequest(provider: .cursor, hook: .beforeShellExecution, sessionID: "conv-9", toolName: "shell")
+        #expect(cursor.statusUpdate(backToTerminal: .jumpFailed).id == "cursor-conv-9")
+        #expect(cursor.statusUpdate(backToTerminal: .jumpFailed).subtitle?.hasPrefix("Couldn't bring the terminal forward") == true)
+    }
+}

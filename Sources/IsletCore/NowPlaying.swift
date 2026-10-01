@@ -170,6 +170,10 @@ public struct NowPlaying: Codable, Equatable, Sendable {
 ///    when the system bridge reports them (`setting(for:)`).
 /// 6. A player picked in the island (`pick(player:at:)`) is shown instead, while it is live,
 ///    until another player starts playing after the pick or the picked one goes.
+/// 7. Apps the user hid (`hidden`, Settings → Now Playing → Ignore apps) never show.
+/// 8. An app Islet doesn't know as a player, reporting nothing but a title (a voice note, a
+///    sound in a chat app, a muted preview), shows only once it has played for `settle`
+///    seconds, so a short clip doesn't take over.
 ///
 /// Several players can be live at once, one per app (`available`): the bridge's (a Chrome video,
 /// say), Spotify's and Music's own, and one pushed through the API.
@@ -185,6 +189,14 @@ public struct MediaArbiter: Sendable {
     public var endedTimeout: TimeInterval
     /// Sources the user switched off in settings.
     public var disabled: Set<MediaSourceKind>
+    /// Apps the user hid (bundle ids), whatever source reports them.
+    public var hidden: Set<String> = []
+    /// Seconds an unknown app's bare clip must play before it shows (rule 8).
+    public static let settle: TimeInterval = 3
+    /// Rule 8: when each bare clip from an unknown app started playing, by track.
+    private var playingSince: [String: Date] = [:]
+    /// Rule 8: bare clips that have played long enough, by track.
+    private var settled: Set<String> = []
 
     /// The kinds the system-wide bridge reports. It describes one player at a time, so each of
     /// its reports replaces all of them.
@@ -202,6 +214,7 @@ public struct MediaArbiter: Sendable {
         let id = Self.playerID(snapshot)
         let was = reportsPlaying(id)
         snapshots[snapshot.source] = snapshot
+        noteSettling(snapshot)
         noteReport(from: id, wasPlaying: was)
     }
 
@@ -219,9 +232,48 @@ public struct MediaArbiter: Sendable {
         let id = snapshot.map(Self.playerID)
         let was = id.map(reportsPlaying) ?? false
         for source in Self.bridgeSources { snapshots[source] = nil }
-        if let snapshot { snapshots[snapshot.source] = snapshot }
+        if let snapshot {
+            snapshots[snapshot.source] = snapshot
+            noteSettling(snapshot)
+        }
         if let id { noteReport(from: id, wasPlaying: was) }
         dropPickIfGone()
+    }
+
+    // MARK: Bare clips from unknown apps (rule 8)
+
+    /// A snapshot rule 8 holds back until it has played a moment: reported by the system bridge
+    /// for an app that isn't a known player or a browser, with no artist and no album.
+    public static func needsSettling(_ s: NowPlaying) -> Bool {
+        guard s.source == .system, MediaSourceKind.player(bundleID: s.bundleID) == nil else { return false }
+        let bare = (s.artist ?? "").isEmpty && (s.album ?? "").isEmpty
+        return bare
+    }
+
+    private static func settleKey(_ s: NowPlaying) -> String { playerID(s) + "\n" + s.trackKey }
+
+    /// Keeps track of how long each bare clip has played without a break.
+    private mutating func noteSettling(_ s: NowPlaying) {
+        let live = Set(snapshots.values.filter(Self.needsSettling).map(Self.settleKey))
+        playingSince = playingSince.filter { live.contains($0.key) }
+        settled = settled.intersection(live)
+        guard Self.needsSettling(s) else { return }
+        let key = Self.settleKey(s)
+        if let since = playingSince[key], s.timestamp.timeIntervalSince(since) >= Self.settle { settled.insert(key) }
+        if s.isPlaying {
+            if playingSince[key] == nil { playingSince[key] = s.timestamp }
+        } else {
+            playingSince[key] = nil
+        }
+    }
+
+    /// Whether a snapshot may show under rule 8 at `now`.
+    func hasSettled(_ s: NowPlaying, now: Date) -> Bool {
+        guard Self.needsSettling(s) else { return true }
+        let key = Self.settleKey(s)
+        if settled.contains(key) { return true }
+        guard s.isPlaying, let since = playingSince[key] else { return false }
+        return now.timeIntervalSince(since) >= Self.settle
     }
 
     // MARK: Several players
@@ -322,6 +374,10 @@ public struct MediaArbiter: Sendable {
         for s in snapshots.values {
             // Due and not yet forgotten: now. `expire` removes it, so this can't repeat.
             if let forget = forgetAt(s) { dates.append(max(now, forget)) }
+            // A bare clip that keeps playing shows once it has settled.
+            if s.isPlaying, !hasSettled(s, now: now), let since = playingSince[Self.settleKey(s)] {
+                dates.append(max(now, since.addingTimeInterval(Self.settle)))
+            }
             // Showing as stopped changes nothing stored, so only a moment still ahead counts.
             if let end = s.endsAt, end.addingTimeInterval(endedGrace) > now { dates.append(end.addingTimeInterval(endedGrace)) }
         }
@@ -350,6 +406,8 @@ public struct MediaArbiter: Sendable {
     func liveSnapshots(now: Date) -> [NowPlaying] {
         snapshots.values.filter { s in
             guard !disabled.contains(Self.setting(for: s)) else { return false }
+            if let app = s.bundleID, hidden.contains(app) { return false }
+            guard hasSettled(s, now: now) else { return false }
             guard let forget = forgetAt(s) else { return true }
             return now < forget
         }.map { s -> NowPlaying in
@@ -545,5 +603,38 @@ public struct SongProgress: Equatable, Sendable {
     public init(fraction: Double, remaining: Double?) {
         self.fraction = fraction
         self.remaining = remaining
+    }
+}
+
+/// When the Now Playing helper is started again after it exits. It restarts after a growing
+/// delay; one that ran for a while earns a fresh set of tries, and one that keeps dying is given
+/// up on after `limit` tries until the user asks again (Try again) or the Mac wakes.
+public struct HelperRestarts: Equatable, Sendable {
+    /// Restarts in a row before giving up.
+    public static let limit = 5
+    /// A helper that ran this long before exiting wasn't failing: the count starts again.
+    public static let healthyRun: TimeInterval = 60
+
+    public private(set) var count = 0
+    public private(set) var gaveUp = false
+
+    public init() {}
+
+    /// The helper exited after running `ranFor` seconds: the delay before starting it again, or
+    /// nil when it has been given up on.
+    public mutating func exited(ranFor: TimeInterval) -> TimeInterval? {
+        if ranFor > Self.healthyRun { count = 0 }
+        count += 1
+        guard count <= Self.limit else {
+            gaveUp = true
+            return nil
+        }
+        return TimeInterval(count * count)
+    }
+
+    /// A fresh set of tries: the user pressed Try again, or the Mac woke.
+    public mutating func reset() {
+        count = 0
+        gaveUp = false
     }
 }

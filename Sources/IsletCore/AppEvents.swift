@@ -32,21 +32,16 @@ public struct CallDetector: Sendable {
         "com.around.Around": "Around",
     ]
 
-    /// Browsers (and their helper processes) that may be hosting a web call (Meet, Zoom web…).
-    public static let browsers: [String: String] = [
-        "com.google.Chrome": "Chrome", "com.apple.Safari": "Safari", "com.apple.WebKit.GPU": "Safari",
-        "company.thebrowser.Browser": "Arc", "org.mozilla.firefox": "Firefox", "com.microsoft.edgemac": "Edge",
-        "com.brave.Browser": "Brave", "com.vivaldi.Vivaldi": "Vivaldi", "com.operasoftware.Opera": "Opera",
-        "app.zen-browser.zen": "Zen", "com.openai.atlas": "Atlas", "ai.perplexity.comet": "Comet",
-    ]
-
     /// Map a (possibly helper) bundle id to a known call app or browser.
     public static func classify(_ bundleID: String) -> (bundleID: String, app: App)? {
         if let name = callApps[bundleID] { return (bundleID, App(name: name, isBrowser: false)) }
-        // "com.google.Chrome.helper", "com.brave.Browser.helper.renderer" → parent app.
-        for (id, name) in browsers where bundleID == id || bundleID.hasPrefix(id + ".") {
-            return (id, App(name: name, isBrowser: true))
+        // A browser (`Browsers`) may be hosting a web call (Meet, Zoom on the web). Its helper
+        // processes count as it ("com.google.Chrome.helper" is Chrome), and Safari's GPU process
+        // holds the microphone for Safari.
+        if bundleID == "com.apple.WebKit.GPU" || bundleID.hasPrefix("com.apple.WebKit.GPU.") {
+            return ("com.apple.WebKit.GPU", App(name: "Safari", isBrowser: true))
         }
+        if let b = Browsers.browser(for: bundleID) { return (b.bundleID, App(name: b.name, isBrowser: true)) }
         for (id, name) in callApps where bundleID.hasPrefix(id + ".") {
             return (id, App(name: name, isBrowser: false))
         }

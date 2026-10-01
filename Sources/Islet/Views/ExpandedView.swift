@@ -747,7 +747,11 @@ struct FileTile: View {
             }
         }
         .onHover { hovering = $0 }
-        .onDrag { NSItemProvider(contentsOf: url) ?? NSItemProvider() }
+        .onDrag {
+            // The island stays open while the file is on its way out (`IslandHold.draggingOut`).
+            model.controls.draggingOut = true
+            return NSItemProvider(contentsOf: url) ?? NSItemProvider()
+        }
         .onTapGesture(count: 2) { ShelfService.open(url) }
         .contextMenu {
             Button("Open") { ShelfService.open(url) }

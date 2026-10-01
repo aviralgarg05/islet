@@ -26,10 +26,17 @@ final class IslandControls {
 
     /// The activity brought forward by a sideways swipe on the closed island.
     var focusedActivityID: String?
-    /// After a swipe closes the island, hovering doesn't reopen it until the pointer leaves.
+    /// After the island closes with the pointer on the notch (a swipe, the shortcut, a menu, a
+    /// link), hovering doesn't reopen it until the pointer leaves.
     @ObservationIgnored var hoverOpenBlocked = false
     /// A menu is open or a slider is being dragged: moving past the island's edge doesn't close it.
     @ObservationIgnored var holdsOpen = false
+    /// Any menu of Islet's is open, a right-click menu included (`NSMenu` tracking).
+    @ObservationIgnored var menuOpen = false
+    /// A file is being dragged out of the shelf (until the mouse button comes up).
+    @ObservationIgnored var draggingOut = false
+    /// The page switcher's width as drawn, so only the switcher itself takes clicks.
+    @ObservationIgnored var switcherWidth: CGFloat?
 
     // MARK: Keep awake
 

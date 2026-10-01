@@ -308,6 +308,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// The song peek and the open island's artwork scale it to their size (`artworkCorner`).
     public var artworkCornerRadius: Double = IsletSettings.standardArtworkCorner
     public var disabledMediaSources: [MediaSourceKind] = []
+    /// Apps whose media never shows (bundle ids), whichever source reports them: a video app
+    /// that autoplays, a game with music.
+    public var hiddenMediaApps: [String] = []
     /// Islet's volume and brightness HUDs. Off for new configs: macOS draws its own, so with
     /// these on and `replaceSystemHUD` off every key press shows two (`hudOverlap`). A file
     /// from before this that doesn't mention them keeps them on (`decodeLenient`).
@@ -582,6 +585,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         var seenApps: Set<String> = []
         s.clipboardIgnoredApps = s.clipboardIgnoredApps.map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty && seenApps.insert($0).inserted }
+        var seenMedia: Set<String> = []
+        s.hiddenMediaApps = s.hiddenMediaApps.map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && seenMedia.insert($0).inserted }
         s.wingWidth = Self.clamp(s.wingWidth, Self.wingWidthRange)
         s.maxConcurrent = min(3, max(1, s.maxConcurrent))
         s.alertDuration = Self.clamp(s.alertDuration, Self.alertDurationRange)
