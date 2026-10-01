@@ -39,15 +39,19 @@ final class PlayingIndicatorNSView: NSView {
     private var style: VisualiserStyle
     private var drawing: IndicatorLayerView
     private var reduceMotion = false
-    private var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+    private var lowPower: Bool
     private var last: (color: NSColor, playing: Bool)?
 
-    init(style: VisualiserStyle) {
+    /// `lowPower` fixes the power state instead of following the system's (snapshots, which
+    /// should look the same on any Mac).
+    init(style: VisualiserStyle, lowPower fixed: Bool? = nil) {
         self.style = style
         drawing = Self.drawing(for: style)
+        lowPower = fixed ?? ProcessInfo.processInfo.isLowPowerModeEnabled
         super.init(frame: .zero)
         wantsLayer = true
         install(drawing)
+        guard fixed == nil else { return }
         // Removed by the system when the view goes.
         NotificationCenter.default.addObserver(self, selector: #selector(powerStateChanged(_:)),
                                                name: .NSProcessInfoPowerStateDidChange, object: nil)

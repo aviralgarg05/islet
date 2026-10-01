@@ -77,7 +77,7 @@ public enum Presenter {
             return .compact(.battery(b))
         }
         // Music paused a moment ago keeps its place, so the pause is seen before it goes.
-        if let np = i.nowPlaying, np.isPlaying || i.pausedMedia == .recent {
+        if let np = mediaInView(i.nowPlaying, pausedMedia: i.pausedMedia) {
             return .compact(.nowPlaying(np))
         }
         if let top = ordered.first {
@@ -87,5 +87,13 @@ public enum Presenter {
             return .compact(.nowPlaying(np))
         }
         return .idle
+    }
+
+    /// The music that holds its place in the closed island, and in a bubble beside an activity:
+    /// playing, or paused a moment ago, so the pause is seen in either. Music kept paused for
+    /// good waits behind everything else.
+    public static func mediaInView(_ np: NowPlaying?, pausedMedia: PausedMediaShow) -> NowPlaying? {
+        guard let np, np.isPlaying || pausedMedia == .recent else { return nil }
+        return np
     }
 }

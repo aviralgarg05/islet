@@ -393,9 +393,12 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         s.hudDuration = Self.clamp(s.hudDuration, Self.hudDurationRange)
         s.glassLevel = Self.clamp(s.glassLevel, Self.glassLevelRange)
         s.artworkCornerRadius = Self.clamp(s.artworkCornerRadius, Self.artworkCornerRange)
-        s.notchWidthAdjust = Self.clamp(s.notchWidthAdjust, Self.notchWidthAdjustRange)
-        s.notchHeightAdjust = Self.clamp(s.notchHeightAdjust, Self.notchHeightAdjustRange)
-        s.pausedMusicTimeout = s.pausedMusicTimeout < 0 ? Self.neverHide : Self.clamp(s.pausedMusicTimeout, Self.pausedMusicTimeoutRange)
+        // Whole points and whole seconds, as Settings offers them: a hand-edited 2.7 would leave
+        // the island's edges between pixels, and 7.5 seconds would show as "8 seconds".
+        s.notchWidthAdjust = Self.clamp(s.notchWidthAdjust.rounded(), Self.notchWidthAdjustRange)
+        s.notchHeightAdjust = Self.clamp(s.notchHeightAdjust.rounded(), Self.notchHeightAdjustRange)
+        s.pausedMusicTimeout = s.pausedMusicTimeout < 0 ? Self.neverHide
+            : Self.clamp(s.pausedMusicTimeout.rounded(), Self.pausedMusicTimeoutRange)
         s.batteryLowThreshold = min(50, max(5, s.batteryLowThreshold))
         s.batteryCriticalThreshold = min(s.batteryLowThreshold - 1, max(1, s.batteryCriticalThreshold))
         if s.batteryChargedAlert != 0 { s.batteryChargedAlert = min(100, max(50, s.batteryChargedAlert)) }
@@ -419,12 +422,15 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         }
         let known = Set(Mirror(reflecting: IsletSettings()).children.compactMap(\.label))
         let decoder = JSONDecoder()
+        // The user's keys that were read; the rest fell back to their defaults.
+        var applied: Set<String> = []
         for key in user.keys.sorted() where known.contains(key) {
             var trial = merged
             trial[key] = user[key]
             if let d = try? JSONSerialization.data(withJSONObject: trial),
                (try? decoder.decode(IsletSettings.self, from: d)) != nil {
                 merged = trial
+                applied.insert(key)
             }
         }
         guard let d = try? JSONSerialization.data(withJSONObject: merged),
@@ -433,8 +439,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         // (the app wrote both keys). `hapticsMode` replaced it, and the old key isn't written back.
         if user["hapticFeedback"] as? Bool == false { s.hapticsMode = .off }
         // `showPausedMedia: true` kept paused music for good; `pausedMusicTimeout` replaced it.
-        // false (or no key) now means the new default, and the old key isn't written back.
-        if user["pausedMusicTimeout"] == nil, user["showPausedMedia"] as? Bool == true { s.pausedMusicTimeout = Self.neverHide }
+        // false (or no key) now means the new default, and the old key isn't written back. A
+        // `pausedMusicTimeout` that can't be read doesn't count, so the old choice still carries.
+        if !applied.contains("pausedMusicTimeout"), user["showPausedMedia"] as? Bool == true { s.pausedMusicTimeout = Self.neverHide }
         // Older configs kept two bundle id lists beside `appRules`. They are folded into the
         // rules and not written back. (`launchAtLogin` is gone too: Login Items is the truth.)
         s.appRules = AppRule.merging(s.appRules,

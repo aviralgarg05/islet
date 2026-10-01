@@ -40,7 +40,7 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 - Keep awake for 15 minutes, an hour, two hours or until you turn it off.
 - Battery thresholds are adjustable, with an optional "charged to 80%" alert.
 - The playing indicator springs down to a dim, flat line when you pause and rises back into motion when you play, instead of jumping. Settings → Now Playing chooses its look (bars, slim bars, dots, wave, pulse or none) and its colour (from the artwork, the accent colour or white). With the accent colour on automatic, "accent" means the artwork's colour, as it does everywhere else. With Reduce Motion a playing song no longer looks paused, and in Low Power Mode the indicator holds still.
-- Paused music stays beside the notch for a while so the pause can be seen: the artwork dims and the indicator settles, then the island goes back to the notch. **Hide paused music after** sets how long (right away to 5 minutes, or never; 10 seconds by default) and replaces "Show paused music" (on becomes never).
+- Paused music stays beside the notch (or in its bubble beside an activity) for a while so the pause can be seen: the artwork dims and the indicator settles, then the island goes back to the notch. **Hide paused music after** sets how long (right away to 5 minutes, or never; 10 seconds by default) and replaces "Show paused music" (on becomes never).
 - Play and pause change the moment you click, with the symbol morphing between them, then follow what the player reports.
 
 ### Calendar and reminders
@@ -56,7 +56,7 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 ### Settings
 - Settings is a sidebar window like System Settings, with a search field that finds any setting and opens its page at that row. Each feature page starts with its switch and one plain line; Appearance gathers every look, with a live drawing of the island, any accent colour and sizes you can drag; shortcuts are set by pressing them; Coding agents connects Claude Code, Codex and Cursor with one button each, showing the change first; and ports, tokens, hook commands and script widgets wait under Advanced.
 - Appearance and Now Playing open with a live drawing of the closed island and a play/pause button, so the indicator and the pause can be judged without music playing.
-- A shortcut field can record a combination that is already one of Islet's shortcuts; they pause while it listens.
+- A shortcut field can record a combination that is already one of Islet's shortcuts; they pause while it listens, and come back if you switch to another app or close Settings.
 - Buttons use sentence case. The Ask box says plainly when Claude Code or Codex isn't installed; where Islet looked is in Advanced → Diagnostics.
 
 ### Safer and lighter

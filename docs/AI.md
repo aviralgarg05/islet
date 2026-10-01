@@ -91,7 +91,7 @@ If the provider you picked can't answer (no key, CLI not found, Apple Intelligen
 
 ### Claude Code and Codex
 
-Islet looks for the binaries in `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin` (and `~/.claude/local` for Claude Code), and runs them like this:
+Islet looks for the binaries in `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin` (and `~/.claude/local` for Claude Code). If a tool isn't in any of them, the Ask box says it isn't installed, and Settings → Advanced → Diagnostics shows where each one was found or where Islet looked. Islet runs them like this:
 
 ```bash
 claude -p "<prompt>" --output-format stream-json --verbose --include-partial-messages \

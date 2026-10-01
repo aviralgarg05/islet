@@ -33,6 +33,10 @@ private func at(_ t: Double) -> Date { t0.addingTimeInterval(t) }
         #expect(decode(#"{"showPausedMedia": "yes"}"#).pausedMusicTimeout == 10)
         // The new key wins when both are there.
         #expect(decode(#"{"showPausedMedia": true, "pausedMusicTimeout": 30}"#).pausedMusicTimeout == 30)
+        #expect(decode(#"{"showPausedMedia": false, "pausedMusicTimeout": -1}"#).pausedMusicTimeout == IsletSettings.neverHide)
+        // A new key that can't be read doesn't count: the old choice still carries over.
+        #expect(decode(#"{"showPausedMedia": true, "pausedMusicTimeout": "soon"}"#).pausedMusicTimeout == IsletSettings.neverHide)
+        #expect(decode(#"{"showPausedMedia": true, "pausedMusicTimeout": null}"#).pausedMusicTimeout == IsletSettings.neverHide)
         // The old key isn't written back, and the migration runs once.
         let keys = try writtenKeys(kept)
         #expect(keys["showPausedMedia"] == nil)
@@ -46,6 +50,10 @@ private func at(_ t: Double) -> Date { t0.addingTimeInterval(t) }
         #expect(decode(#"{"pausedMusicTimeout": 15}"#).pausedMusicTimeout == 15)
         #expect(decode(#"{"pausedMusicTimeout": "soon"}"#).pausedMusicTimeout == 10)
         #expect(decode(#"{"pausedMusicTimeout": 0}"#).pausedMusicTimeout == 0)
+        // Whole seconds, as the menu offers and names them.
+        #expect(decode(#"{"pausedMusicTimeout": 7.4}"#).pausedMusicTimeout == 7)
+        #expect(decode(#"{"pausedMusicTimeout": 0.3}"#).pausedMusicTimeout == 0)
+        #expect(decode(#"{"pausedMusicTimeout": -0.3}"#).pausedMusicTimeout == IsletSettings.neverHide)
     }
 }
 
@@ -133,6 +141,18 @@ private func at(_ t: Double) -> Date { t0.addingTimeInterval(t) }
         let later = Presenter.present(PresenterInputs(now: at(12), center: ActivityCenter(), nowPlaying: paused,
                                                       pausedMedia: p.show(timeout: 10, now: at(12))))
         #expect(later == .idle)
+    }
+
+    @Test func aBubbleKeepsMusicPausedAMomentAgo() {
+        // Beside an activity, music shows as a bubble while it plays and for the moment after a
+        // pause, like the island itself; music kept for good doesn't take a bubble.
+        let playing = track(playing: true)
+        let paused = track(playing: false)
+        #expect(Presenter.mediaInView(playing, pausedMedia: .hidden) == playing)
+        #expect(Presenter.mediaInView(paused, pausedMedia: .recent) == paused)
+        #expect(Presenter.mediaInView(paused, pausedMedia: .hidden) == nil)
+        #expect(Presenter.mediaInView(paused, pausedMedia: .kept) == nil)
+        #expect(Presenter.mediaInView(nil, pausedMedia: .recent) == nil)
     }
 }
 
@@ -234,5 +254,9 @@ private func at(_ t: Double) -> Date { t0.addingTimeInterval(t) }
         let wild = decode(#"{"notchWidthAdjust": 90, "notchHeightAdjust": -30}"#)
         #expect(wild.notchWidthAdjust == 20)
         #expect(wild.notchHeightAdjust == -4)
+        // Whole points, so the island's edges never fall between pixels.
+        let fractional = decode(#"{"notchWidthAdjust": 2.7, "notchHeightAdjust": -3.6}"#)
+        #expect(fractional.notchAdjust == CGSize(width: 3, height: -4))
+        #expect(decode(#"{"notchWidthAdjust": "wide"}"#).notchWidthAdjust == 0)
     }
 }

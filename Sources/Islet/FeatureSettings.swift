@@ -34,7 +34,9 @@ struct NowPlayingSettings: View {
                     ForEach(pausedChoices, id: \.self) { Text(Self.pausedLabel($0)).tag($0) }
                 } label: {
                     Text("Hide paused music after")
-                    Text("The artwork dims and the indicator settles, then the island goes back to the notch.")
+                    Text(model.settings.keepsPausedMusic
+                         ? "The artwork dims and the indicator settles. It stays while nothing else needs the island."
+                         : "The artwork dims and the indicator settles, then the island goes back to the notch.")
                 }
                 .settingsAnchor("nowPlaying.paused")
                 Toggle(isOn: $model.settings.songChangePeek) {
@@ -153,6 +155,8 @@ struct IndicatorStylePicker: View {
                     .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }
+            // Islet's own Reduce motion holds the previews still, as it does the island.
+            .environment(\.islandReduceMotion, model.settings.reduceMotion || model.settings.animationStyle == .off)
         }
     }
 }

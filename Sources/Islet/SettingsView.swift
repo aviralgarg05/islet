@@ -396,9 +396,11 @@ struct IslandPreview: View {
     @ViewState private var playing = true
 
     var body: some View {
-        // Both drawings keep one scale whatever the size, so a bigger island looks bigger.
+        // Both drawings keep one scale whatever the size, so a bigger island looks bigger. The
+        // closed one has room for the widest wings and notch fit, so it never runs off the edge.
         let open = min(0.42, (width - 24) / IsletSettings.expandedWidthRange.upperBound)
-        let closed = min(showsOpen ? 0.62 : 1, (width - 24) / (IslandSketch.notch.width + 2 * IsletSettings.wingWidthRange.upperBound))
+        let widest = IslandSketch.notch.width + IsletSettings.notchWidthAdjustRange.upperBound + 2 * IsletSettings.wingWidthRange.upperBound
+        let closed = min(showsOpen ? 0.62 : 1, (width - 24) / widest)
         VStack(spacing: 8) {
             scene("Closed", IslandSketch(settings: settings, theme: settings.theme, open: false, scale: closed, playing: playing),
                   height: IslandSketch.notch.height * closed + 24)
@@ -621,9 +623,11 @@ private struct NotchFitRows: View {
             Text("If the island's edges don't meet the notch's, move them here.")
         }
         .contentShape(Rectangle())
-        .onTapGesture { withAnimation(.snappy(duration: 0.2)) { expanded.toggle() } }
+        .onTapGesture(perform: toggle)
+        .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityHint(expanded ? "Hides the adjustments" : "Shows the adjustments")
+        .accessibilityAction { toggle() }
         .settingsAnchor("appearance.fitNotch")
         .onAppear {
             if snapshotMode || adjusted || highlight?.hasPrefix("appearance.fit") == true { expanded = true }
@@ -645,6 +649,8 @@ private struct NotchFitRows: View {
             }
         }
     }
+
+    private func toggle() { withAnimation(.snappy(duration: 0.2)) { expanded.toggle() } }
 
     private func binding(_ key: WritableKeyPath<IsletSettings, Double>) -> Binding<Double> {
         Binding(get: { model.settings[keyPath: key] }, set: { value in

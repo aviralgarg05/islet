@@ -544,6 +544,17 @@ final class AppModel {
 
     func clearNowPlayingForSnapshot() { nowPlaying = nil }
 
+    /// Snapshots: the song paused a moment ago (`pause`), or playing as before.
+    func setPausedForSnapshot(_ pause: Bool, now: Date) {
+        guard var np = nowPlaying else { return }
+        pausedMusic = PausedMusic()
+        np.isPlaying = true
+        pausedMusic.ingest(np, now: now)
+        np.isPlaying = !pause
+        nowPlaying = np
+        pausedMusic.ingest(np, now: now)
+    }
+
     // MARK: Time
 
     /// Schedule exactly one timer for the next state change instead of polling.
@@ -577,6 +588,8 @@ final class AppModel {
         if media.expire(now: now) || !media.snapshots.isEmpty {
             setNowPlaying(media.current(now: now), now: now)
         }
+        // A click whose window has ended never arms the timer again, even if the player went.
+        if let i = playbackIntent, now >= i.expires { playbackIntent = nil }
         songPeek.advance(now: now, context: songPeekContext(now: now))
         tick &+= 1
         reschedule()

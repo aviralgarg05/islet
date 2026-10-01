@@ -165,7 +165,11 @@ extension AppModel {
         switch c {
         case .activity(let a, _):
             acts.removeAll { $0.id == a.id }
-            if let np = nowPlaying, np.isPlaying, settings.mediaEnabled { items.append(.media(np)) }
+            // Music paused a moment ago keeps its bubble (dimmed) for "Hide paused music after".
+            if settings.mediaEnabled,
+               let np = Presenter.mediaInView(nowPlaying, pausedMedia: pausedMusic.show(timeout: settings.pausedMusicTimeout, now: Date())) {
+                items.append(.media(np))
+            }
         case .nowPlaying:
             break
         case .battery:
@@ -402,6 +406,7 @@ struct BubbleView: View {
     let model: AppModel
     let diameter: CGFloat
     var overflow = 0
+    @Environment(\.islandMotion) private var motion
 
     var body: some View {
         ZStack {
@@ -409,6 +414,8 @@ struct BubbleView: View {
             switch bubble {
             case .media(let np):
                 TrackArtwork(media: np, size: diameter - 8, corner: (diameter - 8) / 2)
+                    .opacity(np.isPlaying ? 1 : PausedLook.artworkOpacity)
+                    .animation(motion == .off ? nil : .easeInOut(duration: PausedLook.fade), value: np.isPlaying)
             case .activity(let a):
                 if model.visualTemplate(for: a) != nil {
                     TemplateBubble(activity: a, model: model, diameter: diameter)

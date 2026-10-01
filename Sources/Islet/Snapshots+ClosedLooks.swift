@@ -32,6 +32,14 @@ extension Snapshots {
         shoot("40-song-peek-artwork-round")
         model.settings.artworkCornerRadius = saved.artworkCornerRadius
 
+        // Beside an activity, music paused a moment ago keeps its bubble, dimmed.
+        if let activity = model.activities.first {
+            model.setPausedForSnapshot(true, now: Date())  // paused just now, whenever this runs
+            model.forcedPresentation = .compact(.activity(activity, others: 0))
+            shoot("40-compact-activity-paused-music-bubble")
+            model.setPausedForSnapshot(false, now: Date())
+        }
+
         model.settings.hudColour = .colourful
         for kind in HUDKind.allCases {
             model.forcedPresentation = .hud(HUDEvent(kind: kind, value: 0.62, until: now.addingTimeInterval(2)))
@@ -83,7 +91,8 @@ extension Snapshots {
         defer { window.close() }
         for (r, row) in rows.enumerated() {
             for (c, style) in styles.enumerated() {
-                let view = PlayingIndicatorNSView(style: style)
+                // As with Low Power Mode off, whatever this Mac's.
+                let view = PlayingIndicatorNSView(style: style, lowPower: false)
                 view.frame = CGRect(origin: .zero, size: cell)
                 host.addSubview(view)
                 view.layoutSubtreeIfNeeded()
