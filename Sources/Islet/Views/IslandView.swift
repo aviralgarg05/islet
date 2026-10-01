@@ -794,6 +794,8 @@ struct IslandView: View {
             model.setExpanded(model.expandedScreen == nil ? display : nil)
         }
         Button("Settings…") { AppActions.openSettings() }
+        Divider()
+        Button("Quit Islet") { NSApp.terminate(nil) }
     }
 
     /// - Parameter row: in a frozen frame whose content stays the row, the frame, so the row

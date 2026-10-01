@@ -387,6 +387,7 @@ final class AppModel {
     /// False while this user's session is in the background (fast user switching): nothing
     /// reads the menu bar or banners then (`SessionWork`).
     @ObservationIgnored var sessionActive = true
+    @ObservationIgnored private var volumeFilter = VolumeChangeFilter()
 
     /// Low Power Mode: the island's loops hold still (`IslandLoops`). Follows the system's
     /// notification; never polled.
@@ -1078,9 +1079,14 @@ final class AppModel {
         }
     }
 
+    /// A volume key Islet handled (it replaces the system display): changes just after it are its.
+    func volumeKeyHandled() { volumeFilter.keyHandled(at: Date()) }
+
     private func volumeChanged(_ out: AudioMonitor.Output) {
         let deviceChanged = out.deviceName != outputDeviceName
         outputDeviceName = out.deviceName
+        let now = Date()
+        if deviceChanged { volumeFilter.outputChanged(at: now) }
         if deviceChanged, let name = out.deviceName {
             // A new output gets its card (macOS shows none), not a volume HUD.
             guard settings.outputChangeCard else { return }
@@ -1091,8 +1097,10 @@ final class AppModel {
                 priority: .normal, ttl: 3, sneak: true
             ))
         } else {
-            guard settings.hudEnabled else { return }
-            center.showHUD(.volume, value: out.volume, muted: out.muted, label: out.deviceName, now: Date())
+            // A level the new output set for itself, or an app's change while the keys show
+            // their own HUD, isn't shown (`VolumeChangeFilter`).
+            guard settings.hudEnabled, volumeFilter.shows(now: now, replacing: settings.replaceSystemHUD) else { return }
+            center.showHUD(.volume, value: out.volume, muted: out.muted, label: out.deviceName, now: now)
         }
         reschedule()
     }

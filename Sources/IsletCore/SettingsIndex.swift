@@ -220,7 +220,7 @@ public enum SettingsIndex {
     // MARK: Entries
 
     private static let general: [SettingsEntry] = [
-        SettingsEntry("general.login", .general, "Launch at login", section: "Behaviour", keywords: ["startup", "login items", "start automatically"]),
+        SettingsEntry("general.login", .general, "Launch at login", section: "Behaviour", keywords: ["startup", "login items", "start automatically", "move to Applications"]),
         SettingsEntry("general.open", .general, "Open the island", section: "Behaviour", keywords: ["hover", "click"]),
         SettingsEntry("general.hoverDelay", .general, "Hover delay", section: "Behaviour", keywords: ["open delay", "wait"], anchor: "general.open"),
         SettingsEntry("general.peekOnHover", .general, "Peek at what's playing", section: "Behaviour",
@@ -448,6 +448,7 @@ public enum SettingsIndex {
         SettingsEntry("permissions.\(kind.rawValue)", .permissions, kind.title, keywords: ["privacy", "allow", "access"])
     } + [
         SettingsEntry("about.version", .about, "Version", keywords: ["licence", "license", "open source"]),
+        SettingsEntry("about.quit", .about, "Quit", keywords: ["exit", "close the app", "stop"]),
     ]
 
     private static let advanced: [SettingsEntry] = [

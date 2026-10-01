@@ -9,6 +9,19 @@ import Foundation
 /// - Cursor hooks (`hook_event_name`, `conversation_id`, `workspace_roots`, …)
 /// - A generic shape any agent can send: `{"agent": "...", "event": "start|tool|waiting|done|error|end", ...}`
 public enum AgentHooks {
+    /// Fields of a hook payload Islet never reads, left out before it is sent: a tool's whole
+    /// output (`tool_response`) can be larger than the API takes, and would only travel to be
+    /// thrown away.
+    public static let unreadFields: Set<String> = ["tool_response"]
+
+    /// The payload without `unreadFields`. Anything that isn't a JSON object goes as it is.
+    public static func trimmed(_ payload: Data) -> Data {
+        guard var obj = (try? JSONSerialization.jsonObject(with: payload)) as? [String: Any],
+              !unreadFields.isDisjoint(with: obj.keys) else { return payload }
+        for key in unreadFields { obj[key] = nil }
+        return (try? JSONSerialization.data(withJSONObject: obj)) ?? payload
+    }
+
     public enum Result: Equatable, Sendable {
         case upsert(ActivitySpec)
         case remove(id: String)

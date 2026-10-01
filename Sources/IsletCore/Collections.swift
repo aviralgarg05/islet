@@ -65,6 +65,9 @@ public struct ClipboardHistory: Codable, Equatable, Sendable {
     public static var browsers: Set<String> { Browsers.bundleIDs }
 
     public static let maxTextLength = 100_000
+    /// The most text kept in all (bytes of UTF-8), whatever the count: 500 long copies would
+    /// otherwise hold 50 MB. The oldest unpinned entries go first.
+    public static let maxTotalBytes = 4_000_000
 
     public init(limit: Int = 30) { self.limit = max(1, limit) }
 
@@ -133,6 +136,11 @@ public struct ClipboardHistory: Codable, Equatable, Sendable {
 
     mutating func trim() {
         while entries.count > limit, let i = entries.lastIndex(where: { !$0.pinned }) {
+            entries.remove(at: i)
+        }
+        var total = entries.reduce(0) { $0 + $1.text.utf8.count }
+        while total > Self.maxTotalBytes, let i = entries.lastIndex(where: { !$0.pinned }) {
+            total -= entries[i].text.utf8.count
             entries.remove(at: i)
         }
     }

@@ -119,8 +119,8 @@ final class TimerController {
                 rang = true
             case .phaseChanged(_, let t):
                 fresh.insert(t.id)
-            case .missed:
-                break
+            case .missed(let t):
+                _ = try? model.applyLocal(TimerEngine.missedNotice(for: t))
             }
         }
         changed(announce: fresh)

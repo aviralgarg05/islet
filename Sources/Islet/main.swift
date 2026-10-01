@@ -360,10 +360,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         switch key {
         case .volumeUp, .volumeDown:
+            model.volumeKeyHandled()
             guard let cur = AudioMonitor.readOutput()?.volume else { return }
             let v = min(1, max(0, (cur / step).rounded() * step + (key == .volumeUp ? step : -step)))
             if AudioMonitor.setOutputVolume(v) { show(.volume, v) }
         case .mute:
+            model.volumeKeyHandled()
             guard let out = AudioMonitor.readOutput() else { return }
             if AudioMonitor.setMuted(!out.muted) { show(.volume, out.volume, muted: !out.muted) }
         case .brightnessUp, .brightnessDown:

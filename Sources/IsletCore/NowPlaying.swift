@@ -448,6 +448,14 @@ public struct MediaArbiter: Sendable {
                 result.timestamp = other.timestamp
             }
         }
+        // The position from whichever report of this track is newest: Spotify's own can lag the
+        // bridge's after a seek, and the older one would make the progress bar drift.
+        if let newer = live.filter({ $0.trackKey == result.trackKey && $0.isPlaying == result.isPlaying && $0.elapsed != nil })
+            .max(by: { $0.timestamp < $1.timestamp }), newer.timestamp > result.timestamp || result.elapsed == nil {
+            result.elapsed = newer.elapsed
+            result.timestamp = newer.timestamp
+            result.playbackRate = newer.playbackRate
+        }
         return result
     }
 

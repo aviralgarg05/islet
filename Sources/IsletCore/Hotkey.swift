@@ -2,6 +2,13 @@ import Foundation
 
 /// A global shortcut written as text, e.g. "ctrl+option+i" or "cmd+shift+space".
 public struct Hotkey: Equatable, Sendable {
+    /// Whether two shortcuts, as config.json writes them, are the same keys ("ctrl+option+i"
+    /// and "option+ctrl+I" are). Islet's two shortcuts can't share keys: only one would work.
+    public static func sameKeys(_ a: String, _ b: String) -> Bool {
+        guard let x = parse(a), let y = parse(b) else { return false }
+        return x == y
+    }
+
     public struct Modifiers: OptionSet, Sendable, Hashable {
         public let rawValue: UInt32
         public init(rawValue: UInt32) { self.rawValue = rawValue }

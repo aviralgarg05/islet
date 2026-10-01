@@ -8,7 +8,8 @@ import IsletCore
 /// With `--wait`, events that ask for a decision block until it's answered in the notch (or
 /// N seconds pass) and the answer is printed for the agent. Everything else is sent and
 /// forgotten within 1.5 s.
-func forwardHook(provider: String, payload: Data, wait: Int?) async {
+func forwardHook(provider: String, payload raw: Data, wait: Int?) async {
+    let payload = AgentHooks.trimmed(raw)
     do {
         let client = try Client.discover()
         if let wait, ApprovalRequest.parse(provider: provider, payload: payload) != nil {

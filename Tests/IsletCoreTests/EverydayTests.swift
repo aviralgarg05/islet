@@ -577,3 +577,126 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         #expect(MenuBarLayoutEngine.wingWidth(preference: .wings, notch: .zero, preferredWing: 58, occupancy: nil, hasMenuBar: true, displayWidth: 1300) == 58)
     }
 }
+
+@Suite struct MissedTimerTests {
+    @Test func aTimerMissedWhileAsleepLeavesAQuietNote() throws {
+        var engine = TimerEngine()
+        let t = try engine.start(seconds: 600, title: "Tea", now: t0)
+        let events = engine.advance(now: t0.addingTimeInterval(600 + TimerEngine.missedLimit + 1))
+        #expect(events == [.missed(t)])
+        let note = TimerEngine.missedNotice(for: t)
+        #expect(note.title == "Tea" && note.subtitle == "Missed while the Mac was asleep")
+        #expect(note.priority == .low && note.sneak == false && note.ttl == 3600)
+        #expect(note.id != t.id && ActivityCenter.isValidID(note.id!))
+        var center = ActivityCenter()
+        #expect(try center.apply(note, now: t0).source == TimerEngine.source)
+    }
+}
+
+@Suite struct VolumeChangeFilterTests {
+    func at(_ s: TimeInterval) -> Date { t0.addingTimeInterval(s) }
+
+    @Test func aNewOutputsOwnLevelShowsNoHUD() {
+        var f = VolumeChangeFilter()
+        #expect(f.shows(now: at(0), replacing: false))
+        f.outputChanged(at: at(10))
+        #expect(!f.shows(now: at(11), replacing: false))
+        #expect(f.shows(now: at(12.5), replacing: false))
+    }
+
+    @Test func replacingTheSystemDisplayShowsOnlyChangesFromTheKeys() {
+        var f = VolumeChangeFilter()
+        // An app changing the volume.
+        #expect(!f.shows(now: at(0), replacing: true))
+        f.keyHandled(at: at(5))
+        #expect(f.shows(now: at(5.2), replacing: true))
+        #expect(!f.shows(now: at(6), replacing: true))
+    }
+}
+
+@Suite struct SameTrackPositionTests {
+    @Test func theNewestPositionOfATrackWins() {
+        var m = MediaArbiter()
+        // Spotify's own report, then the bridge's after a seek, for the same song.
+        m.update(NowPlaying(source: .spotify, bundleID: "com.spotify.client", title: "Song", artist: "Band", isPlaying: true,
+                            duration: 200, elapsed: 30, timestamp: t0))
+        m.updateFromBridge(NowPlaying(source: .system, bundleID: "com.spotify.client", title: "Song", artist: "Band", isPlaying: true,
+                                      duration: 200, elapsed: 120, timestamp: t0.addingTimeInterval(5)))
+        let shown = m.current(now: t0.addingTimeInterval(6))
+        // Still Spotify's own (its controls), at the bridge's newer position.
+        #expect(shown?.source == .spotify)
+        #expect(shown?.position(at: t0.addingTimeInterval(6)) == 121)
+    }
+}
+
+@Suite struct ClipboardSizeTests {
+    @Test func longCopiesAreCappedByTotalSize() {
+        var h = ClipboardHistory(limit: 500)
+        _ = h.add("keep me", types: [], sourceBundleID: nil, now: t0)
+        h.togglePin(id: h.entries[0].id)
+        for i in 0..<60 {
+            _ = h.add(String(repeating: Character(UnicodeScalar(65 + i % 26)!), count: 99_000) + "\(i)", types: [], sourceBundleID: nil,
+                      now: t0.addingTimeInterval(Double(i)))
+        }
+        let total = h.entries.reduce(0) { $0 + $1.text.utf8.count }
+        #expect(total <= ClipboardHistory.maxTotalBytes)
+        #expect(h.entries.count < 60)
+        // The newest copy and the pinned one stay.
+        #expect(h.entries.first?.text.hasSuffix("59") == true)
+        #expect(h.entries.contains { $0.text == "keep me" && $0.pinned })
+    }
+}
+
+@Suite struct ShortcutClashTests {
+    @Test func isletsTwoShortcutsCantShareKeys() {
+        #expect(Hotkey.sameKeys("ctrl+option+i", "option+ctrl+i"))
+        #expect(!Hotkey.sameKeys("ctrl+option+i", "ctrl+option+a"))
+        #expect(!Hotkey.sameKeys("ctrl+option+i", ""))
+        #expect(!Hotkey.sameKeys("", ""))
+        #expect(!Hotkey.sameKeys(IsletSettings().hotkey, IsletSettings().askHotkey))
+    }
+}
+
+@Suite struct PermissionNoteTests {
+    @Test func accessibilitySaysWhatItReadsAndWhatMacOSCallsIt() throws {
+        let on26 = try #require(PermissionKind.accessibility.note(osMajor: 26))
+        #expect(on26.hasPrefix("Islet doesn't read what you type."))
+        let on27 = try #require(PermissionKind.accessibility.note(osMajor: 27))
+        #expect(on27.hasPrefix("Called Device Control and Data Access in System Settings."))
+        #expect(PermissionKind.accessibility.note(osMajor: 27, status: .denied)?.contains("Remove Islet with the minus button") == true)
+        #expect(PermissionKind.camera.note(osMajor: 27) == nil)
+        // The setting it names is the one on the Notifications & HUDs page.
+        #expect(on26.contains("Replace the system volume and brightness display"))
+        #expect(!on26.contains("—"))
+    }
+}
+
+@Suite struct AppLocationTests {
+    @Test func onlyAnApplicationsFolderIsSettled() {
+        let home = "/Users/a"
+        #expect(AppLocation.isSettled(bundlePath: "/Applications/Islet.app", home: home))
+        #expect(AppLocation.isSettled(bundlePath: "/Users/a/Applications/Islet.app", home: home))
+        #expect(!AppLocation.isSettled(bundlePath: "/Users/a/Downloads/Islet.app", home: home))
+        #expect(!AppLocation.isSettled(bundlePath: "/private/var/folders/x/T/AppTranslocation/ABC/d/Islet.app", home: home))
+        #expect(!AppLocation.isSettled(bundlePath: "/Applications Old/Islet.app", home: home))
+    }
+}
+
+@Suite struct HookPayloadTests {
+    @Test func aToolsOutputIsntSent() throws {
+        let big = String(repeating: "x", count: 2_000_000)
+        let payload = try JSONSerialization.data(withJSONObject: [
+            "hook_event_name": "PostToolUse", "session_id": "s1", "tool_name": "Bash",
+            "tool_input": ["command": "ls"], "tool_response": ["stdout": big],
+        ])
+        let trimmed = AgentHooks.trimmed(payload)
+        #expect(trimmed.count < 1000)
+        let obj = try #require(try JSONSerialization.jsonObject(with: trimmed) as? [String: Any])
+        #expect(obj["tool_response"] == nil)
+        #expect((obj["tool_input"] as? [String: Any])?["command"] as? String == "ls")
+        // Nothing to drop, or not an object: as it was.
+        let plain = Data(#"{"agent":"x","event":"done"}"#.utf8)
+        #expect(AgentHooks.trimmed(plain) == plain)
+        #expect(AgentHooks.trimmed(Data("not json".utf8)) == Data("not json".utf8))
+    }
+}

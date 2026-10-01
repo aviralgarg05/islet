@@ -18,6 +18,20 @@ public enum PermissionKind: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// A plain line under the permission, when it needs one: what Accessibility lets Islet do
+    /// (people worry it reads their typing), and from macOS 27 the name System Settings uses.
+    /// - Parameter status: a refusal adds what to try when the switch is already on.
+    public func note(osMajor: Int, status: PermissionStatus? = nil) -> String? {
+        guard self == .accessibility else { return nil }
+        var lines: [String] = []
+        if osMajor >= 27 { lines.append("Called Device Control and Data Access in System Settings.") }
+        lines.append("Islet doesn't read what you type. It reads where menu bar items are, the text of Live Activities and banners, and, only with Replace the system volume and brightness display on, those keys.")
+        if status == .denied {
+            lines.append("Already on in System Settings? Remove Islet with the minus button and add it again.")
+        }
+        return lines.joined(separator: " ")
+    }
+
     /// The app Islet sends Apple Events to, for the Automation permissions.
     public var automationTarget: String? {
         switch self {
@@ -190,6 +204,18 @@ public enum PermissionPrompt {
     public static func shouldAsk(wasOn: Bool?, isOn: Bool) -> Bool {
         guard let wasOn else { return false }
         return isOn && !wasOn
+    }
+}
+
+/// Where Islet runs from. Opening at login is reliable only from an Applications folder: a copy
+/// run from Downloads, or one macOS moved to a random read-only place (App Translocation), may
+/// not open at the next login.
+public enum AppLocation {
+    public static func isSettled(bundlePath: String, home: String) -> Bool {
+        let path = (bundlePath as NSString).standardizingPath
+        if path.contains("/AppTranslocation/") { return false }
+        let homeApps = (home as NSString).appendingPathComponent("Applications")
+        return path.hasPrefix("/Applications/") || path.hasPrefix(homeApps + "/")
     }
 }
 

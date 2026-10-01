@@ -23,7 +23,9 @@ struct PermissionsSettings: View {
             Section { SettingsHero(page: .permissions) }
             Section {
                 ForEach(PermissionKind.allCases) { kind in
-                    PermissionRow(kind: kind, uses: kind.uses(model.settings), status: status(of: kind), hint: hint(for: kind)) { act(on: kind) }
+                    PermissionRow(kind: kind, uses: kind.uses(model.settings), status: status(of: kind), hint: hint(for: kind),
+                                  note: kind.note(osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+                                                  status: status(of: kind))) { act(on: kind) }
                         .settingsAnchor("permissions.\(kind.rawValue)")
                 }
             } footer: {
@@ -137,6 +139,8 @@ private struct PermissionRow: View {
     let status: PermissionStatus?
     /// One line on what to switch in System Settings.
     var hint: String?
+    /// What the permission lets Islet do, in plain words (`PermissionKind.note`).
+    var note: String?
     let action: () -> Void
 
     var body: some View {
@@ -151,6 +155,9 @@ private struct PermissionRow: View {
                 }
                 if let hint {
                     Text(hint).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                }
+                if let note {
+                    Text(note).font(.caption).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer(minLength: 8)

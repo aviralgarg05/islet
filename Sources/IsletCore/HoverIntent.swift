@@ -142,6 +142,35 @@ public struct PeekPointerGuard: Equatable, Sendable {
     }
 }
 
+/// Tells a volume change you made from one an app or a headset made, so only yours shows a HUD.
+/// A new sound output sets its own level (AirPods connecting), so changes just after one don't
+/// show. While Islet replaces the system display, the keys show their own HUD, and other
+/// changes (an app setting the volume) show only just after a key Islet handled.
+public struct VolumeChangeFilter: Sendable {
+    /// Seconds after the output changes during which volume changes are its own.
+    public var afterOutputChange: TimeInterval
+    /// Seconds after a handled key during which a change is that key's.
+    public var afterKey: TimeInterval
+    private var outputChangedAt: Date?
+    private var keyAt: Date?
+
+    public init(afterOutputChange: TimeInterval = 2, afterKey: TimeInterval = 0.5) {
+        self.afterOutputChange = afterOutputChange
+        self.afterKey = afterKey
+    }
+
+    public mutating func outputChanged(at now: Date) { outputChangedAt = now }
+    public mutating func keyHandled(at now: Date) { keyAt = now }
+
+    /// Whether a volume change reported at `now` shows a HUD.
+    /// - Parameter replacing: Islet replaces the system's volume display.
+    public func shows(now: Date, replacing: Bool) -> Bool {
+        if let o = outputChangedAt, now.timeIntervalSince(o) < afterOutputChange { return false }
+        guard replacing else { return true }
+        return keyAt.map { now.timeIntervalSince($0) <= afterKey } ?? false
+    }
+}
+
 /// Separates deliberate brightness changes (keys, Control Center slider) from ambient-light
 /// auto-brightness drift, which reports through the same callback.
 ///

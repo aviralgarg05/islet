@@ -68,6 +68,15 @@ struct Client {
         return Client(port: port, token: token)
     }
 
+    /// Islet is on this Mac: no proxy (a system proxy could catch 127.0.0.1), no cookies, no cache.
+    static let session: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.connectionProxyDictionary = [:]
+        config.httpCookieStorage = nil
+        config.urlCache = nil
+        return URLSession(configuration: config)
+    }()
+
     func send(_ method: String, _ path: String, json: Data? = nil, timeout: TimeInterval = 3) async throws -> (Int, Data) {
         var req = URLRequest(url: URL(string: "http://127.0.0.1:\(port)\(path)")!)
         req.httpMethod = method
@@ -77,7 +86,7 @@ struct Client {
             req.httpBody = json
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
-        let (data, resp) = try await URLSession.shared.data(for: req)
+        let (data, resp) = try await Self.session.data(for: req)
         return ((resp as? HTTPURLResponse)?.statusCode ?? 0, data)
     }
 
