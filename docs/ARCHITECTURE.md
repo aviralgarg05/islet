@@ -55,7 +55,7 @@ Islet is a menu bar agent (no Dock icon) built with SwiftPM from four targets: `
 1. A source reports a change: a CoreAudio, CoreMediaIO or IOKit listener, a distributed or Darwin notification, an EventKit change, a file-system event, an Accessibility observer, a local API request, an `islet://` URL or a script widget's output.
 2. The `IsletSystem` adapter calls back on the main queue. The API server, Accessibility scans and usage watching do their work on their own queues first.
 3. `AppModel` applies the change to an `IsletCore` value (`ActivityCenter.apply`, `MediaArbiter.update`, `BatteryEventDetector.ingest`); `TimerController` does the same with `TimerEngine.perform`. A change to activities, the HUD, Now Playing or a battery event then calls `reschedule()`.
-4. `reschedule()` arms **one** timer for the next deadline: the earliest of `ActivityCenter.nextDeadline` (activity expiry and staleness, the sneak peek, the HUD), `MediaArbiter.nextDeadline` (a paused player timing out) and the end of a battery event. When it fires, `expireNow()` clears what is due and arms the next one. With nothing due, no timer exists.
+4. `reschedule()` arms **one** timer for the next deadline: the earliest of `ActivityCenter.nextDeadline` (activity expiry and staleness, the sneak peek, the HUD), `MediaArbiter.nextDeadline` (a paused player timing out), `SongPeek.nextDeadline` (a new song settling, or its peek ending) and the end of a battery event. When it fires, `expireNow()` clears what is due and arms the next one. With nothing due, no timer exists.
 5. SwiftUI observes `AppModel`. `IslandView` asks for `presentation(for:)`, which runs `Presenter.present` on that display's inputs.
 6. When the island's silhouette changes, the view posts `isletLayoutChanged`: the trigger windows follow the new shape, and the menu bar is measured if a measurement is due.
 
@@ -66,10 +66,10 @@ Settings follow the same path. The Settings window saves after a quarter of a se
 `Presenter.present(_:)` turns the inputs into one `IslandPresentation`: activities, HUD, sneak peek, now playing, battery event, expanded display, suppression and the activity brought forward by a swipe. The options are:
 
 ```
-hidden · idle · hud(HUDEvent) · sneak(Activity) · compact(nowPlaying | activity | battery) · expanded
+hidden · idle · hud(HUDEvent) · sneak(Activity) · songPeek(NowPlaying) · compact(nowPlaying | activity | battery) · expanded
 ```
 
-Precedence: suppressed (a fullscreen app, or a per-app rule) → only the HUD or a critical sneak peek; expanded; HUD; sneak peek; the activity brought forward by a sideways swipe (unless a critical one is on top); high-priority activity; battery event; playing media; other activities; paused media (with `showPausedMedia`); idle.
+Precedence: suppressed (a fullscreen app, or a per-app rule) → only the HUD or a critical sneak peek; expanded; HUD; sneak peek; a new song (`SongPeek`: once it has played for 0.6 s, for 2.5 s, never the first song after launch or one shown a moment ago); the activity brought forward by a sideways swipe (unless a critical one is on top); high-priority activity; battery event; playing media; other activities; paused media (with `showPausedMedia`); idle.
 
 `AppModel.bubbles(for:)` picks up to one fewer than `maxConcurrent` extra items (media or activities) for the detached bubbles, iPhone-style, with an overflow count. The default of 3 gives two bubbles; 1 turns them off. A battery event shows no bubbles.
 

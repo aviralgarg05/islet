@@ -102,6 +102,8 @@ struct HomePlan {
         case event(AgendaItem)
         case activity(Activity)
         case usage(AgentUsage)
+        /// Claude before its figures arrive: an offer to show them, or waiting for them.
+        case claudeHint(ClaudeUsageHint)
 
         var id: String {
             switch self {
@@ -109,13 +111,18 @@ struct HomePlan {
             case .event(let e): return "event-\(e.id)"
             case .activity(let a): return "activity-\(a.id)"
             case .usage(let u): return "usage-\(u.id)"
+            case .claudeHint: return "usage-claude-hint"
             }
         }
 
         /// About how tall the glance is, to show only what fits without scrolling.
         var height: CGFloat {
-            if case .usage(let u) = self { return 18 + CGFloat(u.windows.count) * 16 }
-            return 32
+            switch self {
+            case .usage(let u): return 18 + CGFloat(u.windows.count) * 16
+            case .claudeHint(.offer): return 24
+            case .claudeHint(.waiting): return 48
+            default: return 32
+            }
         }
     }
 
@@ -147,6 +154,8 @@ struct HomePlan {
         glances += timers.filter { $0.id != shownTimer }.map(Glance.timer)
         if let e = model.upcomingEvent { glances.append(.event(e)) }
         glances += rest.filter { !Self.needsYou($0) }.map(Glance.activity)
+        // Claude's hint sits where its card will be, before Codex's.
+        if let hint = model.agentUsage.claudeHint { glances.append(.claudeHint(hint)) }
         glances += model.agentUsage.visible(now: now).map(Glance.usage)
         self.glances = glances
     }
@@ -324,6 +333,8 @@ struct GlanceColumn: View {
         case .activity(let a): ActivityGlance(activity: a, model: model)
         case .usage(let u):
             TimelineView(.everyMinute) { _ in AgentUsageGlance(usage: u, now: Date()) }
+        case .claudeHint(let hint):
+            ClaudeUsageHintRow(hint: hint, model: model)
         }
     }
 }

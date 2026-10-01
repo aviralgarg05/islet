@@ -24,6 +24,7 @@ extension Snapshots {
             ("agent waiting", .compact(.activity(waiting, others: 0)), 44),
             ("timer", .compact(.activity(timer, others: 0)), 44),
             ("peek", .sneak(waiting), 88),
+            ("new song", .songPeek(model.nowPlaying!), 88),
         ]
         var rows: [(String, NSImage)] = []
         for wing in [MenuBarLayoutEngine.iconOnlyWing, 36, 42.5, 52] as [CGFloat] {

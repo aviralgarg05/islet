@@ -56,11 +56,20 @@ enum IslandLayout {
         case .compact, .hud:
             return IslandGeometry(size: CGSize(width: row, height: n.height), top: 6, bottom: small, wing: wing)
         case .sneak(let a):
-            // The wings stay in the menu bar row; the body opens out below it for a moment.
-            let width = max(row + 32, 276)
-            return IslandGeometry(size: CGSize(width: width, height: n.height + 46 + sneakBar(a)), top: 8, bottom: 18,
-                                  stemWidth: width > row ? row : 0, stemHeight: n.height, wing: wing)
+            return peek(metrics: m, wing: wing, extra: sneakBar(a))
+        case .songPeek:
+            return peek(metrics: m, wing: wing, extra: 0)
         }
+    }
+
+    /// A sneak peek, of an activity or a new song: the wings stay in the menu bar row and the
+    /// body opens out below it for a moment.
+    private static func peek(metrics m: IslandMetrics, wing: CGFloat, extra: CGFloat) -> IslandGeometry {
+        let n = m.notch
+        let row = n.width + 2 * wing
+        let width = max(row + 32, 276)
+        return IslandGeometry(size: CGSize(width: width, height: n.height + 46 + extra), top: 8, bottom: 18,
+                              stemWidth: width > row ? row : 0, stemHeight: n.height, wing: wing)
     }
 
     /// A sneak peek with a bar under its text gets a little more height, so the bar clears the
@@ -105,6 +114,8 @@ enum IslandLayout {
         case .idle: return "idle"
         case .hud: return "hud"
         case .sneak(let a): return "sneak-\(a.id)"
+        // One key for every song: a song that follows another inside the peek swaps in place.
+        case .songPeek: return "song-peek"
         case .compact(.nowPlaying): return "compact-media"
         case .compact(.activity(let a, _)): return "compact-\(a.id)"
         case .compact(.battery): return "compact-battery"
@@ -269,6 +280,7 @@ struct IslandView: View {
         }
         .fontDesign(model.settings.roundedFont ? .rounded : .default)
         .environment(\.islandReduceMotion, model.settings.reduceMotion || model.settings.animationStyle == .off)
+        .environment(\.islandMotion, style)
         .environment(\.colorScheme, .dark)
     }
 
@@ -363,6 +375,10 @@ struct IslandView: View {
             SneakView(activity: a, metrics: metrics, geometry: g, model: model)
                 .contentShape(Rectangle())
                 .onTapGesture { activate(p) }
+        case .songPeek(let np):
+            SongPeekView(media: np, metrics: metrics, geometry: g, model: model)
+                .contentShape(Rectangle())
+                .onTapGesture { activate(p) }
         case .expanded:
             ApprovalGate(model: model, metrics: metrics) { ExpandedView(model: model, metrics: metrics, dropTargeted: dropTargeted) }
         }
@@ -391,7 +407,7 @@ struct BubbleView: View {
             Circle().fill(Color.black)
             switch bubble {
             case .media(let np):
-                ArtworkView(media: np, size: diameter - 8, corner: (diameter - 8) / 2)
+                TrackArtwork(media: np, size: diameter - 8, corner: (diameter - 8) / 2)
             case .activity(let a):
                 if model.visualTemplate(for: a) != nil {
                     TemplateBubble(activity: a, model: model, diameter: diameter)
@@ -474,8 +490,9 @@ struct CompactContentView: View {
     var body: some View {
         switch content {
         case .nowPlaying(let np):
+            // A new song swaps the artwork; the equaliser beside it keeps running.
             Wings(metrics: metrics, wing: geometry.wing) {
-                ArtworkView(media: np, size: min(20, metrics.notch.height - 10), corner: 5)
+                TrackArtwork(media: np, size: min(20, metrics.notch.height - 10), corner: 5)
             } trailing: {
                 PlayingIndicator(tint: model.mediaAccent(np), playing: np.isPlaying)
             }
@@ -611,6 +628,41 @@ struct SneakView: View {
         if activity.clampedProgress != nil, activity.state == .running {
             ActivityProgress(activity: activity, tint: tint, height: 4).padding(.top, Space.hair)
         }
+    }
+}
+
+/// A new song for a moment: the wings as in the closed island, and the title and artist in
+/// the body below, lined up under the artwork like an activity's sneak peek.
+struct SongPeekView: View {
+    let media: NowPlaying
+    let metrics: IslandMetrics
+    let geometry: IslandGeometry
+    let model: AppModel
+
+    var body: some View {
+        let row = metrics.notch.width + 2 * geometry.wing
+        let lead = max(Space.m, (geometry.size.width - row) / 2 + Wings<EmptyView, EmptyView>.inset(for: geometry.wing))
+        VStack(spacing: 0) {
+            Wings(metrics: metrics, wing: geometry.wing) {
+                TrackArtwork(media: media, size: min(20, metrics.notch.height - 10), corner: 5)
+            } trailing: {
+                PlayingIndicator(tint: model.mediaAccent(media), playing: media.isPlaying)
+            }
+            .frame(maxWidth: .infinity)
+            TrackText(media: media) {
+                VStack(alignment: .leading, spacing: Space.hair) {
+                    Text(media.title).textStyle(.headline).foregroundStyle(Ink.primary).lineLimit(1)
+                    if let by = media.artist ?? media.appName {
+                        Text(by).textStyle(.caption).foregroundStyle(Ink.secondary).lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, lead)
+            .padding(.top, Space.hair)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(["Now playing", media.title, media.artist].compactMap { $0 }.joined(separator: ", "))
     }
 }
 

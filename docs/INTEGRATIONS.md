@@ -14,7 +14,7 @@ Ready-made files live in [`integrations/`](../integrations/). For recipes coveri
 
 | Source | What you see | Needs |
 |---|---|---|
-| Any app that reports Now Playing (Music, Spotify, Podcasts, TV, Safari/Chrome/Arc/Firefox tabs, VLC, IINA, Plexamp, Tidal, Cider…) | Artwork + equalizer in the closed island; when open, a scrubber you can drag, ±15 s, shuffle and repeat (when the player reports them), system volume and an output picker | nothing |
+| Any app that reports Now Playing (Music, Spotify, Podcasts, TV, Safari/Chrome/Arc/Firefox tabs, VLC, IINA, Plexamp, Tidal, Cider…) | Artwork + equalizer in the closed island, and each new song for a moment below the notch; when open, a scrubber you can drag, ±15 s, shuffle and repeat (when the player reports them), system volume and an output picker | nothing |
 | FaceTime, Zoom, Teams, Slack huddles, Discord, WhatsApp, Webex, Skype, Telegram, Signal, Meet in a browser | Green call pill with a live timer; video icon when the camera is on | nothing |
 | Calendar (iCloud, Google and Exchange accounts added to macOS) | "Starting soon" 5 minutes before with a **Join** button for Zoom/Meet/Teams/Webex links | Calendar access |
 | Battery | Charging splash with the adapter's watts, low and critical warnings at levels you choose, an optional "charged to 80%" alert, Low Power Mode on/off | nothing |
@@ -100,9 +100,11 @@ Islet reads only what the two tools already write on this Mac. It doesn't read t
 
 ### Claude Code
 
-Claude Code passes plan usage to its status line command on stdin (`rate_limits.five_hour` and `rate_limits.seven_day`, for Pro and Max plans, after a session's first reply). `isletctl statusline` records it.
+Claude Code keeps no usage on disk that Islet can read. It passes plan usage only to its status line command on stdin (`rate_limits.five_hour` and `rate_limits.seven_day`, for Pro and Max plans, after a session's first reply), so the figures update while Claude Code runs in a terminal. `isletctl statusline` records them.
 
-In Settings → Integrations → Usage limits, click **Install status line for Claude Code…**. A sheet shows the `statusLine` command before and after, and nothing is written until you click Install.
+While Claude Code is installed (it has a `~/.claude` folder) without Islet's status line, Home shows Claude with a **Show usage** button that opens this part of Settings. Once the status line is in place, Home says "Waiting for Claude Code" until the first figures arrive. The "x" on that row hides it for good (`"claudeUsageHint": false`).
+
+In Settings → Integrations → Usage limits, click **Show Claude usage…**. A sheet shows the `statusLine` command before and after, and nothing is written until you click Add.
 
 - Without a status line, Islet sets one:
   ```json

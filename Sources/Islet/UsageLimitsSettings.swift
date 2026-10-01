@@ -4,17 +4,19 @@ import SwiftUI
 
 /// Settings → Integrations → Usage limits: sources for plan limits, and the Claude Code
 /// status line installer. `~/.claude/settings.json` is only written when the user confirms
-/// the exact change in a sheet.
+/// the exact change in a sheet. Home's "Show usage" opens Settings here.
 struct UsageLimitsSection: View {
     @Bindable var model: AppModel
     @ViewState private var claudeStatus: ClaudeStatusLineSetup.Status?
     @ViewState private var pending: PendingStatusLineEdit?
     @ViewState private var message: String?
 
-    static var claudeSettingsFile: URL { IsletPaths.home.appendingPathComponent(".claude/settings.json") }
     static var codexSessions: URL { IsletPaths.home.appendingPathComponent(".codex/sessions") }
 
+    private var claudeSettingsFile: URL { model.agentUsage.claudeSettingsFile }
     private var cliAvailable: Bool { FileManager.default.isExecutableFile(atPath: AppActions.cliPath) }
+    /// Where the change is made, as people see it in Finder and the terminal.
+    private var claudeSettingsPath: String { (claudeSettingsFile.path as NSString).abbreviatingWithTildeInPath }
 
     var body: some View {
         Section("Usage limits") {
@@ -36,7 +38,7 @@ struct UsageLimitsSection: View {
         }
         .onAppear(perform: refresh)
         .sheet(item: $pending) { p in
-            StatusLineChangeSheet(change: p, file: Self.claudeSettingsFile) {
+            StatusLineChangeSheet(change: p, file: claudeSettingsFile) {
                 apply(p)
             } onCancel: {
                 pending = nil
@@ -47,7 +49,7 @@ struct UsageLimitsSection: View {
     @ViewBuilder private var claudeButton: some View {
         switch claudeStatus {
         case .notInstalled?:
-            Button("Install status line for Claude Code…") { plan(install: true) }.disabled(!cliAvailable)
+            Button("Show Claude usage…") { plan(install: true) }.disabled(!cliAvailable)
         case .installed?:
             Button("Remove…") { plan(install: false) }
         default:
@@ -55,17 +57,23 @@ struct UsageLimitsSection: View {
         }
     }
 
+    /// What the button changes and when the figures update, in plain words.
     private var claudeText: String {
+        let why = "Claude Code saves its plan usage nowhere Islet can read. It only hands it to its status line, the line under its prompt in the terminal."
+        let change = "Only statusLine in \(claudeSettingsPath) changes, and the old file is kept as settings.json.bak."
+        let updates = "The figures update whenever Claude Code shows its status line in a terminal."
         switch claudeStatus {
-        case .notInstalled(let current?)?:
-            return "Claude Code has its own status line (\(current)). Islet wraps it, so it keeps working."
-        case .notInstalled?:
-            return cliAvailable ? "Claude Code passes your plan's usage to its status line. Install Islet's to read it."
-                : "isletctl isn't in this copy of Islet, so the status line can't be installed."
-        case .installed(let original?)?:
-            return "Status line installed. Your own (\(original)) still runs inside it."
-        case .installed?:
-            return "Status line installed."
+        case .notInstalled(let current)?:
+            guard cliAvailable else { return "isletctl isn't in this copy of Islet, so its status line can't be added." }
+            let adds = current.map { "Show Claude usage adds Islet's status line around yours (\($0)), which keeps showing as before." }
+                ?? "Show Claude usage adds Islet's status line there."
+            return [why, adds, change, updates].joined(separator: " ")
+        case .installed(let original)?:
+            let own = original.map { " Your own (\($0)) still runs inside it." } ?? ""
+            let state = model.agentUsage.claude == nil
+                ? "Waiting for Claude Code: the figures arrive the next time it shows its status line in a terminal."
+                : updates
+            return "Islet's status line is in Claude Code.\(own) \(state)"
         case .unsupported(let why)?:
             return why
         case nil:
@@ -81,12 +89,14 @@ struct UsageLimitsSection: View {
     }
 
     private func refresh() {
-        claudeStatus = ClaudeStatusLineSetup.status(of: try? Data(contentsOf: Self.claudeSettingsFile))
+        claudeStatus = ClaudeStatusLineSetup.status(of: try? Data(contentsOf: claudeSettingsFile))
+        // Home's hint follows: from the offer to waiting, or gone.
+        model.agentUsage.refreshClaudeHint()
     }
 
     private func plan(install: Bool) {
         message = nil
-        let current = try? Data(contentsOf: Self.claudeSettingsFile)
+        let current = try? Data(contentsOf: claudeSettingsFile)
         do {
             let edit = install ? try ClaudeStatusLineSetup.install(into: current, cli: AppActions.cliPath)
                 : try ClaudeStatusLineSetup.remove(from: current)
@@ -99,7 +109,7 @@ struct UsageLimitsSection: View {
     private func apply(_ p: PendingStatusLineEdit) {
         pending = nil
         do {
-            try ClaudeStatusLineSetup.apply(p.edit, to: Self.claudeSettingsFile)
+            try ClaudeStatusLineSetup.apply(p.edit, to: claudeSettingsFile)
             message = nil
         } catch {
             message = String(describing: error)
@@ -123,7 +133,7 @@ struct StatusLineChangeSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(change.install ? "Install the status line for Claude Code" : "Remove Islet's status line").font(.headline)
+            Text(change.install ? "Add Islet's status line to Claude Code" : "Remove Islet's status line").font(.headline)
             Text("Islet will change only the statusLine setting in \((file.path as NSString).abbreviatingWithTildeInPath). The rest of the file stays as it is, and the current file is kept as settings.json.bak.")
                 .font(.callout).fixedSize(horizontal: false, vertical: true)
             commandBox("Now", change.edit.before)
@@ -133,13 +143,13 @@ struct StatusLineChangeSheet: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             if change.install {
-                Text("Claude Code runs the status line after each reply. Islet saves the figures to a private file and never contacts the network.")
+                Text("Claude Code runs its status line in the terminal after each reply, and that is when the figures update. Islet saves them to a private file and never contacts the network.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel, action: onCancel).keyboardShortcut(.cancelAction)
-                Button(change.install ? "Install" : "Remove", action: onConfirm).keyboardShortcut(.defaultAction)
+                Button(change.install ? "Add" : "Remove", action: onConfirm).keyboardShortcut(.defaultAction)
             }
         }
         .padding(20)

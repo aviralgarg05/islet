@@ -76,3 +76,70 @@ struct UsageWindowRow: View {
         return tint
     }
 }
+
+/// Claude on Home before its figures arrive. Claude Code keeps no usage on disk; it passes it
+/// to its status line. So until Islet's status line is added this offers to show usage
+/// (Settings explains the change and asks before making it), and after that it says Islet is
+/// waiting for Claude Code. The "x" hides it for good (`claudeUsageHint`).
+struct ClaudeUsageHintRow: View {
+    let hint: ClaudeUsageHint
+    let model: AppModel
+
+    var body: some View {
+        let provider = UsageProvider.claude
+        let tint = Color(tint: provider.tint)
+        // The same header as Claude's card will have: the mark and the name.
+        let header = HStack(spacing: Space.s) {
+            Image(systemName: provider.symbol)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 18)
+            Text(provider.displayName).textStyle(.body, emphasized: true).foregroundStyle(Ink.primary).lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        switch hint {
+        case .offer:
+            HStack(spacing: Space.xs) {
+                header
+                Button("Show usage") { AppActions.openSettings(model, at: .usageLimits) }
+                    .buttonStyle(CapsuleButtonStyle(tint: tint))
+                    .fixedSize()
+                    .help("Claude's 5-hour and weekly limits. Settings shows what changes before anything does.")
+                dismissButton
+            }
+            .frame(height: 24)
+        case .waiting:
+            VStack(alignment: .leading, spacing: Space.hair) {
+                HStack(spacing: Space.xs) {
+                    header
+                    dismissButton
+                }
+                .frame(height: 16)
+                // Under the mark, like the bars of a usage card.
+                Group {
+                    Text("Waiting for Claude Code").foregroundStyle(Ink.secondary).lineLimit(1)
+                    Text("Updates as it runs in a terminal")
+                        .foregroundStyle(Ink.tertiary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .textStyle(.caption)
+                .help("Claude Code hands its usage to its status line, which it shows while it runs in a terminal.")
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var dismissButton: some View {
+        Button { model.dismissClaudeUsageHint() } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(Ink.tertiary)
+                .frame(width: 16, height: 16)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Don't show this again")
+        .accessibilityLabel("Don't show this again")
+    }
+}

@@ -3,19 +3,37 @@ import IsletCore
 import IsletSystem
 import SwiftUI
 
+/// The tabs of the Settings window.
+enum SettingsPane: Hashable {
+    case general, appearance, modules, apps, integrations, ai, permissions, about
+}
+
+/// A section of Settings that something else can send the user to (`AppActions.openSettings(_:at:)`).
+enum SettingsSection: Hashable {
+    /// Integrations → Usage limits.
+    case usageLimits
+
+    var pane: SettingsPane {
+        switch self {
+        case .usageLimits: return .integrations
+        }
+    }
+}
+
 struct SettingsView: View {
     @Bindable var model: AppModel
 
     var body: some View {
-        TabView {
-            GeneralSettings(model: model).tabItem { Label("General", systemImage: "gearshape") }
-            AppearanceSettings(model: model).tabItem { Label("Appearance", systemImage: "paintbrush") }
-            ModulesSettings(model: model).tabItem { Label("Modules", systemImage: "square.grid.2x2") }
-            AppRulesSettings(model: model).tabItem { Label("Apps", systemImage: "app.badge") }
+        TabView(selection: $model.settingsPane) {
+            GeneralSettings(model: model).tabItem { Label("General", systemImage: "gearshape") }.tag(SettingsPane.general)
+            AppearanceSettings(model: model).tabItem { Label("Appearance", systemImage: "paintbrush") }.tag(SettingsPane.appearance)
+            ModulesSettings(model: model).tabItem { Label("Modules", systemImage: "square.grid.2x2") }.tag(SettingsPane.modules)
+            AppRulesSettings(model: model).tabItem { Label("Apps", systemImage: "app.badge") }.tag(SettingsPane.apps)
             IntegrationsSettings(model: model).tabItem { Label("Integrations", systemImage: "point.3.connected.trianglepath.dotted") }
-            AISettingsView(model: model).tabItem { Label("AI", systemImage: "sparkles") }
-            PermissionsSettings(model: model).tabItem { Label("Permissions", systemImage: "hand.raised") }
-            AboutSettings().tabItem { Label("About", systemImage: "info.circle") }
+                .tag(SettingsPane.integrations)
+            AISettingsView(model: model).tabItem { Label("AI", systemImage: "sparkles") }.tag(SettingsPane.ai)
+            PermissionsSettings(model: model).tabItem { Label("Permissions", systemImage: "hand.raised") }.tag(SettingsPane.permissions)
+            AboutSettings().tabItem { Label("About", systemImage: "info.circle") }.tag(SettingsPane.about)
         }
         .frame(width: 620, height: 540)
         .onChange(of: model.settings) { _, _ in model.settingsEdited() }
@@ -292,6 +310,10 @@ struct ModulesSettings: View {
                 Toggle("Now Playing", isOn: $model.settings.mediaEnabled)
                 MediaSourceToggles(model: model)
                 Toggle("Show paused media in the closed island", isOn: $model.settings.showPausedMedia)
+                Toggle("Show the new song for a moment", isOn: $model.settings.songChangePeek)
+                    .disabled(!model.settings.mediaEnabled)
+                Text("When the track changes, the closed island opens a little below the notch with the artwork, title and artist, then closes again.")
+                    .font(.caption).foregroundStyle(.secondary)
                 LabeledContent("System-wide bridge") {
                     Text(model.systemMedia.isRunning ? "Running" : "Unavailable")
                         .foregroundStyle(model.systemMedia.isRunning ? .green : .orange)
@@ -397,6 +419,24 @@ struct IntegrationsSettings: View {
     @Bindable var model: AppModel
     @ViewState private var copied = false
 
+    var body: some View {
+        // Home's "Show usage" opens this tab scrolled to Usage limits.
+        ScrollViewReader { proxy in
+            form
+                .onAppear { scroll(proxy) }
+                .onChange(of: model.settingsScrollTarget) { _, _ in scroll(proxy) }
+        }
+    }
+
+    private func scroll(_ proxy: ScrollViewProxy) {
+        guard let target = model.settingsScrollTarget, target.pane == .integrations else { return }
+        // After this pass, so the form has laid out the section.
+        DispatchQueue.main.async {
+            withAnimation(.smooth(duration: 0.3)) { proxy.scrollTo(target, anchor: .top) }
+            model.settingsScrollTarget = nil
+        }
+    }
+
     private var hookSnippet: String {
         let cli = AppActions.cliPath
         return """
@@ -410,7 +450,7 @@ struct IntegrationsSettings: View {
         """
     }
 
-    var body: some View {
+    private var form: some View {
         Form {
             Section("Local API") {
                 Toggle("Enable local API (127.0.0.1 only, token required)", isOn: $model.settings.apiEnabled)
@@ -440,6 +480,7 @@ struct IntegrationsSettings: View {
                     .font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
             }
             UsageLimitsSection(model: model)
+                .id(SettingsSection.usageLimits)
             LANBridgeSection(model: model)
             Section("Script widgets") {
                 Toggle("Run scripts from the plugins folder", isOn: $model.settings.pluginsEnabled)

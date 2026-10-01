@@ -74,6 +74,11 @@ final class AppModel {
     var forcedPresentation: IslandPresentation?
     /// Measured closed-island placement per display, for the automatic layout.
     var closedPlacements: [CGDirectDisplayID: ClosedPlacement] = [:]
+    /// The Settings tab on show, and a section to scroll to when it next appears.
+    var settingsPane: SettingsPane = .general
+    var settingsScrollTarget: SettingsSection?
+    /// When a new song shows for a moment below the notch.
+    private(set) var songPeek = SongPeek()
 
     // Services
     let shelfService = ShelfService()
@@ -438,23 +443,37 @@ final class AppModel {
         _ = tick
         if let forcedPresentation { return forcedPresentation }
         let now = Date()
-        var suppressed = false
-        let frontRule = settings.rule(for: frontBundleID)
-        if settings.hideInFullscreen, fullscreenDisplays.contains(display) {
-            suppressed = frontRule?.showInFullscreen != true
-        }
-        if frontRule?.hideIsland == true { suppressed = true }
+        let showsMedia = settings.mediaEnabled
         let inputs = PresenterInputs(
             now: now,
             center: center,
-            nowPlaying: settings.mediaEnabled ? nowPlaying : nil,
+            nowPlaying: showsMedia ? nowPlaying : nil,
             batteryEvent: batteryEvent,
             isExpanded: expandedScreen == display || (isDraggingFile && expandedScreen == display),
-            isSuppressed: suppressed && expandedScreen != display,
+            isSuppressed: isSuppressed(display) && expandedScreen != display,
             showPausedMedia: settings.showPausedMedia,
-            focusedActivityID: controls.focusedActivityID
+            focusedActivityID: controls.focusedActivityID,
+            songPeek: showsMedia && settings.songChangePeek ? songPeek.current(now: now) : nil
         )
         return Presenter.present(inputs)
+    }
+
+    /// The island on `display` gets out of the way: a fullscreen app is in front (unless its
+    /// rule keeps the island), or the front app's rule hides it.
+    func isSuppressed(_ display: CGDirectDisplayID) -> Bool {
+        let frontRule = settings.rule(for: frontBundleID)
+        if frontRule?.hideIsland == true { return true }
+        return settings.hideInFullscreen && fullscreenDisplays.contains(display) && frontRule?.showInFullscreen != true
+    }
+
+    /// What the island is doing, for deciding whether a new song may show.
+    private func songPeekContext(now: Date) -> SongPeek.Context {
+        SongPeek.Context(
+            enabled: settings.mediaEnabled && settings.songChangePeek,
+            isOpen: expandedScreen != nil,
+            isHidden: !islandDisplays.isEmpty && islandDisplays.allSatisfy(isSuppressed),
+            isBusy: center.currentHUD(now: now) != nil || center.currentSneak(now: now) != nil
+        )
     }
 
     var activities: [Activity] { center.ordered(now: Date()) }
@@ -489,6 +508,8 @@ final class AppModel {
         DispatchQueue.main.async { NotificationCenter.default.post(name: .isletLayoutChanged, object: nil) }
         if display != nil {
             center.cancelSneak()
+            songPeek.cancel()
+            agentUsage.refreshClaudeHint()
             Haptics.play(.open)
             if tab == .stats && settings.systemStatsEnabled { statsSampler.start() }
         } else {
@@ -528,6 +549,7 @@ final class AppModel {
         var candidates: [Date] = []
         if let d = center.nextDeadline(now: now) { candidates.append(d) }
         if let d = media.nextDeadline(now: now) { candidates.append(d) }
+        if let d = songPeek.nextDeadline(now: now) { candidates.append(d) }
         if let b = batteryEvent { candidates.append(b.until) }
         guard let next = candidates.min() else { return }
         let t = Timer(fire: next.addingTimeInterval(0.01), interval: 0, repeats: false) { [weak self] _ in
@@ -543,12 +565,17 @@ final class AppModel {
         center.expire(now: now)
         if let b = batteryEvent, b.until <= now { batteryEvent = nil }
         // A paused player timed out: show whatever is left, or nothing.
-        if media.expire(now: now) {
-            let next = media.current(now: now)
-            if next != nowPlaying { nowPlaying = next }
-        }
+        if media.expire(now: now) { setNowPlaying(media.current(now: now), now: now) }
+        songPeek.advance(now: now, context: songPeekContext(now: now))
         tick &+= 1
         reschedule()
+    }
+
+    /// The one way `nowPlaying` changes, so a new song can be shown for a moment.
+    private func setNowPlaying(_ next: NowPlaying?, now: Date) {
+        guard next != nowPlaying else { return }
+        nowPlaying = next
+        songPeek.ingest(next, now: now)
     }
 
     // MARK: Inputs
@@ -618,8 +645,8 @@ final class AppModel {
 
     private func mediaUpdate(_ np: NowPlaying?, source: MediaSourceKind) {
         if let np { media.update(np) } else { media.clear(source) }
-        let next = media.current(now: Date())
-        if next != nowPlaying { nowPlaying = next }
+        let now = Date()
+        setNowPlaying(media.current(now: now), now: now)
         reschedule()
     }
 
@@ -762,6 +789,13 @@ final class AppModel {
             return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
         }
         return source
+    }
+
+    /// The "x" on Home's Claude usage hint: hide it for good.
+    func dismissClaudeUsageHint() {
+        settings.claudeUsageHint = false
+        saveSettings()
+        startEventSources()
     }
 
     /// Silence a source: remove its activities now and ignore it from now on.
@@ -1039,8 +1073,9 @@ extension AppModel {
         // Sources switched off (in Settings or config.json), and the clipboard size, apply without a restart.
         if Set(s.disabledMediaSources) != media.disabled {
             media.disabled = Set(s.disabledMediaSources)
-            let next = media.current(now: Date())
-            if next != nowPlaying { nowPlaying = next }
+            let now = Date()
+            setNowPlaying(media.current(now: now), now: now)
+            reschedule()
         }
         if clipboard.limit != s.clipboardLimit { clipboard.limit = s.clipboardLimit }
 
@@ -1099,6 +1134,8 @@ extension AppModel {
         for p in [music, spotify] as [ScriptablePlayerProvider] { p.stop() }
         for source in MediaSourceKind.allCases { media.clear(source) }
         nowPlaying = nil
+        // Switched back on, the song already playing is the first one again, not a new one.
+        songPeek.reset()
     }
 
     func stopCalendar() {

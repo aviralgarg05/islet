@@ -52,6 +52,10 @@ enum Snapshots {
                          output: ScriptPlugins.parse("Disk: 212 GB free | sfimage=internaldrive"), lastRun: now),
         ])
 
+        // A new song, shown for a moment after the track changes.
+        var nextSong = model.nowPlaying!
+        nextSong.title = "Wait"
+        nextSong.elapsed = 1
         let states: [(String, IslandPresentation, IslandTab)] = [
             ("01-compact-media", .compact(.nowPlaying(model.nowPlaying!)), .home),
             ("02-compact-agent-waiting", .compact(.activity(waiting, others: 2)), .home),
@@ -62,6 +66,7 @@ enum Snapshots {
             ("07-hud-brightness", .hud(HUDEvent(kind: .brightness, value: 0.35, until: now.addingTimeInterval(2))), .home),
             ("08-sneak-agent", .sneak(waiting), .home),
             ("09-sneak-done", .sneak(done), .home),
+            ("22b-sneak-song-change", .songPeek(nextSong), .home),
             ("10-expanded-home", .expanded, .home),
             ("11-expanded-shelf", .expanded, .shelf),
             ("11b-expanded-today", .expanded, .today),
@@ -180,6 +185,12 @@ enum Snapshots {
         model.settings.sizePreset = .compact
         metrics = metricsFor(model.settings)
         shoot("23-expanded-agents-compact")
+        // Claude Code installed without Islet's status line, then waiting for its first figures.
+        model.agentUsage.showDemoHint(.offer)
+        shoot("23b-expanded-claude-usage-offer")
+        model.agentUsage.showDemoHint(.waiting)
+        shoot("23c-expanded-claude-usage-waiting")
+        model.agentUsage.showDemo(now: now)
         let crossing = UsageAlert(provider: .claude, window: UsageWindow(id: "five_hour", usedPercent: 90, windowMinutes: 300,
                                                                          resetsAt: now.addingTimeInterval(72 * 60)), threshold: 90)
         let usageAlert = activity(crossing.activity(now: now))

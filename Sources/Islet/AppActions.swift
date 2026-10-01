@@ -10,6 +10,13 @@ enum AppActions {
 
     static func openSettings() { openSettingsHandler?() }
 
+    /// Open Settings on the tab that holds `section`, scrolled to it.
+    static func openSettings(_ model: AppModel, at section: SettingsSection) {
+        model.settingsPane = section.pane
+        model.settingsScrollTarget = section
+        openSettings()
+    }
+
     static func pluginsFolder(_ model: AppModel) -> URL {
         model.settings.pluginDirectory.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) } ?? IsletPaths.pluginsDirectory
     }

@@ -165,6 +165,8 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     // Modules
     public var mediaEnabled = true
     public var showPausedMedia = false
+    /// Show a new song for a moment below the notch when the track changes (`SongPeek`).
+    public var songChangePeek = true
     public var disabledMediaSources: [MediaSourceKind] = []
     public var hudEnabled = true
     public var brightnessHUDEnabled = true
@@ -244,6 +246,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var shareMirroredActivities = false
     /// Claude Code plan limits, from the status line (`isletctl statusline`). Local files only.
     public var claudeUsageEnabled = true
+    /// Home offers to show Claude's usage while Claude Code is installed without Islet's status
+    /// line (`ClaudeUsageHint`). Its "x" turns this off.
+    public var claudeUsageHint = true
     /// Codex plan limits, from its session logs in `~/.codex/sessions`. Local files only.
     public var codexUsageEnabled = true
     /// Per-app tint, icon, visibility and notification handling. Replaces the old

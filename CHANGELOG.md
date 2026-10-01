@@ -19,6 +19,7 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 ### Coding agents
 - **Approvals.** Claude Code, Codex and Cursor can ask in the island: Allow, Always for this session, Deny, or answer in the terminal. Commands are shown in full, risky ones (recursive deletes, force pushes, sudo and more) need a second click, and questions and plans can be answered there too. If Islet isn't running or you don't answer, the agent asks in the terminal as usual.
 - **Usage limits.** Claude Code's and Codex's 5-hour and weekly limits appear on Home, with one alert at 90% and at 100%. They come from files the tools write locally; no tokens are read and nothing goes over the network.
+- Claude Code only hands its usage to its status line, so its limits need Islet's status line. When Claude Code is installed without it, Home shows Claude with a **Show usage** button that opens Settings at Usage limits, where a plain note says what changes (only `statusLine` in `~/.claude/settings.json`, with a backup) and nothing is written until you confirm. Home then says it is waiting for Claude Code until the first figures arrive. The "x" hides the hint for good.
 - **MCP.** `isletctl mcp` lets agents show progress, notes and timers in the notch as tools.
 - Commands shown in the notch hide anything that looks like a key or password.
 
@@ -33,6 +34,8 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 
 ### Now Playing and controls
 - The scrubber seeks. ±15 seconds, shuffle and repeat where the player supports them, the system volume and an output picker.
+- A new song shows for a moment: the island opens a little below the notch with the artwork, title and artist, then closes again. Skipping through tracks shows only the one you stop on, a song is shown once, and nothing shows for the first song after launch, while the island is open or hidden, or over a HUD or another peek. **Show the new song for a moment** in Settings (`songChangePeek`) turns it off.
+- Changing song no longer snaps: the artwork swaps with a short spring, and in the open island the title and artist slide in from below. With Reduce Motion they fade.
 - Two-finger swipes: down to open, up to close, sideways over music to change track.
 - Keep awake for 15 minutes, an hour, two hours or until you turn it off.
 - Battery thresholds are adjustable, with an optional "charged to 80%" alert.

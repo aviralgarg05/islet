@@ -15,6 +15,8 @@ public enum IslandPresentation: Equatable, Sendable {
     case idle
     case hud(HUDEvent)
     case sneak(Activity)
+    /// A new song, shown for a moment below the notch (`SongPeek`).
+    case songPeek(NowPlaying)
     case compact(CompactContent)
     case expanded
 }
@@ -31,13 +33,16 @@ public struct PresenterInputs: Sendable {
     public var showPausedMedia: Bool
     /// The activity the user brought forward by swiping; it stays in the compact island while it exists.
     public var focusedActivityID: String?
+    /// A new song to show for a moment (`SongPeek.current`). It gives way to a HUD and to an
+    /// activity's sneak peek, and never shows while the island is open or hidden.
+    public var songPeek: NowPlaying?
 
     public init(now: Date, center: ActivityCenter, nowPlaying: NowPlaying? = nil, batteryEvent: BatteryEvent? = nil,
                 isExpanded: Bool = false, isSuppressed: Bool = false, showPausedMedia: Bool = false,
-                focusedActivityID: String? = nil) {
+                focusedActivityID: String? = nil, songPeek: NowPlaying? = nil) {
         self.now = now; self.center = center; self.nowPlaying = nowPlaying; self.batteryEvent = batteryEvent
         self.isExpanded = isExpanded; self.isSuppressed = isSuppressed; self.showPausedMedia = showPausedMedia
-        self.focusedActivityID = focusedActivityID
+        self.focusedActivityID = focusedActivityID; self.songPeek = songPeek
     }
 }
 
@@ -55,6 +60,7 @@ public enum Presenter {
         if i.isExpanded { return .expanded }
         if let hud { return .hud(hud) }
         if let sneak { return .sneak(sneak) }
+        if let song = i.songPeek { return .songPeek(song) }
 
         let ordered = i.center.ordered(now: i.now)
         let others = max(0, ordered.count - 1)

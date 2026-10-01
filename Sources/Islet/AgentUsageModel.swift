@@ -11,17 +11,28 @@ import Observation
 final class AgentUsageModel {
     private(set) var claude: AgentUsage?
     private(set) var codex: AgentUsage?
+    /// What Home says about Claude before its figures arrive (`ClaudeUsageHint`).
+    private(set) var claudeHint: ClaudeUsageHint?
 
     @ObservationIgnored let watcher: UsageWatcher
+    /// Claude Code's settings folder (`~/.claude`). Only read, and only for the hint; Settings
+    /// writes the status line after the user confirms it.
+    @ObservationIgnored let claudeDirectory: URL
     @ObservationIgnored private var alerts = UsageAlertTracker()
     @ObservationIgnored private var post: ((ActivitySpec) -> Void)?
+    @ObservationIgnored private var settings = IsletSettings()
 
-    init(watcher: UsageWatcher = UsageWatcher()) {
+    var claudeSettingsFile: URL { ClaudeCodeInstall.settingsFile(in: claudeDirectory) }
+
+    init(watcher: UsageWatcher = UsageWatcher(),
+         claudeDirectory: URL = ClaudeCodeInstall.configDirectory(home: IsletPaths.home)) {
         self.watcher = watcher
+        self.claudeDirectory = claudeDirectory
     }
 
     /// Start or stop each source to match the settings. Safe to call on every settings change.
     func apply(_ settings: IsletSettings, post: @escaping (ActivitySpec) -> Void) {
+        self.settings = settings
         self.post = post
         watcher.onClaude = { [weak self] u in self?.update(.claude, u) }
         watcher.onCodex = { [weak self] u in self?.update(.codex, u) }
@@ -37,13 +48,30 @@ final class AgentUsageModel {
             watcher.stopCodex()
             codex = nil
         }
+        refreshClaudeHint()
+    }
+
+    /// Look again at whether Claude Code is installed and has Islet's status line: one small
+    /// file, read at launch, on settings changes, after Settings adds or removes the status
+    /// line and when the island opens. Nothing is read once figures have arrived.
+    func refreshClaudeHint() {
+        // Nothing to read when no hint could show anyway.
+        let worthLooking = settings.claudeUsageEnabled && settings.claudeUsageHint && claude == nil
+        let installed = worthLooking && ClaudeCodeInstall.looksInstalled(configDirectory: claudeDirectory)
+        let status = installed ? ClaudeStatusLineSetup.status(of: try? Data(contentsOf: claudeSettingsFile)) : nil
+        let hint = ClaudeUsageHint.decide(enabled: settings.claudeUsageEnabled, dismissed: !settings.claudeUsageHint,
+                                          claudeInstalled: installed, statusLine: status, hasUsage: claude != nil,
+                                          canInstall: FileManager.default.isExecutableFile(atPath: AppActions.cliPath))
+        if hint != claudeHint { claudeHint = hint }
     }
 
     private func update(_ provider: UsageProvider, _ usage: AgentUsage?) {
         // A reading queued just before its source was switched off must not bring the card back.
         guard provider == .claude ? watcher.isWatchingClaude : watcher.isWatchingCodex else { return }
         switch provider {
-        case .claude: claude = usage
+        case .claude:
+            claude = usage
+            refreshClaudeHint()
         case .codex: codex = usage
         }
         guard let usage else { return }
@@ -54,6 +82,12 @@ final class AgentUsageModel {
     /// Agents worth a card right now.
     func visible(now: Date) -> [AgentUsage] {
         [claude, codex].compactMap { $0 }.filter { $0.isRelevant(at: now) }
+    }
+
+    /// A fixed hint for offline snapshots (nothing is read).
+    func showDemoHint(_ hint: ClaudeUsageHint?) {
+        claude = nil
+        claudeHint = hint
     }
 
     /// Fixed figures for offline snapshots.

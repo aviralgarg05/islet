@@ -5,7 +5,8 @@ import SwiftUI
 
 /// Now Playing, the primary thing on Home: large artwork and titles, a scrubber you can drag,
 /// and the transport. The volume row is always there when the island is tall enough; otherwise
-/// the speaker button swaps it with the transport.
+/// the speaker button swaps it with the transport. A new song cross-fades the artwork and
+/// pushes the titles in from below (`TrackChange`).
 struct NowPlayingHero: View {
     let model: AppModel
     let media: NowPlaying
@@ -22,13 +23,15 @@ struct NowPlayingHero: View {
         let showsSound = !roomy && model.controls.soundRowShown
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: Space.m) {
-                ArtworkView(media: media, size: art, corner: art >= 56 ? Radius.m : Radius.s)
+                TrackArtwork(media: media, size: art, corner: art >= 56 ? Radius.m : Radius.s)
                     .shadow(color: media.artworkData == nil ? .clear : accent.opacity(0.35), radius: 10, y: 2)
                     .onTapGesture { model.openPlayer() }
                     .help("Open \(media.appName ?? "player")")
-                VStack(alignment: .leading, spacing: Space.hair) {
-                    Text(media.title).textStyle(.title).foregroundStyle(Ink.primary).lineLimit(1)
-                    Text(media.artist ?? media.appName ?? "").textStyle(.body).foregroundStyle(Ink.secondary).lineLimit(1)
+                TrackText(media: media) {
+                    VStack(alignment: .leading, spacing: Space.hair) {
+                        Text(media.title).textStyle(.title).foregroundStyle(Ink.primary).lineLimit(1)
+                        Text(media.artist ?? media.appName ?? "").textStyle(.body).foregroundStyle(Ink.secondary).lineLimit(1)
+                    }
                 }
                 Spacer(minLength: 0)
                 if !roomy {
@@ -63,6 +66,7 @@ struct MediaScrubber: View {
     let accent: Color
     /// Where the pointer is while dragging (0...1).
     @ViewState private var preview: Double?
+    @Environment(\.islandMotion) private var motion
 
     var body: some View {
         let duration = media.duration ?? 0
@@ -73,6 +77,7 @@ struct MediaScrubber: View {
             HStack(spacing: Space.s) {
                 Text(Format.clock(pos))
                     .foregroundStyle(preview == nil ? Ink.tertiary : Ink.primary)
+                    .contentTransition(.numericText())
                 ScrubBar(value: duration > 0 ? pos / duration : 0, tint: accent) { f in
                     model.controls.holdsOpen = true
                     preview = f
@@ -88,6 +93,7 @@ struct MediaScrubber: View {
                 .accessibilityValue(Format.clock(pos))
                 Button { model.toggleRemainingTime() } label: {
                     Text(MediaSeek.trailingLabel(position: pos, duration: duration, remaining: remaining))
+                        .contentTransition(.numericText())
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -95,6 +101,8 @@ struct MediaScrubber: View {
             }
             .textStyle(.caption, numeric: true)
             .foregroundStyle(Ink.tertiary)
+            // A new song rolls the times over and runs the bar back; ticking stays instant.
+            .animation(TrackChange.animation(motion), value: media.trackKey)
         }
     }
 }

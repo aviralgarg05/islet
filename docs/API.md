@@ -420,6 +420,7 @@ Now Playing, gestures and battery keys:
 | Key | Default | Meaning |
 |---|---|---|
 | `mediaShowsRemainingTime` | `true` | Time left (rather than the track length) right of the scrubber. Tapping the label switches it. |
+| `songChangePeek` | `true` | Show a new song for a moment below the notch when the track changes. |
 | `gesturesEnabled` | `true` | Two-finger swipes on the island. |
 | `swipeDownToOpen`, `swipeUpToClose` | `true` | Open and close by swiping. |
 | `swipeMedia` | `true` | Swipe sideways over music. |

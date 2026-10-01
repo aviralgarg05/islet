@@ -149,7 +149,8 @@ public enum GestureSurface: Equatable, Sendable {
         case .hidden: return nil
         case .idle, .hud, .compact(.battery): return .closed
         case .sneak: return .sneak
-        case .compact(.nowPlaying): return .compactMedia
+        // A new song on show is music too: swiping sideways changes track.
+        case .compact(.nowPlaying), .songPeek: return .compactMedia
         case .compact(.activity): return .compactActivity
         case .expanded: return .expanded(media: homeShowsMedia)
         }
