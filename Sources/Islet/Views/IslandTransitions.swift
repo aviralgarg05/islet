@@ -191,6 +191,8 @@ struct ShellMove: Equatable {
     var opening: Bool
     var delta: CGFloat
     var stretches: Bool
+    /// The shape it moves to sits in the menu bar row (the closed island).
+    var intoRow: Bool
 
     static func == (a: ShellMove, b: ShellMove) -> Bool { a.key == b.key }
 }
@@ -207,9 +209,10 @@ struct ShellStretch<Content: View>: View {
             content(stretch)
         } keyframes: { _ in
             KeyframeTrack {
-                if move.stretches && abs(move.delta) > 0.5 {
+                if move.stretches && IslandMotion.squashes(opening: move.opening, delta: move.delta, intoRow: move.intoRow) {
                     for (t, dt) in Self.samples() {
-                        LinearKeyframe(IslandMotion.stretch(at: t, opening: move.opening, delta: move.delta, pace: Motion.pace),
+                        LinearKeyframe(IslandMotion.stretch(at: t, opening: move.opening, delta: move.delta, intoRow: move.intoRow,
+                                                            pace: Motion.pace),
                                        duration: dt)
                     }
                 } else {
@@ -231,8 +234,8 @@ struct ShellStretch<Content: View>: View {
 
 /// What a bubble's goo grows from and flows back into.
 enum GooAnchor: Equatable {
-    /// The island's side, with its end drawn in (nil: the side alone).
-    case island(GooCap?)
+    /// The island's side, with its end drawn in.
+    case island(GooCap)
     /// The bubble nearer the island, a disc the size of this one.
     case bubble
 }
@@ -242,6 +245,10 @@ struct GooCap: Equatable {
     /// Corner radii of the island's end beside the bubble, top and bottom.
     var top: CGFloat
     var bottom: CGFloat
+    /// The island's end shows what is under it (a glass pill), so the goo is cut away where
+    /// it would be under the island: it flows out of the glass's edge instead of showing
+    /// through it.
+    var seeThrough = false
 }
 
 /// A bubble budding off the island's side like liquid (`split`), or pulled back and absorbed
@@ -301,6 +308,10 @@ struct GooCanvas: View {
 
     /// Room round the shapes for the blur.
     static let margin: CGFloat = 8
+    /// How far the island's end (or the bubble beside) in the goo stays inside its edges.
+    static let capInset: CGFloat = 1
+    /// How far the goo reaches under a see-through island's edge, so no hairline shows between.
+    static let seam: CGFloat = 0.5
 
     /// How soft the goo is: how far apart two edges can be and still flow together.
     static func blur(_ diameter: CGFloat) -> CGFloat { max(2, diameter * 0.11) }
@@ -308,6 +319,12 @@ struct GooCanvas: View {
     var body: some View {
         let m = Self.margin
         Canvas { context, size in
+            if case .island(let cap) = anchor, cap.seeThrough {
+                // Nothing under the glass: only the goo outside the island's end is drawn.
+                var outside = Path(CGRect(origin: .zero, size: size))
+                outside.addPath(end(cap, size: size, inset: Self.seam, reach: size.width))
+                context.clip(to: outside, style: FillStyle(eoFill: true))
+            }
             // Blur the shapes, then cut at half opacity: where they come close their blurs add
             // up past the cut and they flow together. The cut is made twice, because one leaves
             // a soft edge as wide as the blur is steep.
@@ -328,20 +345,18 @@ struct GooCanvas: View {
         let dir: CGFloat = left ? -1 : 1
         let midY = size.height / 2
         let side = size.width / 2 - dir * rest
-        if anchor == .bubble {
-            // The bubble nearer the island, at rest. It is drawn over this one's goo, so only
-            // where the goo flows out of it shows.
-            let r = diameter / 2, x = side - dir * r
-            layer.fill(Path(ellipseIn: CGRect(x: x - r, y: midY - r, width: diameter, height: diameter)), with: .color(.black))
-        } else if case .island(let cap?) = anchor {
+        if anchor == .bubble, pose.bridge > 0 {
+            // The bubble nearer the island, at rest, a point smaller so the blur's soft edge
+            // stays inside it. It is drawn over this one's goo, so only where the goo flows
+            // out of it shows.
+            let r = diameter / 2 - Self.capInset, x = side - dir * diameter / 2
+            layer.fill(Path(ellipseIn: CGRect(x: x - r, y: midY - r, width: 2 * r, height: 2 * r)), with: .color(.black))
+        } else if case .island(let cap) = anchor, pose.bridge > 0 {
             // A block reaching into the island, its outer corners rounded as the island's are.
-            // It sits under the island, so only where it flows into the bridge shows.
-            let depth = diameter
-            let rect = CGRect(x: dir > 0 ? side - depth : side, y: Self.margin, width: depth, height: diameter)
-            let radii = dir > 0
-                ? RectangleCornerRadii(topLeading: 0, bottomLeading: 0, bottomTrailing: cap.bottom, topTrailing: cap.top)
-                : RectangleCornerRadii(topLeading: cap.top, bottomLeading: cap.bottom, bottomTrailing: 0, topTrailing: 0)
-            layer.fill(UnevenRoundedRectangle(cornerRadii: radii).path(in: rect), with: .color(.black))
+            // It sits under the island, so only where it flows into the bridge shows. It is
+            // there only while the bridge is (the goo has nothing else to join), and it stays a
+            // point inside the row, so the blur's soft edge never shows below the island.
+            layer.fill(end(cap, size: size, inset: Self.capInset, reach: diameter), with: .color(.black))
         }
         let r = diameter / 2 * CGFloat(pose.scale)
         let x = side + dir * centre
@@ -351,5 +366,20 @@ struct GooCanvas: View {
             let from = side - dir * 2
             layer.fill(Path(CGRect(x: min(from, x), y: midY - w / 2, width: abs(x - from), height: w)), with: .color(.black))
         }
+    }
+
+    /// The island's end beside the bubble, `inset` inside its edges, reaching `reach` points
+    /// back into the island: a block level with the bubble, its outer corners rounded as the
+    /// island's are.
+    private func end(_ cap: GooCap, size: CGSize, inset: CGFloat, reach: CGFloat) -> Path {
+        let dir: CGFloat = left ? -1 : 1
+        let side = size.width / 2 - dir * rest
+        let rect = CGRect(x: dir > 0 ? side - reach : side, y: Self.margin + inset, width: reach,
+                          height: diameter - 2 * inset)
+        let top = min(cap.top, rect.height / 2), bottom = min(cap.bottom, rect.height / 2)
+        let radii = dir > 0
+            ? RectangleCornerRadii(topLeading: 0, bottomLeading: 0, bottomTrailing: bottom, topTrailing: top)
+            : RectangleCornerRadii(topLeading: top, bottomLeading: bottom, bottomTrailing: 0, topTrailing: 0)
+        return UnevenRoundedRectangle(cornerRadii: radii).path(in: rect)
     }
 }

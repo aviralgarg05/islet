@@ -152,14 +152,29 @@ public enum IslandMotion {
     /// The most the shell squashes or stretches on each side, in points.
     public static let stretchLimit: CGFloat = 2.5
 
+    /// How far the closed island may reach past its resting width on each side of the menu bar
+    /// row while it moves: the room kept clear beside the wings
+    /// (`MenuBarLayoutEngine.clearance`) less the hover response's share.
+    public static let rowRoom: CGFloat = MenuBarLayoutEngine.clearance - NotchGeometry.hoverGrow
+
+    /// Whether a change of `delta` points of width squashes and stretches the shell. Not when
+    /// it barely changes width, and not while it grows into a shape that sits in the menu bar
+    /// row (an activity growing out of the notch): its wings have only `rowRoom` before the
+    /// nearest menu bar item, and the open spring's own overshoot is all they can take.
+    public static func squashes(opening: Bool, delta: CGFloat, intoRow: Bool) -> Bool {
+        abs(delta) > 0.5 && !(opening && intoRow)
+    }
+
     /// Extra width on each side of the shell `t` seconds into a change of `delta` points of
     /// width (the open minus the closed width, either way round). Opening, the shell overshoots
     /// a touch wider as it lands; closing, it pulls in a little narrower on the way. It is 0 at
     /// rest, and closing never pulls it inside the shape it is closing to, so the closed island
-    /// never ends up narrower or wider than the notch and its wings.
-    public static func stretch(at t: Double, opening: Bool, delta: CGFloat, pace: Double = 1) -> CGFloat {
+    /// never ends up narrower or wider than the notch and its wings. `intoRow`: the shape it is
+    /// moving to sits in the menu bar row (`squashes`).
+    public static func stretch(at t: Double, opening: Bool, delta: CGFloat, intoRow: Bool = false,
+                               pace: Double = 1) -> CGFloat {
         let size = abs(delta)
-        guard size > 0.5, t > 0 else { return 0 }
+        guard squashes(opening: opening, delta: delta, intoRow: intoRow), t > 0 else { return 0 }
         let amount = min(stretchLimit, 0.025 * size)
         if opening {
             return amount * CGFloat(bump(at: t, from: 0.14 * pace, to: 0.62 * pace))
@@ -171,13 +186,38 @@ public enum IslandMotion {
         return -min(pull, max(0, left) * 0.6)
     }
 
+    /// The stem's width for a shell `width` points wide (its body, without the flare) stretched
+    /// `d` points on each side. A shape whose stem is as wide as its body (the closed island,
+    /// the open island without a stem) stretches as a whole, so the closed island never grows
+    /// a lip below the row; a stemmed one stretches only its body, so its stem stays the width
+    /// of the row. 0 (no stem) stays 0.
+    public static func stretchedStem(_ stem: CGFloat, width: CGFloat, by d: CGFloat) -> CGFloat {
+        stem > 0 && stem >= width - 0.01 ? stem + 2 * d : stem
+    }
+
     /// Long enough for every part of a change to have settled, for keyframes and frame sheets.
     public static let stretchSpan = 0.7
 
+    /// The island's bounce when something new arrives ("Bounce on activity") peaks at this
+    /// scale.
+    public static let pulsePeak: CGFloat = 1.04
+
+    /// The bounce's horizontal scale at `scale`, for an island whose part in the menu bar row
+    /// is `rowWidth` points wide: the whole bounce on a narrow island, a smaller one on a wide
+    /// island, so the row never reaches more than `rowRoom` past its resting width on a side
+    /// and the wings never cover a menu bar item.
+    public static func pulseWidthScale(_ scale: CGFloat, rowWidth: CGFloat) -> CGFloat {
+        guard rowWidth > 0 else { return scale }
+        let most = 2 * rowRoom / rowWidth
+        let share = min(1, most / (pulsePeak - 1))
+        return min(1 + most, 1 + (scale - 1) * share)
+    }
+
     /// The shell's width on the way from `from` to `to`, `t` seconds in, with its squash.
-    public static func shellWidth(from: CGFloat, to: CGFloat, at t: Double, opening: Bool, pace: Double = 1) -> CGFloat {
+    public static func shellWidth(from: CGFloat, to: CGFloat, at t: Double, opening: Bool, intoRow: Bool = false,
+                                  pace: Double = 1) -> CGFloat {
         let k = shellProgress(at: t, opening: opening, pace: pace)
-        return from + (to - from) * CGFloat(k) + 2 * stretch(at: t, opening: opening, delta: to - from, pace: pace)
+        return from + (to - from) * CGFloat(k) + 2 * stretch(at: t, opening: opening, delta: to - from, intoRow: intoRow, pace: pace)
     }
 
     /// How far the shell has moved from one shape to the next, `t` seconds in: the open spring

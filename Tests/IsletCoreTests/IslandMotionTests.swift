@@ -144,6 +144,57 @@ private func times(to end: Double, step: Double = 1.0 / 240) -> [Double] {
         }
     }
 
+    @Test func theClosedIslandStretchesAsAWhole() {
+        // The compact island (its stem as wide as its body), squashed or stretched a few
+        // points a side: still one width from top to bottom, so no lip hangs below the row.
+        let width: CGFloat = 289, height: CGFloat = 32, flare: CGFloat = 6
+        for d in [IslandMotion.stretchLimit, -2] {
+            let stem = IslandMotion.stretchedStem(width, width: width, by: d)
+            let rect = CGRect(x: 0, y: 0, width: width + 2 * flare + 2 * d, height: height)
+            let o = IslandSilhouette.solve(in: rect, topRadius: flare, bottomRadius: 12, stemWidth: stem,
+                                           stemHeight: height, inset: 0, pillInset: 1.5)
+            #expect(o.overhang == 0)
+            #expect(abs(o.bodyRight - o.bodyLeft - (width + 2 * d)) < 1e-9)
+        }
+        // A stemmed shape (a peek, the Glass island) keeps its stem the width of the row and
+        // stretches only its body; no stem stays no stem.
+        #expect(IslandMotion.stretchedStem(289, width: 321, by: 2) == 289)
+        #expect(IslandMotion.stretchedStem(0, width: 321, by: 2) == 0)
+    }
+
+    @Test func growingIntoTheRowKeepsClearOfTheMenuBar() {
+        // An activity growing out of the notch with the default wings: the closed island lands
+        // on the open spring alone, its wings never reaching further past their place than
+        // the room kept clear beside them leaves (with the hover response on top).
+        let wing = CGFloat(IsletSettings().wingWidth), notch: CGFloat = 185
+        #expect(!IslandMotion.squashes(opening: true, delta: 2 * wing, intoRow: true))
+        for t in times(to: 1) {
+            #expect(IslandMotion.stretch(at: t, opening: true, delta: 2 * wing, intoRow: true) == 0)
+            let width = IslandMotion.shellWidth(from: notch, to: notch + 2 * wing, at: t, opening: true, intoRow: true)
+            #expect((width - notch - 2 * wing) / 2 <= IslandMotion.rowRoom)
+        }
+        #expect(IslandMotion.rowRoom + NotchGeometry.hoverGrow <= MenuBarLayoutEngine.clearance)
+        // Opening out of the row still stretches, and closing into it still pulls in.
+        #expect(IslandMotion.squashes(opening: true, delta: 211, intoRow: false))
+        #expect(IslandMotion.squashes(opening: false, delta: -211, intoRow: true))
+        #expect(times(to: 1).contains { IslandMotion.stretch(at: $0, opening: false, delta: -211, intoRow: true) < 0 })
+    }
+
+    @Test func theBounceKeepsTheRowClearOfTheMenuBar() {
+        // However wide the island's part in the menu bar row, the bounce on a new activity
+        // never takes it more than `rowRoom` past its place on a side; a narrow one gets the
+        // whole bounce, and it ends where it started.
+        for row in stride(from: CGFloat(40), through: 900, by: 10) {
+            for scale in stride(from: CGFloat(0.94), through: 1.06, by: 0.002) {
+                let sx = IslandMotion.pulseWidthScale(scale, rowWidth: row)
+                #expect((sx - 1) * row / 2 <= IslandMotion.rowRoom + 1e-9, "row \(row), scale \(scale)")
+            }
+            #expect(IslandMotion.pulseWidthScale(1, rowWidth: row) == 1)
+        }
+        #expect(IslandMotion.pulseWidthScale(IslandMotion.pulsePeak, rowWidth: 100) == IslandMotion.pulsePeak)
+        #expect(IslandMotion.pulseWidthScale(IslandMotion.pulsePeak, rowWidth: 345) < IslandMotion.pulsePeak)
+    }
+
     @Test func openingOvershootsOnlyATouch() {
         let widths = times(to: 1).map { IslandMotion.shellWidth(from: 269, to: 480, at: $0, opening: true) }
         let over = widths.max()! - 480
@@ -293,6 +344,74 @@ private func times(to end: Double, step: Double = 1.0 / 240) -> [Double] {
         for k in [0.02, 0.05, 0.1, 0.15] as [CGFloat] {
             let o = peekMorph(k)
             #expect(o.bottomRadius >= 12)
+        }
+    }
+
+    /// The left side as a chain of points, top to bottom.
+    private func samples(_ side: IslandSilhouette.Side, steps: Int = 80) -> [CGPoint] {
+        func quad(_ a: CGPoint, _ c: CGPoint, _ b: CGPoint) -> [CGPoint] {
+            (1...steps).map { i in
+                let s = CGFloat(i) / CGFloat(steps), u = 1 - s
+                return CGPoint(x: u * u * a.x + 2 * u * s * c.x + s * s * b.x, y: u * u * a.y + 2 * u * s * c.y + s * s * b.y)
+            }
+        }
+        return [side.start] + quad(side.start, side.topControl, side.topEnd) + [side.shoulderStart]
+            + quad(side.shoulderStart, side.shoulderControl, side.junction) + [side.cornerStart]
+            + quad(side.cornerStart, side.cornerControl, side.cornerEnd) + [side.bottomStart]
+            + quad(side.bottomStart, side.bottomControl, side.end)
+    }
+
+    /// The turn at each sample, in degrees: negative where the left side bends round the
+    /// island (convex), positive where it bends back (a shoulder).
+    private func turns(_ points: [CGPoint]) -> [Double] {
+        var out: [Double] = []
+        for i in 0..<(points.count - 2) {
+            let a = points[i], b = points[i + 1], c = points[i + 2]
+            let v1 = CGVector(dx: b.x - a.x, dy: b.y - a.y), v2 = CGVector(dx: c.x - b.x, dy: c.y - b.y)
+            guard hypot(v1.dx, v1.dy) > 1e-6, hypot(v2.dx, v2.dy) > 1e-6 else { continue }
+            out.append(Double(atan2(v1.dx * v2.dy - v1.dy * v2.dx, v1.dx * v2.dx + v1.dy * v2.dy)) * 180 / .pi)
+        }
+        return out
+    }
+
+    @Test func theSideHasNoCornersInAnyFrame() {
+        // Every join sits on the line between the controls either side of it, so the outline
+        // turns smoothly from one curve into the next.
+        func direction(_ a: CGPoint, _ b: CGPoint) -> CGVector? {
+            let d = CGVector(dx: b.x - a.x, dy: b.y - a.y)
+            let l = hypot(d.dx, d.dy)
+            return l > 1e-6 ? CGVector(dx: d.dx / l, dy: d.dy / l) : nil
+        }
+        for pill in [false, true] {
+            for i in 0...200 {
+                let side = peekMorph(CGFloat(i) / 200, pill: pill).left
+                // Each curve meets the next on the leg between their controls.
+                for (join, before, after) in [(side.topEnd, side.topControl, side.shoulderControl),
+                                              (side.junction, side.shoulderControl, side.cornerControl),
+                                              (side.cornerEnd, side.cornerControl, side.bottomControl)] {
+                    guard let d1 = direction(before, join), let d2 = direction(join, after) else { continue }
+                    #expect(abs(d1.dx * d2.dy - d1.dy * d2.dx) < 1e-6, "pill \(pill), frame \(i)")
+                    #expect(d1.dx * d2.dx + d1.dy * d2.dy > 0, "pill \(pill), frame \(i)")
+                }
+            }
+        }
+    }
+
+    @Test func aFloatingPillOpensWithoutANub() {
+        // While the pill is still short, its end sweeps out in one curve: no shoulder squeezed
+        // between its round corners. (The old outline turned back by more than 30 degrees here,
+        // a nub on each end in the first frames.)
+        for k in [0.01, 0.02, 0.04, 0.06, 0.08, 0.1] as [CGFloat] {
+            let o = peekMorph(k, pill: true)
+            #expect(o.tilt > 0.7)
+            let back = turns(samples(o.left)).filter { $0 > 0 }.reduce(0, +)
+            #expect(back < 6, "k \(k): turns back \(back) degrees")
+        }
+        // The shoulders form as the body drops, and the peek ends as the hanging shape.
+        #expect(peekMorph(1, pill: true).tilt == 0)
+        // A shape hanging from the top edge never tilts: its S is unchanged.
+        for k in stride(from: 0, through: 1, by: 0.05) {
+            #expect(peekMorph(CGFloat(k)).tilt == 0)
         }
     }
 

@@ -10,8 +10,41 @@ import CoreGraphics
 /// any two shapes is clean in every frame. While the body is only a few points wider than the
 /// stem, the shoulder and corner are only that wide but spread down the side, so it leans out
 /// in a long, gentle S instead of stepping; and the body's bottom corners keep the closed
-/// island's radius instead of collapsing into square "ears" under the row.
+/// island's radius instead of collapsing into square "ears" under the row. A floating pill's
+/// round end has no straight side for an S to fit in, so while it starts to open its end
+/// sweeps out in one convex curve instead (`tilt`), and the S grows in as the shoulders fill.
 public struct IslandSilhouette: Equatable, Sendable {
+    /// One side of the outline, top to bottom, as quadratic curves joined by straight runs.
+    /// Every join lies on the line between the controls either side of it, so the side has no
+    /// corners whatever the numbers.
+    public struct Side: Equatable, Sendable {
+        /// The top corner, from the top edge.
+        public var start: CGPoint
+        public var topControl: CGPoint
+        public var topEnd: CGPoint
+        /// The concave shoulder out from the stem.
+        public var shoulderStart: CGPoint
+        public var shoulderControl: CGPoint
+        public var junction: CGPoint
+        /// The convex corner down the body's side.
+        public var cornerStart: CGPoint
+        public var cornerControl: CGPoint
+        public var cornerEnd: CGPoint
+        /// The bottom corner, to the bottom edge.
+        public var bottomStart: CGPoint
+        public var bottomControl: CGPoint
+        public var end: CGPoint
+
+        /// The same side mirrored about `x = axis`.
+        public func mirrored(about axis: CGFloat) -> Side {
+            func m(_ p: CGPoint) -> CGPoint { CGPoint(x: 2 * axis - p.x, y: p.y) }
+            return Side(start: m(start), topControl: m(topControl), topEnd: m(topEnd), shoulderStart: m(shoulderStart),
+                        shoulderControl: m(shoulderControl), junction: m(junction), cornerStart: m(cornerStart),
+                        cornerControl: m(cornerControl), cornerEnd: m(cornerEnd), bottomStart: m(bottomStart),
+                        bottomControl: m(bottomControl), end: m(end))
+        }
+    }
+
     /// The top edge (inside a floating pill's inset) and the bottom edge.
     public var top: CGFloat
     public var bottom: CGFloat
@@ -41,6 +74,14 @@ public struct IslandSilhouette: Equatable, Sendable {
     public var bottomRadius: CGFloat
     /// The outline is closed along its top edge too (a floating pill).
     public var floats: Bool
+    /// How far a floating pill's end has turned from an S into one convex sweep: 1 while its
+    /// round end starts to open, 0 once its shoulders have room (and always without a pill).
+    public var tilt: CGFloat
+    /// The left side as drawn; the right side is its mirror image about the frame's middle.
+    public var left: Side
+    public var right: Side { left.mirrored(about: midX) }
+    /// The middle of the frame.
+    public var midX: CGFloat
 
     /// How far the body reaches past the stem on each side.
     public var overhang: CGFloat { max(0, stemLeft - bodyLeft) }
@@ -84,9 +125,13 @@ public struct IslandSilhouette: Equatable, Sendable {
         let ch = max(0, min(bottomRadius * 0.6, overhang - fh))
         let fullShoulder = max(0, min(shoulder, (row - top) / 2))
         let fullCorner = max(ch, min(cornerFloor, bottomRadius * 0.6))
-        // A lean wants a side about three times as tall as it is wide. A short shape (the
-        // floating pill, all round ends) makes room by rounding its corners a little less.
-        let need = min(3 * overhang, 24) * (1 - full)
+        // A floating pill's round end has no straight side for an S: any S squeezed into it
+        // reads as a nub. So while it is still mostly a pill, its end sweeps out in one convex
+        // curve, and the S grows in as the shoulders fill out.
+        let tilt = overhang > 0 ? float * (1 - smoothstep(0.25, 0.7, full)) : 0
+        // A lean wants a side about three times as tall as it is wide. A short shape makes room
+        // by rounding its corners a little less (a convex sweep needs none).
+        let need = min(3 * overhang, 24) * (1 - full) * (1 - tilt)
         let side = (bottom - b) - (top + t + r)
         if side < need, b + r > 0 {
             let cut = min(need - max(0, side), b + r)
@@ -107,11 +152,44 @@ public struct IslandSilhouette: Equatable, Sendable {
         let below = max(0, bottom - b - junction)
         let fv = above + (min(fullShoulder, above) - above) * full
         let cv = below + (min(fullCorner, below) - below) * full
+        // The side's controls: the stem's top corner, the shoulder, the corner and the body's
+        // bottom corner. The shoulder and corner bend at the junction for a full shoulder, so
+        // the body's top edge runs flat there, and halfway up and down them for a lean, so the
+        // side passes through the junction at a slant instead of jogging sideways.
+        let lean = 1 - full
+        let c1 = CGPoint(x: sL, y: top), c2 = CGPoint(x: bodyL, y: bottom)
+        var q1 = CGPoint(x: sL, y: junction - fv / 2 * lean), q2 = CGPoint(x: bodyL, y: junction + cv / 2 * lean)
+        // The joins sit on the legs between the controls, at the same places whatever the tilt.
+        let a1 = fraction(top + t + r, from: top, to: q1.y), a2 = fraction(junction - fv, from: top, to: q1.y)
+        let s1 = overhang > 1e-9 ? fh / overhang : 0.5, s2 = overhang > 1e-9 ? (overhang - ch) / overhang : 0.5
+        let k1 = fraction(junction + cv, from: q2.y, to: bottom), k2 = fraction(bottom - b, from: q2.y, to: bottom)
+        // Tilting slides the shoulder's and corner's controls onto the straight line from the
+        // top corner's control to the bottom corner's, where the side is one convex sweep.
+        func straight(_ y: CGFloat) -> CGFloat { c1.x + (c2.x - c1.x) * fraction(y, from: top, to: bottom) }
+        q1.x += (straight(q1.y) - q1.x) * tilt
+        q2.x += (straight(q2.y) - q2.x) * tilt
+        func along(_ from: CGPoint, _ to: CGPoint, _ s: CGFloat) -> CGPoint {
+            CGPoint(x: from.x + (to.x - from.x) * s, y: from.y + (to.y - from.y) * s)
+        }
+        let left = Side(start: CGPoint(x: sL - t + r, y: top), topControl: c1, topEnd: along(c1, q1, a1),
+                        shoulderStart: along(c1, q1, a2), shoulderControl: q1, junction: along(q1, q2, s1),
+                        cornerStart: along(q1, q2, s2), cornerControl: q2, cornerEnd: along(q2, c2, k1),
+                        bottomStart: along(q2, c2, k2), bottomControl: c2, end: CGPoint(x: bodyL + b, y: bottom))
         // (With no overhang the S is a straight line along the side, and a floating pill
         // keeps its round ends.)
         return IslandSilhouette(top: top, bottom: bottom, flare: t, round: r, stemLeft: sL, stemRight: sR,
                                 bodyLeft: bodyL, bodyRight: bodyR, junction: junction,
                                 shoulderWidth: fh, shoulderHeight: fv, cornerWidth: ch, cornerHeight: cv,
-                                fullness: full, bottomRadius: b, floats: inset > 0.01)
+                                fullness: full, bottomRadius: b, floats: inset > 0.01, tilt: tilt, left: left, midX: rect.midX)
+    }
+
+    /// Where `v` is between `a` and `b`, 0 to 1 (1 when they are the same).
+    private static func fraction(_ v: CGFloat, from a: CGFloat, to b: CGFloat) -> CGFloat {
+        abs(b - a) < 1e-9 ? 1 : min(1, max(0, (v - a) / (b - a)))
+    }
+
+    private static func smoothstep(_ a: CGFloat, _ b: CGFloat, _ x: CGFloat) -> CGFloat {
+        let t = min(1, max(0, (x - a) / (b - a)))
+        return t * t * (3 - 2 * t)
     }
 }

@@ -14,6 +14,7 @@ import SwiftUI
 struct PageSwitcher: View {
     let model: AppModel
     @Namespace private var highlight
+    @Environment(\.islandMotion) private var motion
 
     /// Height of the capsule and the discs.
     static let height: CGFloat = 32
@@ -61,10 +62,15 @@ struct PageSwitcher: View {
                 }
             }
         }
+        // Always its own width: while the island opens or closes, bubbles still beside it can
+        // leave the switcher less room than it needs, and that must not squeeze the selected
+        // page's name over its neighbour.
+        .fixedSize()
         .frame(height: Self.height)
         .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
-        .animation(Motion.settle, value: model.tab)
-        .animation(Motion.settle, value: model.timers.isEntering)
+        // The highlight slides on the settle spring; a short fade with less motion, none with Off.
+        .animation(motion.inPlace, value: model.tab)
+        .animation(motion.inPlace, value: model.timers.isEntering)
     }
 
     /// One page in the capsule. The selected one shows its name on the sliding highlight.

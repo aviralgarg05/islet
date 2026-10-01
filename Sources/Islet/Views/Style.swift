@@ -109,6 +109,27 @@ extension AnimationStyle {
     }
 
     var bounces: Bool { self == .fluid || self == .snappy }
+
+    /// A small change in place (one icon giving way to the next, a percentage ticking, the
+    /// island answering the pointer): the settle spring with the richer styles, a plain short
+    /// ease with less motion, nothing with Off. Glyphs and numbers swap with `symbolSwap` and
+    /// `numberSwap` under it.
+    var inPlace: Animation? {
+        switch self {
+        case .off: return nil
+        case .minimal: return .easeInOut(duration: 0.14 * k)
+        default: return Motion.settle
+        }
+    }
+
+    /// How a changed symbol swaps: SF Symbols' replace, or a plain fade with less motion.
+    var symbolSwap: ContentTransition { isRich ? .symbolEffect(.replace) : .opacity }
+
+    /// How a changed number swaps: rolling digits, or a plain fade with less motion.
+    func numberSwap(value: Double? = nil) -> ContentTransition {
+        guard isRich else { return .opacity }
+        return value.map { .numericText(value: $0) } ?? .numericText()
+    }
 }
 
 // MARK: - Theme
@@ -178,12 +199,15 @@ private struct GlassBody: View {
     static let smoke = GlassMelt.smokeFloor
     @Environment(\.snapshotMode) private var snapshotMode
     @Environment(\.shellClock) private var clock
+    @Environment(\.islandMotion) private var motion
 
     /// The black melts into glass this long after the island starts to open, over `melt`, and
     /// comes back over `unmelt` as it closes.
     static let meltDelay = 0.15
     static let melt = 0.18
     static let unmelt = 0.08
+    /// The glass itself fades out this quickly as the island closes, under the black.
+    static let glassOut = 0.12
 
     /// How much of the black is over the glass: at rest, or in a transition frozen for the
     /// motion sheets.
@@ -195,11 +219,21 @@ private struct GlassBody: View {
         return IslandMotion.eased(.easeIn, from: 0, length: Self.unmelt * k, at: clock.t)
     }
 
+    /// In a transition frozen for the motion sheets just after the island starts to close, how
+    /// much of the glass is still there, fading out under the black (nil once it has gone).
+    private var leavingGlass: Double? {
+        guard let clock, clock.wasExpanded, !expanded, !closedGlass else { return nil }
+        let left = 1 - clock.t / (Self.glassOut * Motion.pace)
+        return left > 0 ? min(1, left) : nil
+    }
+
     var body: some View {
         ZStack {
             if expanded {
                 GlassSurface(shape: shape, tint: Color.black.opacity(0.2), fallback: Color(white: 0.13).opacity(0.78))
-                    .transition(.asymmetric(insertion: .identity, removal: .opacity.animation(.linear(duration: 0.12))))
+                    .transition(.asymmetric(insertion: .identity,
+                                            removal: motion == .off ? .identity
+                                                : .opacity.animation(.linear(duration: Self.glassOut * Motion.pace))))
                 if let stem {
                     shape.fill(Color.black.opacity(GlassMelt.smoke(level: level)))
                     StemMelt(stem: stem, row: row, depth: GlassMelt.depth(body: height - row, level: level))
@@ -209,6 +243,12 @@ private struct GlassBody: View {
                 }
                 // An AppKit view, which offline snapshots can't draw.
                 if !snapshotMode { GlassSheen().clipShape(shape).allowsHitTesting(false) }
+            } else if let left = leavingGlass {
+                GlassSurface(shape: shape, tint: Color.black.opacity(0.2), fallback: Color(white: 0.13).opacity(0.78))
+                    .opacity(left)
+                shape.fill(Color.black.opacity(Self.smoke * left))
+                // The menu bar row stays black over the notch.
+                Color.black.frame(height: row).frame(maxHeight: .infinity, alignment: .top).clipShape(shape)
             } else if closedGlass {
                 // No hardware to match: glass under the same smoke, and no sheen on something
                 // that is always there.
@@ -217,8 +257,9 @@ private struct GlassBody: View {
             }
             shape.fill(Color.black)
                 .opacity(blackness)
-                .animation(expanded ? .easeOut(duration: Self.melt * Motion.pace).delay(Self.meltDelay * Motion.pace)
-                                    : .easeIn(duration: Self.unmelt * Motion.pace), value: expanded)
+                .animation(motion == .off ? nil
+                               : expanded ? .easeOut(duration: Self.melt * Motion.pace).delay(Self.meltDelay * Motion.pace)
+                               : .easeIn(duration: Self.unmelt * Motion.pace), value: expanded)
         }
     }
 

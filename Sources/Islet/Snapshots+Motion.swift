@@ -30,6 +30,8 @@ extension Snapshots {
         /// The display (nil: the 14-inch MacBook Pro's built-in one).
         var screen: ScreenDescriptor? = nil
         var notchless: NotchlessStyle = .notch
+        /// The closed pill is glass too ("Glass on displays without a notch").
+        var glassPill = false
     }
 
     static func renderMotion(to dir: URL) {
@@ -68,6 +70,12 @@ extension Snapshots {
                         duration: IslandMotion.splitDuration, height: 44, crop: bubbleCrop),
             MotionStrip(title: "Second bubble buds off", from: media, to: media, fromBubbles: set([bubbleA]),
                         toBubbles: set([bubbleA, bubbleB]), duration: IslandMotion.splitDuration, height: 44, crop: bubbleCrop),
+            MotionStrip(title: "No notch, floating pill: first bubble buds off", from: media, to: media, fromBubbles: set([]),
+                        toBubbles: set([bubbleA]), duration: IslandMotion.splitDuration, height: 44, crop: bubbleCrop,
+                        screen: notchlessScreen, notchless: .pill),
+            MotionStrip(title: "No notch, glass pill: first bubble buds off", from: media, to: media, fromBubbles: set([]),
+                        toBubbles: set([bubbleA]), duration: IslandMotion.splitDuration, height: 44, crop: bubbleCrop,
+                        screen: notchlessScreen, notchless: .pill, glassPill: true),
         ])
         sheet("motion-bubble-merge", zoom: 3, model: model, dir: dir, strips: [
             MotionStrip(title: "Last bubble absorbed", from: media, to: media, fromBubbles: set([bubbleA]), toBubbles: set([]),
@@ -92,6 +100,19 @@ extension Snapshots {
         sheet("motion-song-peek-in", zoom: 2, model: model, dir: dir, strips: [
             MotionStrip(title: "Song peek from music", from: media, to: .songPeek(np), fromBubbles: set([]), toBubbles: set([]),
                         duration: 0.65, height: 92, crop: rowCrop),
+        ])
+        // An activity growing out of the closed notch and going back into it. It grows on the open
+        // spring alone, so its wings stay clear of the menu bar items beside them, and closing
+        // pulls in a touch as a whole, never inside the notch, staying one shape in the row.
+        let waitingCompact = IslandPresentation.compact(.activity(waiting, others: 0))
+        sheet("motion-appear", zoom: 2, model: model, dir: dir, strips: [
+            MotionStrip(title: "An activity grows out of the notch", from: .idle, to: waitingCompact,
+                        fromBubbles: set([]), toBubbles: set([]), duration: 0.7, height: 44, crop: rowCrop),
+            MotionStrip(title: "And goes back into it", from: waitingCompact, to: .idle,
+                        fromBubbles: set([]), toBubbles: set([]), duration: 0.7, height: 44, crop: rowCrop),
+            MotionStrip(title: "No notch, floating pill: an activity appears", from: .idle, to: waitingCompact,
+                        fromBubbles: set([]), toBubbles: set([]), duration: 0.7, height: 44, crop: rowCrop,
+                        screen: notchlessScreen, notchless: .pill),
         ])
         sheet("motion-glyph-morph", zoom: 3, model: model, dir: dir, strips: [
             MotionStrip(title: "Music gives way to a timer: the glyph bounces in, the equaliser morphs into the time",
@@ -129,6 +150,8 @@ extension Snapshots {
         }
         for strip in strips {
             model.settings.notchlessStyle = strip.notchless
+            model.settings.glassOnNotchless = strip.glassPill
+            if strip.glassPill { model.settings.theme = .glass }
             let display = strip.screen ?? screen
             let metrics = metricsFor(model.settings, screen: display, notchless: strip.notchless)
             model.closedPlacements[display.id] = ClosedPlacement(wing: metrics.wingWidth, slack: .infinity)

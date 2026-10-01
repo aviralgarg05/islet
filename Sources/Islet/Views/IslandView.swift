@@ -372,7 +372,8 @@ struct IslandView: View {
         let fromRank = frame.map { IslandLayout.rank($0.from) } ?? origin?.rank ?? IslandLayout.rank(p)
         let opening = IslandLayout.rank(p) >= fromRank
         let fromWidth = fromG?.outerWidth ?? origin?.width ?? target.outerWidth
-        let move = ShellMove(key: key, opening: opening, delta: target.outerWidth - fromWidth, stretches: style.stretches)
+        let move = ShellMove(key: key, opening: opening, delta: target.outerWidth - fromWidth, stretches: style.stretches,
+                             intoRow: IslandLayout.rank(p) <= 1)
         let g = frame.map { target.moved(from: fromG ?? target, by: IslandMotion.shellProgress(at: $0.t, opening: opening)) } ?? target
         // Resting on the notch shows the island growing out of it, even with nothing to show.
         let visible = IslandLayout.isVisible(p) || dropTargeted || (p == .idle && look.hoverGrow > 0)
@@ -399,12 +400,16 @@ struct IslandView: View {
         let slots = bubbleSlots(drawn: bubbles, before: before, after: current, reshaping: withShell, opening: opening)
         let left = model.settings.bubblePlacement == .left
         let bp = IslandLayout.bubblePlacement(metrics: metrics, placement: placement, count: bubbles.items.count, left: left)
+        // How far the island's frame has grown on each side since the change began: bubbles
+        // fading as the shell changes shape are laid out beside the new frame, and are moved
+        // back by this much so they fade where they were instead of drifting over the menu bar.
+        let shift = (g.outerWidth - fromWidth) / 2
 
         HStack(alignment: .top, spacing: IslandLayout.bubbleGap) {
             // Bubbles on one side are balanced by invisible spacers on the other,
             // so the island itself stays centred on the notch.
             if left {
-                bubbleViews(slots, diameter: bp.diameter, top: bp.top, geometry: g)
+                bubbleViews(slots, diameter: bp.diameter, top: bp.top, geometry: g, shift: shift)
             } else {
                 spacers(slots.count, diameter: bp.diameter)
             }
@@ -417,7 +422,7 @@ struct IslandView: View {
             if left {
                 spacers(slots.count, diameter: bp.diameter)
             } else {
-                bubbleViews(slots, diameter: bp.diameter, top: bp.top, geometry: g)
+                bubbleViews(slots, diameter: bp.diameter, top: bp.top, geometry: g, shift: shift)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -426,7 +431,7 @@ struct IslandView: View {
         .animation(style.morph, value: bubbles.key)
         .animation(style.morph, value: placement)
         // The hover response: a quick, small spring, in step with the others.
-        .animation(style == .off ? nil : Motion.settle, value: look.hoverGrow)
+        .animation(style.inPlace, value: look.hoverGrow)
         // Appearing from nothing and going back to it. The animation wraps the ones above, so
         // it times only the fade and the shell keeps its spring.
         .opacity(presence(p, visible: visible))
@@ -496,7 +501,8 @@ struct IslandView: View {
                 }
             }
             if let frame {
-                shell(p, geometry: g, stretch: IslandMotion.stretch(at: frame.t, opening: move.opening, delta: move.delta))
+                shell(p, geometry: g, stretch: IslandMotion.stretch(at: frame.t, opening: move.opening, delta: move.delta,
+                                                                    intoRow: move.intoRow))
                     .environment(\.shellClock, ShellClock(t: frame.t, wasExpanded: frame.from == .expanded))
             } else {
                 ShellStretch(move: move) { stretch in shell(p, geometry: g, stretch: stretch) }
@@ -507,10 +513,14 @@ struct IslandView: View {
         // not push the shell off the top of the screen.
         .frame(width: g.outerWidth, height: g.size.height, alignment: .top)
         .keyframeAnimator(initialValue: CGFloat(1), trigger: model.pulse) { view, scale in
-            view.scaleEffect(scale, anchor: .top)
+            // The closed island bounces only sideways, so it never dips below the menu bar row,
+            // and no further than the room kept clear beside its wings, so it never covers a
+            // menu bar item.
+            view.scaleEffect(x: IslandMotion.pulseWidthScale(scale, rowWidth: g.stemWidth > 0 ? g.stemWidth : g.size.width),
+                             y: IslandLayout.rank(p) <= 1 ? 1 : scale, anchor: .top)
         } keyframes: { _ in
             if style.bounces && model.settings.bounceOnActivity {
-                SpringKeyframe(1.04, duration: 0.16, spring: .snappy)
+                SpringKeyframe(IslandMotion.pulsePeak, duration: 0.16, spring: .snappy)
                 SpringKeyframe(1.0, duration: 0.45, spring: .bouncy)
             } else {
                 LinearKeyframe(1.0, duration: 0.01)
@@ -521,7 +531,7 @@ struct IslandView: View {
 
     /// The island's surface and outline, `stretch` points wider on each side while it squashes.
     private func shell(_ p: IslandPresentation, geometry g: IslandGeometry, stretch: CGFloat) -> some View {
-        let shape = g.shape
+        let shape = g.stretched(by: stretch)
         return ZStack {
             model.settings.theme.background(expanded: p == .expanded, shape: shape, row: g.stemHeight, height: g.size.height,
                                             glassLevel: model.settings.glassLevel,
@@ -608,6 +618,7 @@ struct IslandView: View {
         var delay: Double = 0
         /// Leaving, it fades (the shell is changing shape under it) instead of being absorbed.
         var fades = false
+        var leaving = false
         var split: Double? = nil
         var merge: Double? = nil
         var fade: Double? = nil
@@ -640,6 +651,7 @@ struct IslandView: View {
             slot.fromNeighbour = i > 0 && !neighbourLeaving
             slot.delay = closingDelay + Double(arrivingNearer) * Self.budStagger * k
             slot.fades = reshaping
+            slot.leaving = leaving
             if arriving { arrivingNearer += 1 }
             if let frame {
                 if arriving {
@@ -656,20 +668,24 @@ struct IslandView: View {
     }
 
     @ViewBuilder
-    private func bubbleViews(_ slots: [BubbleSlot], diameter: CGFloat, top: CGFloat, geometry g: IslandGeometry) -> some View {
+    private func bubbleViews(_ slots: [BubbleSlot], diameter: CGFloat, top: CGFloat, geometry g: IslandGeometry,
+                             shift: CGFloat) -> some View {
         let left = model.settings.bubblePlacement == .left
         // The island's end for the goo to join: a floating pill's round end or the notch
-        // shape's rounded bottom corner. Glass would show a black end through it, so then the
-        // goo joins the island's side without one.
-        let cap: GooCap? = closedGlass && model.settings.theme == .glass ? nil
-            : metrics.floats ? GooCap(top: diameter / 2, bottom: diameter / 2)
-            : GooCap(top: 0, bottom: min(g.bottom, diameter / 2))
+        // shape's rounded bottom corner. Glass would show the black goo through it, so then
+        // the goo is cut away under the island and flows out of the glass's edge.
+        let seeThrough = closedGlass && model.settings.theme == .glass
+        let cap = metrics.floats ? GooCap(top: diameter / 2, bottom: diameter / 2, seeThrough: seeThrough)
+                                 : GooCap(top: 0, bottom: min(g.bottom, diameter / 2), seeThrough: seeThrough)
         // Nearest the island first on both sides, so the farthest bubble carries the "+N".
         ForEach(left ? Array(slots.reversed()) : slots) { slot in
             let goo = gooShape(slot, diameter: diameter, geometry: g, left: left, cap: cap)
             BubbleView(bubble: slot.bubble, model: model, diameter: diameter, overflow: slot.overflow)
                 .modifier(frozenGoo(slot, shape: goo))
                 .modifier(CrossMorph(progress: 1 - (slot.fade ?? 0)))
+                // Fading with the shell, it stays where it was while the island grows away from
+                // it. The frame's move and this one animate together, so they cancel.
+                .offset(x: slot.fades && slot.leaving ? (left ? 1 : -1) * shift : 0)
                 .padding(.top, top)
                 // Each bubble's goo passes under the bubbles nearer the island.
                 .zIndex(-Double(slot.index))
@@ -686,7 +702,7 @@ struct IslandView: View {
 
     /// Where a bubble's goo runs: from the island's side (inside its top flare) or from the
     /// edge of the bubble nearer the island, out to the bubble's resting centre.
-    private func gooShape(_ slot: BubbleSlot, diameter: CGFloat, geometry g: IslandGeometry, left: Bool, cap: GooCap?) -> GooBud {
+    private func gooShape(_ slot: BubbleSlot, diameter: CGFloat, geometry g: IslandGeometry, left: Bool, cap: GooCap) -> GooBud {
         let gap = IslandLayout.bubbleGap
         let rest = slot.fromNeighbour ? gap + diameter / 2
             : g.top + gap + CGFloat(slot.index) * (diameter + gap) + diameter / 2
@@ -794,6 +810,16 @@ extension IslandGeometry {
         g.inset = mix(start.inset, inset)
         return g
     }
+
+    /// The shape `d` points wider on each side, for the shell's squash and stretch. A shape
+    /// that is one width from top to bottom (the closed island, the open island without a
+    /// stem) stretches as a whole, so the closed island never grows a lip below its row; a
+    /// stemmed one stretches only its body, so its stem stays the width of the row.
+    func stretched(by d: CGFloat) -> IslandShape {
+        var shape = self.shape
+        shape.stemWidth = IslandMotion.stretchedStem(stemWidth, width: size.width, by: d)
+        return shape
+    }
 }
 
 /// "+2" in the closed island's wing: other activities without a bubble.
@@ -808,8 +834,8 @@ struct MoreCount: View {
                 .monospacedDigit()
                 .foregroundStyle(Color.islandSecondary)
                 .fixedSize()
-                .contentTransition(.numericText(value: Double(count)))
-                .animation(motion == .off ? nil : Motion.settle, value: count)
+                .contentTransition(motion.numberSwap(value: Double(count)))
+                .animation(motion.inPlace, value: count)
                 .accessibilityLabel("\(count) more")
         }
     }
@@ -1067,14 +1093,14 @@ struct IslandRow: View {
             Image(systemName: BatteryGlyph.symbol(ev.state))
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(BatteryGlyph.tint(ev))
-                .contentTransition(.symbolEffect(.replace))
-                .animation(motion == .off ? nil : Motion.settle, value: BatteryGlyph.symbol(ev.state))
+                .contentTransition(motion.symbolSwap)
+                .animation(motion.inPlace, value: BatteryGlyph.symbol(ev.state))
         case .hud(let hud):
             Image(systemName: hud.symbol)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(model.hudTint(hud.kind))
-                .contentTransition(.symbolEffect(.replace))
-                .animation(motion == .off ? nil : Motion.settle, value: hud.symbol)
+                .contentTransition(motion.symbolSwap)
+                .animation(motion.inPlace, value: hud.symbol)
         default:
             EmptyView()
         }
@@ -1100,8 +1126,8 @@ struct IslandRow: View {
                 // Icon-only wings are too narrow for "100%" at full size; never wrap it.
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-                .contentTransition(.numericText(value: Double(ev.state.level)))
-                .animation(motion == .off ? nil : Motion.settle, value: ev.state.level)
+                .contentTransition(motion.numberSwap(value: Double(ev.state.level)))
+                .animation(motion.inPlace, value: ev.state.level)
         case .hud(let hud):
             LevelBar(value: hud.muted ? 0 : hud.value, tint: model.hudTint(hud.kind), height: 4)
                 .frame(width: max(22, geometry.wing - 20))
@@ -1204,8 +1230,8 @@ struct ActivityTrailing: View {
             Image(systemName: glyph)
                 .font(.system(size: min(size, room * 0.6), weight: .semibold))
                 .foregroundStyle(tint)
-                .contentTransition(.symbolEffect(.replace))
-                .animation(motion == .off ? nil : Motion.settle, value: glyph)
+                .contentTransition(motion.symbolSwap)
+                .animation(motion.inPlace, value: glyph)
         } else if activity.endsAt != nil || activity.startedAt != nil {
             TimelineView(.periodic(from: .now, by: 1)) { ctx in
                 Text(activity.trailingText(now: ctx.date) ?? "")
@@ -1224,8 +1250,8 @@ struct ActivityTrailing: View {
                 .lineLimit(1)
                 .minimumScaleFactor(room < NarrowValue.wordRoom ? 0.5 : 0.75)
                 // A changed value rolls to the new one rather than popping.
-                .contentTransition(.numericText())
-                .animation(motion == .off ? nil : Motion.settle, value: text)
+                .contentTransition(motion.numberSwap())
+                .animation(motion.inPlace, value: text)
         } else if activity.progress != nil {
             ProgressRing(progress: activity.clampedProgress, tint: tint, size: compact ? 13 : 15, lineWidth: 2.2)
         } else {
@@ -1298,14 +1324,15 @@ struct DetailedHUDContent: View {
                 Image(systemName: hud.symbol)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(tint)
-                    .contentTransition(.symbolEffect(.replace))
+                    .contentTransition(motion.symbolSwap)
+                    .animation(motion.inPlace, value: hud.symbol)
                     .frame(width: 18)
                 LevelBar(value: hud.shownLevel, tint: tint, height: 5)
                     .animation(motion == .off ? nil : .snappy(duration: 0.18), value: hud.value)
                 Text("\(percent)%")
                     .textStyle(.caption, emphasized: true, numeric: true)
                     .foregroundStyle(Ink.secondary)
-                    .contentTransition(.numericText(value: Double(percent)))
+                    .contentTransition(motion.numberSwap(value: Double(percent)))
                     .animation(motion == .off ? nil : .snappy(duration: 0.18), value: percent)
                     .frame(width: 34, alignment: .trailing)
             }

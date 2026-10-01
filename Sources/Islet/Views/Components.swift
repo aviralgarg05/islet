@@ -48,37 +48,31 @@ struct IslandShape: Shape {
     /// rounding and the flare all change together, so opening from the pill, or a peek growing
     /// out of it, morphs smoothly instead of jumping to the hanging shape at the end.
     ///
-    /// `IslandSilhouette` solves the numbers. Its shoulders grow with the body's overhang and its
-    /// bottom corners keep their radius while the body is short, so a morph never passes
-    /// through square "ears" under the row.
+    /// `IslandSilhouette` solves the outline. Its shoulders grow with the body's overhang and its
+    /// bottom corners keep their radius while the body is short, and a floating pill's end
+    /// sweeps out in one curve before its shoulders form, so a morph never passes through
+    /// square "ears" or a nub under the row.
     func outline(in rect: CGRect, closed: Bool) -> Path {
         let o = IslandSilhouette.solve(in: rect, topRadius: topRadius, bottomRadius: bottomRadius, stemWidth: stemWidth,
                                     stemHeight: stemHeight, inset: inset, pillInset: NotchGeometry.pillInset)
-        let t = o.flare, r = o.round, b = o.bottomRadius, j = o.junction
-        let fh = o.shoulderWidth, fv = o.shoulderHeight, ch = o.cornerWidth, cv = o.cornerHeight
-        let sL = o.stemLeft, sR = o.stemRight, bL = o.bodyLeft, bR = o.bodyRight
-        // Where the shoulder and corner bend: at the junction for a full shoulder, so the
-        // body's top edge runs flat there; halfway up and down them for a lean, so the side
-        // passes through the junction at a slant instead of jogging sideways.
-        let lean = 1 - o.fullness
-        let jf = j - fv / 2 * lean, jc = j + cv / 2 * lean
+        let l = o.left, r = o.right
         var p = Path()
-        p.move(to: CGPoint(x: sL - t + r, y: o.top))
-        p.addQuadCurve(to: CGPoint(x: sL, y: o.top + t + r), control: CGPoint(x: sL, y: o.top))
-        p.addLine(to: CGPoint(x: sL, y: j - fv))
-        p.addQuadCurve(to: CGPoint(x: sL - fh, y: j), control: CGPoint(x: sL, y: jf))
-        p.addLine(to: CGPoint(x: bL + ch, y: j))
-        p.addQuadCurve(to: CGPoint(x: bL, y: j + cv), control: CGPoint(x: bL, y: jc))
-        p.addLine(to: CGPoint(x: bL, y: o.bottom - b))
-        p.addQuadCurve(to: CGPoint(x: bL + b, y: o.bottom), control: CGPoint(x: bL, y: o.bottom))
-        p.addLine(to: CGPoint(x: bR - b, y: o.bottom))
-        p.addQuadCurve(to: CGPoint(x: bR, y: o.bottom - b), control: CGPoint(x: bR, y: o.bottom))
-        p.addLine(to: CGPoint(x: bR, y: j + cv))
-        p.addQuadCurve(to: CGPoint(x: bR - ch, y: j), control: CGPoint(x: bR, y: jc))
-        p.addLine(to: CGPoint(x: sR + fh, y: j))
-        p.addQuadCurve(to: CGPoint(x: sR, y: j - fv), control: CGPoint(x: sR, y: jf))
-        p.addLine(to: CGPoint(x: sR, y: o.top + t + r))
-        p.addQuadCurve(to: CGPoint(x: sR + t - r, y: o.top), control: CGPoint(x: sR, y: o.top))
+        p.move(to: l.start)
+        p.addQuadCurve(to: l.topEnd, control: l.topControl)
+        p.addLine(to: l.shoulderStart)
+        p.addQuadCurve(to: l.junction, control: l.shoulderControl)
+        p.addLine(to: l.cornerStart)
+        p.addQuadCurve(to: l.cornerEnd, control: l.cornerControl)
+        p.addLine(to: l.bottomStart)
+        p.addQuadCurve(to: l.end, control: l.bottomControl)
+        p.addLine(to: r.end)
+        p.addQuadCurve(to: r.bottomStart, control: r.bottomControl)
+        p.addLine(to: r.cornerEnd)
+        p.addQuadCurve(to: r.cornerStart, control: r.cornerControl)
+        p.addLine(to: r.junction)
+        p.addQuadCurve(to: r.shoulderStart, control: r.shoulderControl)
+        p.addLine(to: r.topEnd)
+        p.addQuadCurve(to: r.start, control: r.topControl)
         if closed || o.floats { p.closeSubpath() }
         return p
     }
@@ -125,8 +119,8 @@ struct IconView: View {
             Image(systemName: NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil ? name : "questionmark.circle")
                 .font(.system(size: size * 0.9, weight: .semibold))
                 .foregroundStyle(tint)
-                .contentTransition(.symbolEffect(.replace))
-                .animation(motion == .off ? nil : Motion.settle, value: name)
+                .contentTransition(motion.symbolSwap)
+                .animation(motion.inPlace, value: name)
                 .frame(width: size, height: size)
         case .emoji(let e):
             Text(e).font(.system(size: size * 0.85)).frame(width: size, height: size)
