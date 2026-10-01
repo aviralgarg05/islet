@@ -10,8 +10,10 @@ Islet is a menu bar agent (no Dock icon) built with SwiftPM from four targets: `
 │   IslandWindowController ×display: IslandPanel (level 27) + TriggerPanel (26)      │
 │   PointerCoordinator: hover intent, click-through, drag to shelf, swipes           │
 │   TimerController · ApprovalController · AskController · AgentUsageModel           │
+│   SalesModel · StocksModel · ToolUsageModel · TeleprompterController · MirrorModel │
 │   Views: IslandView → compact / sneak / HUD / bubbles / expanded                   │
 │          expanded tabs: Home · Today · Shelf · Widgets · Clipboard · System · Ask  │
+│          tools under More: Mirror · Teleprompter · Stocks · Sales                  │
 │                                                                                    │
 │  IsletSystem (adapters to macOS)                                                   │
 │   LocalAPIServer (Network.framework) · SystemNowPlayingBridge (perl helper)        │
@@ -21,7 +23,7 @@ Islet is a menu bar agent (no Dock icon) built with SwiftPM from four targets: `
 │   DownloadsWatcher · ClipboardMonitor · SystemStatsSampler · ShelfService          │
 │   MenuBarInspector · MenuBarLiveActivityMonitor (AX) · ScriptPluginRunner          │
 │   UsageWatcher · AskService · KeychainStore · AIAssist · PowerAssertion            │
-│   GlobalHotkey                                                                     │
+│   GlobalHotkey · ToolsService (sales, stocks, AI usage) · CameraMirror             │
 │                                                                                    │
 │  IsletCore (pure Swift, no AppKit, unit-tested)                                    │
 │   ActivityCenter · Presenter · MediaArbiter · HoverIntent · NotchGeometry          │
@@ -30,6 +32,7 @@ Islet is a menu bar agent (no Dock icon) built with SwiftPM from four targets: `
 │   Ask providers and stream decoders · SSEParser · AgentUsage · AgentHooks          │
 │   HTTP parser + APIRouter · URLCommand · ScriptPlugins · GestureMap · KeepAwake    │
 │   CallDetector · NotificationParser · DownloadTracker · SmartIcon · IsletSettings  │
+│   SalesAPI · StocksAPI · OpenRouter/Copilot/Ollama usage · TeleprompterPlayback    │
 └────────────────────────────────────────────────────────────────────────────────────┘
    ▲ isletctl (CLI, hooks, status line, MCP)   ▲ islet:// URLs
    ▲ HTTP (loopback, optional LAN bridge)      ▲ script widgets
@@ -181,6 +184,19 @@ Claude Code and Codex plan usage come from local files. Nothing polls and nothin
 
 `AgentUsageModel` shows the figures on the Home tab. It posts one activity when a window first crosses 90%, and a high-priority one at 100% (`UsageAlertTracker`). The first reading after launch only sets the baseline, so relaunching doesn't repeat an alert. Both sources are on by default (`claudeUsageEnabled`, `codexUsageEnabled`).
 
+`ToolUsageModel` adds OpenRouter (the user's key, `GET /api/v1/key`), Copilot (a GitHub key with Plan read access, this month's premium request usage) and Ollama (`/api/ps` on 127.0.0.1) to Home, each off by default. They are asked for only when the island opens and the figures are older than the source allows (`ToolUsageSource.freshFor`), so nothing polls. See [Integrations](INTEGRATIONS.md#openrouter-copilot-and-ollama).
+
+## Tools
+
+The Mirror, Teleprompter, Stocks and Sales pages (`AppModel+Tools.swift`) start off and are listed under More once on (`IslandPage.switcher`). `syncToolPages()` runs when the island opens or closes, the page changes or settings change, and starts only what the page on show needs:
+
+- **Mirror.** `CameraMirror` (IsletSystem) owns an `AVCaptureSession` with the default camera, made the first time the page shows. It runs only while the Mirror page is open; the preview is an `AVCaptureVideoPreviewLayer`, so frames never reach Islet's code.
+- **Teleprompter.** `TeleprompterPlayback` (IsletCore) keeps the position as an anchor and a start time, so pausing reads exactly where the text had got to. The page hands the rest of the way to one linear SwiftUI animation, and the deadline timer stops it at the end (`endsAt`). A scroll over the open island goes to the teleprompter before the swipe recogniser (`IslandHostingView.onScroll`). The script is `teleprompter.txt` (0600) in the support folder.
+- **Stocks.** `StocksSchedule`: on opening the page if the prices are a minute old, then every two minutes, only while the page is open.
+- **Sales.** `SalesSchedule`: every 15 minutes while Sales is on, a store is connected, the screen is unlocked (an `UnlockMonitor` runs only then) and Low Power Mode is off; and on opening the page if the figures are a minute old. `SalesAPI` builds each store's request for today and reads its replies, page by page (at most ten).
+
+Each model reports its next moment to `AppModel.reschedule()`, which keeps the one deadline timer. `ToolsService` sends every request: an ephemeral `URLSession` made on first use, no cookies, cache or credential store, HTTPS only to the hosts the tool names (or HTTP to Ollama on 127.0.0.1), and redirects refused.
+
 ## Local API security
 
 - Loopback bind, on port 47831 by default. If that port is taken, an ephemeral one, which clients read from the discovery file.
@@ -206,6 +222,8 @@ Claude Code and Codex plan usage come from local files. Nothing polls and nothin
   | Clipboard history | reads `NSPasteboard.changeCount` once a second (macOS has no change notification) | clipboard history is on and the screen is unlocked with the displays awake |
   | Downloads | once a second while a partial file grows (file growth doesn't change the folder), every 30 s after 15 s without growth, and stops after 10 quiet minutes | a partial download is in the folder |
   | System stats | every 2 s | the System tab is open |
+  | Sales | every 15 minutes, through the deadline timer | Sales is on with a store connected, the screen is unlocked and Low Power Mode is off |
+  | Stocks | every 2 minutes, through the deadline timer | the Stocks page is open |
   | Script widgets | each script's interval from its file name (5 minutes by default), with a 15 s timeout | widgets are on and the screen is unlocked with the displays awake |
   | Live Activity mirroring | a safety rescan every 15 s | at least one activity is mirrored |
   | Hover intent | every 50 ms | an open or close decision is pending |
@@ -218,12 +236,12 @@ Claude Code and Codex plan usage come from local files. Nothing polls and nothin
 ## Privacy rules
 
 - **Permissions only for features the user switches on or asks to use.** Calendar and Reminders access is requested from Settings or the Allow buttons on the Today tab. macOS asks only once: after a refusal, or with "Add events only", those buttons open Privacy & Security at the right page instead, and Islet reads the access again when it becomes active (back from System Settings), when the island opens while the calendar can't be read, and for `GET /v1/state`, starting the calendar with a fresh event store the moment access arrives. Accessibility is requested when the user switches on replacing the system HUD, or presses an Allow or Grant button in Settings. If the HUD option is on at launch but Accessibility has been taken away, Islet doesn't ask again: it leaves the volume and brightness keys to macOS and Settings shows the missing permission. Notification mirroring, menu bar measurement and Live Activity mirroring use it only once it has been granted. Automation (AppleScript to Music and Spotify) is used only when the MediaRemote bridge isn't running or is reporting another player (a Spotify song picked in the island while a Chrome video is the system's now playing), and only once it has been granted: Islet checks without prompting (`AEDeterminePermissionToAutomateTarget`, off the main thread, never launching the player) once per player per launch, and again when that player opens or comes to the front, or one of its controls is pressed in the island, while macOS has no lasting answer. The prompt itself comes only from Allow in Settings → Permissions. macOS asks for Downloads folder access the first time the downloads module reads the folder.
-- **Off by default:** clipboard history, download progress, notification mirroring, script widgets, the LAN bridge, replacing the system HUD, and reminders.
+- **Off by default:** clipboard history, download progress, notification mirroring, script widgets, the LAN bridge, replacing the system HUD, reminders, the camera mirror, the teleprompter, stocks, sales, and OpenRouter, Copilot and Ollama usage. The camera is asked for only from the Mirror page's **Allow camera** or Settings → Permissions, and runs only while that page is open.
 - **Accessibility reads are narrow and stay in memory.** Menu bar measurement reads frames only. Live Activity mirroring reads only MenuBarAgent's items and the renderer's content. Notification mirroring reads the text a banner shows and ignores the Notification Center panel. None of it is written to disk or logs.
 - **Clipboard history** lives in memory. It skips content marked concealed, transient or auto-generated (the nspasteboard.org conventions), copies from password managers and from apps the user lists (`clipboardIgnoredApps`), and, with `clipboardSkipSecrets` (on by default), one-line text that looks like a password when a browser copied it, since password manager extensions copy as the browser. Switching it off forgets everything, pinned items too. When Islet copies the API token, it marks it concealed and keeps it off Universal Clipboard.
-- **On disk:** `config.json` in `~/.config/islet` (or `$XDG_CONFIG_HOME/islet`), and `api.json` (0600), `shelf.json`, `timers.json` and `usage/claude.json` (0600) in `~/Library/Application Support/Islet`. API keys are in the Keychain.
+- **On disk:** `config.json` in `~/.config/islet` (or `$XDG_CONFIG_HOME/islet`), and `api.json` (0600), `shelf.json`, `timers.json`, `usage/claude.json` (0600) and `teleprompter.txt` (0600) in `~/Library/Application Support/Islet`. API, store, OpenRouter and GitHub keys are in the Keychain (service `dev.islet.Islet.ai`).
 - **Files are never lost to a parse error.** `SettingsFile` (`IsletCore`) reads `config.json` as loaded, missing or unreadable (with the line). Unreadable keeps the settings in use and refuses every save until the file parses or the user chooses Replace in Advanced, which keeps a copy as `config.json.broken`. Each file that parses (read or saved) is also copied to `config-last-good.json` in the support folder, so a file already broken at launch starts from that copy (`SettingsFile.open()`) instead of the defaults. Saving merges into the file, so keys this build doesn't know survive. An unreadable `shelf.json` or `timers.json` is moved to `<name>.corrupt` before the store starts empty (`JSONStore.start`); if it can't be moved, the store doesn't save that session. Shelf items on a volume that isn't mounted stay, dimmed, instead of being pruned.
-- **What leaves the Mac:** an Ask question sent to a cloud provider, directly or through its CLI, and a model-list request when a key is saved or the list is refreshed; images given to Islet as URLs (activity icons, artwork); and Spotify cover art from `open.spotify.com` when the MediaRemote bridge isn't running. Smart icons and notification summaries use the on-device model or nothing.
+- **What leaves the Mac:** an Ask question sent to a cloud provider, directly or through its CLI, and a model-list request when a key is saved or the list is refreshed; images given to Islet as URLs (activity icons, artwork); and Spotify cover art from `open.spotify.com` when the MediaRemote bridge isn't running. Once turned on: today's sales from the stores the user connects, stock prices from Yahoo Finance while the Stocks page is open, and usage from OpenRouter and GitHub with the keys the user pasted. Islet never reads another app's sign-in tokens. Smart icons and notification summaries use the on-device model or nothing.
 - **Script widgets run only if trusted:** the user must own the script and its folder, and nobody else may be able to write to them. The first time in a session that a widget's menu item would run a command, Islet shows the command and asks.
 - **Hide from screenshots** (`hideFromScreenCapture`, off by default) sets the island panel's `sharingType` to `.none`, which keeps it out of screenshots. ScreenCaptureKit is reported to ignore `sharingType` from macOS 15, so some screen-sharing and recording apps may still show the island, and Settings says so; this hasn't been checked on macOS 26 or 27. While it is on, glass surfaces draw their solid fill, because a window kept out of captures can lose the backdrop Liquid Glass samples and draw it black.
 
@@ -245,8 +263,8 @@ Claude Code and Codex plan usage come from local files. Nothing polls and nothin
 
 | Layer | How |
 |---|---|
-| Core logic | `make test`: presenter, activity centre, arbiter, hover intent, gestures, keep awake, HTTP parser, router (auth, CSRF, rebinding), URL scheme, hooks and approvals, risk rules, templates and catalogue, timers and durations, menu bar layout and Live Activity recognition, Ask decoders, usage parsing, status line setup, settings, calls, notifications, downloads, smart icons |
-| System adapters | `make test`: real sockets (API server, held long-polls, LAN rate limit, LAN token, early 401, body and connection limits, malformed requests), IOKit/Music/Spotify/MediaRemote parsers, script runner (output, exit codes, timeouts), Safari/Chrome partial downloads, shelf persistence, discovery-file permissions, Ask service with fake transports and CLIs, Keychain queries, usage file watching, hook installer, menu bar inspector |
+| Core logic | `make test`: presenter, activity centre, arbiter, hover intent, gestures, keep awake, HTTP parser, router (auth, CSRF, rebinding), URL scheme, hooks and approvals, risk rules, templates and catalogue, timers and durations, menu bar layout and Live Activity recognition, Ask decoders, usage parsing (Claude, Codex, OpenRouter, Copilot, Ollama), status line setup, settings, calls, notifications, downloads, smart icons, sales requests and replies for seven stores, stock quotes and sparklines, teleprompter pace and position, tool refresh schedules |
+| System adapters | `make test`: real sockets (API server, held long-polls, LAN rate limit, LAN token, early 401, body and connection limits, malformed requests), IOKit/Music/Spotify/MediaRemote parsers, script runner (output, exit codes, timeouts), Safari/Chrome partial downloads, shelf persistence, discovery-file permissions, Ask service with fake transports and CLIs, tools service with fake transports (pages, host limits, refused redirects, offline), Keychain queries, usage file watching, hook installer, menu bar inspector |
 | End to end | `make e2e`: launches the real app with isolated config and port; drives the CLI, HTTP, URL scheme, agent and zsh hooks, plugins, MCP and the LAN bridge; checks window level and placement, single instance, clean shutdown, idle CPU and memory. `make e2e-media` adds the MediaRemote bridge, which skips itself if something is playing. |
 | Performance | `make perf`: CPU in seven island states against the budgets above |
 | Visual | `make snapshots`: renders every island state to PNG offline, with sample content and a scratch config. `make settings-snapshots`: renders every Settings page in light and dark, and a page of search results, in a child process whose home folder is temporary |
