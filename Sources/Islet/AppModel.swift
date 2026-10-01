@@ -67,6 +67,8 @@ final class AppModel {
     /// Meeting reminders: the meetings you joined or dismissed, and those already announced.
     private(set) var meetings = MeetingReminders()
     private(set) var shelf = Shelf()
+    /// Shelf items that can't be opened now (their disk or share isn't there): shown dimmed.
+    private(set) var shelfUnavailable: Set<String> = []
     private(set) var clipboard = ClipboardHistory()
     private(set) var stats: SystemStats?
     private(set) var plugins: [String: PluginResult] = [:]
@@ -77,8 +79,9 @@ final class AppModel {
     /// Display the island is expanded on (nil = collapsed everywhere).
     var expandedScreen: CGDirectDisplayID?
     var tab: IslandTab = .home
-    /// Displays covered by a fullscreen app, and that app.
-    private(set) var fullscreenDisplays: Set<CGDirectDisplayID> = []
+    /// The app in full screen on each display that has one (its bundle id, "" without one),
+    /// whichever app is in front.
+    private(set) var fullscreenApps: [CGDirectDisplayID: String] = [:]
     private(set) var frontBundleID: String?
     /// Bumped whenever time-driven state changes, so views re-evaluate the presentation.
     private(set) var tick = 0
@@ -234,9 +237,11 @@ final class AppModel {
         media.disabled = Set(settings.disabledMediaSources)
         media.hidden = Set(settings.hiddenMediaApps)
         shelfService.onChange = { [weak self] s in self?.shelf = s }
+        shelfService.onAvailability = { [weak self] ids in self?.shelfUnavailable = ids }
+        shelfUnavailable = shelfService.unavailable
 
-        fullscreen.onChange = { [weak self] displays, bundle in
-            self?.fullscreenDisplays = displays
+        fullscreen.onChange = { [weak self] apps, bundle in
+            self?.fullscreenApps = apps
             self?.frontBundleID = bundle
         }
         fullscreen.start()
@@ -285,7 +290,8 @@ final class AppModel {
             for id in calls.active.keys.map(CallDetector.activityID) { remove(activityID: id) }
             calls = CallDetector()
         }
-        if settings.notificationMirroring {
+        let inFront = SessionWork.runs(sessionActive: sessionActive)
+        if settings.notificationMirroring && inFront {
             notificationMirror.onNotification = { [weak self] n in self?.mirrored(n) }
             notificationMirror.start()
         } else {
@@ -303,7 +309,7 @@ final class AppModel {
         }
         unlock.onUnlock = { [weak self] in self?.welcomeBack() }
         if settings.unlockSplash { unlock.start() } else { unlock.stop() }
-        if settings.mirrorMenuBarActivities && MenuBarLiveActivityMonitor.isAvailable {
+        if settings.mirrorMenuBarActivities && inFront && MenuBarLiveActivityMonitor.isAvailable {
             menuBarActivities.onChange = { [weak self] list in self?.syncMenuBarActivities(list) }
             menuBarActivities.knownApp = { $0.count <= 24 && LiveActivityCatalog.look(for: $0) != nil }
             menuBarActivities.onStructureChange = { NotificationCenter.default.post(name: .isletMenuBarChanged, object: nil) }
@@ -377,6 +383,10 @@ final class AppModel {
         systemMedia.start()
         syncPlayers()
     }
+
+    /// False while this user's session is in the background (fast user switching): nothing
+    /// reads the menu bar or banners then (`SessionWork`).
+    @ObservationIgnored var sessionActive = true
 
     /// Low Power Mode: the island's loops hold still (`IslandLoops`). Follows the system's
     /// notification; never polled.
@@ -834,7 +844,8 @@ final class AppModel {
     /// What full screen asks of the island on `display` now (`show` when nothing is in full
     /// screen there, or the front app's rule keeps the island).
     func fullscreenBehaviour(on display: CGDirectDisplayID) -> FullscreenBehaviour {
-        settings.fullscreenEffect(isFullscreen: fullscreenDisplays.contains(display), frontApp: frontBundleID)
+        // The rule that counts is the full screen app's on that display, not the front app's.
+        settings.fullscreenEffect(isFullscreen: fullscreenApps[display] != nil, frontApp: fullscreenApps[display])
     }
 
     /// The pointer reached the closed island on `display`, or left it (nil).

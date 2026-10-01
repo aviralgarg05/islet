@@ -427,3 +427,153 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         #expect(cursor.statusUpdate(backToTerminal: .jumpFailed).subtitle?.hasPrefix("Couldn't bring the terminal forward") == true)
     }
 }
+
+@Suite struct FullscreenCoverageTests {
+    // Two displays side by side, in the window list's coordinates (y down).
+    let builtIn = DisplayArea(id: 1, bounds: CGRect(x: 0, y: 0, width: 1512, height: 982))
+    let external = DisplayArea(id: 2, bounds: CGRect(x: 1512, y: 0, width: 2560, height: 1440))
+    let menuLevel = 24
+    func menuBar(on d: DisplayArea) -> ScreenWindow { ScreenWindow(bounds: CGRect(x: d.bounds.minX, y: 0, width: d.bounds.width, height: 33), layer: menuLevel, pid: 1) }
+
+    @Test func aVideoInFullScreenStaysCoveredWhileYouWorkOnTheOtherDisplay() {
+        // The editor on the external display is in front; the video app's window still fills the built-in one.
+        let windows = [
+            menuBar(on: external),
+            ScreenWindow(bounds: CGRect(x: 1700, y: 100, width: 1200, height: 900), layer: 0, pid: 20),
+            ScreenWindow(bounds: builtIn.bounds, layer: 0, pid: 10),
+        ]
+        #expect(FullscreenCoverage.coveringApps(windows: windows, displays: [builtIn, external], menuLevel: menuLevel,
+                                                menuBarAutoHides: false) == [1: 10])
+    }
+
+    @Test func aDisplayWithItsMenuBarIsNeverCovered() {
+        let windows = [menuBar(on: builtIn), ScreenWindow(bounds: builtIn.bounds, layer: 0, pid: 10)]
+        #expect(FullscreenCoverage.coveringApps(windows: windows, displays: [builtIn], menuLevel: menuLevel, menuBarAutoHides: false).isEmpty)
+    }
+
+    @Test func aLargeWindowUnderAnAutoHiddenMenuBarDoesntCountUnlessConfirmed() {
+        let windows = [ScreenWindow(bounds: builtIn.bounds, layer: 0, pid: 10)]
+        let unconfirmed = FullscreenCoverage.coveringApps(windows: windows, displays: [builtIn], menuLevel: menuLevel, menuBarAutoHides: true)
+        #expect(unconfirmed.isEmpty)
+        let confirmed = FullscreenCoverage.coveringApps(windows: windows, displays: [builtIn], menuLevel: menuLevel, menuBarAutoHides: true) { _, _ in true }
+        #expect(confirmed == [1: 10])
+        // Accessibility saying "not in full screen" wins over the shape of the window.
+        let zoomed = FullscreenCoverage.coveringApps(windows: windows, displays: [builtIn], menuLevel: menuLevel, menuBarAutoHides: false) { _, _ in false }
+        #expect(zoomed.isEmpty)
+    }
+
+    @Test func onlyTheFrontmostWindowOnTheDisplayCounts() {
+        // A smaller window in front of a large one: not full screen.
+        let windows = [ScreenWindow(bounds: CGRect(x: 100, y: 100, width: 600, height: 400), layer: 0, pid: 30),
+                       ScreenWindow(bounds: builtIn.bounds, layer: 0, pid: 10)]
+        #expect(FullscreenCoverage.coveringApps(windows: windows, displays: [builtIn], menuLevel: menuLevel, menuBarAutoHides: false).isEmpty)
+        // Content placed below the camera housing still counts.
+        let notched = [ScreenWindow(bounds: CGRect(x: 0, y: 32, width: 1512, height: 950), layer: 0, pid: 10)]
+        #expect(FullscreenCoverage.coveringApps(windows: notched, displays: [builtIn], menuLevel: menuLevel, menuBarAutoHides: false) == [1: 10])
+        #expect(FullscreenCoverage.followUpLooks == [0.6, 2])
+    }
+}
+
+@Suite struct SessionWorkTests {
+    @Test func aGrantRestartsOnlyWhatUsesIt() {
+        var s = IsletSettings()
+        s.closedLayout = .wings
+        s.mirrorMenuBarActivities = false
+        // Nothing uses Accessibility: nothing to restart.
+        #expect(!SessionWork.restartsOnTrustChange(wasTrusted: false, isTrusted: true, settings: s))
+        s.mirrorMenuBarActivities = true
+        #expect(SessionWork.restartsOnTrustChange(wasTrusted: false, isTrusted: true, settings: s))
+        // Taken away: what used it stops.
+        #expect(SessionWork.restartsOnTrustChange(wasTrusted: true, isTrusted: false, settings: s))
+        // No change, or nothing known before: nothing to do.
+        #expect(!SessionWork.restartsOnTrustChange(wasTrusted: true, isTrusted: true, settings: s))
+        #expect(!SessionWork.restartsOnTrustChange(wasTrusted: nil, isTrusted: true, settings: s))
+        #expect(SessionWork.runs(sessionActive: true) && !SessionWork.runs(sessionActive: false))
+    }
+}
+
+@Suite struct DisplayPolicyTests {
+    let lid = ScreenDescriptor(id: 1, name: "Built-in", frame: CGRect(x: 0, y: 0, width: 1512, height: 982), safeAreaTop: 32,
+                               auxiliaryLeftWidth: 664, auxiliaryRightWidth: 664, isBuiltIn: true)
+    let monitor = ScreenDescriptor(id: 7, name: "Studio Display", frame: CGRect(x: 1512, y: 0, width: 2560, height: 1440), safeAreaTop: 0)
+
+    @Test func panelsAreRemadeWhenTheDisplaysChangeOrAfterWaking() {
+        #expect(!DisplayPolicy.needsRebuild(current: [lid, monitor], wanted: [lid, monitor], force: false))
+        // Lid closed: only the monitor.
+        #expect(DisplayPolicy.needsRebuild(current: [lid, monitor], wanted: [monitor], force: false))
+        // Back from sleep with a new id for the same monitor.
+        var renamed = monitor
+        renamed.id = 8
+        #expect(DisplayPolicy.needsRebuild(current: [lid, monitor], wanted: [lid, renamed], force: false))
+        // A resolution change.
+        var scaled = lid
+        scaled.frame.size = CGSize(width: 1352, height: 878)
+        #expect(DisplayPolicy.needsRebuild(current: [lid], wanted: [scaled], force: false))
+        // Notch areas that settled after waking.
+        var settled = lid
+        settled.auxiliaryLeftWidth = nil
+        #expect(DisplayPolicy.needsRebuild(current: [settled], wanted: [lid], force: false))
+        // After waking, always, then a second look that rebuilds only if something changed.
+        #expect(DisplayPolicy.needsRebuild(current: [lid], wanted: [lid], force: true))
+        #expect(DisplayPolicy.wakeLooks.map(\.force) == [true, false])
+        #expect(DisplayPolicy.wakeLooks.map(\.delay) == [1, 2.5])
+    }
+}
+
+@Suite struct BannerDeduperTests {
+    func at(_ s: TimeInterval) -> Date { t0.addingTimeInterval(s) }
+
+    @Test func eachBannerOnceAndRepeatsWithTheSameWordsToo() {
+        var d = BannerDeduper<Int>()
+        var said: [Bool] = []
+        // Banner 1 seen twice while up, then a second banner with the same words (element 2).
+        for (banner, t) in [(1, 0.0), (1, 5.0), (2, 20.0)] { said.append(d.isNew(banner, now: at(t))) }
+        #expect(said == [true, false, true])
+        // Seen again a minute later, when Notification Center redraws: still not news.
+        let again = d.isNew(1, now: at(65))
+        #expect(!again)
+        // Remembered for ten minutes after it was last seen.
+        let much = d.isNew(1, now: at(65 + BannerDeduper<Int>.keepFor))
+        #expect(much)
+    }
+
+    @Test func bannersAlreadyUpWhenMirroringStartsArentNews() {
+        var d = BannerDeduper<Int>()
+        d.prime([3, 4], now: at(0))
+        let old = d.isNew(3, now: at(1))
+        let fresh = d.isNew(5, now: at(1))
+        #expect(!old && fresh)
+    }
+}
+
+@Suite struct ShelfCheckTests {
+    @Test func aFileOnAMissingVolumeStaysAndOneGoneFromAMountedVolumeGoes() {
+        let mounted: Set<String> = ["/Volumes/Backup", "/Volumes/Backup/a.pdf"]
+        #expect(ShelfCheck.check(path: "/Volumes/Backup/a.pdf", exists: mounted.contains) == .present)
+        #expect(ShelfCheck.check(path: "/Volumes/Backup/b.pdf", exists: mounted.contains) == .gone)
+        #expect(ShelfCheck.check(path: "/Volumes/Share/c.pdf", exists: mounted.contains) == .unreachable)
+        #expect(Shelf.isOnStartupDisk(ShelfItem(path: "/Users/a/c.pdf", addedAt: t0)))
+        #expect(!Shelf.isOnStartupDisk(ShelfItem(path: "/Volumes/Share/c.pdf", addedAt: t0)))
+    }
+
+    @Test func aBookmarkMadeLaterIsKept() {
+        var shelf = Shelf()
+        shelf.add(paths: ["/Users/a/c.pdf"], now: t0)
+        shelf.setBookmark(Data([1, 2]), forPath: "/Users/a/c.pdf")
+        #expect(shelf.items.first?.bookmark == Data([1, 2]))
+    }
+}
+
+@Suite struct NarrowDisplayWingTests {
+    @Test func unmeasuredWingsAreIconOnlyOnANarrowDisplay() {
+        func wing(_ width: CGFloat) -> CGFloat {
+            MenuBarLayoutEngine.wingWidth(preference: .auto, notch: .zero, preferredWing: 58, occupancy: nil, hasMenuBar: true, displayWidth: width)
+        }
+        #expect(wing(1470) == MenuBarLayoutEngine.iconOnlyWing)
+        #expect(wing(1512) == MenuBarLayoutEngine.unmeasuredWing)
+        #expect(MenuBarLayoutEngine.wingWidth(preference: .auto, notch: .zero, preferredWing: 58, occupancy: nil, hasMenuBar: true)
+            == MenuBarLayoutEngine.unmeasuredWing)
+        // Always full width, or no menu bar: as before.
+        #expect(MenuBarLayoutEngine.wingWidth(preference: .wings, notch: .zero, preferredWing: 58, occupancy: nil, hasMenuBar: true, displayWidth: 1300) == 58)
+    }
+}

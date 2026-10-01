@@ -192,3 +192,35 @@ public enum PermissionPrompt {
         return isOn && !wasOn
     }
 }
+
+/// Background work that follows the user's session and permissions: reading the menu bar,
+/// banners and keys through Accessibility, and following the pointer.
+public enum SessionWork {
+    /// Accessibility was granted or taken away: whether to start (or stop) what uses it now,
+    /// rather than at the next launch. Nothing changes for a grant nobody uses.
+    /// - Parameter wasTrusted: what Islet knew before, nil before the first look.
+    public static func restartsOnTrustChange(wasTrusted: Bool?, isTrusted: Bool, settings: IsletSettings) -> Bool {
+        guard let was = wasTrusted, was != isTrusted else { return false }
+        return PermissionKind.accessibility.uses(settings).contains(where: \.isOn)
+    }
+
+    /// Whether the menu bar and banner readers, the key tap and the pointer watchers run. After
+    /// fast user switching this session is in the background and none of them do; back in front,
+    /// they start again as the settings say.
+    public static func runs(sessionActive: Bool) -> Bool { sessionActive }
+}
+
+/// When the island's panels are made again.
+public enum DisplayPolicy {
+    /// After waking: the displays are looked at once they have settled, rebuilt whatever they
+    /// say (the same displays can come back with other values, or panels that no longer draw),
+    /// then once more in case something settled later.
+    public static let wakeLooks: [(delay: TimeInterval, force: Bool)] = [(1, true), (2.5, false)]
+
+    /// Whether the panels must be made again: forced after waking, or because the displays
+    /// (which ones, in what order, at what size and with what notch) differ from the ones the
+    /// panels were made for.
+    public static func needsRebuild(current: [ScreenDescriptor], wanted: [ScreenDescriptor], force: Bool) -> Bool {
+        force || current != wanted
+    }
+}

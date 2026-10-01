@@ -265,6 +265,27 @@ func request(_ port: UInt16, _ method: String, _ path: String, token: String? = 
         try FileManager.default.removeItem(at: file)
         #expect(ShelfService(storeURL: store).shelf.items.isEmpty)
     }
+
+    /// A share that doesn't answer: launch isn't held up, and its files are dimmed, not dropped.
+    @MainActor @Test func aSlowShareNeitherBlocksNorLosesFiles() async throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = dir.appendingPathComponent("shelf.json")
+        var saved = Shelf()
+        saved.add(paths: ["/Volumes/IsletTestShare/report.pdf"], now: Date())
+        try JSONEncoder().encode(saved).write(to: store)
+        let started = Date()
+        let shelf = ShelfService(storeURL: store, exists: { _ in Thread.sleep(forTimeInterval: 1); return false }, volumeTimeout: 0.2)
+        #expect(Date().timeIntervalSince(started) < 0.5)
+        #expect(shelf.shelf.items.count == 1)
+        let id = try #require(shelf.shelf.items.first?.id)
+        for _ in 0..<50 where !shelf.unavailable.contains(id) { try await Task.sleep(nanoseconds: 20_000_000) }
+        #expect(shelf.unavailable.contains(id))
+        // The answer, when it comes (the volume isn't there), keeps it dimmed and on the shelf.
+        for _ in 0..<100 { try await Task.sleep(nanoseconds: 20_000_000) }
+        #expect(shelf.unavailable.contains(id))
+        #expect(shelf.shelf.items.count == 1)
+    }
 }
 
 @Suite struct HostProbeTests {

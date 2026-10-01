@@ -723,7 +723,8 @@ struct FileTile: View {
     var body: some View {
         let url = URL(fileURLWithPath: item.path)
         // On a disk or share that isn't connected: kept, dimmed, until it comes back.
-        let available = Shelf.isAvailable(item) { FileManager.default.fileExists(atPath: $0) }
+        // Checked in the background (`ShelfService.checkVolumes`), never while drawing.
+        let available = !model.shelfUnavailable.contains(item.id)
         VStack(spacing: Space.xs) {
             Image(nsImage: IconCache.file(item.path, size: 48))
                 .resizable()

@@ -210,6 +210,33 @@ public struct Shelf: Codable, Equatable, Sendable {
         guard let i = items.firstIndex(where: { $0.id == id }) else { return }
         items[i].path = path
     }
+
+    /// The bookmark for an item, made after it was added (away from the main thread).
+    public mutating func setBookmark(_ data: Data?, forPath path: String) {
+        guard let i = items.firstIndex(where: { $0.path == path }) else { return }
+        items[i].bookmark = data
+    }
+
+    /// Items on the startup disk are quick to check, so they are checked at once. Ones on
+    /// another volume (an external disk, or a network share that may not answer) are checked
+    /// away from the main thread (`ShelfCheck`).
+    public static func isOnStartupDisk(_ item: ShelfItem) -> Bool { volume(of: item.path) == nil }
+}
+
+/// What a look at a shelf file on another volume found.
+public enum ShelfCheck: Equatable, Sendable {
+    /// The file is there.
+    case present
+    /// Its volume is there and the file isn't: it leaves the shelf.
+    case gone
+    /// Its volume isn't mounted (or didn't answer in time): it stays, dimmed, until it is back.
+    case unreachable
+
+    public static func check(path: String, exists: (String) -> Bool) -> ShelfCheck {
+        if exists(path) { return .present }
+        if let volume = Shelf.volume(of: path), !exists(volume) { return .unreachable }
+        return .gone
+    }
 }
 
 // MARK: - System stats

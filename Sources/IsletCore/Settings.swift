@@ -553,6 +553,7 @@ public struct IsletSettings: Codable, Equatable, Sendable {
 
     /// What full screen asks of the island on a display: nothing (`show`) unless an app is in
     /// full screen there and the front app's rule doesn't keep the island.
+    /// - Parameter frontApp: the app in full screen there; its rule may keep the island.
     public func fullscreenEffect(isFullscreen: Bool, frontApp: String?) -> FullscreenBehaviour {
         guard isFullscreen, rule(for: frontApp)?.showInFullscreen != true else { return .show }
         return fullscreenBehaviour

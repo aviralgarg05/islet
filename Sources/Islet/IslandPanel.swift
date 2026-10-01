@@ -210,7 +210,8 @@ final class IslandWindowController {
         }
         MenuBarInspector.measure(notch: notch, screenFrame: descriptor.frame) { [weak self] occupancy in
             guard let self else { return }
-            let measured = MenuBarLayoutEngine.wingWidth(preference: preference, notch: notch, preferredWing: preferred, occupancy: occupancy, hasMenuBar: true)
+            let measured = MenuBarLayoutEngine.wingWidth(preference: preference, notch: notch, preferredWing: preferred, occupancy: occupancy,
+                                                         hasMenuBar: true, displayWidth: self.descriptor.frame.width)
             let current = self.model.closedPlacements[display]
             var wing = measured
             if let kept = current?.wing, !MenuBarLayoutEngine.shouldReplace(kept, with: measured, preferredWing: preferred) { wing = kept }

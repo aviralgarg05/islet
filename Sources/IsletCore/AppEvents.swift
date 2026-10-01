@@ -208,6 +208,32 @@ public struct MirroredNotification: Equatable, Sendable {
     }
 }
 
+/// Which banners to mirror. Each banner (one on-screen element) is mirrored once: seen again
+/// while it is up, or when Notification Center redraws, it isn't news, and banners already on
+/// screen when mirroring starts aren't either. A new banner with the same words (a second "ok"
+/// from the same person) is mirrored like any other.
+public struct BannerDeduper<Banner: Hashable & Sendable>: Sendable {
+    /// How long a banner is remembered after it was last seen.
+    public static var keepFor: TimeInterval { 600 }
+
+    private var seen: [Banner: Date] = [:]
+
+    public init() {}
+
+    /// Banners already on screen when mirroring starts: remembered, not mirrored.
+    public mutating func prime(_ banners: [Banner], now: Date) {
+        for b in banners { seen[b] = now }
+    }
+
+    /// Whether `banner` should be mirrored now. Either way it is remembered.
+    public mutating func isNew(_ banner: Banner, now: Date) -> Bool {
+        seen = seen.filter { now.timeIntervalSince($0.value) < Self.keepFor }
+        let new = seen[banner] == nil
+        seen[banner] = now
+        return new
+    }
+}
+
 public enum NotificationParser {
     /// Accessibility labels that are controls, not content.
     static let noise: Set<String> = ["close", "clear", "options", "show", "reply", "mark as read", "open", "more", "dismiss", "snooze"]

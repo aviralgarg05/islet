@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setUpHUD()
         setUpHotkey()
         rebuildPanels()
+        lastTrusted = MediaKeyInterceptor.hasAccessibility
         panelSettings = PanelSettings(model.settings)
         pointer.start()
         setUpStatusItem()
@@ -59,21 +60,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { self?.scheduleMenuBarMeasure(after: 0.1) }
         }
         nc.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.retryKeyTap() }
+            MainActor.assumeIsolated { self?.accessibilityMayHaveChanged() }
         }
         // Posted when any app's Accessibility permission changes; the new answer can take a
         // moment to read back.
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("com.apple.accessibility.api"), object: nil,
                                                             queue: .main) { [weak self] _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                MainActor.assumeIsolated { self?.retryKeyTap() }
+                MainActor.assumeIsolated { self?.accessibilityMayHaveChanged() }
             }
         }
         let wnc = NSWorkspace.shared.notificationCenter
-        for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification, NSWorkspace.activeSpaceDidChangeNotification] {
+        for name in [NSWorkspace.screensDidWakeNotification, NSWorkspace.activeSpaceDidChangeNotification] {
             wnc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.scheduleRebuild() }
             }
+        }
+        wnc.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.didWake() }
+        }
+        // Fast user switching: in the background session nothing reads the menu bar, banners or
+        // keys, and the pointer isn't followed. It all starts again on the way back.
+        wnc.addObserver(forName: NSWorkspace.sessionDidResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.setSessionActive(false) }
+        }
+        wnc.addObserver(forName: NSWorkspace.sessionDidBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.setSessionActive(true) }
         }
         // The space beside the notch changes when app menus change (switching apps) or when
         // status items come and go (apps launching and quitting).
@@ -115,6 +127,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return chosen
     }
 
+    // MARK: Sleep, session and permission changes
+
+    private var wakeWork: [DispatchWorkItem] = []
+
+    /// Back from sleep: the panels are made again once the displays have settled, and looked at
+    /// once more later (`DisplayPolicy.wakeLooks`); the key tap and the shortcuts are set up
+    /// afresh, since either can be lost across sleep.
+    private func didWake() {
+        wakeWork.forEach { $0.cancel() }
+        wakeWork = DisplayPolicy.wakeLooks.map { look in
+            let work = DispatchWorkItem { [weak self] in
+                MainActor.assumeIsolated { self?.rebuildPanels(force: look.force) }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + look.delay, execute: work)
+            return work
+        }
+        keys.stop()
+        setUpHUD()
+        setUpHotkey()
+    }
+
+    private func setSessionActive(_ active: Bool) {
+        guard model.sessionActive != active else { return }
+        model.sessionActive = active
+        model.startEventSources()
+        if SessionWork.runs(sessionActive: active) {
+            setUpHUD()
+            pointer.start()
+            scheduleRebuild()
+        } else {
+            keys.stop()
+            pointer.stop()
+        }
+    }
+
+    /// What Islet last knew about its Accessibility permission.
+    private var lastTrusted: Bool?
+
+    /// Accessibility granted in System Settings (or taken away) while Islet was running: start
+    /// or stop what uses it now, rather than at the next launch. Called when macOS says
+    /// Accessibility changed and when Islet comes to the front; never polled.
+    private func accessibilityMayHaveChanged() {
+        let trusted = MediaKeyInterceptor.hasAccessibility
+        defer { lastTrusted = trusted }
+        if SessionWork.restartsOnTrustChange(wasTrusted: lastTrusted, isTrusted: trusted, settings: model.settings) {
+            model.startEventSources()
+            scheduleMenuBarMeasure(after: 0.1)
+        }
+        retryKeyTap()
+    }
+
     /// Displays settle in several steps after plugging, waking or changing arrangement.
     private func scheduleRebuild() {
         rebuildWork?.cancel()
@@ -137,11 +200,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
-    private func rebuildPanels() {
+    /// - Parameter force: make the panels again even when the displays look the same (after
+    ///   waking, when a panel may no longer draw though nothing about the display changed).
+    private func rebuildPanels(force: Bool = false) {
         let screens = targetScreens()
-        let current = controllers.map { ($0.display, $0.descriptor) }
-        let wanted = screens.map { (($0.displayID ?? 0), IslandWindowController.describe($0)) }
-        if current.count == wanted.count, zip(current, wanted).allSatisfy({ $0.0 == $1.0 && $0.1 == $1.1 }) {
+        let wanted = screens.map(IslandWindowController.describe)
+        guard DisplayPolicy.needsRebuild(current: controllers.map(\.descriptor), wanted: wanted, force: force) else {
             controllers.forEach { $0.panel.orderFrontRegardless() }
             return
         }
@@ -224,6 +288,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var replacedHUD: Bool?
 
     private func setUpHUD() {
+        // In the background session (fast user switching) the key tap stays off.
+        guard model.sessionActive else {
+            keys.stop()
+            return
+        }
         if model.settings.brightnessHUDEnabled {
             brightness.onChange = { [weak self] v in
                 // Intercepted keys show the HUD themselves; otherwise macOS takes the keys and this shows it.
@@ -254,7 +323,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Settings directly): start the key tap now rather than at the next launch. Called when
     /// macOS says Accessibility changed and when Islet comes to the front; never polled.
     private func retryKeyTap() {
-        guard model.settings.replaceSystemHUD, !keys.isRunning, MediaKeyInterceptor.hasAccessibility else { return }
+        guard model.sessionActive, model.settings.replaceSystemHUD, !keys.isRunning, MediaKeyInterceptor.hasAccessibility else { return }
         keys.start()
     }
 
