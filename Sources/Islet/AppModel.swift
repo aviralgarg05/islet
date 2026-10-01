@@ -55,6 +55,14 @@ final class AppModel {
     private(set) var batteryEvent: BatteryEvent?
     private(set) var agenda: [AgendaItem] = []
     private(set) var reminders: [ReminderItem] = []
+    /// What macOS allows for calendars and reminders, read again when Islet becomes active, when
+    /// an Allow is answered and when the island opens while the calendar isn't working.
+    private(set) var calendarAccess = CalendarAccessState.current
+    /// Calendars or reminders whose Allow macOS answered with no this session: the next press
+    /// opens System Settings instead (macOS doesn't ask twice).
+    private(set) var calendarRefused: Set<PermissionKind> = []
+    /// Meeting reminders: the meetings you joined or dismissed, and those already announced.
+    private(set) var meetings = MeetingReminders()
     private(set) var shelf = Shelf()
     private(set) var clipboard = ClipboardHistory()
     private(set) var stats: SystemStats?
@@ -150,22 +158,53 @@ final class AppModel {
     private var server: LocalAPIServer?
     private var deadlineTimer: Timer?
     private var batteryDetector = BatteryEventDetector()
-    private var calendarTimer: Timer?
     private var dayObserver: NSObjectProtocol?
     /// What `applyModules()` has started.
     private var modules = RunningModules()
-    /// Calendar and reminder alerts already shown, by occurrence, with when they were for.
-    private var alertedEvents: [String: Date] = [:]
+    /// Reminder alerts already shown, by occurrence, with when they were for.
+    private var alertedReminders: [String: Date] = [:]
+    /// Where meeting reminders are kept; nil until `start()`, so snapshots never write it.
+    @ObservationIgnored private var meetingsURL: URL?
+    @ObservationIgnored private var canSaveMeetings = true
+    /// The meeting reminders on show, by activity id, and the spec each was last applied with.
+    @ObservationIgnored private var shownMeetings: [String: (reminder: MeetingReminder, spec: ActivitySpec)] = [:]
+    @ObservationIgnored private var systemObservers: [NSObjectProtocol] = []
     /// Activities already sent to the on-device model for an icon.
     private var iconAttempts: Set<String> = []
     private var settingsWatcher: DispatchSourceFileSystemObject?
+    /// config.json, which is never written over while it doesn't parse.
+    @ObservationIgnored private var configFile: SettingsFile
+    /// Set while config.json doesn't parse: Islet keeps its last good settings and saves
+    /// nothing until the file is fixed or replaced (Settings → Advanced).
+    private(set) var settingsProblem: FileProblem?
+    /// Where the settings in use came from while `settingsProblem` is set: the last good copy,
+    /// or the defaults when config.json was already broken at launch and there was no copy.
+    private(set) var settingsOrigin: SettingsFile.Origin = .file
 
-    /// `ask` is replaceable so Settings snapshots keep API keys in memory instead of the Keychain.
-    init(settings: IsletSettings = IsletSettings.load(from: IsletPaths.configFile), ask: AskController? = nil) {
+    /// With no `settings`, they are read from config.json (or, when it doesn't parse, from the
+    /// copy of the last one that did). `ask` is replaceable so Settings snapshots keep API keys
+    /// in memory instead of the Keychain.
+    init(settings: IsletSettings? = nil, ask: AskController? = nil) {
+        var file = SettingsFile(url: IsletPaths.configFile, lastGood: IsletPaths.lastGoodConfigFile)
+        var origin = SettingsFile.Origin.file
+        let start: IsletSettings
+        if let settings {
+            start = settings
+        } else {
+            let opened = file.open()
+            start = opened.settings
+            origin = opened.origin
+        }
+        let settings = start
+        configFile = file
+        settingsProblem = file.problem
+        settingsOrigin = origin
         self.settings = settings
         self.ask = ask ?? AskController()
         shelf = shelfService.shelf
         clipboard = ClipboardHistory(limit: settings.clipboardLimit)
+        clipboard.ignoredApps = Set(settings.clipboardIgnoredApps)
+        clipboard.skipsSecrets = settings.clipboardSkipSecrets
         songPeek.duration = settings.alertDuration
     }
 
@@ -184,8 +223,23 @@ final class AppModel {
         applyTiming()
         timers.start()
         tools.stopwatch.start()
+        loadMeetings()
         startEventSources()
         watchSettingsFile()
+        // Once per launch: hooks left pointing at an isletctl that moved fail silently.
+        checkAgentHooks()
+        // Back from System Settings, calendar access may have changed; it starts at once.
+        systemObservers.append(NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.recheckCalendarAccess() }
+        })
+        // Timers don't count time asleep: catch up on what fell due (a meeting that started).
+        systemObservers.append(NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.expireNow() }
+        })
     }
 
     /// Everything that depends on settings; safe to call again after changes.
@@ -284,12 +338,31 @@ final class AppModel {
             // Fall back to per-player enrichment. It uses AppleScript only where Automation is
             // already allowed, so this never brings up the prompt; Settings → Permissions does.
             NSLog("Islet: %@", reason)
-            self?.music.enrich = true
-            self?.spotify.enrich = true
+            self?.bridgeFailed = true
+            self?.syncPlayers()
         }
+        bridgeFailed = false
         systemMedia.start()
+        syncPlayers()
+    }
+
+    /// The system bridge said it can't deliver (it may still be running), so the players fetch
+    /// their own details. Reset when media starts again.
+    @ObservationIgnored private var bridgeFailed = false
+
+    /// Music and Spotify run only while their source is on in Settings; a source switched off
+    /// sends no AppleScript at all, even with the system bridge down.
+    func syncPlayers() {
+        let disabled = media.disabled
+        let bridgeUp = systemMedia.isRunning && !bridgeFailed
         for p in [music, spotify] as [ScriptablePlayerProvider] {
-            p.enrich = !systemMedia.isRunning
+            guard PlayerIntegration.runs(p.source, disabled: disabled) else {
+                p.enrich = false
+                p.stop()
+                continue
+            }
+            // Before start(), which begins enriching straight away when asked to.
+            p.enrich = PlayerIntegration.enriches(p.source, disabled: disabled, bridgeRunning: bridgeUp)
             p.onUpdate = { [weak self, source = p.source] np in self?.mediaUpdate(np, source: source) }
             p.start()
         }
@@ -299,11 +372,11 @@ final class AppModel {
         calendar.includeReminders = settings.remindersEnabled
         calendar.onAgenda = { [weak self] items in
             self?.agenda = items
-            self?.checkCalendarAlerts()
+            self?.calendarChanged()
         }
         calendar.onReminders = { [weak self] items in
             self?.reminders = items
-            self?.checkCalendarAlerts()
+            self?.calendarChanged()
         }
         calendar.start()
         // The agenda covers today and tomorrow; roll it forward when the day changes.
@@ -312,27 +385,14 @@ final class AppModel {
                 MainActor.assumeIsolated { self?.calendar.refresh() }
             }
         }
-        calendarTimer?.invalidate()
-        // Re-check upcoming events once a minute (tolerant timer; calendar data itself is event-driven).
-        let t = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.checkCalendarAlerts() }
-        }
-        t.tolerance = 10
-        RunLoop.main.add(t, forMode: .common)
-        calendarTimer = t
     }
 
-    func requestReminderAccess() {
-        calendar.requestReminderAccess { [weak self] granted in
-            guard let self, granted else { return }
-            self.settings.remindersEnabled = true
-            self.saveSettings()
-            self.startCalendar()
-        }
+    /// Events from calendars the user hasn't hidden. Reads `tick`, so what depends on the time
+    /// of day (the next event, what is left today) is drawn again at each deadline.
+    var visibleAgenda: [AgendaItem] {
+        _ = tick
+        return Agenda.visible(agenda, hiding: Set(settings.hiddenCalendars))
     }
-
-    /// Events from calendars the user hasn't hidden.
-    var visibleAgenda: [AgendaItem] { Agenda.visible(agenda, hiding: Set(settings.hiddenCalendars)) }
 
     func completeReminder(_ id: String) {
         Haptics.play(.tap)
@@ -341,15 +401,187 @@ final class AppModel {
 
     var dueReminders: [ReminderItem] { settings.remindersEnabled ? Reminders.dueSoon(reminders, now: Date()) : [] }
 
-    func requestCalendarAccess() {
-        calendar.requestAccess { [weak self] granted in
-            guard let self else { return }
-            if granted {
-                self.settings.calendarEnabled = true
-                self.saveSettings()
-                self.startCalendar()
+    // MARK: Calendar access
+
+    /// What to say about calendar (`.calendars`) or reminders (`.reminders`) access, and the button.
+    func calendarAdvice(_ kind: PermissionKind) -> CalendarAccessAdvice {
+        CalendarAccessAdvice.advice(kind == .reminders ? calendarAccess.reminders : calendarAccess.events, kind: kind,
+                                    refused: calendarRefused.contains(kind))
+    }
+
+    /// "Allow…" for calendars or reminders. macOS is asked when it hasn't been; after a refusal,
+    /// or with "Add events only", System Settings opens at the right page instead, since asking
+    /// again would return at once and look stuck. Access arriving starts the feature straight away
+    /// (and, with `turnOn`, switches it on).
+    func requestCalendarAccess(_ kind: PermissionKind = .calendars, turnOn: Bool = true, answered: (() -> Void)? = nil) {
+        readCalendarAccess()
+        switch calendarAdvice(kind).action {
+        case nil:
+            if turnOn { switchOnCalendarFeature(kind) }
+            answered?()
+        case .openSettings(let url)?:
+            NSWorkspace.shared.open(url)
+            answered?()
+        case .ask?:
+            let done: (Bool) -> Void = { [weak self] granted in
+                guard let self else { return }
+                if !granted { self.calendarRefused.insert(kind) }
+                if granted, turnOn { self.switchOnCalendarFeature(kind) } else { self.recheckCalendarAccess(force: true) }
+                answered?()
+            }
+            if kind == .reminders { calendar.requestReminderAccess(completion: done) } else { calendar.requestAccess(completion: done) }
+        }
+    }
+
+    private func switchOnCalendarFeature(_ kind: PermissionKind) {
+        if kind == .reminders { settings.remindersEnabled = true } else { settings.calendarEnabled = true }
+        saveSettings()
+        recheckCalendarAccess(force: true)
+    }
+
+    /// Read access again and start (or stop) the calendar to match, without a relaunch.
+    func recheckCalendarAccess(force: Bool = false) {
+        guard readCalendarAccess() || force else { return }
+        applyModules()
+    }
+
+    /// Reads calendar and reminders access. Returns whether either changed. Access just granted
+    /// gives the service a new event store, which a store made before it may need.
+    @discardableResult
+    private func readCalendarAccess() -> Bool {
+        let fresh = CalendarAccessState.current
+        guard fresh != calendarAccess else { return false }
+        let gained = fresh.events.canRead && !calendarAccess.events.canRead || fresh.reminders.canRead && !calendarAccess.reminders.canRead
+        calendarAccess = fresh
+        if fresh.events.canRead { calendarRefused.remove(.calendars) }
+        if fresh.reminders.canRead { calendarRefused.remove(.reminders) }
+        if gained { calendar.accessChanged() }
+        return true
+    }
+
+    /// Whether a calendar feature that is on can't read what it needs (so opening the island
+    /// checks access again).
+    private var calendarIsBlocked: Bool {
+        settings.calendarEnabled && !calendarAccess.events.canRead || settings.remindersEnabled && !calendarAccess.reminders.canRead
+    }
+
+    /// `--settings-snapshot` and `--snapshot` draw the access states without asking macOS.
+    func setCalendarAccessForSnapshot(events: CalendarAccess, reminders: CalendarAccess, refused: Set<PermissionKind> = []) {
+        calendarAccess = CalendarAccessState(events: events, reminders: reminders)
+        calendarRefused = refused
+    }
+
+    /// For `GET /v1/state`: the access and how many timed events are left today, never titles.
+    var calendarStatus: CalendarStatus {
+        let left = settings.calendarEnabled ? Agenda.restOfToday(visibleAgenda, now: Date()).timed.count : 0
+        return CalendarStatus(events: calendarAccess.events, reminders: calendarAccess.reminders, upcoming: left)
+    }
+
+    // MARK: Meeting reminders
+
+    /// The meetings showing as reminders now, earliest first.
+    var liveMeetings: [MeetingReminder] {
+        meetings.live(visibleAgenda, now: Date(), options: MeetingReminderOptions(settings))
+    }
+
+    private func loadMeetings() {
+        let url = IsletPaths.supportDirectory.appendingPathComponent("meetings.json")
+        meetingsURL = url
+        let restored = MeetingReminders.start(from: url)
+        if let saved = restored.value { meetings = saved }
+        canSaveMeetings = restored.canSave
+        if let moved = restored.setAside { NSLog("Islet: meetings.json couldn't be read; kept as %@", moved.lastPathComponent) }
+    }
+
+    private func saveMeetings() {
+        guard let url = meetingsURL, canSaveMeetings else { return }
+        do {
+            try meetings.save(to: url)
+        } catch {
+            NSLog("Islet: couldn't save meetings.json: %@", error.localizedDescription)
+        }
+    }
+
+    /// The agenda or reminders changed: show what is due, and wake for what comes next.
+    private func calendarChanged() {
+        let now = Date()
+        syncMeetings(now: now)
+        checkReminderAlerts(now: now)
+        tick &+= 1
+        reschedule()
+    }
+
+    /// Show each meeting due a reminder as an activity, and take away those that are over.
+    /// Only real changes are applied (the countdown once a minute), so the island doesn't redraw
+    /// or reorder for nothing.
+    private func syncMeetings(now: Date) {
+        let options = MeetingReminderOptions(settings)
+        // Worked on a copy, so views watching `meetings` redraw only when something changed.
+        var updated = meetings
+        updated.forget(before: now)
+        var live = updated.live(visibleAgenda, now: now, options: options)
+        // A call already going on in the meeting's app counts as joining it, however it was
+        // joined and however early (within `joinWindow`), so the reminder never glows at you
+        // while you are in the meeting.
+        if settings.callDetection {
+            let joined = MeetingReminders.joinedByCalls(calls.ongoing, live: live)
+            if !joined.isEmpty {
+                for r in joined { updated.join(r.item) }
+                live = updated.live(visibleAgenda, now: now, options: options)
             }
         }
+        let announce = updated.announce(live)
+        let changed = updated != meetings
+        if changed { meetings = updated }
+        var shown: [String: (reminder: MeetingReminder, spec: ActivitySpec)] = [:]
+        for r in live {
+            var spec = MeetingReminders.activity(for: r, now: now, icon: MeetingReminders.icon(for: r, installed: AppActions.isInstalled),
+                                                 sneak: false, time: { $0.formatted(date: .omitted, time: .shortened) })
+            if let previous = shownMeetings[r.id], previous.spec == spec, center.activities[r.id] != nil {
+                shown[r.id] = previous
+                continue
+            }
+            let plain = spec
+            spec.sneak = announce.contains(r.key)
+            // A muted calendar shows nothing; it is tried again at the next change.
+            if (try? applyLocal(spec)) != nil { shown[r.id] = (r, plain) }
+        }
+        for id in shownMeetings.keys where shown[id] == nil { center.remove(id: id) }
+        shownMeetings = shown
+        if changed { saveMeetings() }
+    }
+
+    /// The meeting reminder an activity shows, if it is one and still on show (muting the
+    /// calendar takes it away before the next sync).
+    func meetingReminder(for activityID: String) -> MeetingReminder? {
+        guard center.activities[activityID] != nil else { return nil }
+        return shownMeetings[activityID]?.reminder
+    }
+
+    /// Join: open the call link and count the meeting as joined, so its reminder goes.
+    func join(_ item: AgendaItem) {
+        guard let url = item.meetingURL else { return }
+        Haptics.play(.tap)
+        NSWorkspace.shared.open(url)
+        meetings.join(item)
+        saveMeetings()
+        let now = Date()
+        syncMeetings(now: now)
+        reschedule()
+    }
+
+    /// A meeting reminder's activity went (its ×, a swipe, Dismiss, a script): it stays dismissed.
+    private func meetingActivityRemoved(_ id: String) {
+        guard let shown = shownMeetings.removeValue(forKey: id) else { return }
+        meetings.dismiss(shown.reminder.item)
+        saveMeetings()
+    }
+
+    /// `--snapshot`: these events, and the meeting reminders they would show at `now`.
+    func showMeetingsForSnapshot(_ items: [AgendaItem], now: Date) {
+        agenda = items
+        meetings = MeetingReminders()
+        syncMeetings(now: now)
     }
 
     private func startClipboard() {
@@ -401,8 +633,63 @@ final class AppModel {
 
     // MARK: Settings
 
+    /// Writes the settings to config.json, keeping keys this build doesn't know. Writes
+    /// nothing while the file doesn't parse (`settingsProblem`).
     func saveSettings() {
-        try? settings.save(to: IsletPaths.configFile)
+        do {
+            try configFile.save(settings)
+        } catch {
+            NSLog("Islet: couldn't save config.json: %@", error.localizedDescription)
+        }
+        noteSettingsProblem(configFile.problem)
+    }
+
+    /// Settings → Advanced, while config.json doesn't parse: keep a copy of it as
+    /// config.json.broken and write the settings in use over it.
+    func replaceBrokenSettingsFile() {
+        do {
+            try configFile.replace(with: settings)
+        } catch {
+            NSLog("Islet: couldn't replace config.json: %@", error.localizedDescription)
+        }
+        noteSettingsProblem(configFile.problem)
+    }
+
+    /// Settings → Advanced → Reset: every setting back to how Islet came. A config.json that
+    /// doesn't parse is kept as config.json.broken.
+    func resetSettings() {
+        settings = IsletSettings()
+        replaceBrokenSettingsFile()
+        NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
+    }
+
+    private func noteSettingsProblem(_ problem: FileProblem?) {
+        if settingsProblem != problem { settingsProblem = problem }
+        // A file that parses again (or was replaced) is where the settings come from once more.
+        if problem == nil, settingsOrigin != .file { settingsOrigin = .file }
+    }
+
+    /// `--settings-snapshot` draws Advanced as it looks while config.json has an error.
+    func setSettingsProblemForSnapshot(_ problem: FileProblem?, origin: SettingsFile.Origin = .lastGood) {
+        settingsProblem = problem
+        settingsOrigin = problem == nil ? .file : origin
+    }
+
+    /// Agents whose hooks call an `isletctl` that is gone (Islet.app moved or was deleted).
+    /// Settings shows a dot on Coding agents; Update there fixes it.
+    private(set) var agentsNeedingUpdate: Set<CodingAgent> = []
+
+    /// Reads each agent's hooks file once, off the main thread: at launch and when the Coding
+    /// agents page refreshes. Never writes, never polls.
+    func checkAgentHooks() {
+        let home = IsletPaths.home
+        let exists = AppActions.isExecutable
+        Task { @MainActor in
+            let stale = await Task.detached(priority: .utility) {
+                Set(CodingAgent.allCases.filter { !AgentHookSetup.missingExecutables($0, home: home, exists: exists).isEmpty })
+            }.value
+            if agentsNeedingUpdate != stale { agentsNeedingUpdate = stale }
+        }
     }
 
     private static var pendingSettingsCommit: DispatchWorkItem?
@@ -455,9 +742,13 @@ final class AppModel {
         fileWatcher = src
     }
 
+    /// A file that doesn't parse (a typo mid-edit) changes nothing: the last good settings stay,
+    /// and Settings → Advanced says which line. A deleted file changes nothing either; the next
+    /// save writes it again.
     private func reloadSettingsFromDisk() {
-        let fresh = IsletSettings.load(from: IsletPaths.configFile)
-        guard fresh != settings else { return }
+        let read = configFile.read()
+        noteSettingsProblem(configFile.problem)
+        guard case .loaded(let fresh) = read, fresh != settings else { return }
         settings = fresh
         // The app delegate applies the rest (modules, media sources, clipboard size, hotkey, panels)
         // on this notification.
@@ -574,12 +865,15 @@ final class AppModel {
             hoverDisplay = nil
             hoverPeekDisplay = nil
             agentUsage.refreshClaudeHint()
+            // Access may have come from System Settings without Islet becoming active.
+            if calendarIsBlocked { recheckCalendarAccess() }
             Haptics.play(.open)
             if tab == .stats && settings.systemStatsEnabled { statsSampler.start() }
         } else {
             statsSampler.stop()
             pinned = false
             ask.islandDidCollapse()
+            controlHint = nil
         }
     }
 
@@ -628,6 +922,14 @@ final class AppModel {
         if let d = pausedMusic.nextDeadline(timeout: settings.pausedMusicTimeout, now: now) { candidates.append(d) }
         if let i = playbackIntent { candidates.append(max(now, i.expires)) }
         if let b = batteryEvent { candidates.append(b.until) }
+        // The calendar: a meeting reminder showing, starting, counting down or going; a reminder
+        // falling due; an event starting or ending (what Home and Today show changes then).
+        if !agenda.isEmpty {
+            let visible = visibleAgenda
+            if let d = meetings.nextDeadline(visible, now: now, options: MeetingReminderOptions(settings)) { candidates.append(d) }
+            if settings.calendarEnabled, let d = Agenda.nextChange(visible, now: now) { candidates.append(d) }
+        }
+        if settings.remindersEnabled, let d = Reminders.nextDue(reminders, now: now) { candidates.append(d) }
         guard let next = candidates.min() else { return }
         let t = Timer(fire: next.addingTimeInterval(0.01), interval: 0, repeats: false) { [weak self] _ in
             Task { @MainActor in self?.expireNow() }
@@ -640,6 +942,8 @@ final class AppModel {
     private func expireNow() {
         let now = Date()
         center.expire(now: now)
+        syncMeetings(now: now)
+        checkReminderAlerts(now: now)
         if let b = batteryEvent, b.until <= now { batteryEvent = nil }
         // A paused player timed out: show whatever is left, or nothing. A track that ran past
         // its end shows as stopped, and a click the player never confirmed shows its real state.
@@ -756,31 +1060,17 @@ final class AppModel {
         }
     }
 
-    private func checkCalendarAlerts() {
-        let now = Date()
-        var alerted = false
-        // Keyed by occurrence: every repeat of a meeting shares its event identifier.
-        if settings.calendarEnabled {
-            for item in visibleAgenda where Agenda.shouldAlert(item, now: now) {
-                let key = "\(item.id)@\(Int(item.start.timeIntervalSince1970))"
-                guard alertedEvents[key] == nil else { continue }
-                alertedEvents[key] = item.start
-                alerted = true
-                _ = try? applyLocal(Agenda.activity(for: item, now: now))
-            }
+    /// A timed reminder reaching its due minute shows once. Woken at the due time (`reschedule`),
+    /// never by checking every minute.
+    private func checkReminderAlerts(now: Date) {
+        guard settings.remindersEnabled else { return }
+        for r in reminders where Reminders.shouldAlert(r, now: now) {
+            let key = "r:\(r.id)@\(Int(r.due?.timeIntervalSince1970 ?? 0))"
+            guard alertedReminders[key] == nil else { continue }
+            alertedReminders[key] = r.due ?? now
+            _ = try? applyLocal(Reminders.activity(for: r))
         }
-        if settings.remindersEnabled {
-            for r in reminders where Reminders.shouldAlert(r, now: now) {
-                let key = "r:\(r.id)@\(Int(r.due?.timeIntervalSince1970 ?? 0))"
-                guard alertedEvents[key] == nil else { continue }
-                alertedEvents[key] = r.due ?? now
-                alerted = true
-                _ = try? applyLocal(Reminders.activity(for: r))
-            }
-        }
-        alertedEvents = alertedEvents.filter { now.timeIntervalSince($0.value) < 86_400 }
-        // Redraw only when something time-based is on show.
-        if alerted || upcomingEvent != nil { tick &+= 1 }
+        alertedReminders = alertedReminders.filter { now.timeIntervalSince($0.value) < 86_400 }
     }
 
     @discardableResult
@@ -830,11 +1120,20 @@ final class AppModel {
 
     private func updateCalls() {
         guard settings.callDetection else { return }
+        var started = false
         for change in calls.update(micUsers: lastMicUsers, cameraOn: cameraInUse, now: Date()) {
             switch change {
-            case .started(let spec), .updated(let spec): _ = try? applyLocal(spec)
+            case .started(let spec):
+                _ = try? applyLocal(spec)
+                started = true
+            case .updated(let spec): _ = try? applyLocal(spec)
             case .ended(let id): remove(activityID: id)
             }
+        }
+        // A call in a meeting's app counts as joining it (`syncMeetings`).
+        if started {
+            syncMeetings(now: Date())
+            reschedule()
         }
     }
 
@@ -870,15 +1169,11 @@ final class AppModel {
             lockedAt = nil
             lockedDigest = [:]
         }
-        guard let since = lockedAt, Date().timeIntervalSince(since) > 60 else { return }
-        let total = lockedDigest.values.reduce(0, +)
-        let summary = total == 0 ? "Nothing new while you were away"
-            : lockedDigest.sorted { $0.value > $1.value }.prefix(3)
-                .map { "\($0.value) from \(Self.friendlySource($0.key))" }.joined(separator: " · ")
-        _ = try? commit(ActivitySpec(
-            id: "welcome-back", source: "system", title: "Welcome back", subtitle: summary,
-            icon: .symbol("lock.open.fill"), state: .info, tint: "white", priority: .normal, ttl: 4, sneak: true
-        ))
+        // Nothing arrived: nothing to say, so the island stays as it was.
+        guard let since = lockedAt,
+              let spec = WelcomeBack.activity(counts: lockedDigest, lockedFor: Date().timeIntervalSince(since), name: Self.friendlySource)
+        else { return }
+        _ = try? commit(spec)
     }
 
     static func friendlySource(_ source: String) -> String {
@@ -913,18 +1208,27 @@ final class AppModel {
 
     func remove(activityID: String) {
         center.remove(id: activityID)
+        meetingActivityRemoved(activityID)
         reschedule()
         timers.activityRemoved(activityID)
         tools.stopwatch.activityRemoved(activityID)
     }
 
     func perform(_ action: ActivityAction, activityID: String) {
+        // A meeting reminder's Join counts as joining, not as dismissing it.
+        if let r = meetingReminder(for: activityID), let link = r.item.meetingURL, action.url == link {
+            join(r.item)
+            return
+        }
         if let url = action.url {
             // Islet's own links (keep awake's Turn off, for one) are handled here, not via Launch Services.
             if url.scheme == "islet" { AppActions.handle(url: url, model: self) } else { NSWorkspace.shared.open(url) }
         }
         if action.dismiss ?? true { remove(activityID: activityID) }
     }
+
+    /// Whether a swipe up or an × may dismiss an activity in the closed island: meeting reminders.
+    func isDismissableReminder(_ a: Activity) -> Bool { meetingReminder(for: a.id) != nil }
 
     // MARK: Media control
 
@@ -941,20 +1245,78 @@ final class AppModel {
             setNowPlaying(media.current(now: now), now: now)
             reschedule()
         }
+        // A press that went nowhere because macOS hasn't allowed Islet to control the player
+        // says so, instead of doing nothing.
+        let hint = nowPlaying.flatMap { np -> String? in
+            let r = mediaRoute(for: np)
+            return PlayerIntegration.controlHint(route: r, sent: sent, canScript: r == .player(.spotify) ? spotify.canScript : music.canScript)
+        }
+        if controlHint != hint { controlHint = hint }
         return sent
     }
 
+    /// "Allow Islet to control Music": the player whose controls just went nowhere, until a
+    /// control works or the island closes.
+    private(set) var controlHint: String?
+
+    /// `--snapshot` draws the hint.
+    func setControlHintForSnapshot(_ player: String?) { controlHint = player }
+
+    /// The hint's Allow button: Settings → Permissions, at that player's row.
+    func openControlPermission() {
+        let kind: PermissionKind = controlHint == "Spotify" ? .automationSpotify : .automationMusic
+        controlHint = nil
+        AppActions.openSettings(.permissions, at: "permissions.\(kind.rawValue)")
+    }
+
+    /// Commands go to the player on show (the one picked in the island, or the newest): the
+    /// bridge only when it is that app's, Music and Spotify otherwise through their own
+    /// integration, so a press on Spotify never pauses a video in Chrome.
     private func route(_ command: PlaybackCommand, position: Double?) -> Bool {
-        if let routed = sendControl(command, position: position) { return routed }
-        // The bridge controls whatever macOS considers "now playing" without Automation prompts.
-        if systemMedia.isRunning, systemMedia.send(command, position: position) { return true }
-        guard let np = nowPlaying else { return false }
-        switch np.source {
-        case .spotify: return spotify.send(command, position: position)
-        case .appleMusic: return music.send(command, position: position)
-        case .system, .browser: return systemMedia.send(command, position: position)
-        case .external: return systemMedia.send(command, position: position)
+        guard let np = nowPlaying else {
+            // Nothing on show: the bridge controls whatever macOS considers "now playing".
+            return systemMedia.isRunning && systemMedia.send(command, position: position)
         }
+        let r = mediaRoute(for: np)
+        if let routed = sendControl(command, position: position, bridge: r == .bridge) { return routed }
+        switch r {
+        case .bridge: return systemMedia.send(command, position: position)
+        case .player(.spotify): return spotify.send(command, position: position)
+        case .player(.appleMusic): return music.send(command, position: position)
+        case .player, .none: return false
+        }
+    }
+
+    func mediaRoute(for np: NowPlaying) -> MediaRoute {
+        MediaRoute.route(for: np, bridgeRunning: systemMedia.isRunning, bridgePlayer: media.bridgePlayer)
+    }
+
+    // MARK: Players
+
+    /// The players live now, one per app, newest first. More than one shows as chips in the open island.
+    var players: [NowPlaying] {
+        _ = tick
+        return settings.mediaEnabled ? media.available(now: Date()) : []
+    }
+
+    /// A player chip: show and control that player. The closed island follows it.
+    func pickPlayer(_ np: NowPlaying) {
+        Haptics.play(.tap)
+        let now = Date()
+        media.pick(player: MediaArbiter.playerID(np), at: now)
+        controlHint = nil
+        playbackIntent = nil
+        setNowPlaying(media.current(now: now), now: now)
+        reschedule()
+    }
+
+    /// `--snapshot`: several players at once (a Chrome video and a Spotify song), or, with
+    /// none, back to the demo's song alone.
+    func loadPlayersForSnapshot(_ list: [NowPlaying], bridge: NowPlaying?, now: Date, song: NowPlaying? = nil) {
+        media = MediaArbiter(disabled: media.disabled)
+        for np in list { media.update(np) }
+        media.updateFromBridge(bridge)
+        nowPlaying = song ?? media.current(now: now)
     }
 
     func openPlayer() {
@@ -985,6 +1347,7 @@ final class AppModel {
 
     func togglePinClip(_ id: String) { clipboard.togglePin(id: id) }
     func removeClip(_ id: String) { clipboard.remove(id: id) }
+    /// "Clear unpinned" on the Clipboard page.
     func clearClipboard() { clipboard.clear() }
 
     func runPlugin(_ path: String) { pluginRunner?.runNow(path: path) }
@@ -1055,6 +1418,7 @@ extension AppModel: IsletBackend {
     nonisolated func removeActivity(id: String) async -> Bool {
         await MainActor.run {
             let removed = self.center.remove(id: id) != nil
+            self.meetingActivityRemoved(id)
             self.reschedule()
             self.timers.activityRemoved(id)
             self.tools.stopwatch.activityRemoved(id)
@@ -1065,6 +1429,7 @@ extension AppModel: IsletBackend {
     nonisolated func removeActivities(source: String) async -> Int {
         await MainActor.run {
             let n = self.center.removeAll(source: source)
+            for id in self.shownMeetings.keys where self.center.activities[id] == nil { self.meetingActivityRemoved(id) }
             self.reschedule()
             self.timers.activitiesRemoved(source: source)
             if source == Stopwatch.source { self.tools.stopwatch.activityRemoved(Stopwatch.activityID) }
@@ -1102,13 +1467,16 @@ extension AppModel: IsletBackend {
 
     nonisolated func stateSnapshot() async -> StateSnapshot {
         await MainActor.run {
+            // Checked from the command line after a change in System Settings: read it afresh.
+            self.recheckCalendarAccess()
             let display = self.expandedScreen ?? NSScreen.main?.displayID ?? 0
             return StateSnapshot(
                 version: Self.version,
                 presentation: String(describing: self.presentation(for: display)).components(separatedBy: "(").first ?? "",
                 activities: self.activities,
                 nowPlaying: self.nowPlaying.map { NowPlayingSummary($0, now: Date()) },
-                battery: self.battery
+                battery: self.battery,
+                calendar: self.calendarStatus
             )
         }
     }
@@ -1120,6 +1488,16 @@ extension NSScreen {
     }
 }
 
+
+/// Calendar and reminders access, as macOS reports it now.
+struct CalendarAccessState: Equatable {
+    var events: CalendarAccess
+    var reminders: CalendarAccess
+
+    static var current: CalendarAccessState {
+        CalendarAccessState(events: CalendarService.eventAccess, reminders: CalendarService.reminderAccess)
+    }
+}
 
 /// Which settings-controlled services are running, so switching a module on or off in Settings
 /// (or in config.json) takes effect at once instead of at the next launch.
@@ -1190,14 +1568,18 @@ extension AppModel {
         // Sources switched off (in Settings or config.json), and the clipboard size, apply without a restart.
         if Set(s.disabledMediaSources) != media.disabled {
             media.disabled = Set(s.disabledMediaSources)
+            // Music or Spotify switched off stops altogether; switched on, it starts.
+            if s.mediaEnabled { syncPlayers() }
             let now = Date()
             setNowPlaying(media.current(now: now), now: now)
             reschedule()
         }
         if clipboard.limit != s.clipboardLimit { clipboard.limit = s.clipboardLimit }
+        if clipboard.ignoredApps != Set(s.clipboardIgnoredApps) { clipboard.ignoredApps = Set(s.clipboardIgnoredApps) }
+        if clipboard.skipsSecrets != s.clipboardSkipSecrets { clipboard.skipsSecrets = s.clipboardSkipSecrets }
 
-        let wantCalendar = s.calendarEnabled && CalendarService.eventAccess == .granted
-            || s.remindersEnabled && CalendarService.reminderAccess == .granted
+        readCalendarAccess()
+        let wantCalendar = s.calendarEnabled && calendarAccess.events.canRead || s.remindersEnabled && calendarAccess.reminders.canRead
         if wantCalendar != modules.calendar {
             if wantCalendar { startCalendar() } else { stopCalendar() }
             modules.calendar = wantCalendar
@@ -1205,13 +1587,17 @@ extension AppModel {
             calendar.includeReminders = s.remindersEnabled
             calendar.refresh()
         }
+        // Reminder settings or hidden calendars may have changed what shows, and when.
+        syncMeetings(now: Date())
+        reschedule()
 
         if s.clipboardEnabled != modules.clipboard {
             if s.clipboardEnabled {
                 startClipboard()
             } else {
                 clipboardMonitor.stop()
-                clipboard.clear()
+                // Off means nothing is kept, pinned entries included.
+                clipboard.removeAll()
             }
             modules.clipboard = s.clipboardEnabled
         }
@@ -1259,12 +1645,11 @@ extension AppModel {
 
     func stopCalendar() {
         calendar.stop()
-        calendarTimer?.invalidate()
-        calendarTimer = nil
         if let o = dayObserver { NotificationCenter.default.removeObserver(o) }
         dayObserver = nil
         agenda = []
         reminders = []
+        syncMeetings(now: Date())
     }
 
     func stopPlugins() {

@@ -48,7 +48,16 @@ enum OnDeviceAsk {
         }
     }
 
+    /// Whether this build reads macOS 27's `LanguageModelError`. Builds with the macOS 26 SDK
+    /// (Xcode 26, Swift 6.3) don't have the type and fall back to the error's description.
+    #if compiler(>=6.4) && canImport(FoundationModels, _version: 2.0)
+    static let readsLanguageModelError = true
+    #else
+    static let readsLanguageModelError = false
+    #endif
+
     private static func event(for error: Error) -> AskEvent {
+        #if compiler(>=6.4) && canImport(FoundationModels, _version: 2.0)
         if #available(macOS 27, *), let e = error as? LanguageModelError {
             switch e {
             case .refusal, .guardrailViolation: return .refusal(nil)
@@ -59,6 +68,7 @@ enum OnDeviceAsk {
             default: break
             }
         }
+        #endif
         // macOS 26 reports the same cases through the older error type.
         let name = String(describing: error)
         if name.contains("refusal") || name.contains("guardrailViolation") { return .refusal(nil) }

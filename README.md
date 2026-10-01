@@ -9,14 +9,14 @@
 ## What it does
 
 - **Your iPhone's Live Activities.** Rides, deliveries, scores and flights that macOS shows in the menu bar appear in the island with the app's icon and colour, including the ones the notch hides. 119 apps have their own look. See [Live Activities](docs/LIVE-ACTIVITIES.md).
-- **Now Playing** from any app, browsers included, with a scrubber that seeks, ±15 s, shuffle and repeat, volume and an output picker. Each new song shows for a moment below the notch.
+- **Now Playing** from any app, browsers included, with a scrubber that seeks, ±15 s, shuffle and repeat, volume and an output picker. Each new song shows for a moment below the notch. With a video in Chrome and a song in Spotify at once, small app icons beside the title switch between them, and the controls follow.
 - **Coding agents.** See what Claude Code, Codex or Cursor is doing, answer their permission requests and questions from the notch, and watch your plan's usage limits. Agents can also drive the notch over MCP. See [Integrations](docs/INTEGRATIONS.md) and [MCP](docs/MCP.md).
 - **Ask** Apple Intelligence, Claude, ChatGPT or your command-line agent a quick question. See [AI](docs/AI.md).
 - **Timers and Pomodoro**, started from the island, a phrase like "tea 4m", Siri via Shortcuts ([recipes](docs/SHORTCUTS.md)) or a script.
-- **Calendar and Reminders**: the next meeting with a Join button, the rest of today, and reminders you can tick off.
+- **Calendar and Reminders**: meeting reminders that count down beside the notch and stay until you join, a large Join button, the rest of today, and reminders you can tick off. When macOS hasn't allowed Islet to read your calendar, it says why and opens the right page of System Settings.
 - **Calls, HUDs and system events**: call timers, volume and brightness, charging and battery, Focus, keep awake, a summary when you unlock.
 - **A file shelf, clipboard history, download progress and script widgets** (xbar and SwiftBar plugins run unchanged).
-- **Tools you switch on when you want them**: time-synced lyrics, your Shortcuts, the weather, a month calendar on Today, a stopwatch, Pomodoro lengths and focus sounds. Each starts off and waits under More.
+- **Tools you switch on when you want them**: time-synced lyrics, your Shortcuts, the weather, a month calendar on Today, a stopwatch, Pomodoro lengths and focus sounds. Each starts off until you turn it on in Settings; Shortcuts and Weather then appear under More.
 - **Your own activities** from the command line, a local HTTP API, the `islet://` URL scheme or iPhone Shortcuts. See the [API](docs/API.md).
 
 ## How it stays out of the way
@@ -54,7 +54,7 @@ You only need to do this once. On macOS 15 and later, Control-clicking the app a
 
 ## Build from source
 
-To build Islet yourself, you need the Xcode Command Line Tools with the macOS 27 SDK (`xcrun --show-sdk-version` prints 27 or later); full Xcode isn't needed.
+To build Islet yourself, you need the Xcode Command Line Tools or Xcode with the macOS 26 SDK or later (`xcrun --show-sdk-version` prints 26 or later); full Xcode isn't needed.
 
 ```bash
 git clone https://github.com/aviralgarg05/islet.git islet && cd islet

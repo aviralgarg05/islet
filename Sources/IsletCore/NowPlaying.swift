@@ -22,6 +22,65 @@ public enum MediaSourceKind: String, Codable, Sendable, CaseIterable {
     }
 }
 
+/// Islet's own Music and Spotify integrations: when they run, and what to say when their
+/// controls can't reach the player.
+public enum PlayerIntegration {
+    /// Music or Spotify switched off in Settings runs not at all: it reads no notifications
+    /// and sends no AppleScript, whether or not the system bridge is up.
+    public static func runs(_ source: MediaSourceKind, disabled: Set<MediaSourceKind>) -> Bool {
+        !disabled.contains(source)
+    }
+
+    /// Whether it fetches position and artwork itself (AppleScript, or Spotify's cover art):
+    /// only while it runs and the system bridge, which already brings both, is down.
+    public static func enriches(_ source: MediaSourceKind, disabled: Set<MediaSourceKind>, bridgeRunning: Bool) -> Bool {
+        runs(source, disabled: disabled) && !bridgeRunning
+    }
+
+    /// The player to name in "Allow Islet to control …" after a control press went nowhere: the
+    /// bridge is down and macOS hasn't allowed Apple Events to Music or Spotify. Nil otherwise.
+    public static func controlHint(for source: MediaSourceKind, sent: Bool, bridgeRunning: Bool, canScript: Bool) -> String? {
+        let route: MediaRoute = bridgeRunning ? .bridge : source == .spotify || source == .appleMusic ? .player(source) : .none
+        return controlHint(route: route, sent: sent, canScript: canScript)
+    }
+
+    /// The same for a press routed to `route`: only Music's and Spotify's own integrations need
+    /// Automation, so only a press that went to one of them, unsent and not allowed, asks.
+    public static func controlHint(route: MediaRoute, sent: Bool, canScript: Bool) -> String? {
+        guard !sent, !canScript, case .player(let source) = route else { return nil }
+        switch source {
+        case .appleMusic: return "Music"
+        case .spotify: return "Spotify"
+        default: return nil
+        }
+    }
+}
+
+/// Where a command for the player on show goes. The system bridge controls whichever app macOS
+/// treats as now playing, so it is used only for that app: with a Chrome video and a Spotify
+/// song both live, a press on Spotify must not pause the video.
+public enum MediaRoute: Equatable, Sendable {
+    /// The system bridge (no permission needed).
+    case bridge
+    /// Music's or Spotify's own integration: AppleScript, once Automation for it is allowed.
+    case player(MediaSourceKind)
+    /// Nothing would reach this player.
+    case none
+
+    /// - Parameters:
+    ///   - bridgePlayer: the player the bridge last reported (`MediaArbiter.bridgePlayer`).
+    public static func route(for np: NowPlaying, bridgeRunning: Bool, bridgePlayer: String?) -> MediaRoute {
+        let id = MediaArbiter.playerID(np)
+        if bridgeRunning, bridgePlayer == id { return .bridge }
+        if let own = MediaSourceKind.player(bundleID: np.bundleID) ?? ([.spotify, .appleMusic].contains(np.source) ? np.source : nil) {
+            return .player(own)
+        }
+        // A player only the bridge or the API knows about: the bridge reaches it unless it is
+        // reporting another app.
+        return bridgeRunning && bridgePlayer == nil ? .bridge : .none
+    }
+}
+
 public enum PlaybackCommand: String, Codable, Sendable, CaseIterable {
     case play, pause, togglePlayPause, next, previous, seek
     /// Jump 15 s forward or back, computed from the current position so it works with any player.
@@ -109,8 +168,15 @@ public struct NowPlaying: Codable, Equatable, Sendable {
 ///     that a video finished) counts as paused from its end and goes after `endedTimeout`.
 /// 5. Sources switched off in settings are ignored. Music and Spotify count as themselves even
 ///    when the system bridge reports them (`setting(for:)`).
+/// 6. A player picked in the island (`pick(player:at:)`) is shown instead, while it is live,
+///    until another player starts playing after the pick or the picked one goes.
+///
+/// Several players can be live at once, one per app (`available`): the bridge's (a Chrome video,
+/// say), Spotify's and Music's own, and one pushed through the API.
 public struct MediaArbiter: Sendable {
     public private(set) var snapshots: [MediaSourceKind: NowPlaying] = [:]
+    /// The player chosen in the island, and when.
+    public private(set) var pick: MediaPick?
     public var pausedTimeout: TimeInterval
     /// Seconds past a track's end before a player that still says "playing" is believed to have
     /// stopped, so a slow report of the next track doesn't flicker the island.
@@ -133,12 +199,16 @@ public struct MediaArbiter: Sendable {
     }
 
     public mutating func update(_ snapshot: NowPlaying) {
+        let id = Self.playerID(snapshot)
+        let was = reportsPlaying(id)
         snapshots[snapshot.source] = snapshot
+        noteReport(from: id, wasPlaying: was)
     }
 
     /// A provider reports that its player quit or has nothing loaded.
     public mutating func clear(_ source: MediaSourceKind) {
         snapshots[source] = nil
+        dropPickIfGone()
     }
 
     /// A report from the system-wide bridge: what plays now, or nil for nothing. It replaces
@@ -146,8 +216,76 @@ public struct MediaArbiter: Sendable {
     /// "playing" after its window closes because the bridge's "nothing" was filed under the
     /// other kind.
     public mutating func updateFromBridge(_ snapshot: NowPlaying?) {
+        let id = snapshot.map(Self.playerID)
+        let was = id.map(reportsPlaying) ?? false
         for source in Self.bridgeSources { snapshots[source] = nil }
         if let snapshot { snapshots[snapshot.source] = snapshot }
+        if let id { noteReport(from: id, wasPlaying: was) }
+        dropPickIfGone()
+    }
+
+    // MARK: Several players
+
+    /// One app's player: its bundle id, or the source's name for a player that didn't say
+    /// (`source:external`). The system bridge's report of Spotify and Spotify's own are one player.
+    public static func playerID(_ s: NowPlaying) -> String {
+        s.bundleID ?? "source:\(s.source.rawValue)"
+    }
+
+    /// The player the bridge last reported, which is the one its commands reach. A report that
+    /// doesn't name its app is the player on the same track (as in `grouped`), so Spotify stays
+    /// on the bridge, needing no Automation, even when macOS leaves the app out.
+    public var bridgePlayer: String? {
+        guard let b = snapshots[.system] ?? snapshots[.browser] else { return nil }
+        if b.bundleID == nil, let same = snapshots.values.first(where: { $0.bundleID != nil && $0.trackKey == b.trackKey }) {
+            return Self.playerID(same)
+        }
+        return Self.playerID(b)
+    }
+
+    /// The live players, one per app, newest first. The island offers the others as chips.
+    public func available(now: Date) -> [NowPlaying] {
+        Self.grouped(liveSnapshots(now: now)).values.compactMap(Self.best).sorted { a, b in
+            a.timestamp != b.timestamp ? a.timestamp > b.timestamp : Self.playerID(a) < Self.playerID(b)
+        }
+    }
+
+    /// Show and control `player` (a `playerID`) rather than the most recent one. Ignored for a
+    /// player that isn't live.
+    public mutating func pick(player: String, at now: Date) {
+        guard available(now: now).contains(where: { Self.playerID($0) == player }) else { return }
+        pick = MediaPick(player: player, at: now)
+    }
+
+    public mutating func clearPick() { pick = nil }
+
+    /// Snapshots by player. One without a bundle id joins a player describing the same track
+    /// (a browser extension reporting the video the bridge reports).
+    static func grouped(_ live: [NowPlaying]) -> [String: [NowPlaying]] {
+        var groups: [String: [NowPlaying]] = [:]
+        for s in live {
+            let key = s.bundleID
+                ?? live.first(where: { $0.bundleID != nil && $0.trackKey == s.trackKey })?.bundleID
+                ?? playerID(s)
+            groups[key, default: []].append(s)
+        }
+        return groups
+    }
+
+    /// Whether any report from `player` says it is playing.
+    private func reportsPlaying(_ player: String) -> Bool {
+        snapshots.values.contains { Self.playerID($0) == player && $0.isPlaying }
+    }
+
+    /// Another player starting to play ends the pick; so does the picked player going.
+    private mutating func noteReport(from player: String, wasPlaying: Bool) {
+        if let p = pick, p.player != player, !wasPlaying, reportsPlaying(player) { pick = nil }
+        dropPickIfGone()
+    }
+
+    private mutating func dropPickIfGone() {
+        guard let p = pick, !snapshots.values.contains(where: { Self.playerID($0) == p.player }) else { return }
+        pick = nil
     }
 
     /// Whether a snapshot is really playing at `now`: it says so and hasn't run past its end.
@@ -196,11 +334,21 @@ public struct MediaArbiter: Sendable {
     public mutating func expire(now: Date) -> Bool {
         let dead = snapshots.filter { forgetAt($0.value).map { $0 <= now } == true }.keys
         for source in dead { snapshots[source] = nil }
+        dropPickIfGone()
         return !dead.isEmpty
     }
 
+    /// What the island shows and controls: the picked player while it is live, otherwise the
+    /// best of all (rules 1 to 3).
     public func current(now: Date) -> NowPlaying? {
-        let live = snapshots.values.filter { s in
+        let live = liveSnapshots(now: now)
+        if let pick, let group = Self.grouped(live)[pick.player], let picked = Self.best(group) { return picked }
+        return Self.best(live)
+    }
+
+    /// Snapshots still counting at `now`, from sources that are on, each past its end shown as stopped.
+    func liveSnapshots(now: Date) -> [NowPlaying] {
+        snapshots.values.filter { s in
             guard !disabled.contains(Self.setting(for: s)) else { return false }
             guard let forget = forgetAt(s) else { return true }
             return now < forget
@@ -213,11 +361,15 @@ public struct MediaArbiter: Sendable {
             stopped.timestamp = end
             return stopped
         }
+    }
+
+    /// The one to show among `live`, with gaps filled from others describing the same track.
+    static func best(_ live: [NowPlaying]) -> NowPlaying? {
         guard !live.isEmpty else { return nil }
         let best = live.max { a, b in
             if a.isPlaying != b.isPlaying { return !a.isPlaying }
             if a.timestamp != b.timestamp { return a.timestamp < b.timestamp }
-            return Self.rank(a.source) < Self.rank(b.source)
+            return rank(a.source) < rank(b.source)
         }!
         var result = best
         // Prefer a direct integration's identity (reliable state, controls) for the same track.
@@ -249,6 +401,18 @@ public struct MediaArbiter: Sendable {
         case .spotify: return 3
         case .appleMusic: return 3
         }
+    }
+}
+
+/// A player chosen in the island's player chips.
+public struct MediaPick: Equatable, Sendable {
+    /// `MediaArbiter.playerID`.
+    public var player: String
+    public var at: Date
+
+    public init(player: String, at: Date) {
+        self.player = player
+        self.at = at
     }
 }
 

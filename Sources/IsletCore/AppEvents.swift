@@ -297,6 +297,28 @@ public struct DownloadTracker: Sendable {
     }
 }
 
+// MARK: - Welcome back
+
+/// The "Welcome back" summary on unlock: what arrived while the screen was locked, by source.
+public enum WelcomeBack {
+    /// Locked for less than this, nothing is said.
+    public static let minimumAway: TimeInterval = 60
+
+    /// The activity to show, or nil: nothing arrived (an empty "Nothing new" would only be
+    /// noise), or the screen was locked for under a minute.
+    public static func activity(counts: [String: Int], lockedFor: TimeInterval, name: (String) -> String) -> ActivitySpec? {
+        let arrived = counts.filter { $0.value > 0 }
+        guard lockedFor > minimumAway, !arrived.isEmpty else { return nil }
+        // Most first; ties in name order, so the line reads the same each time.
+        let summary = arrived.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.prefix(3)
+            .map { "\($0.value) from \(name($0.key))" }.joined(separator: " · ")
+        return ActivitySpec(
+            id: "welcome-back", source: "system", title: "Welcome back", subtitle: summary,
+            icon: .symbol("lock.open.fill"), state: .info, tint: "white", priority: .normal, ttl: 4, sneak: true
+        )
+    }
+}
+
 // MARK: - Focus
 
 public enum FocusPill {

@@ -13,6 +13,9 @@ public final class LocalAPIServer {
     /// Connections that have not delivered a full request by then are dropped. Once the request
     /// has arrived, the connection stays open until the response is sent (long-polls).
     public var requestTimeout: TimeInterval = 5
+    /// Connections whose request line and headers have not all arrived by then are dropped
+    /// (nil: only `requestTimeout` applies). Set for the local-network listener.
+    public var headerTimeout: TimeInterval?
     /// Most long-polls (requests with `?wait=`) held open at once; more get 503.
     public var maxHeldRequests = 16
     /// Set for the local-network listener: limits requests per client address.
@@ -21,7 +24,17 @@ public final class LocalAPIServer {
     public var maxBodyBytes = HTTPParser.maxBodyBytes
     /// Most connections open at once (nil: no limit); more get 503.
     public var maxConnections: Int?
-    private var openConnections = 0
+    /// Most connections open at once from one client, keyed as for the rate limit (nil: no
+    /// limit); more get 429.
+    public var maxConnectionsPerClient: Int?
+    /// After refusing a request from its headers, how long at most to keep reading and dropping
+    /// the body the client is still sending before closing (see `refuse`).
+    public var lingerTimeout: TimeInterval = 5
+    /// Most refused connections draining their bodies at once; past that they close at once.
+    static let maxLingering = 16
+    /// Read and changed on `queue`.
+    private var connections = ConnectionTally()
+    private var lingering = 0
     private let held = HeldCount()
 
     /// One connection and whether its request has fully arrived.
@@ -95,35 +108,43 @@ public final class LocalAPIServer {
     }
 
     private func accept(_ conn: NWConnection) {
-        if let maxConnections {
-            guard openConnections < maxConnections else {
-                conn.start(queue: queue)
-                return respond(conn, .error(503, "too many connections; try again later"))
-            }
-            openConnections += 1
-            var open = true
-            conn.stateUpdateHandler = { [weak self] state in
-                switch state {
-                case .cancelled, .failed:
-                    guard open else { return }
-                    open = false
-                    self?.openConnections -= 1
-                default:
-                    break
-                }
+        let client = Self.clientKey(conn.endpoint)
+        switch connections.admit(client, limit: maxConnections, perClient: maxConnectionsPerClient) {
+        case .admitted:
+            break
+        case .full:
+            conn.start(queue: queue)
+            return respond(conn, .error(503, "too many connections; try again later"))
+        case .clientFull:
+            conn.start(queue: queue)
+            return respond(conn, .error(429, "too many connections from this device; try again when one has finished"))
+        }
+        // Counted until it closes, including while it lingers after a refusal.
+        var open = true
+        conn.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .cancelled, .failed:
+                guard open else { return }
+                open = false
+                self?.connections.release(client)
+            default:
+                break
             }
         }
         conn.start(queue: queue)
-        if rateLimiter != nil {
-            if rateLimiter?.allow(Self.clientKey(conn.endpoint), now: Date()) == false {
-                respond(conn, .error(429, "too many requests; slow down"))
-                return
-            }
+        if rateLimiter?.allow(client, now: Date()) == false {
+            return respond(conn, .error(429, "too many requests; slow down"))
         }
         let exchange = Exchange(conn)
         queue.asyncAfter(deadline: .now() + requestTimeout) { [weak exchange] in
             guard let exchange, !exchange.received, exchange.conn.state != .cancelled else { return }
             exchange.conn.cancel()
+        }
+        if let headerTimeout, headerTimeout < requestTimeout {
+            queue.asyncAfter(deadline: .now() + headerTimeout) { [weak exchange] in
+                guard let exchange, exchange.head == nil, !exchange.received, exchange.conn.state != .cancelled else { return }
+                exchange.conn.cancel()
+            }
         }
         receive(exchange, buffer: Data())
     }
@@ -143,14 +164,15 @@ public final class LocalAPIServer {
                     return self.respond(conn, .error(status, reason))
                 case .head(let head):
                     // A wrong token, a refused route or an oversized body is answered now,
-                    // without waiting for the body.
+                    // without waiting for the body; what is still coming of it is dropped.
+                    let unread = head.bodyLength - (buffer.count - head.bodyOffset)
                     if let refusal = self.router.preflight(head.request) {
                         exchange.received = true
-                        return self.respond(conn, refusal)
+                        return self.refuse(conn, refusal, unread: unread)
                     }
                     if head.bodyLength > self.maxBodyBytes {
                         exchange.received = true
-                        return self.respond(conn, .error(413, "body too large; the limit is \(self.maxBodyBytes / 1024) KB"))
+                        return self.refuse(conn, .error(413, "body too large; the limit is \(self.maxBodyBytes / 1024) KB"), unread: unread)
                     }
                     exchange.head = head
                 }
@@ -194,6 +216,58 @@ public final class LocalAPIServer {
 
     private func respond(_ conn: NWConnection, _ response: HTTPResponse) {
         conn.send(content: response.serialized(), completion: .contentProcessed { _ in conn.cancel() })
+    }
+
+    /// Answers a request refused from its headers, then reads and drops the `unread` bytes of
+    /// body the client may still be sending, and only then closes. Closing with data unread
+    /// resets the connection, and a client that is still uploading (URLSession) loses the
+    /// answer. It closes sooner when the client hangs up, and after `lingerTimeout` at most.
+    /// Nothing is kept, and the connection counts against the connection limits until it closes.
+    private func refuse(_ conn: NWConnection, _ response: HTTPResponse, unread: Int) {
+        guard unread > 0, lingering < Self.maxLingering else { return respond(conn, response) }
+        lingering += 1
+        let linger = Linger(conn) { [weak self] in self?.lingering -= 1 }
+        conn.send(content: response.serialized(), completion: .contentProcessed { error in
+            linger.sent = true
+            if linger.drained || error != nil { linger.close() }
+        })
+        drain(conn, unread) {
+            linger.drained = true
+            if linger.sent { linger.close() }
+        }
+        queue.asyncAfter(deadline: .now() + lingerTimeout) { [weak linger] in linger?.close() }
+    }
+
+    /// Reads and drops up to `remaining` bytes, a chunk at a time, then calls `done`; sooner if
+    /// the client hangs up or the connection fails.
+    private func drain(_ conn: NWConnection, _ remaining: Int, then done: @escaping () -> Void) {
+        conn.receive(minimumIncompleteLength: 1, maximumLength: min(remaining, 64 * 1024)) { [weak self] data, _, isComplete, error in
+            let left = remaining - (data?.count ?? 0)
+            guard let self, left > 0, !isComplete, error == nil else { return done() }
+            self.drain(conn, left, then: done)
+        }
+    }
+}
+
+/// A refused connection draining its body: it closes once the answer is sent and the body is
+/// read, or at the deadline, whichever comes first. Used on the server's queue only.
+private final class Linger {
+    let conn: NWConnection
+    let onClose: () -> Void
+    var sent = false
+    var drained = false
+    private var closed = false
+
+    init(_ conn: NWConnection, onClose: @escaping () -> Void) {
+        self.conn = conn
+        self.onClose = onClose
+    }
+
+    func close() {
+        guard !closed else { return }
+        closed = true
+        onClose()
+        conn.cancel()
     }
 }
 

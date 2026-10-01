@@ -189,7 +189,7 @@ echo '{"title":"Lakers at Celtics","teams":[{"abbr":"LAL","score":3},{"abbr":"BO
 | Method & path | Body | Result |
 |---|---|---|
 | `GET /v1/health` | — | `{"ok":"true","version":"…"}` (no token needed) |
-| `GET /v1/state` | — | presentation, activities, now playing, battery |
+| `GET /v1/state` | — | presentation, activities, now playing, battery, and `calendar` (see below) |
 | `GET /v1/activities` | — | activities in display order |
 | `POST /v1/activities` | activity | `201` + the activity (upsert) |
 | `PUT` / `PATCH /v1/activities/{id}` | partial activity | the updated activity |
@@ -205,7 +205,7 @@ echo '{"title":"Lakers at Celtics","teams":[{"abbr":"LAL","score":3},{"abbr":"BO
 | `POST /v1/focus` | `{name, on}` | iPhone-style Focus pill |
 | `POST /v1/media` | `{title, artist?, album?, isPlaying?, duration?, elapsed?, bundleID?, appName?, artworkURL?}` | report playback from any player |
 | `DELETE /v1/media` | — | clear it |
-| `POST /v1/media/command` | `{command: play\|pause\|togglePlayPause\|next\|previous\|seek\|skipForward\|skipBackward\|toggleShuffle\|toggleRepeat, position?}` | controls whatever is playing (see [Media commands](#media-commands)) |
+| `POST /v1/media/command` | `{command: play\|pause\|togglePlayPause\|next\|previous\|seek\|skipForward\|skipBackward\|toggleShuffle\|toggleRepeat, position?}` | controls the player on show: the one picked in the island, or the newest (see [Media commands](#media-commands)) |
 | `GET /v1/awake` | — | keep-awake status |
 | `POST /v1/awake` | `{minutes?}` (omitted or `0` = until turned off, up to `1440`) | keeps the Mac awake; returns the status |
 | `DELETE /v1/awake` | — | lets the Mac sleep again; returns the status |
@@ -222,6 +222,8 @@ curl -s -X POST http://127.0.0.1:47831/v1/activities \
   -d '{"id":"backup","title":"Backing up","progress":0.3}'
 ```
 
+`GET /v1/state` (and `isletctl state`) includes `"calendar": {"events": "fullAccess", "reminders": "notDetermined", "upcoming": 3}`: what macOS allows for calendars and for reminders (`notDetermined`, `fullAccess`, `writeOnly` for "Add events only", `denied` or `restricted`), read afresh for each request, and how many timed events are left today. It never includes a title. Meeting reminders (ids starting with `meeting-`, source `calendar`) carry the meeting's title, so `GET /v1/activities` and `/v1/state` always leave them out. To a script they aren't there: changing or removing one by its id gets a `404`, and `DELETE /v1/activities?source=calendar` removes only your own `calendar` activities and counts only those.
+
 Live Activities mirrored from the menu bar (ids starting with `live-`, source `live-activity`) belong to the mirror. Creating, changing or removing one, or sending that source, gets a `403` whether or not the id exists. `GET /v1/activities` and `/v1/state` leave them out, and `/v1/debug/menubar` leaves out their text, unless **Share mirrored activities with scripts** is on; see [LIVE-ACTIVITIES.md](LIVE-ACTIVITIES.md).
 
 ### Media commands
@@ -233,7 +235,7 @@ Live Activities mirrored from the menu bar (ids starting with `live-`, source `l
 | `skipForward`, `skipBackward` | 15 s forward or back, worked out from the current position so it works with any player. If Islet doesn't know the position, the player's own 15 s skip is used. |
 | `toggleShuffle`, `toggleRepeat` | Shuffle on or off; repeat cycles off → all → one. Players that don't report shuffle or repeat may ignore them, and the island only shows these buttons for players that do. |
 
-A `503` means no player is available for the command.
+A `503` means no player is available for the command. With several players at once, commands go to the one the island shows: through the system's Now Playing when that is the same app, otherwise to Music or Spotify directly (which needs Automation for that player, allowed in Settings → Permissions).
 
 ### Keep awake
 
@@ -301,7 +303,7 @@ Off by default. When enabled (Settings → Advanced → iPhone bridge), a second
 
 Everything else is `403`: the bridge can't read activities or state, remove anything, send agent hooks, or control media, the HUD, keep awake or the island.
 
-The bridge has its own token, shown in Settings → Advanced → iPhone bridge with **Copy** and **New token**, and kept in `~/Library/Application Support/Islet/lan.json` (mode `0600`). The local API's token is refused on the bridge, and the bridge's token is refused on the local API. A missing or wrong token gets `401` as soon as the headers arrive, before the body is read. Bodies are limited to 16 KB (`413`), 8 connections are served at once (`503`), and each client gets 30 requests per 10 seconds (`429`; an IPv6 /64 counts as one client). Browser origins are refused. See [iPhone recipes](INTEGRATIONS.md#iphone).
+The bridge has its own token, shown in Settings → Advanced → iPhone bridge with **Copy** and **New token**, and kept in `~/Library/Application Support/Islet/lan.json` (mode `0600`); `isletctl token --lan` prints it. The local API's token is refused on the bridge, and the bridge's token is refused on the local API. A missing or wrong token gets `401` as soon as the headers arrive, before the body is read. Bodies are limited to 16 KB (`413`). 8 connections are served at once (`503`), at most 2 of them from one client (`429`), and a connection is closed if its headers haven't arrived within 2 seconds. Each client gets 30 requests per 10 seconds (`429`). For both per-client limits, an IPv6 /64 counts as one client. Browser origins are refused. See [iPhone recipes](INTEGRATIONS.md#iphone).
 
 ---
 
@@ -339,9 +341,12 @@ isletctl hook <claude|codex|AGENT> [JSON]   forward an agent hook payload (stdin
 isletctl statusline [-- <command…>]    Claude Code status line: record plan usage, run your own line
 isletctl hook <claude|codex|cursor> --wait N   wait up to N s for an answer in the notch, print it
 isletctl state | health | token
+isletctl token --lan                  the iPhone bridge's token (not the local API's)
 ```
 
 `isletctl hook` never fails the calling agent: it exits 0 within ~1.5 s even when Islet isn't running.
+
+`isletctl token --lan` prints the iPhone bridge's token from `lan.json`, even while Islet isn't running, and says so if the bridge has never been turned on.
 
 `isletctl statusline` is a Claude Code status line command. It reads the JSON Claude passes on stdin and saves the plan limits, model and context use to `~/Library/Application Support/Islet/usage/claude.json` (mode 0600, written only when a figure changes). Then it runs `<command…>` with the same stdin and passes its output and exit code through; if Claude Code stops the status line early, the command is stopped too. A single argument runs with `/bin/sh -c`, which is how Claude stores a command line; several arguments run directly, without a shell. With no command it prints a short line such as `Opus 5.5 · 42% context · 5h 62%`. It never contacts the app or the network, and its own work takes a few milliseconds. See [Usage limits](INTEGRATIONS.md#usage-limits).
 `isletctl timer` reads the same phrases as the API's `in`, with one difference: a bare number is seconds (`isletctl timer 300`), as it always was. Quote phrases with spaces: `isletctl timer "in 20 minutes to check the oven"`.
@@ -396,7 +401,7 @@ Scripts get `ISLET=1`, `SWIFTBAR=1`, `XBARDarkMode=true` and Homebrew on `PATH`,
 
 ## Settings file
 
-Everything in Settings lives in `~/.config/islet/config.json` (or `$XDG_CONFIG_HOME/islet/config.json`) and reloads live when edited, so it can live in your dotfiles. Unknown keys are ignored; a bad value falls back to its default without breaking the rest. Example:
+Everything in Settings lives in `~/.config/islet/config.json` (or `$XDG_CONFIG_HOME/islet/config.json`) and reloads live when edited, so it can live in your dotfiles. Unknown keys are ignored and kept; a bad value falls back to its default without breaking the rest, and a file that doesn't parse is never written over (see the end of this section). Example:
 
 ```json
 {
@@ -436,6 +441,9 @@ Now Playing, closed island, HUD, gestures and battery keys:
 | `songChangePeek` | `true` | Show a new song for a moment below the notch when the track changes, for as long as `alertDuration`. |
 | `peekOnHover` | `true` | While the island opens on click (`hoverToOpen: false`), resting the pointer on the notch shows what's playing until it leaves. |
 | `songProgressRing` | `false` | A thin ring round the artwork beside the notch that fills as the song plays. |
+| `meetingReminderMinutes` | `10` | Minutes before a meeting that it shows beside the notch, counting down: `0` (off), `5`, `10`, `15` or `30`. Other values become the nearest. |
+| `meetingRemindUntilJoined` | `true` | A meeting that has started stays, glowing, until you join it, dismiss it or it ends. `false`: it goes 5 minutes after the start. |
+| `meetingRemindersNeedLink` | `true` | Only meetings with a call link remind you. All-day events, cancelled meetings and declined invitations never do. |
 | `pausedMusicTimeout` | `10` | Seconds the closed island keeps paused music before it hides (0–300; `0` = right away, `-1` = never). Replaces `showPausedMedia`, which is read once: `true` becomes `-1`. |
 | `visualiserStyle` | `"bars"` | The playing indicator: `"bars"`, `"slim"`, `"dots"`, `"wave"`, `"pulse"` or `"off"`. |
 | `musicColour` | `"artwork"` | The playing indicator, the progress ring and the open island's progress bar: `"artwork"`, `"accent"` (the artwork's colour while `accentColor` is `"auto"`) or `"white"`. Replaces `visualiserColour`, which is read once. |
@@ -453,5 +461,11 @@ Now Playing, closed island, HUD, gestures and battery keys:
 | `batteryLowThreshold` | `20` | Low battery warning, 5–50%. |
 | `batteryCriticalThreshold` | `10` | Second, urgent warning; always below the low one. |
 | `batteryChargedAlert` | `0` | Tell me when charging reaches this level (50–100; `0` = off). |
+| `clipboardEnabled` | `false` | Clipboard history. Switching it off forgets everything, pinned items too. |
+| `clipboardLimit` | `30` | Items kept, 1–500. Pinned items are never dropped. |
+| `clipboardSkipSecrets` | `true` | Skip text that looks like a password (one line, no spaces, 8–128 characters, three of lower case, upper case, digits and symbols) when it is copied in a browser, where password manager extensions copy as the browser. Links, paths, email addresses and domain names are kept. |
+| `clipboardIgnoredApps` | `[]` | Bundle ids whose copies are never kept, beside the password managers that always are. |
 
 The old `hapticFeedback: false` is read as `"hapticsMode": "off"`; use `hapticsMode` from now on.
+
+If `config.json` stops parsing (a missing comma while you edit it), Islet keeps the settings it had and writes nothing over the file until it parses again. If it is already broken when Islet starts, Islet uses the copy of the last version that parsed, which it keeps in `~/Library/Application Support/Islet/config-last-good.json` (outside the config folder, so your dotfiles never see it), or its defaults when there is no copy; Advanced says which. Settings → Advanced says which line has the error and offers **Replace…**, which keeps a copy as `config.json.broken` and writes the settings in use. Keys Islet doesn't know, from a newer version or your own notes, survive a save. Keys that were replaced by newer ones (`hapticFeedback`, `showPausedMedia`, `hideInFullscreen`, `showOnNonNotchDisplays`, `visualiserColour`, `fullscreenAllowList`, `hideForApps`, `launchAtLogin`) are read once and dropped on save.

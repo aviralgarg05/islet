@@ -21,15 +21,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Islet needs the macOS 27 SDK (FoundationModels' LanguageModelError in OnDeviceAsk.swift),
-      # so use the newest release Xcode on the runner rather than its default.
+      # Islet builds with the macOS 26 SDK (Xcode 26, Swift 6.3) and later; macOS 27-only code is
+      # compiled in only with the macOS 27 SDK. Use the newest release Xcode on the runner.
       - name: Select the newest Xcode
         id: xcode
         run: |
           sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | grep -vi beta | sort -V | tail -1)"
           swift --version
           sdk="$(xcrun --show-sdk-version)"
-          [ "${sdk%%.*}" -ge 27 ] || { echo "::error::Islet needs the macOS 27 SDK; the newest Xcode here has $sdk."; exit 1; }
+          [ "${sdk%%.*}" -ge 26 ] || { echo "::error::Islet needs the macOS 26 SDK or later; the newest Xcode here has $sdk."; exit 1; }
           echo "toolchain=$(swift --version 2>/dev/null | head -1 | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
 
       - name: Cache .build

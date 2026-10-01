@@ -281,6 +281,8 @@ import Testing
         #expect(s.sizePreset == .large)
         #expect(s.expandedSize.width == 660)
         #expect(s.rule(for: "us.zoom.xos")?.showInFullscreen == true)
+        // Decoding text that isn't JSON gives the defaults, but the app never applies them or
+        // writes them over the file: `SettingsFile` reports it as unreadable (SettingsFileTests).
         #expect(IsletSettings.decodeLenient(Data("not json".utf8)) == IsletSettings())
     }
 
@@ -313,8 +315,12 @@ import Testing
         s.mutedSources = ["ci"]
         try s.save(to: url)
         #expect(IsletSettings.load(from: url) == s)
+        // A file that doesn't parse reads as unreadable and is never saved over.
         try Data("garbage".utf8).write(to: url)
+        #expect(IsletSettings.read(from: url).problem != nil)
         #expect(IsletSettings.load(from: url) == IsletSettings())
+        #expect(throws: FileProblem.self) { try s.save(to: url) }
+        #expect(try Data(contentsOf: url) == Data("garbage".utf8))
     }
 
     @Test func tokenLooksRandom() {

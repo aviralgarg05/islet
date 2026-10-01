@@ -191,3 +191,46 @@ import Testing
         #expect(h.bodyLength == HTTPParser.maxBodyBytes + 1)
     }
 }
+
+@Suite struct ConnectionTallyTests {
+    @Test func limitsEachClientAndTheListener() {
+        var t = ConnectionTally()
+        func admit(_ client: String) -> ConnectionTally.Verdict { t.admit(client, limit: 3, perClient: 2) }
+        #expect([admit("a"), admit("a"), admit("a")] == [.admitted, .admitted, .clientFull])
+        #expect([admit("b"), admit("c")] == [.admitted, .full])
+        // Refusals aren't counted.
+        #expect(t.total == 3 && t.count(for: "a") == 2 && t.count(for: "c") == 0)
+        t.release("a")
+        #expect(t.count(for: "a") == 1)
+        #expect(admit("c") == .admitted)
+        // Releasing a client with nothing open changes nothing.
+        t.release("d")
+        #expect(t.total == 3)
+        for client in ["a", "b", "c"] { t.release(client) }
+        #expect(t.total == 0 && t.count(for: "a") == 0)
+    }
+
+    @Test func noLimitsStillCounts() {
+        var t = ConnectionTally()
+        for _ in 0..<100 { #expect(t.admit("a", limit: nil, perClient: nil) == .admitted) }
+        #expect(t.total == 100 && t.count(for: "a") == 100)
+        #expect(t.admit("a", limit: nil, perClient: 100) == .clientFull)
+        #expect(t.admit("b", limit: 100, perClient: nil) == .full)
+    }
+}
+
+@Suite struct LANTokenFileTests {
+    @Test func sitsBesideTheDiscoveryFileAndReadsBack() throws {
+        #expect(IsletPaths.lanTokenFile.lastPathComponent == "lan.json")
+        #expect(IsletPaths.lanTokenFile.deletingLastPathComponent() == IsletPaths.apiDiscoveryFile.deletingLastPathComponent())
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("islet-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("lan.json")
+        #expect(LANTokenFile.read(from: url) == nil)
+        try Data(#"{"token":"abc"}"#.utf8).write(to: url)
+        #expect(LANTokenFile.read(from: url) == "abc")
+        try Data("not json".utf8).write(to: url)
+        #expect(LANTokenFile.read(from: url) == nil)
+    }
+}

@@ -25,8 +25,11 @@ actor FakeBackend: IsletBackend {
         return media != nil
     }
     func setExpanded(_ expanded: Bool) async { self.expanded = expanded }
+    var calendar: CalendarStatus?
+    func setCalendar(_ status: CalendarStatus?) { calendar = status }
     func stateSnapshot() async -> StateSnapshot {
-        StateSnapshot(version: "test", presentation: "idle", activities: center.ordered(now: now), nowPlaying: nil, battery: nil)
+        StateSnapshot(version: "test", presentation: "idle", activities: center.ordered(now: now), nowPlaying: nil, battery: nil,
+                      calendar: calendar)
     }
     var menuBar: [MenuBarItemInfo] = []
     func menuBarItems() async -> [MenuBarItemInfo] { menuBar }

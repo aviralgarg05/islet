@@ -6,7 +6,7 @@ Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md). Issues a
 
 ## Setup
 
-Command Line Tools are enough (`xcode-select --install`), as long as they include the macOS 27 SDK (`xcrun --show-sdk-version` prints 27 or later). Then:
+Command Line Tools are enough (`xcode-select --install`), as long as they include the macOS 26 SDK or later (`xcrun --show-sdk-version` prints 26 or later). Xcode 26 works too. A few macOS 27 additions (the on-device model's newer error type) are compiled in only with the macOS 27 SDK, behind `#if compiler(>=6.4) && canImport(FoundationModels, _version: 2.0)`; guard anything else that needs it the same way. Then:
 
 ```bash
 make test     # must pass
@@ -19,6 +19,7 @@ make perf     # must stay within budget
 - **Decisions go in `IsletCore`**, as pure value types with an injected clock, and come with tests. `IsletSystem` only adapts macOS events to the core; the app layer only draws.
 - **No polling while idle.** Use notifications, property listeners, file-system events or one deadline timer. Perpetual animations must be Core Animation layers, not SwiftUI `repeatForever`. `make perf` must stay green.
 - **No new permission without an opt-in toggle** and a one-line reason in Settings. Nothing may prompt at launch.
+- **A calm budget.** A new module starts off and lives in the page switcher's menu (listed only while it is on) or Home's glance column. It adds a closed-island state only for an alert worth the space, and nothing it shows hangs below the menu bar row or covers a menu bar icon. Nothing appears just to say nothing happened.
 - **Private APIs are capability-checked** (`dlsym`, weak linking, helper processes) so that removing them only disables that feature.
 - **Clean-room code only.** Several notch apps are GPL-3.0; don't copy from them. MIT/BSD code is fine with attribution.
 - **Match the surrounding style:** small files, doc comments on public types, no force-unwraps outside tests.

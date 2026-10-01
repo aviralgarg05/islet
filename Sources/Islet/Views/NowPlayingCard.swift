@@ -37,11 +37,15 @@ struct NowPlayingHero: View {
                     }
                 }
                 Spacer(minLength: 0)
-                if !roomy {
-                    IconButton(symbol: showsSound ? "playpause.fill" : "speaker.wave.2.fill",
-                               help: showsSound ? "Show playback controls" : "Show volume and output",
-                               size: 24, glyph: 11, ink: Ink.tertiary) {
-                        model.controls.soundRowShown.toggle()
+                // The other players and the volume toggle, close together so the title keeps its room.
+                HStack(spacing: Space.xs) {
+                    PlayerChips(model: model, current: media)
+                    if !roomy {
+                        IconButton(symbol: showsSound ? "playpause.fill" : "speaker.wave.2.fill",
+                                   help: showsSound ? "Show playback controls" : "Show volume and output",
+                                   size: 24, glyph: 11, ink: Ink.tertiary) {
+                            model.controls.soundRowShown.toggle()
+                        }
                     }
                 }
             }
@@ -49,7 +53,10 @@ struct NowPlayingHero: View {
             if media.duration != nil {
                 MediaScrubber(model: model, media: media, accent: tint)
             }
-            if showsSound {
+            if let player = model.controlHint {
+                ControlPermissionHint(player: player) { model.openControlPermission() }
+                    .frame(height: TransportControls.height)
+            } else if showsSound {
                 SoundControls(model: model).frame(height: TransportControls.height)
             } else {
                 TransportControls(model: model, media: media, accent: tint, wide: size.width >= 330)
@@ -62,6 +69,59 @@ struct NowPlayingHero: View {
         // Lyrics are looked up while Now Playing is on show, once per song.
         .onAppear { if !snapshotMode { model.tools.lyrics.want(media) } }
         .onChange(of: media.trackKey) { _, _ in if !snapshotMode { model.tools.lyrics.want(media) } }
+    }
+}
+
+/// The other players live now (a video in Chrome beside a song in Spotify), as small app icons
+/// beside the title. Clicking one shows and controls that player instead, and the closed island
+/// follows. Nothing shows while there is only one player.
+struct PlayerChips: View {
+    let model: AppModel
+    let current: NowPlaying
+
+    var body: some View {
+        let shown = MediaArbiter.playerID(current)
+        let others = model.players.filter { MediaArbiter.playerID($0) != shown }
+        if !others.isEmpty {
+            HStack(spacing: Space.xs) {
+                ForEach(Array(others.prefix(3).enumerated()), id: \.offset) { _, np in
+                    PlayerChip(media: np) { model.pickPlayer(np) }
+                }
+            }
+        }
+    }
+}
+
+/// One other player: its app's icon on a quiet wash, with a small dot while it plays.
+struct PlayerChip: View {
+    let media: NowPlaying
+    let action: () -> Void
+    @ViewState private var hovering = false
+
+    var body: some View {
+        let name = media.appName ?? "another player"
+        Button(action: action) {
+            Group {
+                if let bundle = media.bundleID {
+                    AppIconView(bundleID: bundle, size: 16)
+                } else {
+                    Image(systemName: "music.note").font(.system(size: 10, weight: .semibold)).foregroundStyle(Ink.secondary)
+                }
+            }
+            .frame(width: 22, height: 22)
+            .background(Circle().fill(hovering ? Wash.strong : Wash.regular))
+            .overlay(alignment: .bottomTrailing) {
+                if media.isPlaying {
+                    Circle().fill(Color.green).frame(width: 5, height: 5)
+                }
+            }
+            .opacity(hovering ? 1 : 0.85)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help("Switch to \(name): \(media.title)")
+        .accessibilityLabel("Switch to \(name)")
     }
 }
 
@@ -158,6 +218,25 @@ struct ScrubBar: View {
             onCancel()
         }
         .animation(.snappy(duration: 0.15), value: dragging || hovering)
+    }
+}
+
+/// In place of the transport after a press went nowhere: macOS hasn't allowed Islet to control
+/// the player. One button, which opens the right place in Settings.
+struct ControlPermissionHint: View {
+    let player: String
+    let allow: () -> Void
+
+    var body: some View {
+        Button(action: allow) {
+            HStack(spacing: Space.xs) {
+                Image(systemName: "lock.fill").font(.system(size: 10, weight: .semibold))
+                Text("Allow Islet to control \(player)…").lineLimit(1)
+            }
+        }
+        .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
+        .help("Opens Settings → Permissions")
+        .frame(maxWidth: .infinity)
     }
 }
 

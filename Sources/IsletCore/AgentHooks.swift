@@ -5,7 +5,8 @@ import Foundation
 ///
 /// Supported inputs:
 /// - Claude Code hooks (JSON on stdin with `hook_event_name`, `session_id`, `cwd`, …)
-/// - Codex CLI `notify` program payloads (`{"type": "agent-turn-complete", …}`)
+/// - Codex hooks (the same shape) and its `notify` program payloads (`{"type": "agent-turn-complete", …}`)
+/// - Cursor hooks (`hook_event_name`, `conversation_id`, `workspace_roots`, …)
 /// - A generic shape any agent can send: `{"agent": "...", "event": "start|tool|waiting|done|error|end", ...}`
 public enum AgentHooks {
     public enum Result: Equatable, Sendable {
@@ -27,6 +28,7 @@ public enum AgentHooks {
         switch provider.lowercased() {
         case "claude", "claude-code", "claudecode": result = mapClaude(obj)
         case "codex": result = mapCodex(obj)
+        case "cursor": result = mapCursor(obj)
         default: result = mapGeneric(obj, provider: provider)
         }
         // An agent that stops reporting (its terminal was closed mid-turn) dims after a while
@@ -157,7 +159,7 @@ public enum AgentHooks {
             spec.ttl = 0
         case "Stop":
             spec.state = .success
-            spec.subtitle = "Done — your turn"
+            spec.subtitle = "Done. Your turn."
             spec.progress = 1
             spec.trailing = "Done"
             spec.priority = .normal
@@ -174,7 +176,10 @@ public enum AgentHooks {
         return .upsert(spec)
     }
 
+    /// Codex's hooks (`~/.codex/hooks.json`, what Connect writes) are shaped like Claude Code's
+    /// and keyed by `session_id`; its older `notify` program sends `agent-turn-complete`.
     static func mapCodex(_ o: [String: Any]) -> Result {
+        if let event = o["hook_event_name"] as? String { return mapCodexHook(o, event: event) }
         let type = o["type"] as? String ?? ""
         guard type == "agent-turn-complete" else { return .ignore }
         let turn = shortID((o["thread-id"] as? String) ?? (o["turn-id"] as? String))
@@ -186,9 +191,114 @@ public enum AgentHooks {
             state: .success, tint: "#10A37F", priority: .normal, ttl: 30, sneak: true
         )
         if let msg = o["last-assistant-message"] as? String, !msg.isEmpty {
-            spec.subtitle = truncate(msg, 70)
+            // The agent's own words can quote a key it just used; they show in the island.
+            spec.subtitle = truncate(redactSecrets(msg), 70)
         } else {
             spec.subtitle = "Turn complete"
+        }
+        return .upsert(spec)
+    }
+
+    static func mapCodexHook(_ o: [String: Any], event: String) -> Result {
+        let id = "codex-" + shortID(o["session_id"] as? String)
+        let proj = project(o["cwd"] as? String)
+        var spec = ActivitySpec(id: id, source: "codex", title: proj.map { "Codex · \($0)" } ?? "Codex",
+                                icon: .symbol("terminal.fill"), tint: "#10A37F")
+        let tool = o["tool_name"] as? String ?? "tool"
+        switch event {
+        case "SessionStart":
+            spec.state = .info; spec.subtitle = "Session started"; spec.priority = .low; spec.sneak = false; spec.ttl = 0
+        case "UserPromptSubmit":
+            spec.state = .running; spec.subtitle = "Thinking…"; spec.progress = -1
+            spec.priority = .normal; spec.sneak = false; spec.ttl = 0; spec.trailing = ""
+        case "PreToolUse", "PostToolUse":
+            // After a tool the turn goes on, so it still reads as working on that step.
+            spec.state = .running; spec.subtitle = describeCodexTool(tool, input: o["tool_input"]); spec.progress = -1
+            spec.priority = .normal; spec.sneak = false; spec.ttl = 0; spec.trailing = ""
+        case "PermissionRequest":
+            // The approval card gets attention; this only marks the wait.
+            spec.state = .waiting; spec.subtitle = "Needs approval: " + describeCodexTool(tool, input: o["tool_input"])
+            spec.progress = 0; spec.trailing = "Waiting"; spec.priority = .high; spec.sneak = false; spec.ttl = 0
+        case "Stop":
+            let last = (o["last_assistant_message"] as? String).map { truncate(redactSecrets($0), 70) }
+            spec.state = .success; spec.subtitle = (last?.isEmpty == false ? last : nil) ?? "Done. Your turn."
+            spec.progress = 1; spec.trailing = "Done"; spec.priority = .normal; spec.sneak = true; spec.ttl = 30
+        case "SessionEnd":
+            return .remove(id: id)
+        default:
+            return .ignore
+        }
+        return .upsert(spec)
+    }
+
+    /// A Codex tool call in a few words. Its shell tool takes the command as a list
+    /// (`["bash", "-lc", "git status"]`), and `apply_patch` names the files in the patch.
+    static func describeCodexTool(_ name: String, input: Any?) -> String {
+        let object = input as? [String: Any] ?? [:]
+        switch name {
+        case "shell", "local_shell", "exec_command", "container.exec", "Bash":
+            guard let command = commandLine(object["command"] ?? object["cmd"] ?? input) else { return "Running a command" }
+            return "Running " + truncate(redactSecrets(command), 44)
+        case "apply_patch":
+            let patch = object["input"] as? String ?? object["patch"] as? String ?? input as? String ?? ""
+            if let r = patch.range(of: #"\*\*\* (?:Add|Update|Delete) File: \S+"#, options: .regularExpression) {
+                let path = String(patch[r]).components(separatedBy: "File: ").last ?? ""
+                return "Editing " + URL(fileURLWithPath: path).lastPathComponent
+            }
+            return "Editing files"
+        case "update_plan": return "Updating the plan"
+        case "web_search": return "Browsing the web"
+        case "view_image": return "Looking at an image"
+        default: return describeTool(name, input: object)
+        }
+    }
+
+    /// A command given as a string or as a list of arguments, as one line. A shell's
+    /// `-c` or `-lc` wrapper is dropped, so `["bash", "-lc", "make"]` reads "make".
+    static func commandLine(_ value: Any?) -> String? {
+        if let s = value as? String { return s.isEmpty ? nil : s }
+        guard let args = value as? [String], !args.isEmpty else { return nil }
+        let shells: Set<String> = ["bash", "sh", "zsh", "/bin/bash", "/bin/sh", "/bin/zsh"]
+        if args.count >= 3, shells.contains(args[0]), args[1] == "-c" || args[1] == "-lc" { return args[2] }
+        return args.joined(separator: " ")
+    }
+
+    /// Cursor's hooks (`~/.cursor/hooks.json`), keyed by `conversation_id`. A payload with no
+    /// `hook_event_name` is the generic shape, as before.
+    static func mapCursor(_ o: [String: Any]) -> Result {
+        guard let event = o["hook_event_name"] as? String else { return mapGeneric(o, provider: "cursor") }
+        let id = "cursor-" + shortID(o["conversation_id"] as? String)
+        let proj = project((o["workspace_roots"] as? [String])?.first ?? o["cwd"] as? String)
+        var spec = ActivitySpec(id: id, source: "cursor", title: proj.map { "Cursor · \($0)" } ?? "Cursor",
+                                icon: .symbol("cursorarrow"), tint: "#C8C8C8")
+        func working(_ subtitle: String) {
+            spec.state = .running; spec.subtitle = subtitle; spec.progress = -1
+            spec.priority = .normal; spec.sneak = false; spec.ttl = 0; spec.trailing = ""
+        }
+        switch event {
+        case "beforeSubmitPrompt":
+            working("Thinking…")
+        case "beforeShellExecution", "afterShellExecution":
+            working((o["command"] as? String).map { "Running " + truncate(redactSecrets($0), 44) } ?? "Running a command")
+        case "beforeMCPExecution", "afterMCPExecution":
+            working((o["tool_name"] as? String).map { "Using " + truncate($0, 40) } ?? "Using a tool")
+        case "afterFileEdit":
+            working((o["file_path"] as? String).map { "Editing " + URL(fileURLWithPath: $0).lastPathComponent } ?? "Editing a file")
+        case "stop":
+            switch (o["status"] as? String ?? "completed").lowercased() {
+            case "error":
+                spec.state = .failure; spec.subtitle = "Stopped with an error"; spec.progress = 1
+                spec.trailing = "Error"; spec.priority = .high; spec.sneak = true; spec.ttl = 0
+            case "aborted":
+                // You stopped it yourself: nothing to point out.
+                spec.state = .success; spec.subtitle = "Stopped"; spec.progress = 1
+                spec.trailing = "Stopped"; spec.priority = .low; spec.sneak = false; spec.ttl = 10
+            default:
+                spec.state = .success; spec.subtitle = "Done. Your turn."; spec.progress = 1
+                spec.trailing = "Done"; spec.priority = .normal; spec.sneak = true; spec.ttl = 30
+            }
+        default:
+            return .ignore
         }
         return .upsert(spec)
     }

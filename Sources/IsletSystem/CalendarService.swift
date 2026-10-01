@@ -6,34 +6,49 @@ import IsletCore
 /// Reads upcoming events and reminders with EventKit. Access is only requested when the
 /// user turns the module on, never at launch.
 public final class CalendarService {
-    public enum Access: Equatable { case notDetermined, granted, denied }
-
     public var onAgenda: (([AgendaItem]) -> Void)?
     public var onReminders: (([ReminderItem]) -> Void)?
     /// Also fetch reminders (requires separate Reminders access).
     public var includeReminders = false
     /// Made on first use: creating a store contacts the calendar daemon, which runs a privacy
-    /// check even while the module is off.
-    private lazy var store = EKEventStore()
+    /// check even while the module is off. Made again when access arrives (`accessChanged`).
+    private var storeInstance: EKEventStore?
+    private var store: EKEventStore {
+        if let s = storeInstance { return s }
+        let s = EKEventStore()
+        storeInstance = s
+        return s
+    }
     private var observer: NSObjectProtocol?
 
     public init() {}
     deinit { stop() }
 
-    public static var eventAccess: Access {
-        switch EKEventStore.authorizationStatus(for: .event) {
-        case .fullAccess, .authorized: return .granted
+    /// What macOS allows for calendars: full access, "Add events only", refused, restricted or
+    /// not asked yet. Reading it never prompts.
+    public static var eventAccess: CalendarAccess { access(EKEventStore.authorizationStatus(for: .event)) }
+
+    public static var reminderAccess: CalendarAccess { access(EKEventStore.authorizationStatus(for: .reminder)) }
+
+    static func access(_ status: EKAuthorizationStatus) -> CalendarAccess {
+        switch status {
+        case .fullAccess, .authorized: return .fullAccess
+        case .writeOnly: return .writeOnly
+        case .denied: return .denied
+        case .restricted: return .restricted
         case .notDetermined: return .notDetermined
-        default: return .denied
+        @unknown default: return .denied
         }
     }
 
-    public static var reminderAccess: Access {
-        switch EKEventStore.authorizationStatus(for: .reminder) {
-        case .fullAccess, .authorized: return .granted
-        case .notDetermined: return .notDetermined
-        default: return .denied
-        }
+    /// Access changed while Islet was running (the user came back from System Settings). A
+    /// store made before access was granted may go on seeing nothing, so the next use makes a
+    /// new one; a running service starts reading straight away.
+    public func accessChanged() {
+        let running = observer != nil
+        stop()
+        storeInstance = nil
+        if running { start() }
     }
 
     public func requestReminderAccess(completion: @escaping (Bool) -> Void) {
@@ -44,7 +59,7 @@ public final class CalendarService {
 
     /// Event calendars, for choosing which ones to show: (identifier, title, colour hex).
     public func calendars() -> [(id: String, title: String, color: String?)] {
-        guard Self.eventAccess == .granted else { return [] }
+        guard Self.eventAccess.canRead else { return [] }
         return store.calendars(for: .event).map { ($0.calendarIdentifier, $0.title, Self.hex($0.color)) }
             .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
     }
@@ -62,7 +77,7 @@ public final class CalendarService {
     }
 
     public func start() {
-        guard Self.eventAccess == .granted || includeReminders && Self.reminderAccess == .granted else { return }
+        guard Self.eventAccess.canRead || includeReminders && Self.reminderAccess.canRead else { return }
         if observer == nil {
             observer = NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: store, queue: .main) { [weak self] _ in
                 self?.refresh()
@@ -79,7 +94,7 @@ public final class CalendarService {
     /// Events from an hour ago until the end of tomorrow, and incomplete reminders due by then.
     public func refresh() {
         refreshReminders()
-        guard Self.eventAccess == .granted else { return }
+        guard Self.eventAccess.canRead else { return }
         let now = Date()
         let end = Calendar.current.date(byAdding: .day, value: 2, to: Calendar.current.startOfDay(for: now)) ?? now.addingTimeInterval(86400)
         let predicate = store.predicateForEvents(withStart: now.addingTimeInterval(-3600), end: end, calendars: nil)
@@ -90,13 +105,13 @@ public final class CalendarService {
     /// Events between two moments from every calendar (the month calendar on Today reads a
     /// month at a time, while it is on screen). Empty without Calendar access.
     public func events(from start: Date, to end: Date) -> [AgendaItem] {
-        guard Self.eventAccess == .granted, start < end else { return [] }
+        guard Self.eventAccess.canRead, start < end else { return [] }
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
         return store.events(matching: predicate).map(Self.item(from:))
     }
 
     private func refreshReminders() {
-        guard includeReminders, Self.reminderAccess == .granted else { return }
+        guard includeReminders, Self.reminderAccess.canRead else { return }
         let end = Calendar.current.date(byAdding: .day, value: 2, to: Calendar.current.startOfDay(for: Date())) ?? Date()
         let predicate = store.predicateForIncompleteReminders(withDueDateStarting: nil, ending: end, calendars: nil)
         store.fetchReminders(matching: predicate) { [weak self] reminders in
@@ -108,7 +123,7 @@ public final class CalendarService {
     /// Mark a reminder done (the user ticked it in the island).
     @discardableResult
     public func complete(reminderID: String) -> Bool {
-        guard Self.reminderAccess == .granted,
+        guard Self.reminderAccess.canRead,
               let r = store.calendarItem(withIdentifier: reminderID) as? EKReminder else { return false }
         r.isCompleted = true
         do {
@@ -145,7 +160,9 @@ public final class CalendarService {
             location: e.location,
             meetingURL: Agenda.meetingLink(in: [e.url?.absoluteString, e.location, e.notes]),
             calendarID: e.calendar?.calendarIdentifier,
-            calendarTitle: e.calendar?.title
+            calendarTitle: e.calendar?.title,
+            // A cancelled meeting (Exchange keeps it in the calendar) is no more to join than one declined.
+            isDeclined: e.status == .canceled || e.attendees?.first(where: \.isCurrentUser)?.participantStatus == .declined
         )
     }
 }

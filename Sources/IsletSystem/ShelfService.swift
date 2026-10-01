@@ -7,14 +7,16 @@ public final class ShelfService {
     public private(set) var shelf: Shelf
     public var onChange: ((Shelf) -> Void)?
     private let storeURL: URL
+    /// False when an unreadable shelf.json couldn't be moved aside: then it is left alone.
+    private let canSave: Bool
 
     public init(storeURL: URL = IsletPaths.supportDirectory.appendingPathComponent("shelf.json")) {
         self.storeURL = storeURL
-        if let data = try? Data(contentsOf: storeURL), let s = try? JSONDecoder().decode(Shelf.self, from: data) {
-            shelf = s
-        } else {
-            shelf = Shelf()
-        }
+        // A shelf.json that doesn't parse goes to shelf.json.corrupt before the shelf starts empty.
+        let restored = JSONStore.start(storeURL) { JSONStore.read(Shelf.self, from: $0) }
+        shelf = restored.value ?? Shelf()
+        canSave = restored.canSave
+        if let moved = restored.setAside { NSLog("Islet: shelf.json couldn't be read; kept as %@", moved.lastPathComponent) }
         resolveBookmarks()
         shelf.prune { FileManager.default.fileExists(atPath: $0) }
     }
@@ -56,8 +58,10 @@ public final class ShelfService {
     }
 
     private func save() {
-        try? FileManager.default.createDirectory(at: storeURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if let data = try? JSONEncoder().encode(shelf) { try? data.write(to: storeURL, options: .atomic) }
+        if canSave {
+            try? FileManager.default.createDirectory(at: storeURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if let data = try? JSONEncoder().encode(shelf) { try? data.write(to: storeURL, options: .atomic) }
+        }
         onChange?(shelf)
     }
 

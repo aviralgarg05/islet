@@ -74,7 +74,7 @@ extension Snapshots {
         for (name, end) in targets {
             let frames = VStack(spacing: 0) {
                 ForEach(steps, id: \.self) { k in
-                    let g = morph(pill, end, k)
+                    let g = end.moved(from: pill, by: k)
                     ZStack(alignment: .top) {
                         notchlessBackdrop(metrics: metrics)
                         g.shape.fill(Color.black).frame(width: g.outerWidth, height: g.size.height)
@@ -85,19 +85,6 @@ extension Snapshots {
             }
             write(frames, to: dir.appendingPathComponent("52-notchless-pill-morph-\(name).png"))
         }
-    }
-
-    /// `a` moved `k` of the way to `b`, as the island's spring moves it.
-    private static func morph(_ a: IslandGeometry, _ b: IslandGeometry, _ k: Double) -> IslandGeometry {
-        func mix(_ x: CGFloat, _ y: CGFloat) -> CGFloat { x + (y - x) * CGFloat(k) }
-        var g = b
-        g.size = CGSize(width: mix(a.size.width, b.size.width), height: mix(a.size.height, b.size.height))
-        g.top = mix(a.top, b.top)
-        g.bottom = mix(a.bottom, b.bottom)
-        g.stemWidth = mix(a.stemWidth, b.stemWidth)
-        g.stemHeight = mix(a.stemHeight, b.stemHeight)
-        g.inset = mix(a.inset, b.inset)
-        return g
     }
 
     static func shootNotchless(_ name: String, model: AppModel, metrics: IslandMetrics, dir: URL) {

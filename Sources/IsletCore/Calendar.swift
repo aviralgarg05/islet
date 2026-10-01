@@ -14,13 +14,34 @@ public struct AgendaItem: Codable, Equatable, Sendable, Identifiable {
     /// Identifier of the calendar it belongs to (for hiding calendars).
     public var calendarID: String?
     public var calendarTitle: String?
+    /// You declined the invitation, or the meeting was cancelled: either way it never reminds you.
+    public var isDeclined: Bool
 
     public init(id: String, title: String, start: Date, end: Date, isAllDay: Bool = false,
                 calendarColor: String? = nil, location: String? = nil, meetingURL: URL? = nil,
-                calendarID: String? = nil, calendarTitle: String? = nil) {
+                calendarID: String? = nil, calendarTitle: String? = nil, isDeclined: Bool = false) {
         self.id = id; self.title = title; self.start = start; self.end = end; self.isAllDay = isAllDay
         self.calendarColor = calendarColor; self.location = location; self.meetingURL = meetingURL
-        self.calendarID = calendarID; self.calendarTitle = calendarTitle
+        self.calendarID = calendarID; self.calendarTitle = calendarTitle; self.isDeclined = isDeclined
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, start, end, isAllDay, calendarColor, location, meetingURL, calendarID, calendarTitle, isDeclined
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        start = try c.decode(Date.self, forKey: .start)
+        end = try c.decode(Date.self, forKey: .end)
+        isAllDay = try c.decodeIfPresent(Bool.self, forKey: .isAllDay) ?? false
+        calendarColor = try c.decodeIfPresent(String.self, forKey: .calendarColor)
+        location = try c.decodeIfPresent(String.self, forKey: .location)
+        meetingURL = try c.decodeIfPresent(URL.self, forKey: .meetingURL)
+        calendarID = try c.decodeIfPresent(String.self, forKey: .calendarID)
+        calendarTitle = try c.decodeIfPresent(String.self, forKey: .calendarTitle)
+        isDeclined = try c.decodeIfPresent(Bool.self, forKey: .isDeclined) ?? false
     }
 
     public func isOngoing(at now: Date) -> Bool { start <= now && now < end }
@@ -69,33 +90,6 @@ public enum Agenda {
         if let ongoing = timed.first(where: { $0.isOngoing(at: now) }) { return ongoing }
         return timed.first { $0.start.timeIntervalSince(now) <= horizon }
     }
-
-    /// Whether to raise a "starting soon" live activity for this event.
-    public static func shouldAlert(_ item: AgendaItem, now: Date, lead: TimeInterval = 5 * 60) -> Bool {
-        guard !item.isAllDay else { return false }
-        let delta = item.start.timeIntervalSince(now)
-        return delta <= lead && delta > -60
-    }
-
-    /// The live activity announcing an imminent event.
-    public static func activity(for item: AgendaItem, now: Date) -> ActivitySpec {
-        var actions: [ActivityAction] = []
-        if let url = item.meetingURL { actions.append(ActivityAction(title: "Join", url: url)) }
-        return ActivitySpec(
-            id: "calendar-\(String(item.id.filter { $0.isLetter || $0.isNumber }.prefix(40)))",
-            source: "calendar",
-            title: item.title,
-            subtitle: item.location.flatMap { $0.isEmpty ? nil : $0 } ?? Format.relative(to: item.start, now: now),
-            icon: .symbol(item.meetingURL != nil ? "video.fill" : "calendar"),
-            state: .info,
-            tint: item.calendarColor ?? "blue",
-            priority: .high,
-            ttl: max(60, item.start.timeIntervalSince(now) + 120),
-            endsAt: item.start > now ? item.start : nil,
-            actions: actions,
-            sneak: true
-        )
-    }
 }
 
 extension Agenda {
@@ -110,6 +104,12 @@ extension Agenda {
     /// Drop events from calendars the user hid.
     public static func visible(_ items: [AgendaItem], hiding hidden: Set<String>) -> [AgendaItem] {
         hidden.isEmpty ? items : items.filter { !hidden.contains($0.calendarID ?? "") }
+    }
+
+    /// The next moment what the agenda shows changes on its own: a timed event starting or
+    /// ending. The app redraws then, rather than checking every minute.
+    public static func nextChange(_ items: [AgendaItem], now: Date) -> Date? {
+        items.filter { !$0.isAllDay }.flatMap { [$0.start, $0.end] }.filter { $0 > now }.min()
     }
 }
 
@@ -150,6 +150,11 @@ public enum Reminders {
             if a.isAllDay != b.isAllDay { return !a.isAllDay }
             return (a.due ?? .distantFuture, a.title) < (b.due ?? .distantFuture, b.title)
         }
+    }
+
+    /// When the next timed reminder is due, so its alert shows on time without checking every minute.
+    public static func nextDue(_ items: [ReminderItem], now: Date) -> Date? {
+        items.compactMap { $0.isAllDay ? nil : $0.due }.filter { $0 > now }.min()
     }
 
     /// Timed reminders alert at their due minute (never all-day ones, which have no moment).

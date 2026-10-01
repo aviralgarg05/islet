@@ -27,13 +27,13 @@ extension Snapshots {
             model.tools.lyrics.showForSnapshot(lyrics, for: np)
             for preset in [SizePreset.compact, .standard, .large] {
                 size(preset)
-                shoot("60-lyrics-\(preset.rawValue)")
+                shoot("90-lyrics-\(preset.rawValue)")
             }
             size(.compact)
             model.tools.lyrics.showForSnapshot(lyrics, for: np, hidden: true)
-            shoot("60b-lyrics-hidden")
+            shoot("90b-lyrics-hidden")
             model.tools.lyrics.showForSnapshot(SongLyrics(plain: "Lights along the river\nTurning slowly into gold\nEvery window holds a story"), for: np)
-            shoot("60c-lyrics-plain")
+            shoot("90c-lyrics-plain")
             model.tools.lyrics.showForSnapshot(nil, for: np)
             model.settings.lyricsEnabled = false
         }
@@ -41,7 +41,7 @@ extension Snapshots {
         // Shortcuts: off (Turn on), then on with one running and one just done.
         model.tab = .shortcuts
         model.settings.shortcutsEnabled = false
-        shoot("61-shortcuts-off")
+        shoot("91-shortcuts-off")
         model.settings.shortcutsEnabled = true
         let shortcuts = [
             ShortcutItem(id: "1", name: "Morning routine"), ShortcutItem(id: "2", name: "Log a glass of water"),
@@ -49,12 +49,12 @@ extension Snapshots {
             ShortcutItem(id: "5", name: "Start a focus playlist"), ShortcutItem(id: "6", name: "Resize images"),
         ]
         model.tools.shortcuts.showForSnapshot(shortcuts, runs: ["3": .running, "1": .done])
-        shoot("61b-shortcuts")
+        shoot("91b-shortcuts")
         size(.standard)
-        shoot("61c-shortcuts-standard")
+        shoot("91c-shortcuts-standard")
         size(.compact)
         model.tools.shortcuts.showForSnapshot(shortcuts, query: "zzz")
-        shoot("61d-shortcuts-no-match")
+        shoot("91d-shortcuts-no-match")
         model.tools.shortcuts.showForSnapshot(shortcuts)
 
         // The Ask box offers a shortcut whose name matches.
@@ -63,7 +63,7 @@ extension Snapshots {
         for kind in AskProviderKind.allCases { model.ask.setStatusForSnapshot(.ready, for: kind) }
         model.ask.sessionProvider = .anthropic
         model.ask.draft = "lights"
-        shoot("61e-ask-shortcut")
+        shoot("91e-ask-shortcut")
         model.ask.draft = ""
         model.ask.sessionProvider = nil
         model.settings.shortcutsEnabled = false
@@ -71,7 +71,7 @@ extension Snapshots {
         // Weather: off, then a week in London, then where it can't reach.
         model.tab = .weather
         model.settings.weatherEnabled = false
-        shoot("62-weather-off")
+        shoot("92-weather-off")
         model.settings.weatherEnabled = true
         model.settings.weatherPlace = WeatherPlace(name: "London", region: "England", country: "United Kingdom", latitude: 51.51, longitude: -0.13)
         let days = [(61, 16.1, 9.8, 80), (3, 17.4, 10.2, 20), (2, 18.0, 11.0, 10), (0, 19.5, 10.9, 0),
@@ -83,12 +83,12 @@ extension Snapshots {
             },
             fetchedAt: now)
         model.tools.weather.showForSnapshot(report)
-        shoot("62b-weather")
+        shoot("92b-weather")
         size(.standard)
-        shoot("62c-weather-standard")
+        shoot("92c-weather-standard")
         size(.compact)
         model.tools.weather.showForSnapshot(nil, status: .failed)
-        shoot("62d-weather-failed")
+        shoot("92d-weather-failed")
         model.tools.weather.showForSnapshot(nil)
 
         // Today with the month calendar: today, then a picked day, and on a wide island.
@@ -105,14 +105,14 @@ extension Snapshots {
             on(14, 16, "Call with Ana", "#BF5AF2"), on(21, 18, "Book club", "#34C759"), on(27, 11, "Flight to Lisbon", "#FF453A"),
         ]
         model.tools.month.showForSnapshot(month: now, selected: nil, events: month)
-        shoot("63-today-month")
+        shoot("93-today-month")
         model.tools.month.showForSnapshot(month: now, selected: on(14, 0, "", "").start, events: month)
-        shoot("63b-today-month-picked")
+        shoot("93b-today-month-picked")
         model.tools.month.showForSnapshot(month: now, selected: nil, events: month)
         size(.standard)
-        shoot("63c-today-month-standard")
+        shoot("93c-today-month-standard")
         size(.large)
-        shoot("63d-today-month-large")
+        shoot("93d-today-month-large")
         size(.compact)
         model.settings.monthCalendar = false
 
@@ -126,28 +126,28 @@ extension Snapshots {
         model.tools.stopwatch.showForSnapshot(watch)
         model.tab = .home
         model.settings.mediaEnabled = false
-        shoot("64-stopwatch")
+        shoot("94-stopwatch")
         var paused = watch
         paused.pause(now: now)
         model.tools.stopwatch.showForSnapshot(paused)
-        shoot("64b-stopwatch-paused")
+        shoot("94b-stopwatch-paused")
         model.tools.stopwatch.showForSnapshot(watch)
         model.settings.mediaEnabled = true
-        shoot("64c-stopwatch-glance")
+        shoot("94c-stopwatch-glance")
         var center = ActivityCenter()
         if let spec = watch.spec(now: now), let a = try? center.apply(spec, now: now) {
             model.forcedPresentation = .compact(.activity(a, others: 0))
-            shoot("64d-compact-stopwatch")
+            shoot("94d-compact-stopwatch")
             model.closedPlacements[1] = ClosedPlacement(wing: MenuBarLayoutEngine.iconOnlyWing, slack: 0)
-            shoot("i64d-compact-stopwatch")
+            shoot("i94d-compact-stopwatch")
             model.closedPlacements[1] = nil
             model.forcedPresentation = .expanded
         }
         model.tools.stopwatch.showForSnapshot(Stopwatch())
         model.timers.isEntering = true
-        shoot("64e-timer-entry-stopwatch")
+        shoot("94e-timer-entry-stopwatch")
         size(.standard)
-        shoot("64f-timer-entry-stopwatch-standard")
+        shoot("94f-timer-entry-stopwatch-standard")
         size(.compact)
         model.timers.isEntering = false
 

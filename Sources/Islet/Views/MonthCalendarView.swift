@@ -145,11 +145,17 @@ struct MonthDayColumn: View {
             SectionLabel(title: picked.map { $0.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)) } ?? "Today",
                          count: timed.count)
                 .frame(height: 16)
-            if !model.settings.calendarEnabled || CalendarService.eventAccess != .granted && !snapshotMode {
+            if !(model.settings.calendarEnabled && model.calendarAccess.events.canRead) {
+                // Off, or macOS not letting Islet read it: what is wrong, and the button that helps.
+                let advice = model.calendarAdvice(.calendars)
                 VStack(alignment: .leading, spacing: Space.s) {
-                    Text("Your events, with a Join button for calls.").textStyle(.body).foregroundStyle(Ink.secondary)
+                    Text(advice.isAllowed || advice.action == .ask ? "Your events, with a Join button for calls." : advice.status)
+                        .textStyle(.body).foregroundStyle(Ink.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Button("Allow Calendar") { model.requestCalendarAccess() }.buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
+                    Button(advice.isAllowed ? "Turn on" : advice.action == .ask ? "Allow Calendar" : advice.button ?? "Open System Settings") {
+                        model.requestCalendarAccess(.calendars)
+                    }
+                    .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
                 }
             } else if lines == 0 {
                 Text(picked == nil ? "Nothing else today" : "Nothing on this day").textStyle(.body).foregroundStyle(Ink.tertiary)
@@ -163,7 +169,7 @@ struct MonthDayColumn: View {
                             }
                             .frame(height: TodayTab.allDayHeight)
                         }
-                        ForEach(timed.prefix(snapshotMode ? fit.timed : 30)) { e in AgendaLine(item: e, now: now) }
+                        ForEach(timed.prefix(snapshotMode ? fit.timed : 30)) { e in AgendaLine(item: e, now: now) { model.join(e) } }
                         if !reminders.isEmpty && (!snapshotMode || fit.reminders > 0) {
                             SectionLabel(title: "Reminders", count: reminders.count).frame(height: 16)
                             ForEach(reminders.prefix(snapshotMode ? fit.reminders : 30)) { r in
@@ -202,8 +208,12 @@ struct TodayReminders: View {
         let fit = TodayTab.rows(in: height)
         VStack(alignment: .leading, spacing: Space.xs) {
             SectionLabel(title: "Reminders", count: reminders.count).frame(height: 16)
-            if CalendarService.reminderAccess != .granted && !snapshotMode {
-                Button("Allow Reminders") { model.requestReminderAccess() }.buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
+            if !model.calendarAccess.reminders.canRead {
+                let advice = model.calendarAdvice(.reminders)
+                Button(advice.action == .ask ? "Allow Reminders" : advice.button ?? "Open System Settings") {
+                    model.requestCalendarAccess(.reminders)
+                }
+                .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
             } else if reminders.isEmpty {
                 Text("All done").textStyle(.body).foregroundStyle(Ink.tertiary)
             } else {

@@ -18,8 +18,13 @@ struct CodingAgentsSettings: View {
             Section { SettingsHero(page: .agents) }
             Section {
                 ForEach(CodingAgent.allCases) { agent in
-                    AgentConnectionRow(agent: agent, connection: connections[agent], note: notes[agent]) { preview(agent) }
-                        .settingsAnchor("agents.\(agent.rawValue)")
+                    AgentConnectionRow(agent: agent, connection: connections[agent], note: notes[agent],
+                                       moved: model.agentsNeedingUpdate.contains(agent)) {
+                        preview(agent)
+                    } disconnect: {
+                        previewDisconnect(agent)
+                    }
+                    .settingsAnchor("agents.\(agent.rawValue)")
                 }
             } header: {
                 Text("Connections")
@@ -63,7 +68,7 @@ struct CodingAgentsSettings: View {
 
     /// How hooks call the CLI: the copy inside the app, or `isletctl` on PATH for dev builds.
     static var executable: String {
-        FileManager.default.isExecutableFile(atPath: AppActions.cliPath) ? AppActions.cliPath : "isletctl"
+        AppActions.isExecutable(AppActions.cliPath) ? AppActions.cliPath : "isletctl"
     }
 
     private var wait: Int { Int(model.settings.approvalWait) }
@@ -72,6 +77,7 @@ struct CodingAgentsSettings: View {
         for agent in CodingAgent.allCases {
             connections[agent] = AgentHookSetup.connection(agent, home: IsletPaths.home, executable: Self.executable, wait: wait)
         }
+        model.checkAgentHooks()
     }
 
     private func preview(_ agent: CodingAgent) {
@@ -84,13 +90,28 @@ struct CodingAgentsSettings: View {
         }
     }
 
+    private func previewDisconnect(_ agent: CodingAgent) {
+        notes[agent] = nil
+        do {
+            let plan = try AgentHookSetup.disconnectPlan(agent, home: IsletPaths.home)
+            if plan.isUpToDate { refresh() } else { pending = PendingConnection(plan: plan) }
+        } catch {
+            notes[agent] = Self.message(for: error, agent: agent)
+        }
+    }
+
     private func connect(_ plan: AgentHookPlan) {
         pending = nil
         do {
             try AgentHookSetup.apply(plan)
-            notes[plan.agent] = plan.agent == .codex
-                ? "Connected. In Codex, type /hooks once to trust Islet's hooks."
-                : "Connected. New \(plan.agent.title) sessions use it."
+            switch plan.kind {
+            case .disconnect:
+                notes[plan.agent] = "Disconnected. \(plan.agent.title) no longer tells Islet what it's doing."
+            case .connect:
+                notes[plan.agent] = plan.agent == .codex
+                    ? "Connected. In Codex, type /hooks once to trust Islet's hooks."
+                    : "Connected. New \(plan.agent.title) sessions use it."
+            }
         } catch {
             notes[plan.agent] = Self.message(for: error, agent: plan.agent)
         }
@@ -119,12 +140,16 @@ private struct PendingConnection: Identifiable {
     let plan: AgentHookPlan
 }
 
-/// One agent: its mark, where its connection stands, and the button that connects it.
+/// One agent: its mark, where its connection stands, and the buttons that connect, update
+/// or disconnect it.
 private struct AgentConnectionRow: View {
     let agent: CodingAgent
     let connection: AgentConnection?
     let note: String?
+    /// Its hooks call an isletctl that isn't there any more.
+    let moved: Bool
     let connect: () -> Void
+    let disconnect: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -143,8 +168,10 @@ private struct AgentConnectionRow: View {
             Spacer(minLength: 8)
             switch connection {
             case .connected?:
+                Button("Disconnect…", action: disconnect).buttonStyle(.borderless).foregroundStyle(.secondary)
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityLabel("Connected")
             case .needsUpdate?:
+                Button("Disconnect…", action: disconnect).buttonStyle(.borderless).foregroundStyle(.secondary)
                 Button("Update…", action: connect)
             case .problem?, nil:
                 EmptyView()
@@ -158,7 +185,9 @@ private struct AgentConnectionRow: View {
     private func detail(_ c: AgentConnection) -> String {
         switch c {
         case .problem(let why): return why
-        case .needsUpdate: return "Connected. Update it so it waits as long as you set below."
+        case .needsUpdate:
+            return moved ? "Islet has moved since it was connected, so \(agent.title) can't reach it. Update it to fix this."
+                : "Connected to an older setup. Update it so it keeps working as you set below."
         case .notFound: return "Not found on this Mac yet. You can still connect it."
         default: return c.label
         }
@@ -198,13 +227,18 @@ private struct AgentConnectSheet: View {
     var onConfirm: () -> Void
     var onCancel: () -> Void
 
+    private var disconnecting: Bool { plan.kind == .disconnect }
+    private var verb: String { disconnecting ? "Disconnect" : plan.wasConnected ? "Update" : "Connect" }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 AgentMark(agent: plan.agent)
-                Text("Connect \(plan.agent.title)?").font(.headline)
+                Text("\(verb) \(plan.agent.title)?").font(.headline)
             }
-            Text("Islet adds its hooks to \(plan.agent.title)'s settings. Your own settings and hooks stay as they are, and each file is copied to a .bak file first.")
+            Text(disconnecting
+                 ? "Islet takes its own hooks out of \(plan.agent.title)'s settings. Your own settings and hooks stay as they are, and the file is copied to a .bak file first."
+                 : "Islet adds its hooks to \(plan.agent.title)'s settings. Your own settings and hooks stay as they are, and each file is copied to a .bak file first.")
                 .font(.callout).fixedSize(horizontal: false, vertical: true)
             ForEach(plan.changedFiles, id: \.url) { file in
                 VStack(alignment: .leading, spacing: 4) {
@@ -218,14 +252,14 @@ private struct AgentConnectSheet: View {
                         .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.06)))
                 }
             }
-            if plan.agent == .codex {
+            if plan.agent == .codex && !disconnecting {
                 Text("Codex asks once before it runs new hooks: type /hooks in Codex and trust Islet's.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel, action: onCancel).keyboardShortcut(.cancelAction)
-                Button("Connect", action: onConfirm).keyboardShortcut(.defaultAction)
+                Button(verb, role: disconnecting ? .destructive : nil, action: onConfirm).keyboardShortcut(.defaultAction)
             }
         }
         .padding(20)

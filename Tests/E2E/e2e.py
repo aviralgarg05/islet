@@ -279,6 +279,7 @@ def run_suite(e, app, windows_bin):
             lan_token = json.load(f).get("token")
         check("lan.json is private (0600)", oct(os.stat(lan_file).st_mode & 0o777) == "0o600")
     check("LAN has its own token", lan_token and lan_token != token)
+    check("isletctl token --lan prints it", ctl(e, "token", "--lan").stdout.strip() == lan_token)
     status, body = http_to(LAN_PORT, "POST", "/v1/notify", lan_token, {"title": "From iPhone", "ttl": 30}, {"Host": "my-mac.local:%d" % LAN_PORT})
     check("iPhone-style request with .local host accepted", status == 201, f"{status} {body}")
     check("LAN still requires the token", http_to(LAN_PORT, "POST", "/v1/notify", None, {"title": "x"}, {"Host": "my-mac.local"})[0] == 401)

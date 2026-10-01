@@ -16,13 +16,14 @@ struct PermissionsSettings: View {
     /// Reading the Downloads folder can prompt, so it's only read once the user has asked
     /// or the downloads module (which reads it anyway) is on.
     @ViewState private var askedForDownloads = false
+    @Environment(\.snapshotMode) private var snapshotMode
 
     var body: some View {
         Form {
             Section { SettingsHero(page: .permissions) }
             Section {
                 ForEach(PermissionKind.allCases) { kind in
-                    PermissionRow(kind: kind, uses: kind.uses(model.settings), status: statuses[kind]) { act(on: kind) }
+                    PermissionRow(kind: kind, uses: kind.uses(model.settings), status: status(of: kind), hint: hint(for: kind)) { act(on: kind) }
                         .settingsAnchor("permissions.\(kind.rawValue)")
                 }
             } footer: {
@@ -50,10 +51,30 @@ struct PermissionsSettings: View {
     }
 
     private func refresh() {
+        // Calendars and reminders come from the model, which starts them as access arrives.
+        // (Snapshots draw the access they were given.)
+        if !snapshotMode { model.recheckCalendarAccess() }
         let readDownloads = askedForDownloads || model.settings.downloadsEnabled
-        for kind in PermissionKind.allCases {
+        for kind in PermissionKind.allCases where !Self.isCalendar(kind) {
             PermissionProbe.status(of: kind, readDownloads: readDownloads) { update(kind, $0) }
         }
+    }
+
+    private static func isCalendar(_ kind: PermissionKind) -> Bool { kind == .calendars || kind == .reminders }
+
+    private func status(of kind: PermissionKind) -> PermissionStatus? {
+        switch kind {
+        case .calendars: return .calendar(model.calendarAccess.events, refused: model.calendarRefused.contains(.calendars))
+        case .reminders: return .calendar(model.calendarAccess.reminders, refused: model.calendarRefused.contains(.reminders))
+        default: return statuses[kind]
+        }
+    }
+
+    /// For calendars and reminders that aren't allowed: what to switch in System Settings.
+    private func hint(for kind: PermissionKind) -> String? {
+        guard Self.isCalendar(kind) else { return nil }
+        let advice = model.calendarAdvice(kind)
+        return advice.action == .ask || advice.isAllowed ? nil : advice.detail
     }
 
     /// A newly granted permission lets switched-on features start now rather than at next launch.
@@ -66,6 +87,11 @@ struct PermissionsSettings: View {
     }
 
     private func act(on kind: PermissionKind) {
+        if Self.isCalendar(kind) {
+            // Asks macOS when it hasn't; otherwise opens the right page of System Settings.
+            model.requestCalendarAccess(kind, turnOn: false) { refresh() }
+            return
+        }
         switch (statuses[kind] ?? .unknown).action {
         case .openSettings:
             NSWorkspace.shared.open(kind.settingsURL)
@@ -77,21 +103,8 @@ struct PermissionsSettings: View {
     }
 
     private func request(_ kind: PermissionKind) {
-        switch kind {
-        case .calendars:
-            model.calendar.requestAccess { _ in calendarAnswered() }
-        case .reminders:
-            model.calendar.requestReminderAccess { _ in calendarAnswered() }
-        default:
-            if kind == .downloadsFolder { askedForDownloads = true }
-            PermissionProbe.request(kind) { update(kind, $0) }
-        }
-    }
-
-    private func calendarAnswered() {
-        refresh()
-        model.startEventSources()
-        if model.settings.calendarEnabled || model.settings.remindersEnabled { model.calendar.refresh() }
+        if kind == .downloadsFolder { askedForDownloads = true }
+        PermissionProbe.request(kind) { update(kind, $0) }
     }
 }
 
@@ -122,6 +135,8 @@ private struct PermissionRow: View {
     let kind: PermissionKind
     let uses: [PermissionUse]
     let status: PermissionStatus?
+    /// One line on what to switch in System Settings.
+    var hint: String?
     let action: () -> Void
 
     var body: some View {
@@ -133,6 +148,9 @@ private struct PermissionRow: View {
                     Text(use.isOn ? use.feature : "\(use.feature) (off)")
                         .font(.caption)
                         .foregroundStyle(use.isOn ? .secondary : .tertiary)
+                }
+                if let hint {
+                    Text(hint).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer(minLength: 8)
@@ -176,13 +194,15 @@ private struct PermissionRow: View {
         case .appNotRunning: return "Open \(kind == .automationMusic ? "Music" : "Spotify") to check"
         case .appNotInstalled: return "Not installed"
         case .unknown: return "Asked on first use"
+        case .writeOnly: return "Can only add events"
+        case .restricted: return "Turned off by this Mac's restrictions"
         }
     }
 
     private var color: Color {
         switch status {
         case .granted: return .green
-        case .denied: return .orange
+        case .denied, .writeOnly, .restricted: return .orange
         default: return Color.secondary.opacity(0.5)
         }
     }

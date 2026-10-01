@@ -9,20 +9,28 @@ extension LocalAPIServer {
     /// Bridge requests are a title and a few fields; 16 KB is plenty.
     public static let lanBodyLimit = 16 * 1024
     public static let lanConnectionLimit = 8
+    /// So that one client can't take every slot: a Shortcut sends one request at a time.
+    public static let lanConnectionsPerClient = 2
+    /// A Shortcut sends its headers at once, so a client that hasn't is idling on a slot.
+    public static let lanHeaderTimeout: TimeInterval = 2
 
     /// The listener for the iPhone bridge, where anyone on the Wi-Fi can connect: each client
-    /// is rate-limited, bodies are small, and only a few connections are open at once.
+    /// is rate-limited and holds at most two connections, headers must arrive quickly, bodies
+    /// are small, and only a few connections are open at once.
     public static func localNetwork(router: APIRouter) -> LocalAPIServer {
         let server = LocalAPIServer(router: router)
         server.rateLimiter = RateLimiter(limit: lanRateLimit, window: lanRateWindow)
         server.maxBodyBytes = lanBodyLimit
         server.maxConnections = lanConnectionLimit
+        server.maxConnectionsPerClient = lanConnectionsPerClient
+        server.headerTimeout = lanHeaderTimeout
         return server
     }
 
-    /// Rate-limit key: the IPv4 address, or the /64 prefix for IPv6, since one device can pick
-    /// any address in its /64. Only IPv4-mapped addresses (an IPv4 client on the dual-stack
-    /// socket) count as IPv4: `asIPv4` alone also unwraps `::a.b.c.d`, a key per address.
+    /// Client key for the rate limit and the per-client connection limit: the IPv4 address, or
+    /// the /64 prefix for IPv6, since one device can pick any address in its /64. Only
+    /// IPv4-mapped addresses (an IPv4 client on the dual-stack socket) count as IPv4: `asIPv4`
+    /// alone also unwraps `::a.b.c.d`, a key per address.
     static func clientKey(_ endpoint: NWEndpoint) -> String {
         guard case .hostPort(let host, _) = endpoint else { return "unknown" }
         switch host {
@@ -41,13 +49,10 @@ extension LocalAPIServer {
 /// separate from the local API's token: the bridge is plain HTTP, and a token read off the
 /// Wi-Fi must not open the loopback API.
 public enum LANTokenStore {
-    public static var defaultURL: URL { IsletPaths.supportDirectory.appendingPathComponent("lan.json") }
-
-    struct Contents: Codable { var token: String }
+    public static var defaultURL: URL { IsletPaths.lanTokenFile }
 
     public static func read(from url: URL = defaultURL) -> String? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return (try? JSONDecoder().decode(Contents.self, from: data))?.token
+        LANTokenFile.read(from: url)
     }
 
     /// The saved token, or a new one (saved) when there is none, it is too short, or it is the
@@ -70,7 +75,7 @@ public enum LANTokenStore {
     static func write(_ token: String, to url: URL) throws {
         let fm = FileManager.default
         try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let data = try JSONEncoder().encode(Contents(token: token))
+        let data = try JSONEncoder().encode(LANTokenFile(token: token))
         // Create with 0600 before writing so the token is never world-readable.
         if !fm.fileExists(atPath: url.path) {
             fm.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600])

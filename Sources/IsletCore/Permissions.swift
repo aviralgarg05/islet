@@ -52,7 +52,7 @@ public enum PermissionKind: String, CaseIterable, Sendable, Identifiable {
                 PermissionUse("Fit the closed island between menu bar icons", on: s.closedLayout == .auto),
             ]
         case .calendars:
-            return [PermissionUse("Next event, meeting alerts and Join buttons", on: s.calendarEnabled)]
+            return [PermissionUse("Next event, meeting reminders and Join buttons", on: s.calendarEnabled)]
         case .reminders:
             return [PermissionUse("Reminders due today", on: s.remindersEnabled)]
         case .location:
@@ -91,6 +91,10 @@ public enum PermissionStatus: Equatable, Sendable {
     case appNotInstalled
     /// macOS can't tell without asking (the Downloads folder before a feature has used it).
     case unknown
+    /// Calendars with "Add events only": Islet can add events but not see them.
+    case writeOnly
+    /// Screen Time or a configuration profile decides, not the user here.
+    case restricted
 
     /// Status from the `OSStatus` of `AEDeterminePermissionToAutomateTarget`.
     public static func automation(_ status: Int32) -> PermissionStatus {
@@ -108,7 +112,7 @@ public enum PermissionStatus: Equatable, Sendable {
     public var action: PermissionAction {
         switch self {
         case .notDetermined, .unknown: return .request
-        case .granted, .denied, .appNotRunning: return .openSettings
+        case .granted, .denied, .appNotRunning, .writeOnly, .restricted: return .openSettings
         case .appNotInstalled: return .none
         }
     }

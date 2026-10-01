@@ -33,6 +33,10 @@ public final class BrightnessMonitor {
 
     public static var isAvailable: Bool { getFn != nil }
 
+    /// Whether the built-in display's brightness can be read and set (the private symbols are
+    /// there). An OS update that removes them turns this off.
+    public static var canSet: Bool { getFn != nil && setFn != nil }
+
     /// The built-in panel if there is one (external displays need DDC, which we don't do).
     public static var builtInDisplay: CGDirectDisplayID? {
         var count: UInt32 = 0
@@ -84,6 +88,13 @@ public enum KeyboardBacklight {
     private typealias GetIMP = @convention(c) (NSObject, Selector, UInt64) -> Float
     private typealias SetIMP = @convention(c) (NSObject, Selector, Float, UInt64) -> Bool
 
+    /// Whether the backlight can be read and set on this Mac and macOS.
+    public static var isAvailable: Bool {
+        guard let client else { return false }
+        return class_getInstanceMethod(type(of: client), NSSelectorFromString("brightnessForKeyboard:")) != nil
+            && class_getInstanceMethod(type(of: client), NSSelectorFromString("setBrightness:forKeyboard:")) != nil
+    }
+
     public static func read() -> Double? {
         let sel = NSSelectorFromString("brightnessForKeyboard:")
         guard let client, let m = class_getInstanceMethod(type(of: client), sel) else { return nil }
@@ -103,11 +114,18 @@ public enum KeyboardBacklight {
 /// Opt-in "replace the system HUD" mode: an event tap swallows the volume, brightness and
 /// keyboard-backlight keys and applies the change itself, so only Islet's HUD appears.
 /// Requires Accessibility permission; without it `start()` returns false and nothing changes.
+/// A key Islet can't act on (`shouldIntercept` says no) goes on to macOS untouched.
 public final class MediaKeyInterceptor {
-    public enum Key { case volumeUp, volumeDown, mute, brightnessUp, brightnessDown, backlightUp, backlightDown }
+    public typealias Key = MediaKey
 
     /// Called on the main thread with the key and whether a fine step (⇧⌥) was requested.
     public var onKey: ((Key, Bool) -> Void)?
+    /// Asked on the main thread, for each key press, whether to take it (`KeyInterceptPolicy`);
+    /// its repeats and release get the same answer (`KeyInterceptLatch`). With none set, every
+    /// key is taken.
+    public var shouldIntercept: ((Key, NSEvent.ModifierFlags) -> Bool)?
+    /// The answer each key's press got, for its repeats and release. Main thread only.
+    fileprivate var latch = KeyInterceptLatch()
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
 
@@ -125,7 +143,7 @@ public final class MediaKeyInterceptor {
     }
 
     // NX_KEYTYPE_* values from IOKit/hidsystem/ev_keymap.h
-    static func key(for code: Int) -> Key? {
+    public static func key(for code: Int) -> Key? {
         switch code {
         case 0: return .volumeUp
         case 1: return .volumeDown
@@ -157,6 +175,13 @@ public final class MediaKeyInterceptor {
             let code = Int((ns.data1 & 0xFFFF_0000) >> 16)
             guard let key = MediaKeyInterceptor.key(for: code) else { return Unmanaged.passUnretained(event) }
             let isDown = ((ns.data1 & 0xFF00) >> 8) == 0xA
+            let isRepeat = ns.data1 & 0x1 != 0
+            // The tap's source is on the main run loop, so this runs on the main thread. The press
+            // decides, and its repeats and release follow it, so macOS never sees half a key.
+            if let ask = me.shouldIntercept,
+               !me.latch.take(key, isDown: isDown, isRepeat: isRepeat, decide: { ask(key, ns.modifierFlags) }) {
+                return Unmanaged.passUnretained(event)
+            }
             if isDown {
                 let fine = ns.modifierFlags.contains(.shift) && ns.modifierFlags.contains(.option)
                 DispatchQueue.main.async { me.onKey?(key, fine) }

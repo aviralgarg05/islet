@@ -49,10 +49,18 @@ enum Haptics {
 // MARK: - Motion
 
 extension AnimationStyle {
+    /// The style the island actually uses: Off stays off; Reduce Motion (the system's or
+    /// Islet's) and Low Power Mode get plain short fades.
+    static func effective(_ setting: AnimationStyle, reduceMotion: Bool,
+                          lowPower: Bool = ProcessInfo.processInfo.isLowPowerModeEnabled) -> AnimationStyle {
+        if setting == .off { return .off }
+        return reduceMotion || lowPower ? .minimal : setting
+    }
+
     /// Every duration below is scaled by "Animation speed" (`Motion.pace`).
     private var k: Double { Motion.pace }
 
-    /// Shape morphing between island states (expanding).
+    /// The shell growing into a bigger shape (opening, a peek dropping down).
     var morph: Animation? {
         switch self {
         case .fluid: return Motion.open
@@ -63,29 +71,36 @@ extension AnimationStyle {
         }
     }
 
-    /// Collapsing is quicker and settles without overshoot.
+    /// The shell shrinking back: once the content has faded, on a calmer spring.
     var collapse: Animation? {
         switch self {
-        case .fluid: return Motion.close
-        case .snappy: return .snappy(duration: 0.22 * k)
-        case .smooth: return .smooth(duration: 0.3 * k)
+        case .fluid: return Motion.close.delay(IslandMotion.closeDelay * k)
+        case .snappy: return .snappy(duration: 0.22 * k).delay(0.03 * k)
+        case .smooth: return .smooth(duration: 0.3 * k).delay(IslandMotion.closeDelay * k)
         case .minimal: return .easeInOut(duration: 0.14 * k)
         case .off: return nil
         }
     }
 
-    /// How content enters and leaves.
-    var contentTransition: AnyTransition {
+    /// The richer motion (liquid bubbles, the staggered switcher, glyphs that bounce in):
+    /// every style but Minimal and Off.
+    var isRich: Bool { self == .fluid || self == .snappy || self == .smooth }
+
+    /// The shell squashes and stretches only with the springy style.
+    var stretches: Bool { self == .fluid }
+
+    /// How content enters and leaves. Shape first, content after: new content fades and scales
+    /// in once the shell has made room, and outgoing content is gone before the shell closes.
+    func contentTransition(opening: Bool) -> AnyTransition {
         switch self {
-        case .fluid, .smooth:
+        case .fluid, .smooth, .snappy:
+            let quick = self == .snappy ? 0.7 : 1
+            let delay = opening ? IslandMotion.contentDelay : IslandMotion.contentDelayClosing
             return .asymmetric(
-                insertion: AnyTransition(.blurReplace).combined(with: .scale(scale: 0.94, anchor: .top))
-                    .animation(.easeOut(duration: 0.26 * k).delay(0.05 * k)),
-                removal: .opacity.animation(.easeIn(duration: 0.08 * k))
+                insertion: ContentReveal.transition
+                    .animation(.easeOut(duration: IslandMotion.contentFade * quick * k).delay(delay * quick * k)),
+                removal: .opacity.animation(.easeIn(duration: IslandMotion.contentExit * quick * k))
             )
-        case .snappy:
-            return .asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.14 * k).delay(0.03 * k)),
-                               removal: .opacity.animation(.linear(duration: 0.06 * k)))
         case .minimal:
             return .opacity
         case .off:
@@ -94,6 +109,27 @@ extension AnimationStyle {
     }
 
     var bounces: Bool { self == .fluid || self == .snappy }
+
+    /// A small change in place (one icon giving way to the next, a percentage ticking, the
+    /// island answering the pointer): the settle spring with the richer styles, a plain short
+    /// ease with less motion, nothing with Off. Glyphs and numbers swap with `symbolSwap` and
+    /// `numberSwap` under it.
+    var inPlace: Animation? {
+        switch self {
+        case .off: return nil
+        case .minimal: return .easeInOut(duration: 0.14 * k)
+        default: return Motion.settle
+        }
+    }
+
+    /// How a changed symbol swaps: SF Symbols' replace, or a plain fade with less motion.
+    var symbolSwap: ContentTransition { isRich ? .symbolEffect(.replace) : .opacity }
+
+    /// How a changed number swaps: rolling digits, or a plain fade with less motion.
+    func numberSwap(value: Double? = nil) -> ContentTransition {
+        guard isRich else { return .opacity }
+        return value.map { .numericText(value: $0) } ?? .numericText()
+    }
 }
 
 // MARK: - Theme
@@ -162,12 +198,42 @@ private struct GlassBody: View {
     /// The least black left over the glass, so text always has a floor of contrast.
     static let smoke = GlassMelt.smokeFloor
     @Environment(\.snapshotMode) private var snapshotMode
+    @Environment(\.shellClock) private var clock
+    @Environment(\.islandMotion) private var motion
+
+    /// The black melts into glass this long after the island starts to open, over `melt`, and
+    /// comes back over `unmelt` as it closes.
+    static let meltDelay = 0.15
+    static let melt = 0.18
+    static let unmelt = 0.08
+    /// The glass itself fades out this quickly as the island closes, under the black.
+    static let glassOut = 0.12
+
+    /// How much of the black is over the glass: at rest, or in a transition frozen for the
+    /// motion sheets.
+    private var blackness: Double {
+        let rest: Double = expanded || closedGlass ? 0 : 1
+        guard let clock, clock.wasExpanded != expanded, !closedGlass else { return rest }
+        let k = Motion.pace
+        if expanded { return 1 - IslandMotion.eased(.easeOut, from: Self.meltDelay * k, length: Self.melt * k, at: clock.t) }
+        return IslandMotion.eased(.easeIn, from: 0, length: Self.unmelt * k, at: clock.t)
+    }
+
+    /// In a transition frozen for the motion sheets just after the island starts to close, how
+    /// much of the glass is still there, fading out under the black (nil once it has gone).
+    private var leavingGlass: Double? {
+        guard let clock, clock.wasExpanded, !expanded, !closedGlass else { return nil }
+        let left = 1 - clock.t / (Self.glassOut * Motion.pace)
+        return left > 0 ? min(1, left) : nil
+    }
 
     var body: some View {
         ZStack {
             if expanded {
                 GlassSurface(shape: shape, tint: Color.black.opacity(0.2), fallback: Color(white: 0.13).opacity(0.78))
-                    .transition(.asymmetric(insertion: .identity, removal: .opacity.animation(.linear(duration: 0.12))))
+                    .transition(.asymmetric(insertion: .identity,
+                                            removal: motion == .off ? .identity
+                                                : .opacity.animation(.linear(duration: Self.glassOut * Motion.pace))))
                 if let stem {
                     shape.fill(Color.black.opacity(GlassMelt.smoke(level: level)))
                     StemMelt(stem: stem, row: row, depth: GlassMelt.depth(body: height - row, level: level))
@@ -177,6 +243,12 @@ private struct GlassBody: View {
                 }
                 // An AppKit view, which offline snapshots can't draw.
                 if !snapshotMode { GlassSheen().clipShape(shape).allowsHitTesting(false) }
+            } else if let left = leavingGlass {
+                GlassSurface(shape: shape, tint: Color.black.opacity(0.2), fallback: Color(white: 0.13).opacity(0.78))
+                    .opacity(left)
+                shape.fill(Color.black.opacity(Self.smoke * left))
+                // The menu bar row stays black over the notch.
+                Color.black.frame(height: row).frame(maxHeight: .infinity, alignment: .top).clipShape(shape)
             } else if closedGlass {
                 // No hardware to match: glass under the same smoke, and no sheen on something
                 // that is always there.
@@ -184,9 +256,10 @@ private struct GlassBody: View {
                 shape.fill(Color.black.opacity(Self.smoke))
             }
             shape.fill(Color.black)
-                .opacity(expanded || closedGlass ? 0 : 1)
-                .animation(expanded ? .easeOut(duration: 0.18 * Motion.pace).delay(0.15 * Motion.pace)
-                                    : .easeIn(duration: 0.08 * Motion.pace), value: expanded)
+                .opacity(blackness)
+                .animation(motion == .off ? nil
+                               : expanded ? .easeOut(duration: Self.melt * Motion.pace).delay(Self.meltDelay * Motion.pace)
+                               : .easeIn(duration: Self.unmelt * Motion.pace), value: expanded)
         }
     }
 
@@ -290,16 +363,18 @@ final class GlassSheenView: NSView {
 }
 
 /// Liquid Glass on macOS 26 and later, a blurred material before that, and a solid fill when
-/// Reduce Transparency is on or when rendering offline snapshots.
+/// Reduce Transparency is on, when the island is hidden from screenshots, or when rendering
+/// offline snapshots.
 struct GlassSurface<S: Shape>: View {
     let shape: S
     var tint: Color = .clear
     var fallback: Color = Color(white: 0.09)
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.snapshotMode) private var snapshotMode
+    @Environment(\.hiddenFromCapture) private var hiddenFromCapture
 
     var body: some View {
-        if reduceTransparency || snapshotMode {
+        if reduceTransparency || snapshotMode || hiddenFromCapture {
             shape.fill(fallback)
         } else if #available(macOS 26, *) {
             Color.clear.glassEffect(.regular.tint(tint), in: shape)

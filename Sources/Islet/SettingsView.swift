@@ -72,8 +72,11 @@ struct GeneralSettings: View {
                     Text(Self.fullscreenDetail(model.settings.fullscreenBehaviour))
                 }
                 .settingsAnchor("general.fullscreen")
-                Toggle("Hide from screenshots and screen sharing", isOn: $model.settings.hideFromScreenCapture)
-                    .settingsAnchor("general.capture")
+                Toggle(isOn: $model.settings.hideFromScreenCapture) {
+                    Text("Hide from screenshots")
+                    Text("Some screen-sharing and recording apps still show it. The island's glass turns solid while this is on.")
+                }
+                .settingsAnchor("general.capture")
             }
             GestureSettingsSection(model: model)
             Section("Island pages") {
@@ -812,13 +815,6 @@ struct AppRulesSettings: View {
     @Bindable var model: AppModel
     @ViewState private var added: String?
 
-    private var runningApps: [NSRunningApplication] {
-        let existing = Set(model.settings.appRules.map(\.bundleID))
-        return NSWorkspace.shared.runningApplications
-            .filter { $0.activationPolicy == .regular && $0.bundleIdentifier != nil && !existing.contains($0.bundleIdentifier!) }
-            .sorted { ($0.localizedName ?? "") < ($1.localizedName ?? "") }
-    }
-
     var body: some View {
         ScrollViewReader { proxy in
             Form {
@@ -856,30 +852,14 @@ struct AppRulesSettings: View {
     }
 
     private var addMenu: some View {
-        Menu("Add app") {
-            ForEach(runningApps, id: \.processIdentifier) { app in
-                Button(app.localizedName ?? app.bundleIdentifier!) { add(app.bundleIdentifier!) }
-            }
-            if !runningApps.isEmpty { Divider() }
-            Button("Other app…", action: chooseApp)
-        }
-        .fixedSize()
-        .settingsAnchor("apps.add")
+        AddAppMenu(existing: Set(model.settings.appRules.map(\.bundleID)), add: add)
+            .settingsAnchor("apps.add")
     }
 
     private func add(_ bundleID: String) {
         guard !model.settings.appRules.contains(where: { $0.bundleID == bundleID }) else { return }
         model.settings.appRules.append(AppRule(bundleID: bundleID))
         added = bundleID
-    }
-
-    private func chooseApp() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.application]
-        panel.directoryURL = URL(fileURLWithPath: "/Applications")
-        panel.prompt = "Add"
-        guard panel.runModal() == .OK, let url = panel.url, let id = Bundle(url: url)?.bundleIdentifier else { return }
-        add(id)
     }
 }
 

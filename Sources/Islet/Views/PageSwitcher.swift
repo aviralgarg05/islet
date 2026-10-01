@@ -8,9 +8,13 @@ import SwiftUI
 ///
 /// It sits over the desktop, not on the island, so it is the one place the island uses Liquid
 /// Glass in the Black theme too (and never glass on glass in the Glass theme).
+///
+/// When the island opens, the capsule and then the discs rise into place after the content
+/// (`SwitcherReveal`, `RiseIn`).
 struct PageSwitcher: View {
     let model: AppModel
     @Namespace private var highlight
+    @Environment(\.islandMotion) private var motion
 
     /// Height of the capsule and the discs.
     static let height: CGFloat = 32
@@ -51,15 +55,22 @@ struct PageSwitcher: View {
                 }
                 .padding(Self.inset)
                 .floatingGlass(Capsule())
+                // It buds off the island first; the discs follow a moment later.
+                .modifier(RiseIn(index: 0))
                 disc(symbol: IslandTab.ask.symbol, help: "Ask", selected: model.tab == .ask) {
                     model.select(tab: model.tab == .ask ? .home : .ask)
                 }
             }
         }
+        // Always its own width: while the island opens or closes, bubbles still beside it can
+        // leave the switcher less room than it needs, and that must not squeeze the selected
+        // page's name over its neighbour.
+        .fixedSize()
         .frame(height: Self.height)
         .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
-        .animation(Motion.settle, value: model.tab)
-        .animation(Motion.settle, value: model.timers.isEntering)
+        // The highlight slides on the settle spring; a short fade with less motion, none with Off.
+        .animation(motion.inPlace, value: model.tab)
+        .animation(motion.inPlace, value: model.timers.isEntering)
     }
 
     /// One page in the capsule. The selected one shows its name on the sliding highlight.
@@ -110,42 +121,26 @@ struct PageSwitcher: View {
         }
         .buttonStyle(PressableStyle())
         .floatingGlass(Circle())
+        .modifier(RiseIn(index: 1))
         .help(help)
         .accessibilityLabel(help)
     }
 
-    /// Pages that got a switch in Settings, split between the capsule and the "more" menu.
+    /// Pages whose feature is on, split between the capsule and the "more" menu
+    /// (`IslandPage.switcher`). Clipboard is listed only while clipboard history is on.
     static func pages(_ model: AppModel) -> (main: [IslandTab], more: [IslandTab]) {
-        let s = model.settings
-        var main: [IslandTab] = [.home]
-        if s.calendarEnabled || s.remindersEnabled { main.append(.today) }
-        if s.shelfEnabled { main.append(.shelf) }
-        var more: [IslandTab] = [.clipboard]
-        if s.pluginsEnabled { more.append(.widgets) }
-        if s.systemStatsEnabled { more.append(.stats) }
-        more += ToolPages.on(s)
-        // A page opened some other way (a drop, the API) still shows where you are.
-        if model.tab != .ask, !main.contains(model.tab), !more.contains(model.tab) { more.append(model.tab) }
-        return (main, more)
+        let split = IslandPage.switcher(model.settings, current: IslandPage(rawValue: model.tab.rawValue))
+        func tabs(_ pages: [IslandPage]) -> [IslandTab] { pages.compactMap { IslandTab(rawValue: $0.rawValue) } }
+        return (tabs(split.main), tabs(split.more))
     }
 
     /// The rest of the pages, then keep awake, keep open and Settings.
     private func showMore(_ tabs: [IslandTab]) {
-        // Tools still switched off wait together in one submenu, so the menu stays short.
-        let off = ToolPages.off(model.settings)
-        var items = tabs.filter { !off.contains($0) }.map { tab in
+        var items = tabs.map { tab in
             IslandMenu.Item(title: tab.title, symbol: tab.symbol, checked: model.tab == tab) {
                 model.timers.isEntering = false
                 model.select(tab: tab)
             }
-        }
-        if !off.isEmpty {
-            items.append(IslandMenu.Item(title: "More tools", symbol: "puzzlepiece", children: off.map { tab in
-                IslandMenu.Item(title: tab.title, symbol: tab.symbol, checked: model.tab == tab) {
-                    model.timers.isEntering = false
-                    model.select(tab: tab)
-                }
-            }))
         }
         items.append(.separator)
         let awake = model.controls.awake

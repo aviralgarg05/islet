@@ -225,3 +225,39 @@ public struct RateLimiter: Sendable {
         return true
     }
 }
+
+/// Open connections, in all and per client (keyed like `RateLimiter`), so that one client can't
+/// hold every slot of a listener with idle connections.
+public struct ConnectionTally: Sendable {
+    public enum Verdict: Equatable, Sendable {
+        case admitted
+        /// The listener already has its limit open.
+        case full
+        /// This client already has its limit open.
+        case clientFull
+    }
+
+    public private(set) var total = 0
+    /// Only clients with a connection open, so it never outgrows the connections themselves.
+    private var byClient: [String: Int] = [:]
+
+    public init() {}
+
+    public func count(for client: String) -> Int { byClient[client] ?? 0 }
+
+    /// Counts a new connection from `client` when there is room for it. A nil limit is no limit.
+    public mutating func admit(_ client: String, limit: Int?, perClient: Int?) -> Verdict {
+        if let perClient, count(for: client) >= perClient { return .clientFull }
+        if let limit, total >= limit { return .full }
+        total += 1
+        byClient[client, default: 0] += 1
+        return .admitted
+    }
+
+    /// An admitted connection from `client` has closed.
+    public mutating func release(_ client: String) {
+        guard let n = byClient[client] else { return }
+        total -= 1
+        byClient[client] = n > 1 ? n - 1 : nil
+    }
+}

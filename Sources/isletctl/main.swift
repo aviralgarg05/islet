@@ -31,6 +31,7 @@ USAGE
   isletctl statusline [-- <command…>]  Claude Code status line: record plan usage, run your own line
                [--wait SECONDS]              for approvals: wait for an answer in the notch, print it
   isletctl state | health | token
+  isletctl token --lan                 the iPhone bridge's token (not the local API's)
   isletctl debug menubar [--watch]      what Islet sees in the menu bar (--watch: print each change)
   isletctl mcp                         run as an MCP server on stdio (for Claude Code, Codex, Cursor…)
 
@@ -88,7 +89,7 @@ struct Client {
 /// Parses `--flag value` pairs and positional arguments.
 struct Args {
     /// Flags that take no value.
-    static let switches: Set<String> = ["watch"]
+    static let switches: Set<String> = ["watch", "lan"]
 
     var positional: [String] = []
     var flags: [String: String] = [:]
@@ -205,6 +206,16 @@ func spec(from a: Args, id: String?) throws -> ActivitySpec {
     return s
 }
 
+/// The iPhone bridge's own token, read from `lan.json`; Islet needn't be running.
+func lanToken() throws -> String {
+    let url = IsletPaths.lanTokenFile
+    guard FileManager.default.fileExists(atPath: url.path) else {
+        throw CLIError("the iPhone bridge has never been turned on, so it has no token yet. Turn it on in Settings → Advanced → iPhone bridge, then run this again.")
+    }
+    guard let token = LANTokenFile.read(from: url) else { throw CLIError("could not read the iPhone bridge token from \(url.path)") }
+    return token
+}
+
 @discardableResult
 func expectOK(_ result: (Int, Data), print output: Bool = false) throws -> Data {
     let (status, data) = result
@@ -277,6 +288,10 @@ func run(_ argv: [String]) async throws -> Int32 {
         return 0
 
     case "token":
+        if a.flags["lan"] != nil {
+            print(try lanToken())
+            return 0
+        }
         print(try Client.discover().token)
         return 0
 

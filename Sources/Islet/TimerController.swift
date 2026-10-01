@@ -17,6 +17,8 @@ final class TimerController {
     @ObservationIgnored private var wakeUp: DispatchSourceTimer?
     /// Where timers are saved; nil until `start()` (snapshots never touch the disk).
     @ObservationIgnored private var storeURL: URL?
+    /// False when an unreadable timers.json couldn't be moved aside: then it is left alone.
+    @ObservationIgnored private var canSave = true
     /// What each timer's activity currently looks like, so only real changes are re-applied.
     @ObservationIgnored private var shown: [String: ActivitySpec] = [:]
     @ObservationIgnored private var syncing = false
@@ -38,8 +40,13 @@ final class TimerController {
 
     /// Restores saved timers and catches up on any that ended while Islet wasn't running.
     func start() {
-        storeURL = IsletPaths.supportDirectory.appendingPathComponent("timers.json")
-        if let url = storeURL, let saved = TimerEngine.load(from: url) { engine = saved }
+        let url = IsletPaths.supportDirectory.appendingPathComponent("timers.json")
+        storeURL = url
+        // A timers.json that doesn't parse is moved aside rather than saved over.
+        let restored = TimerEngine.start(from: url)
+        if let saved = restored.value { engine = saved }
+        canSave = restored.canSave
+        if let moved = restored.setAside { NSLog("Islet: timers.json couldn't be read; kept as %@", moved.lastPathComponent) }
         fire()
     }
 
@@ -124,7 +131,7 @@ final class TimerController {
     private func changed(announce: Set<String> = []) {
         sync(announce: announce)
         if openedForAlarm, !engine.isRinging { alarmHandled() }
-        if let storeURL { try? engine.save(to: storeURL) }
+        if let storeURL, canSave { try? engine.save(to: storeURL) }
         scheduleWakeUp()
         // A focus round starting, pausing or giving way to a break moves the focus sound.
         if storeURL != nil { model.tools.focus.update() }

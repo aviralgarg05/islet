@@ -14,21 +14,23 @@ Ready-made files live in [`integrations/`](../integrations/). For recipes coveri
 
 | Source | What you see | Needs |
 |---|---|---|
-| Any app that reports Now Playing (Music, Spotify, Podcasts, TV, Safari/Chrome/Arc/Firefox tabs, VLC, IINA, Plexamp, Tidal, Cider…) | Artwork + equalizer in the closed island, and each new song for a moment below the notch; when open, a scrubber you can drag, ±15 s, shuffle and repeat (when the player reports them), system volume and an output picker | nothing |
+| Any app that reports Now Playing (Music, Spotify, Podcasts, TV, Safari/Chrome/Arc/Firefox tabs, VLC, IINA, Plexamp, Tidal, Cider…) | Artwork + equalizer in the closed island, and each new song for a moment below the notch; when open, a scrubber you can drag, ±15 s, shuffle and repeat (when the player reports them), system volume and an output picker. With several players at once (a Chrome video and a Spotify song), the others show as small app icons beside the title; clicking one shows and controls that player | nothing (Automation for Spotify or Music to control one the system doesn't treat as now playing) |
 | FaceTime, Zoom, Teams, Slack huddles, Discord, WhatsApp, Webex, Skype, Telegram, Signal, Meet in a browser | Green call pill with a live timer; video icon when the camera is on | nothing |
-| Calendar (iCloud, Google and Exchange accounts added to macOS) | "Starting soon" 5 minutes before with a **Join** button for Zoom/Meet/Teams/Webex links | Calendar access |
+| Calendar (iCloud, Google and Exchange accounts added to macOS) | Meeting reminders: from 10 minutes before (5, 15 or 30, or off), the meeting counts down beside the notch with its call app's icon, glows when it starts and stays until you join, dismiss it or it ends. **Join** opens the Zoom, Meet, Teams, Webex or FaceTime link; being in a call in that app (joined up to 10 minutes early) counts as joining. All-day events, cancelled meetings and declined invitations never remind you | Calendar access (full access, not "Add events only") |
 | Battery | Charging splash with the adapter's watts, low and critical warnings at levels you choose, an optional "charged to 80%" alert, Low Power Mode on/off | nothing |
 | Volume, brightness, keyboard backlight | HUD in the notch (optionally replacing the system one) | nothing (Accessibility to replace) |
 | AirPods / headphones / displays / speakers | "Connected" card when the output device changes | nothing |
 | Safari, Chrome, Firefox, Edge, Brave, Arc downloads | Progress (real % for Safari), then "Downloaded" with Open/Show | Downloads folder access |
 | Notifications from every app, including iPhone notifications forwarded by macOS | App icon + sender + one line; per-app mute, tint and priority; optional on-device summary | Accessibility (experimental) |
-| Screen unlock | "Welcome back" with what arrived while you were away | nothing |
+| Screen unlock | "Welcome back" with what arrived while you were away; nothing when nothing did | nothing |
 
 ---
 
 ## Coding agents
 
-The quickest way: open *Settings → Coding agents* and press **Connect…** beside Claude Code, Codex or Cursor. A sheet lists every change before anything is written, your own hooks and settings stay as they are, and each file is copied to a `.bak` file first. The row then says **Connected**; if you later change how long Islet waits for an answer, it says **Needs an update** and **Update…** brings the hooks in line. The commands themselves are in *Settings → Advanced → Coding agents*, for dotfiles. The sections below do the same by hand.
+The quickest way: open *Settings → Coding agents* and press **Connect…** beside Claude Code, Codex or Cursor. A sheet lists every change before anything is written, your own hooks and settings stay as they are, and each file is copied to a `.bak` file first. The row then says **Connected**. If you later change how long Islet waits for an answer, or Islet.app moves (the hooks call the `isletctl` inside it), it says **Needs an update** and **Update…** brings the hooks in line; Islet checks once at launch and puts a dot on Coding agents when a hook points at an `isletctl` that is gone. Hooks that call `isletctl` by name, as in the examples below, never count as moved. **Disconnect…** takes out Islet's hooks and nothing else, after showing what it removes. The commands themselves are in *Settings → Advanced → Coding agents*, for dotfiles. The sections below do the same by hand.
+
+All three show each session in the island: *Thinking…* when you send a prompt (Claude Code and Codex), the command or tool that is running, **Waiting** when one needs your approval, and **Done** when the turn ends. Cursor's sessions are its conversations, and a stop with an error shows as one.
 
 **Claude Code:** add [`integrations/claude-code/settings.json`](../integrations/claude-code/settings.json) to `~/.claude/settings.json` (merge the `hooks` key). The island then shows, per session:
 - *Thinking…* with a spinner;
@@ -36,7 +38,9 @@ The quickest way: open *Settings → Coding agents* and press **Connect…** bes
 - **Waiting** in high priority with a glow when it needs your permission or input;
 - **Done** when the turn ends, before the activity disappears at session end.
 
-**Codex CLI:** add `notify = ["isletctl", "hook", "codex"]` to `~/.codex/config.toml` (see [`integrations/codex/config.toml`](../integrations/codex/config.toml)). You get a "Turn complete" card with the last message.
+**Codex CLI:** add [`integrations/codex/hooks.json`](../integrations/codex/hooks.json) to `~/.codex/hooks.json` and `hooks = true` under `[features]` in `~/.codex/config.toml`, then type `/hooks` in Codex once to trust them. The island shows the same per-session states as for Claude Code. The older `notify = ["isletctl", "hook", "codex"]` in `config.toml` still works and gives a "Turn complete" card with the last message.
+
+**Cursor:** add [`integrations/cursor/hooks.json`](../integrations/cursor/hooks.json) to `~/.cursor/hooks.json`. Shell commands and MCP tools show as they run, and the conversation shows **Done** (or the error) when it stops.
 
 **Any other agent:** post the generic shape to `/v1/hooks/<name>` or pipe it to `isletctl hook <name>`:
 
@@ -215,7 +219,7 @@ Apple doesn't let third-party apps read the iPhone's Live Activities (macOS 26+ 
 1. **iPhone notifications.** macOS forwards them to the Mac when iPhone Mirroring or notification forwarding is on, and Islet's notification mirroring picks them up like any other banner.
 2. **iPhone Shortcuts automations → Islet's local-network bridge.**
 
-To set up the bridge, turn on **Accept requests from this network** in *Settings → Advanced → iPhone bridge* and press **Copy** beside the token. This is the bridge's own token, not the one `isletctl token` prints; neither works in place of the other. Then on the iPhone: Shortcuts → Automation → **New** → pick a trigger → **Get Contents of URL**:
+To set up the bridge, turn on **Accept requests from this network** in *Settings → Advanced → iPhone bridge* and press **Copy** beside the token. This is the bridge's own token, not the one `isletctl token` prints; neither works in place of the other. In a terminal, `isletctl token --lan` prints the bridge's token. Then on the iPhone: Shortcuts → Automation → **New** → pick a trigger → **Get Contents of URL**:
 - URL: `http://<your-mac>.local:47832/v1/notify`
 - Method: POST
 - Headers: `Authorization: Bearer <bridge token>`
@@ -233,7 +237,7 @@ To set up the bridge, turn on **Accept requests from this network** in *Settings
 
 The bridge is not encrypted: anyone on the same Wi-Fi can read what a Shortcut sends, token included. So it only accepts notifications, timers, Focus and simple activities, and everything else gets `403`. It can't read your notifications, activities or state, control media or the island, or take part in agent approvals. Activities from the bridge have no links or buttons, use symbols, emoji or app icons only, get ids starting with `lan-`, and are at most `high` priority. If the token may have leaked, press **New token** and paste the new one into your Shortcuts.
 
-The bridge also rejects browser origins, rate-limits each client (30 requests / 10 s), limits bodies to 16 KB and serves 8 connections at once. Bonjour advertises it as "Islet", not by your Mac's name. The full list of routes is in [API.md](API.md#local-network-bridge-iphone-shortcuts).
+The bridge also rejects browser origins, rate-limits each client (30 requests / 10 s), limits bodies to 16 KB and serves 8 connections at once, 2 per client. Bonjour advertises it as "Islet", not by your Mac's name. The full list of routes is in [API.md](API.md#local-network-bridge-iphone-shortcuts).
 
 ---
 

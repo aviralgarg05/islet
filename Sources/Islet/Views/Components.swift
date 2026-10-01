@@ -47,61 +47,33 @@ struct IslandShape: Shape {
     /// with its top corners rounded like its bottom ones instead of flared. The inset, that
     /// rounding and the flare all change together, so opening from the pill, or a peek growing
     /// out of it, morphs smoothly instead of jumping to the hanging shape at the end.
+    ///
+    /// `IslandSilhouette` solves the outline. Its shoulders grow with the body's overhang and its
+    /// bottom corners keep their radius while the body is short, and a floating pill's end
+    /// sweeps out in one curve before its shoulders form, so a morph never passes through
+    /// square "ears" or a nub under the row.
     func outline(in rect: CGRect, closed: Bool) -> Path {
-        let inset = min(max(0, self.inset), rect.height / 3)
-        // 1 for a floating pill, 0 for a shape hanging from the top edge.
-        let float = min(1, inset / NotchGeometry.pillInset)
-        let frame = rect.insetBy(dx: 0, dy: inset)
-        let t = min(max(0, topRadius), frame.width / 4)
-        let bodyL = frame.minX + t, bodyR = frame.maxX - t
-        let bodyW = bodyR - bodyL
-        let stem = stemWidth <= 0 ? bodyW : min(stemWidth, bodyW)
-        let stemH = min(max(0, stemHeight - inset), frame.height)
-        let top = frame.minY
+        let o = IslandSilhouette.solve(in: rect, topRadius: topRadius, bottomRadius: bottomRadius, stemWidth: stemWidth,
+                                    stemHeight: stemHeight, inset: inset, pillInset: NotchGeometry.pillInset)
+        let l = o.left, r = o.right
         var p = Path()
-
-        guard stem < bodyW - 1, stemH > 0, frame.height - stemH > 4 else {
-            let b = min(bottomRadius, bodyW / 2, frame.height / 2)
-            // The pill's rounded top corners; none once it hangs from the top edge.
-            let r = float * b
-            p.move(to: CGPoint(x: bodyL - t + r, y: top))
-            p.addQuadCurve(to: CGPoint(x: bodyL, y: top + t + r), control: CGPoint(x: bodyL, y: top))
-            p.addLine(to: CGPoint(x: bodyL, y: frame.maxY - b))
-            p.addQuadCurve(to: CGPoint(x: bodyL + b, y: frame.maxY), control: CGPoint(x: bodyL, y: frame.maxY))
-            p.addLine(to: CGPoint(x: bodyR - b, y: frame.maxY))
-            p.addQuadCurve(to: CGPoint(x: bodyR, y: frame.maxY - b), control: CGPoint(x: bodyR, y: frame.maxY))
-            p.addLine(to: CGPoint(x: bodyR, y: top + t + r))
-            p.addQuadCurve(to: CGPoint(x: bodyR + t - r, y: top), control: CGPoint(x: bodyR, y: top))
-            if closed || inset > 0.01 { p.closeSubpath() }
-            return p
-        }
-
-        let sL = rect.midX - stem / 2, sR = rect.midX + stem / 2
-        let row = top + stemH
-        let bodyH = frame.maxY - row
-        let shoulder = min(8, (bodyW - stem) / 2, stemH / 2)
-        let corner = min(bottomRadius * 0.6, bodyH / 3, (bodyW - stem) / 2 - shoulder)
-        let b = min(bottomRadius, bodyW / 2, bodyH / 2)
-        // The stem's top corners while it still floats as a pill.
-        let r = float * min(b, stem / 2, max(0, stemH - shoulder))
-
-        p.move(to: CGPoint(x: sL - t + r, y: top))
-        p.addQuadCurve(to: CGPoint(x: sL, y: top + t + r), control: CGPoint(x: sL, y: top))
-        p.addLine(to: CGPoint(x: sL, y: row - shoulder))
-        p.addQuadCurve(to: CGPoint(x: sL - shoulder, y: row), control: CGPoint(x: sL, y: row))
-        p.addLine(to: CGPoint(x: bodyL + max(0, corner), y: row))
-        p.addQuadCurve(to: CGPoint(x: bodyL, y: row + max(0, corner)), control: CGPoint(x: bodyL, y: row))
-        p.addLine(to: CGPoint(x: bodyL, y: frame.maxY - b))
-        p.addQuadCurve(to: CGPoint(x: bodyL + b, y: frame.maxY), control: CGPoint(x: bodyL, y: frame.maxY))
-        p.addLine(to: CGPoint(x: bodyR - b, y: frame.maxY))
-        p.addQuadCurve(to: CGPoint(x: bodyR, y: frame.maxY - b), control: CGPoint(x: bodyR, y: frame.maxY))
-        p.addLine(to: CGPoint(x: bodyR, y: row + max(0, corner)))
-        p.addQuadCurve(to: CGPoint(x: bodyR - max(0, corner), y: row), control: CGPoint(x: bodyR, y: row))
-        p.addLine(to: CGPoint(x: sR + shoulder, y: row))
-        p.addQuadCurve(to: CGPoint(x: sR, y: row - shoulder), control: CGPoint(x: sR, y: row))
-        p.addLine(to: CGPoint(x: sR, y: top + t + r))
-        p.addQuadCurve(to: CGPoint(x: sR + t - r, y: top), control: CGPoint(x: sR, y: top))
-        if closed || inset > 0.01 { p.closeSubpath() }
+        p.move(to: l.start)
+        p.addQuadCurve(to: l.topEnd, control: l.topControl)
+        p.addLine(to: l.shoulderStart)
+        p.addQuadCurve(to: l.junction, control: l.shoulderControl)
+        p.addLine(to: l.cornerStart)
+        p.addQuadCurve(to: l.cornerEnd, control: l.cornerControl)
+        p.addLine(to: l.bottomStart)
+        p.addQuadCurve(to: l.end, control: l.bottomControl)
+        p.addLine(to: r.end)
+        p.addQuadCurve(to: r.bottomStart, control: r.bottomControl)
+        p.addLine(to: r.cornerEnd)
+        p.addQuadCurve(to: r.cornerStart, control: r.cornerControl)
+        p.addLine(to: r.junction)
+        p.addQuadCurve(to: r.shoulderStart, control: r.shoulderControl)
+        p.addLine(to: r.topEnd)
+        p.addQuadCurve(to: r.start, control: r.topControl)
+        if closed || o.floats { p.closeSubpath() }
         return p
     }
 }
@@ -138,13 +110,17 @@ struct IconView: View {
     let icon: ActivityIcon
     var size: CGFloat = 16
     var tint: Color = .white
+    @Environment(\.islandMotion) private var motion
 
     var body: some View {
         switch icon {
         case .symbol(let name):
+            // A new symbol (one stage giving way to the next) morphs into place.
             Image(systemName: NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil ? name : "questionmark.circle")
                 .font(.system(size: size * 0.9, weight: .semibold))
                 .foregroundStyle(tint)
+                .contentTransition(motion.symbolSwap)
+                .animation(motion.inPlace, value: name)
                 .frame(width: size, height: size)
         case .emoji(let e):
             Text(e).font(.system(size: size * 0.85)).frame(width: size, height: size)
@@ -505,28 +481,22 @@ private struct WingRoomKey: EnvironmentKey {
     static let defaultValue: CGFloat = .infinity
 }
 
-/// How a value is shown when the wing is narrow: words become a glyph, numbers shrink.
-enum NarrowValue {
-    /// Below this width a word no longer reads, so it becomes a glyph.
-    static let wordRoom: CGFloat = 34
-
-    /// A glyph for a status word ("Waiting", "Done", "Failed"); nil for anything with digits.
-    static func glyph(for text: String, state: ActivityState) -> String? {
-        guard !text.contains(where: \.isNumber) else { return nil }
-        switch state {
-        case .waiting: return "exclamationmark.bubble.fill"
-        case .success: return "checkmark.circle.fill"
-        case .failure: return "xmark.circle.fill"
-        case .warning: return "exclamationmark.triangle.fill"
-        case .running: return "ellipsis"
-        case .info: return text.count <= 3 ? nil : "info.circle.fill"
-        }
-    }
-}
-
 /// Islet's own "Reduce motion" or "Animation: Off", on top of the system setting.
 private struct IslandReduceMotionKey: EnvironmentKey {
     static let defaultValue = false
+}
+
+/// "Hide from screenshots" is on. A window kept out of captures can lose the backdrop Liquid
+/// Glass samples and draw it as a black slab, so glass surfaces use their solid fill instead.
+private struct HiddenFromCaptureKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var hiddenFromCapture: Bool {
+        get { self[HiddenFromCaptureKey.self] }
+        set { self[HiddenFromCaptureKey.self] = newValue }
+    }
 }
 
 extension EnvironmentValues {

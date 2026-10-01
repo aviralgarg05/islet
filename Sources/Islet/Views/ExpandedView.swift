@@ -92,6 +92,8 @@ struct MenuBarRow: View {
 struct HomePlan {
     enum Primary {
         case ringing(TimerItem)
+        /// A meeting reminder on show: it leads, with its Join button, until it goes.
+        case meeting(MeetingReminder)
         case media(NowPlaying)
         case timer(TimerItem)
         case stopwatch(Stopwatch)
@@ -113,6 +115,9 @@ struct HomePlan {
         case usage(AgentUsage)
         /// Claude before its figures arrive: an offer to show them, or waiting for them.
         case claudeHint(ClaudeUsageHint)
+        /// The calendar is on but macOS doesn't let Islet read it (turned off in System
+        /// Settings, restricted, or "Add events only"): what is wrong and the button that helps.
+        case calendarAccess(CalendarAccessAdvice)
 
         var id: String {
             switch self {
@@ -122,6 +127,7 @@ struct HomePlan {
             case .activity(let a): return "activity-\(a.id)"
             case .usage(let u): return "usage-\(u.id)"
             case .claudeHint: return "usage-claude-hint"
+            case .calendarAccess: return "calendar-access"
             }
         }
 
@@ -146,9 +152,15 @@ struct HomePlan {
         var shownTimer: String?
         var shownActivity: String?
         var shownStopwatch = false
+        // The meeting that has started, else the next one (`liveMeetings` is earliest first).
+        let meetings = model.liveMeetings.filter { model.meetingReminder(for: $0.id) != nil }
+        let meeting = meetings.first { $0.phase == .now } ?? meetings.first
         if let ringing = timers.first(where: { $0.status == .ringing }) {
             primary = .ringing(ringing)
             shownTimer = ringing.id
+        } else if let meeting {
+            primary = .meeting(meeting)
+            shownActivity = meeting.id
         } else if let np = model.nowPlaying, model.settings.mediaEnabled {
             primary = .media(np)
         } else if let t = timers.first {
@@ -168,12 +180,23 @@ struct HomePlan {
         var glances: [Glance] = rest.filter(Self.needsYou).map(Glance.activity)
         glances += timers.filter { $0.id != shownTimer }.map(Glance.timer)
         if stopwatch.isActive && !shownStopwatch { glances.append(.stopwatch(stopwatch)) }
-        if let e = model.upcomingEvent { glances.append(.event(e)) }
+        // The next event, unless it is the meeting leading the page.
+        if let e = model.upcomingEvent, !Self.leads(e, primary) { glances.append(.event(e)) }
+        // Where the next event would be: a calendar that is on but can't be read, once macOS has
+        // said so (not before it has been asked; the Today page offers Allow then).
+        let access = model.calendarAdvice(.calendars)
+        if model.settings.calendarEnabled, !access.isAllowed, access.action != .ask { glances.append(.calendarAccess(access)) }
         glances += rest.filter { !Self.needsYou($0) }.map(Glance.activity)
         // Claude's hint sits where its card will be, before Codex's.
         if let hint = model.agentUsage.claudeHint { glances.append(.claudeHint(hint)) }
         glances += model.agentUsage.visible(now: now).map(Glance.usage)
         self.glances = glances
+    }
+
+    /// Whether `item` is the meeting `primary` shows.
+    static func leads(_ item: AgendaItem, _ primary: Primary) -> Bool {
+        guard case .meeting(let m) = primary else { return false }
+        return MeetingReminders.key(for: item) == m.key
     }
 
     /// Waiting on you, or failing loudly: these lead the column.
@@ -222,6 +245,7 @@ struct HomeTab: View {
     private func primary(_ p: HomePlan.Primary, width: CGFloat) -> some View {
         switch p {
         case .media(let np): NowPlayingHero(model: model, media: np, size: CGSize(width: width, height: size.height))
+        case .meeting(let m): MeetingHero(model: model, reminder: m)
         case .ringing(let t), .timer(let t): TimerHero(model: model, timer: t)
         case .stopwatch(let s): StopwatchHero(model: model, stopwatch: s)
         case .activity(let a): ActivityHero(activity: a, model: model)
@@ -354,12 +378,24 @@ struct GlanceColumn: View {
         switch g {
         case .timer(let t): TimerGlance(timer: t, model: model)
         case .stopwatch(let s): StopwatchGlance(stopwatch: s, model: model)
-        case .event(let e): EventGlance(item: e)
+        case .event(let e): EventGlance(item: e, model: model)
         case .activity(let a): ActivityGlance(activity: a, model: model)
         case .usage(let u):
             TimelineView(.everyMinute) { _ in AgentUsageGlance(usage: u, now: Date()) }
         case .claudeHint(let hint):
             ClaudeUsageHintRow(hint: hint, model: model)
+        case .calendarAccess(let advice):
+            GlanceRow(title: "Calendar") {
+                Image(systemName: "calendar").font(.system(size: 12, weight: .semibold)).foregroundStyle(Ink.tertiary)
+            } trailing: {
+                Button(advice.button == "Open System Settings" ? "Open" : advice.button ?? "Open") {
+                    model.requestCalendarAccess(.calendars)
+                }
+                .buttonStyle(CapsuleButtonStyle(tint: .blue))
+                .help(advice.detail ?? "")
+            } detail: {
+                Text(advice.status)
+            }
         }
     }
 }
@@ -404,6 +440,7 @@ struct GlanceRow<Lead: View, Trailing: View, Detail: View>: View {
 
 struct EventGlance: View {
     let item: AgendaItem
+    let model: AppModel
 
     var body: some View {
         TimelineView(.everyMinute) { ctx in
@@ -413,8 +450,8 @@ struct EventGlance: View {
                     .frame(width: 3, height: 30)
                     .frame(height: 16, alignment: .top)
             } trailing: {
-                if let url = item.meetingURL {
-                    Button("Join") { NSWorkspace.shared.open(url) }
+                if item.meetingURL != nil {
+                    Button("Join") { model.join(item) }
                         .buttonStyle(CapsuleButtonStyle(tint: .green))
                 }
             } detail: {
@@ -512,9 +549,10 @@ struct TodayTab: View {
             let todos = Self.rows(in: h)
             HStack(alignment: .top, spacing: 0) {
                 VStack(alignment: .leading, spacing: Space.xs) {
-                    SectionLabel(title: "Calendar", count: rest.timed.count).frame(height: Self.labelHeight)
-                    if !model.settings.calendarEnabled || CalendarService.eventAccess != .granted && !snapshotMode {
-                        accessHint("Today's events, with a Join button for calls.", action: "Allow Calendar") { model.requestCalendarAccess() }
+                    let calendarOn = model.settings.calendarEnabled && model.calendarAccess.events.canRead
+                    SectionLabel(title: "Calendar", count: calendarOn ? rest.timed.count : 0).frame(height: Self.labelHeight)
+                    if !calendarOn {
+                        accessHint(.calendars, text: "Today's events, with a Join button for calls.")
                     } else if rest.timed.isEmpty && rest.allDay.isEmpty {
                         quiet("Nothing else today")
                     } else {
@@ -522,7 +560,9 @@ struct TodayTab: View {
                         AdaptiveScroll(scrolls: rest.timed.count > events) {
                             VStack(alignment: .leading, spacing: Space.s) {
                                 if !rest.allDay.isEmpty { allDay(rest.allDay) }
-                                ForEach(rest.timed.prefix(snapshotMode ? events : 20)) { e in AgendaLine(item: e, now: now) }
+                                ForEach(rest.timed.prefix(snapshotMode ? events : 20)) { e in
+                                    AgendaLine(item: e, now: now) { model.join(e) }
+                                }
                             }
                         }
                     }
@@ -530,9 +570,10 @@ struct TodayTab: View {
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 ColumnRule().frame(height: h).padding(.horizontal, Space.l)
                 VStack(alignment: .leading, spacing: Space.xs) {
-                    SectionLabel(title: "Reminders", count: reminders.count).frame(height: Self.labelHeight)
-                    if !model.settings.remindersEnabled || CalendarService.reminderAccess != .granted && !snapshotMode {
-                        accessHint("Reminders due today, with an alert when they're due.", action: "Allow Reminders") { model.requestReminderAccess() }
+                    let remindersOn = model.settings.remindersEnabled && model.calendarAccess.reminders.canRead
+                    SectionLabel(title: "Reminders", count: remindersOn ? reminders.count : 0).frame(height: Self.labelHeight)
+                    if !remindersOn {
+                        accessHint(.reminders, text: "Reminders due today, with an alert when they're due.")
                     } else if reminders.isEmpty {
                         quiet("All done")
                     } else {
@@ -561,10 +602,28 @@ struct TodayTab: View {
         Text(text).textStyle(.body).foregroundStyle(Ink.tertiary)
     }
 
-    private func accessHint(_ text: String, action: String, _ perform: @escaping () -> Void) -> some View {
-        VStack(alignment: .leading, spacing: Space.s) {
-            Text(text).textStyle(.body).foregroundStyle(Ink.secondary).fixedSize(horizontal: false, vertical: true)
-            Button(action, action: perform).buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
+    /// The feature switched off, or macOS not letting Islet read it: what is wrong in plain words,
+    /// and the one button that helps (Allow, Turn on, or System Settings at the right page).
+    private func accessHint(_ kind: PermissionKind, text: String) -> some View {
+        let on = kind == .reminders ? model.settings.remindersEnabled : model.settings.calendarEnabled
+        let advice = model.calendarAdvice(kind)
+        let noun = kind == .reminders ? "Reminders" : "Calendar"
+        return VStack(alignment: .leading, spacing: Space.s) {
+            if advice.isAllowed || !on && advice.action == .ask {
+                // Switched off (and allowed, or never asked): what it does, and the switch.
+                Text(text).textStyle(.body).foregroundStyle(Ink.secondary).fixedSize(horizontal: false, vertical: true)
+                Button(advice.isAllowed ? "Turn on" : "Allow \(noun)") { model.requestCalendarAccess(kind) }
+                    .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
+            } else {
+                VStack(alignment: .leading, spacing: Space.hair) {
+                    Text(advice.status).textStyle(.body, emphasized: true).foregroundStyle(Ink.primary)
+                    if let detail = advice.detail {
+                        Text(detail).textStyle(.caption).foregroundStyle(Ink.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Button(advice.button ?? "Open System Settings") { model.requestCalendarAccess(kind) }
+                    .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: advice.action == .ask))
+            }
         }
     }
 }
@@ -572,6 +631,7 @@ struct TodayTab: View {
 struct AgendaLine: View {
     let item: AgendaItem
     let now: Date
+    var join: () -> Void
 
     var body: some View {
         let ongoing = item.isOngoing(at: now)
@@ -587,8 +647,8 @@ struct AgendaLine: View {
                     .foregroundStyle(ongoing ? Color.green : Ink.tertiary)
             }
             Spacer(minLength: 0)
-            if let url = item.meetingURL {
-                Button("Join") { NSWorkspace.shared.open(url) }.buttonStyle(CapsuleButtonStyle(tint: .green))
+            if item.meetingURL != nil {
+                Button("Join", action: join).buttonStyle(CapsuleButtonStyle(tint: .green))
             }
         }
     }
@@ -680,6 +740,8 @@ struct FileTile: View {
 
     var body: some View {
         let url = URL(fileURLWithPath: item.path)
+        // On a disk or share that isn't connected: kept, dimmed, until it comes back.
+        let available = Shelf.isAvailable(item) { FileManager.default.fileExists(atPath: $0) }
         VStack(spacing: Space.xs) {
             Image(nsImage: IconCache.file(item.path, size: 48))
                 .resizable()
@@ -691,6 +753,7 @@ struct FileTile: View {
                 .multilineTextAlignment(.center)
                 .frame(width: 72)
         }
+        .opacity(available ? 1 : 0.4)
         .padding(Space.xs)
         .background(RoundedRectangle(cornerRadius: Radius.s, style: .continuous).fill(hovering ? Wash.subtle : .clear))
         .overlay(alignment: .topTrailing) {
@@ -715,7 +778,7 @@ struct FileTile: View {
             Divider()
             Button("Remove from shelf") { model.removeFromShelf(item.id) }
         }
-        .help(item.path)
+        .help(available ? item.path : item.path + "\nOn a disk that isn't connected")
     }
 }
 
@@ -859,9 +922,23 @@ struct ClipboardTab: View {
         } else if model.clipboard.entries.isEmpty {
             EmptyHint(symbol: "doc.on.clipboard", text: "Copy some text and it shows up here.")
         } else {
-            AdaptiveScroll(scrolls: model.clipboard.entries.count > 4) {
+            let clearable = model.clipboard.hasUnpinned
+            AdaptiveScroll(scrolls: model.clipboard.entries.count + (clearable ? 1 : 0) > 4) {
                 VStack(spacing: 0) {
                     ForEach(model.clipboard.entries) { e in ClipRow(entry: e, model: model) }
+                    // Quiet, after the last item; pinned items stay.
+                    if clearable {
+                        HStack {
+                            Spacer(minLength: 0)
+                            Button("Clear unpinned") { model.clearClipboard() }
+                                .buttonStyle(.plain)
+                                .textStyle(.caption)
+                                .foregroundStyle(Ink.tertiary)
+                                .help("Remove everything you haven't pinned")
+                        }
+                        .padding(.horizontal, Space.s)
+                        .frame(height: 24)
+                    }
                 }
             }
             .padding(.horizontal, -Space.s)

@@ -113,18 +113,26 @@ extension View {
     }
 }
 
-/// One spring family for everything that moves on the island. Opening is lively; closing
-/// starts quicker and settles without overshoot. Small in-place changes (the page highlight
-/// sliding, a row arriving) use `settle`, the same spring with a shorter response.
-/// "Animation speed" (Appearance) scales every response through `pace`.
+/// One spring family for everything that moves on the island (`IslandMotion` holds the
+/// numbers). Opening is lively, with a touch of overshoot; closing is a little longer and
+/// lands without one. Small in-place changes (the page highlight sliding, a row arriving) use
+/// `settle`. "Animation speed" (Appearance) scales every response and delay through `pace`.
 enum Motion {
     /// How long moves take against Normal (`AnimationSpeed.multiplier`). Set on the main thread
     /// when settings apply, and read while views draw there.
     nonisolated(unsafe) static var pace: Double = 1
 
-    static var open: Animation { .spring(response: 0.42 * pace, dampingFraction: 0.80) }
-    static var close: Animation { .spring(response: 0.34 * pace, dampingFraction: 1.0) }
-    static var settle: Animation { .spring(response: 0.30 * pace, dampingFraction: 0.86) }
+    static var open: Animation { spring(IslandMotion.open) }
+    static var close: Animation { spring(IslandMotion.close) }
+    static var settle: Animation { spring(IslandMotion.settle) }
+    /// A glyph arriving in a wing: one soft bounce.
+    static var bounce: Animation { spring(IslandMotion.bounce) }
+
+    /// SwiftUI's spring with the same response and damping as `spring`, at the current pace.
+    static func spring(_ spring: MotionSpring) -> Animation {
+        .spring(response: spring.response * pace, dampingFraction: spring.damping)
+    }
+
     /// Pressed controls give a little.
     static let pressScale: CGFloat = 0.94
 }
@@ -240,14 +248,16 @@ struct ColumnRule: View {
 }
 
 /// Liquid Glass for controls that float over the desktop (the page switcher). A dark fill in
-/// snapshots, with Reduce Transparency and before macOS 26.
+/// snapshots, with Reduce Transparency, while the island is hidden from screenshots, and
+/// before macOS 26.
 struct FloatingGlass<S: InsettableShape>: ViewModifier {
     let shape: S
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.snapshotMode) private var snapshotMode
+    @Environment(\.hiddenFromCapture) private var hiddenFromCapture
 
     func body(content: Content) -> some View {
-        if reduceTransparency || snapshotMode {
+        if reduceTransparency || snapshotMode || hiddenFromCapture {
             content
                 .background(shape.fill(Color(white: 0.07).opacity(0.92)))
                 .overlay(shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5))

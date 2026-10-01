@@ -22,9 +22,9 @@ public enum PermissionProbe {
         case .accessibility:
             completion(AXIsProcessTrusted() ? .granted : askedForAccessibility ? .denied : .notDetermined)
         case .calendars:
-            completion(status(CalendarService.eventAccess))
+            completion(.calendar(CalendarService.eventAccess))
         case .reminders:
-            completion(status(CalendarService.reminderAccess))
+            completion(.calendar(CalendarService.reminderAccess))
         case .location:
             completion(status(LocationProvider.access))
         case .downloadsFolder:
@@ -60,14 +60,6 @@ public enum PermissionProbe {
     }
 
     static func status(_ access: LocationProvider.Access) -> PermissionStatus {
-        switch access {
-        case .granted: return .granted
-        case .denied: return .denied
-        case .notDetermined: return .notDetermined
-        }
-    }
-
-    static func status(_ access: CalendarService.Access) -> PermissionStatus {
         switch access {
         case .granted: return .granted
         case .denied: return .denied

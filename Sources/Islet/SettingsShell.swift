@@ -78,7 +78,7 @@ struct SettingsShell: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            SettingsSidebar(navigation: navigation)
+            SettingsSidebar(navigation: navigation, attention: model.agentsNeedingUpdate.isEmpty ? [] : [.agents])
                 .frame(width: SettingsWindow.sidebarWidth)
             Divider().ignoresSafeArea()
             SettingsDetail(model: model, navigation: navigation)
@@ -101,6 +101,8 @@ struct SettingsShell: View {
 
 struct SettingsSidebar: View {
     @Bindable var navigation: SettingsNavigation
+    /// Pages with something to fix, which get a small dot.
+    var attention: Set<SettingsPage> = []
     @Environment(\.snapshotMode) private var snapshotMode
     /// The page list has the keyboard when the window opens, so the arrow keys move between pages.
     @FocusState private var listFocused: Bool
@@ -153,7 +155,7 @@ struct SettingsSidebar: View {
             if !pages.isEmpty {
                 Section {
                     ForEach(pages) { page in
-                        SidebarRow(page: page, drawsSelection: selected == page).tag(page).id(page)
+                        SidebarRow(page: page, drawsSelection: selected == page, attention: attention.contains(page)).tag(page).id(page)
                     }
                 } header: {
                     // Groups without a title are set apart by the list's own section spacing.
@@ -167,12 +169,20 @@ struct SettingsSidebar: View {
 private struct SidebarRow: View {
     let page: SettingsPage
     var drawsSelection = false
+    var attention = false
 
     var body: some View {
         Label {
-            Text(page.title)
-                .lineLimit(1)
-                .foregroundStyle(drawsSelection ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+            HStack(spacing: 6) {
+                Text(page.title)
+                    .lineLimit(1)
+                    .foregroundStyle(drawsSelection ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+                if attention {
+                    Spacer(minLength: 0)
+                    Circle().fill(Color.orange).frame(width: 6, height: 6)
+                        .accessibilityLabel("Needs attention")
+                }
+            }
         } icon: {
             SettingsTile(page: page)
         }

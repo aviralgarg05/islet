@@ -1,6 +1,7 @@
 # Home Assistant → Islet over the local-network bridge (enable it in Islet → Settings → Advanced → iPhone bridge).
 # Put the bridge token in secrets.yaml as islet_token: "Bearer <token>". Copy it from Islet → Settings →
-# Advanced → iPhone bridge; the local API token from `isletctl token` doesn't work here.
+# Advanced → iPhone bridge, or print it with `isletctl token --lan`; the local API token from
+# plain `isletctl token` doesn't work here.
 rest_command:
   islet_notify:
     url: "http://my-mac.local:47832/v1/notify"

@@ -8,9 +8,16 @@ import SwiftUI
 enum AppActions {
     static var openSettingsHandler: ((SettingsPage?, String?) -> Void)?
 
+    /// Whether an `isletctl` is there to run. Settings snapshots, which show the installed
+    /// location without an installed app, say yes.
+    static var isExecutable: @Sendable (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
+
     /// Open the Settings window on `page`, scrolled to the row `anchor` names (an id from
     /// `SettingsIndex`), or else on the page it showed last.
     static func openSettings(_ page: SettingsPage? = nil, at anchor: String? = nil) { openSettingsHandler?(page, anchor) }
+
+    /// Whether an app is installed (for a meeting's call app icon).
+    static var isInstalled: (String) -> Bool = { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) != nil }
 
     static func pluginsFolder(_ model: AppModel) -> URL {
         model.settings.pluginDirectory.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) } ?? IsletPaths.pluginsDirectory

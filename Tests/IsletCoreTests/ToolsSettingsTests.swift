@@ -59,6 +59,18 @@ import Testing
         }
     }
 
+    @Test func toolPagesAreListedUnderMoreOnlyOnceOn() {
+        var s = IsletSettings()
+        let off = IslandPage.switcher(s, current: .home)
+        #expect(!off.more.contains(.shortcuts) && !off.more.contains(.weather))
+        s.shortcutsEnabled = true
+        s.weatherEnabled = true
+        let on = IslandPage.switcher(s, current: .home)
+        #expect(on.more.suffix(2) == [.shortcuts, .weather])
+        // Never in the capsule: nothing new crowds it.
+        #expect(on.main == off.main)
+    }
+
     @Test func locationIsAskedForOnlyByWeatherWhereYouAre() {
         var s = IsletSettings()
         #expect(PermissionKind.location.uses(s).allSatisfy { !$0.isOn })

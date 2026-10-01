@@ -220,8 +220,9 @@ extension AppRule {
 }
 
 /// User settings, persisted as human-editable JSON at `~/.config/islet/config.json`
-/// so they can live in a dotfiles repo. Loading is lenient: unknown keys are ignored and
-/// a missing or malformed value falls back to its default without affecting the others.
+/// so they can live in a dotfiles repo. Loading is lenient: unknown keys are ignored (and kept
+/// on save) and a missing or malformed value falls back to its default without affecting the
+/// others. A file that isn't valid JSON is never overwritten (`SettingsFile`).
 public struct IsletSettings: Codable, Equatable, Sendable {
     // Placement & behaviour
     public var displayMode: DisplayMode = .notchedScreen
@@ -237,7 +238,8 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// What the island does over an app in full screen. Replaces `hideInFullscreen` (false
     /// became `show`). An app's rule can keep the island in full screen whatever this says.
     public var fullscreenBehaviour: FullscreenBehaviour = .hide
-    /// Exclude the island from screenshots and screen sharing.
+    /// Keep the island out of screenshots (`NSWindow.sharingType = .none`). Some screen-sharing
+    /// and recording apps (ScreenCaptureKit) still show it; glass draws solid while it is on.
     public var hideFromScreenCapture = false
 
     // Size
@@ -321,10 +323,23 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var remindersEnabled = false
     /// Calendar identifiers the user hid.
     public var hiddenCalendars: [String] = []
+    /// Minutes before a meeting that it shows in the closed island, counting down (one of
+    /// `meetingReminderChoices`); 0 turns meeting reminders off.
+    public var meetingReminderMinutes = 10
+    /// A meeting that has started stays, urgent, until you join or dismiss it or it ends.
+    /// Off, it goes a few minutes after the start.
+    public var meetingRemindUntilJoined = true
+    /// Only meetings with a call link (Zoom, Google Meet, Teams, Webex, FaceTime and others).
+    public var meetingRemindersNeedLink = true
     public var shelfEnabled = true
     /// Off by default: clipboard history is sensitive.
     public var clipboardEnabled = false
     public var clipboardLimit = 30
+    /// Apps whose copies clipboard history never keeps (bundle ids), beside the password
+    /// managers it always skips.
+    public var clipboardIgnoredApps: [String] = []
+    /// Skip what looks like a password copied in a browser (`ClipboardHistory.looksLikeSecret`).
+    public var clipboardSkipSecrets = true
     public var privacyIndicatorsEnabled = true
     public var systemStatsEnabled = true
     /// Live call timer when a call app is using the microphone.
@@ -451,6 +466,8 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// The choices Settings offers for `pausedMusicTimeout`, in order.
     public static let pausedMusicChoices: [Double] = [0, 5, 10, 30, 60, 300, neverHide]
     public static let clipboardLimitRange: ClosedRange<Int> = 1...500
+    /// The choices Settings offers for `meetingReminderMinutes`, Off first.
+    public static let meetingReminderChoices = [0, 5, 10, 15, 30]
     /// Ports for the local API and the LAN bridge (unprivileged, and never the same one).
     public static let portRange: ClosedRange<Int> = 1024...65535
 
@@ -545,6 +562,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         s.openDelay = Self.clamp(s.openDelay, Self.openDelayRange)
         s.closeDelay = Self.clamp(s.closeDelay, Self.closeDelayRange)
         s.clipboardLimit = Self.clamp(s.clipboardLimit, Self.clipboardLimitRange)
+        var seenApps: Set<String> = []
+        s.clipboardIgnoredApps = s.clipboardIgnoredApps.map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && seenApps.insert($0).inserted }
         s.wingWidth = Self.clamp(s.wingWidth, Self.wingWidthRange)
         s.maxConcurrent = min(3, max(1, s.maxConcurrent))
         s.alertDuration = Self.clamp(s.alertDuration, Self.alertDurationRange)
@@ -564,6 +584,12 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         s.focusSoundVolume = s.focusSoundVolume.isFinite ? Self.clamp(s.focusSoundVolume, 0...1) : 0.4
         // A hand-edited place off the globe means no place.
         if let p = s.weatherPlace, !(abs(p.latitude) <= 90 && abs(p.longitude) <= 180) { s.weatherPlace = nil }
+        // A hand-edited lead time becomes the nearest choice Settings offers.
+        if !Self.meetingReminderChoices.contains(s.meetingReminderMinutes) {
+            let wanted = s.meetingReminderMinutes
+            s.meetingReminderMinutes = wanted <= 0 ? 0
+                : Self.meetingReminderChoices.dropFirst().min { abs($0 - wanted) < abs($1 - wanted) } ?? 10
+        }
         let d = IsletSettings()
         if !Self.portRange.contains(s.apiPort) { s.apiPort = d.apiPort }
         if !Self.portRange.contains(s.lanPort) || s.lanPort == s.apiPort {
@@ -585,7 +611,7 @@ public struct IsletSettings: Codable, Equatable, Sendable {
               let user = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
             return IsletSettings()
         }
-        let known = Set(Mirror(reflecting: IsletSettings()).children.compactMap(\.label))
+        let known = knownKeys
         let decoder = JSONDecoder()
         // The user's keys that were read; the rest fell back to their defaults.
         var applied: Set<String> = []
@@ -632,17 +658,34 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         return port == other ? "The local API and the iPhone bridge need different ports." : nil
     }
 
+    /// The settings in the file, or the defaults when it is missing or doesn't parse. The app
+    /// uses `SettingsFile` instead, which tells those apart and never overwrites a broken file.
     public static func load(from url: URL) -> IsletSettings {
-        guard let data = try? Data(contentsOf: url) else { return IsletSettings() }
-        return decodeLenient(data)
+        read(from: url).value ?? IsletSettings()
     }
 
-    public func save(to url: URL) throws {
-        let e = JSONEncoder()
-        e.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try e.encode(self).write(to: url, options: .atomic)
+    /// The settings in the file, or whether it is missing or doesn't parse (and on which line).
+    public static func read(from url: URL) -> FileRead<IsletSettings> {
+        var file = SettingsFile(url: url)
+        return file.read()
     }
+
+    /// Writes the settings, keeping keys this build doesn't know. Throws the file's
+    /// `FileProblem`, writing nothing, when the file there doesn't parse.
+    public func save(to url: URL) throws {
+        var file = SettingsFile(url: url)
+        if try file.save(self) == .refused, let problem = file.problem { throw problem }
+    }
+
+    /// The keys this build reads and writes.
+    public static let knownKeys: Set<String> = Set(Mirror(reflecting: IsletSettings()).children.compactMap(\.label))
+
+    /// Keys older builds wrote, read once by `decodeLenient` and folded into newer ones. They
+    /// are dropped on save, so the old value can't come back over a newer choice.
+    public static let retiredKeys: Set<String> = [
+        "hapticFeedback", "showPausedMedia", "hideInFullscreen", "showOnNonNotchDisplays", "visualiserColour",
+        "fullscreenAllowList", "hideForApps", "launchAtLogin",
+    ]
 }
 
 /// Well-known file locations.
@@ -670,6 +713,27 @@ public enum IsletPaths {
 
     /// Discovery file written by the app: `{"port": 47831, "token": "…"}` (mode 0600).
     public static var apiDiscoveryFile: URL { supportDirectory.appendingPathComponent("api.json") }
+
+    /// A copy of the last `config.json` that parsed (`SettingsFile.lastGood`), kept here rather
+    /// than beside it so a dotfiles repo never sees it.
+    public static var lastGoodConfigFile: URL { supportDirectory.appendingPathComponent("config-last-good.json") }
+
+    /// The iPhone bridge's own token, `{"token": "…"}` (mode 0600), written the first time the
+    /// bridge is turned on and kept when it is turned off.
+    public static var lanTokenFile: URL { supportDirectory.appendingPathComponent("lan.json") }
+}
+
+/// Contents of `lan.json`, shared between the app and `isletctl token --lan`.
+public struct LANTokenFile: Codable, Equatable, Sendable {
+    public var token: String
+
+    public init(token: String) { self.token = token }
+
+    /// The saved token, or nil when the file is missing or unreadable.
+    public static func read(from url: URL = IsletPaths.lanTokenFile) -> String? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return (try? JSONDecoder().decode(LANTokenFile.self, from: data))?.token
+    }
 }
 
 /// Contents of the API discovery file shared between the app and `isletctl`.

@@ -22,6 +22,9 @@ enum Snapshots {
         settings.animationStyle = .off
         let model = AppModel(settings: settings)
         model.loadDemo(includeActivities: true)
+        // Drawn as if macOS allowed both; the access states have shots of their own.
+        model.setCalendarAccessForSnapshot(events: .fullAccess, reminders: .fullAccess)
+        AppActions.isInstalled = { $0 == "com.apple.FaceTime" }
         func metricsFor(_ s: IsletSettings) -> IslandMetrics {
             NotchGeometry.metrics(for: screen, expandedSize: CGSize(width: s.expandedSize.width, height: s.expandedSize.height),
                                   wingWidth: s.effectiveWingWidth, adjust: s.notchAdjust)
@@ -166,6 +169,10 @@ enum Snapshots {
         shoot("23-expanded-media-standard")
         model.settings.sizePreset = .compact
         metrics = metricsFor(model.settings)
+        // A control press that went nowhere: Automation for the player isn't allowed yet.
+        model.setControlHintForSnapshot("Spotify")
+        shoot("23b-expanded-media-allow-control")
+        model.setControlHintForSnapshot(nil)
         let awake = KeepAwakeSession(since: now, until: now.addingTimeInterval(2 * 3600))
         model.controls.awake = awake
         let awakeActivity = activity(KeepAwake.activity(for: awake, sneak: false) { _ in "18:30" })
@@ -177,6 +184,8 @@ enum Snapshots {
         model.forcedPresentation = .expanded
         shoot("25-expanded-keep-awake-on")
         model.controls.awake = nil
+        renderCalendarAndPlayers(model: model, now: now, shoot: shoot) { model.settings.sizePreset = $0; metrics = metricsFor(model.settings) }
+            placement: { model.closedPlacements[1] = $0 }
 
         // Home without media shows the Today card.
         model.clearNowPlayingForSnapshot()

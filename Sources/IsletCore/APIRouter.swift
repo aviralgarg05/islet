@@ -38,10 +38,13 @@ public struct StateSnapshot: Codable, Equatable, Sendable {
     public var activities: [Activity]
     public var nowPlaying: NowPlayingSummary?
     public var battery: BatteryState?
+    /// Calendar and reminders access, and how many events are left today; never a title.
+    public var calendar: CalendarStatus?
 
-    public init(version: String, presentation: String, activities: [Activity], nowPlaying: NowPlayingSummary?, battery: BatteryState?) {
+    public init(version: String, presentation: String, activities: [Activity], nowPlaying: NowPlayingSummary?, battery: BatteryState?,
+                calendar: CalendarStatus? = nil) {
         self.version = version; self.presentation = presentation; self.activities = activities
-        self.nowPlaying = nowPlaying; self.battery = battery
+        self.nowPlaying = nowPlaying; self.battery = battery; self.calendar = calendar
     }
 }
 
@@ -240,6 +243,8 @@ public struct APIRouter: Sendable {
             return try await route(request, seg)
         } catch ActivityError.mirrored {
             return .error(403, ActivityError.mirrored.description)
+        } catch ActivityError.notFound(let id) {
+            return .error(404, ActivityError.notFound(id).description)
         } catch {
             return .error(422, Self.describe(error))
         }
@@ -253,18 +258,44 @@ public struct APIRouter: Sendable {
         if spec.source == MenuBarLiveActivities.source || spec.id.map(MenuBarLiveActivities.isMirrored(id:)) == true {
             throw ActivityError.mirrored
         }
+        if let id = spec.id, await isMeetingReminder(id) { throw ActivityError.notFound(id) }
         return try await backend.applyActivity(spec)
     }
 
     func remove(id: String) async throws -> Bool {
         guard !MenuBarLiveActivities.isMirrored(id: id) else { throw ActivityError.mirrored }
+        guard !(await isMeetingReminder(id)) else { return false }
         return await backend.removeActivity(id: id)
     }
 
-    /// What scripts may read: mirrored Live Activities only when the user shares them.
+    /// Whether `id` is a meeting reminder on show. Scripts can't read those (`readable`), so to
+    /// a script the id isn't there: it can't change one, learn its title from the answer, or
+    /// dismiss it (which would keep it away for good).
+    private func isMeetingReminder(_ id: String) async -> Bool {
+        // Only ids in the reminders' namespace are looked up, so other writes cost nothing more.
+        guard id.hasPrefix(MeetingReminders.idPrefix) else { return false }
+        return await backend.listActivities().contains { $0.id == id && MeetingReminders.isReminder($0) }
+    }
+
+    /// `DELETE /v1/activities?source=`: everything from one source, except meeting reminders,
+    /// which share the source `calendar` with what a script may push. A script clearing its own
+    /// `calendar` activities neither dismisses today's meetings nor learns how many are showing.
+    func removeAll(source: String) async -> Int {
+        guard source == MeetingReminders.source else { return await backend.removeActivities(source: source) }
+        var removed = 0
+        for a in await backend.listActivities() where a.source == source && !MeetingReminders.isReminder(a) {
+            if await backend.removeActivity(id: a.id) { removed += 1 }
+        }
+        return removed
+    }
+
+    /// What scripts may read: mirrored Live Activities only when the user shares them, and
+    /// meeting reminders never (they carry the meeting's title; `calendar` in the state says
+    /// how many events are left instead).
     func readable(_ activities: [Activity]) async -> [Activity] {
-        if await backend.sharesMirroredActivities() { return activities }
-        return activities.filter { !MenuBarLiveActivities.isMirrored($0) }
+        let shown = activities.filter { !MeetingReminders.isReminder($0) }
+        if await backend.sharesMirroredActivities() { return shown }
+        return shown.filter { !MenuBarLiveActivities.isMirrored($0) }
     }
 
     private func route(_ r: HTTPRequest, _ seg: [String]) async throws -> HTTPResponse {
@@ -303,7 +334,7 @@ public struct APIRouter: Sendable {
             }
             // The count would also say how many are showing.
             guard source != MenuBarLiveActivities.source else { throw ActivityError.mirrored }
-            return .json(["removed": await backend.removeActivities(source: source)])
+            return .json(["removed": await removeAll(source: source)])
 
         case ("POST", 1, "notify"):
             let n = try decode(NotifyPush.self, from: r)

@@ -58,6 +58,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         nc.addObserver(forName: .isletMenuBarChanged, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.scheduleMenuBarMeasure(after: 0.1) }
         }
+        nc.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.retryKeyTap() }
+        }
+        // Posted when any app's Accessibility permission changes; the new answer can take a
+        // moment to read back.
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("com.apple.accessibility.api"), object: nil,
+                                                            queue: .main) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                MainActor.assumeIsolated { self?.retryKeyTap() }
+            }
+        }
         let wnc = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification, NSWorkspace.activeSpaceDidChangeNotification] {
             wnc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
@@ -225,6 +236,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if model.settings.replaceSystemHUD {
             keys.onKey = { [weak self] key, fine in self?.handleKey(key, fine: fine) }
+            keys.shouldIntercept = { [weak self] key, flags in
+                MainActor.assumeIsolated { self?.shouldIntercept(key, flags: flags) ?? false }
+            }
             // Without Accessibility the keys are left to macOS. Ask for it only as the option is
             // switched on; at launch a revoked permission shows in Settings instead of a prompt.
             if !keys.start(), PermissionPrompt.shouldAsk(wasOn: replacedHUD, isOn: true) {
@@ -236,33 +250,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         replacedHUD = model.settings.replaceSystemHUD
     }
 
+    /// Accessibility granted while Settings wasn't showing it (the HUD's Grant button, or System
+    /// Settings directly): start the key tap now rather than at the next launch. Called when
+    /// macOS says Accessibility changed and when Islet comes to the front; never polled.
+    private func retryKeyTap() {
+        guard model.settings.replaceSystemHUD, !keys.isRunning, MediaKeyInterceptor.hasAccessibility else { return }
+        keys.start()
+    }
+
+    /// Whether the key tap takes `key` (`KeyInterceptPolicy`). Read fresh for each press, so a
+    /// display, output or app that changed since is always counted.
+    private func shouldIntercept(_ key: MediaKeyInterceptor.Key, flags: NSEvent.ModifierFlags) -> Bool {
+        var s = KeyInterceptState(optionHeld: flags.contains(.option), shiftHeld: flags.contains(.shift))
+        switch key {
+        case .volumeUp, .volumeDown:
+            s.volumeSettable = AudioMonitor.isVolumeSettable()
+        case .mute:
+            s.muteSettable = AudioMonitor.isMuteSettable()
+        case .brightnessUp, .brightnessDown:
+            let builtIn = BrightnessMonitor.builtInDisplay
+            s.builtInDisplayOnline = builtIn != nil
+            s.canSetBrightness = BrightnessMonitor.canSet && BrightnessMonitor.read(builtIn) != nil
+            let pointer = NSEvent.mouseLocation
+            let screen = NSScreen.screens.first { NSMouseInRect(pointer, $0.frame, false) }
+            s.pointerOnBuiltInDisplay = builtIn != nil && screen?.displayID == builtIn
+            s.displayToolRunning = KeyInterceptPolicy.displayToolRunning(NSWorkspace.shared.runningApplications.lazy.compactMap(\.bundleIdentifier))
+        case .backlightUp, .backlightDown:
+            s.canSetKeyboardBacklight = KeyboardBacklight.isAvailable
+        }
+        return KeyInterceptPolicy.shouldIntercept(key, s)
+    }
+
     private func handleKey(_ key: MediaKeyInterceptor.Key, fine: Bool) {
         let step = fine ? 1.0 / 64 : 1.0 / 16
-        // The keys still do their job with a HUD switched off; only the display is skipped.
+        // The keys still do their job with a HUD switched off; only the display is skipped. The
+        // HUD shows only what really changed: a set call that failed shows nothing.
         func show(_ kind: HUDKind, _ v: Double, muted: Bool = false) {
             guard model.settings.showsHUD(kind) else { return }
             Task { await model.showHUD(kind: kind, value: v, muted: muted, label: nil) }
         }
         switch key {
         case .volumeUp, .volumeDown:
-            let cur = AudioMonitor.readOutput()?.volume ?? 0.5
+            guard let cur = AudioMonitor.readOutput()?.volume else { return }
             let v = min(1, max(0, (cur / step).rounded() * step + (key == .volumeUp ? step : -step)))
-            AudioMonitor.setOutputVolume(v)
-            show(.volume, v)
+            if AudioMonitor.setOutputVolume(v) { show(.volume, v) }
         case .mute:
-            let out = AudioMonitor.readOutput()
-            AudioMonitor.setMuted(!(out?.muted ?? false))
-            show(.volume, out?.volume ?? 0, muted: !(out?.muted ?? false))
+            guard let out = AudioMonitor.readOutput() else { return }
+            if AudioMonitor.setMuted(!out.muted) { show(.volume, out.volume, muted: !out.muted) }
         case .brightnessUp, .brightnessDown:
-            let cur = BrightnessMonitor.read() ?? 0.5
+            guard let cur = BrightnessMonitor.read() else { return }
             let v = min(1, max(0, cur + (key == .brightnessUp ? step : -step)))
-            BrightnessMonitor.set(v)
-            show(.brightness, v)
+            if BrightnessMonitor.set(v) { show(.brightness, v) }
         case .backlightUp, .backlightDown:
-            let cur = KeyboardBacklight.read() ?? 0.5
+            guard let cur = KeyboardBacklight.read() else { return }
             let v = min(1, max(0, cur + (key == .backlightUp ? step : -step)))
-            KeyboardBacklight.set(v)
-            show(.keyboardBrightness, v)
+            if KeyboardBacklight.set(v) { show(.keyboardBrightness, v) }
         }
     }
 
@@ -331,7 +373,7 @@ let args = CommandLine.arguments
 // Snapshots and the demo fill the island with sample content; keep it out of the real shelf,
 // config and API files.
 let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("islet-demo-\(ProcessInfo.processInfo.processIdentifier)")
-if args.contains("--snapshot") || args.contains("--demo") {
+if args.contains("--snapshot") || args.contains("--snapshot-motion") || args.contains("--demo") {
     try? FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
     if ProcessInfo.processInfo.environment["ISLET_SUPPORT_DIR"] == nil {
         setenv("ISLET_SUPPORT_DIR", scratch.appendingPathComponent("support").path, 1)
@@ -372,6 +414,14 @@ if let i = args.firstIndex(of: "--settings-snapshot") {
     }
     try? FileManager.default.removeItem(at: scratch)
     exit(status)
+}
+
+// The island's transitions as contact sheets, each frame frozen part of the way through.
+if let i = args.firstIndex(of: "--snapshot-motion") {
+    let dir = i + 1 < args.count ? args[i + 1] : "motion-snapshots"
+    MainActor.assumeIsolated { Snapshots.renderMotion(to: URL(fileURLWithPath: dir)) }
+    try? FileManager.default.removeItem(at: scratch)
+    exit(0)
 }
 
 if let i = args.firstIndex(of: "--snapshot") {

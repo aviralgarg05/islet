@@ -24,11 +24,15 @@ enum SettingsSnapshots {
         NSApp.setActivationPolicy(.prohibited)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         AppActions.bundleURL = URL(fileURLWithPath: "/Applications/Islet.app")
+        // As if Islet were installed there, so connected agents read as connected.
+        AppActions.isExecutable = { _ in true }
         seedAgents(home: home)
 
         let secrets = MemorySecretStore([AskProviderKind.anthropic.keyAccount ?? "": "snapshot-sample-0000"])
         let model = AppModel(settings: sampleSettings, ask: AskController(service: AskService(secrets: secrets)))
         model.apiStatus = "Listening on 127.0.0.1:\(model.settings.apiPort)"
+        // Drawn as if macOS allowed calendars and reminders; the other states have shots of their own.
+        model.setCalendarAccessForSnapshot(events: .fullAccess, reminders: .fullAccess)
         let navigation = SettingsNavigation()
         let window = SettingsWindow.make(model: model, navigation: navigation, window: OffscreenWindow(), snapshot: true)
         window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
@@ -44,6 +48,18 @@ enum SettingsSnapshots {
         }
         navigation.query = "colour"
         capture(window, appearance: .aqua, to: dir.appendingPathComponent("search-results.png"))
+        // Calendar access that explains itself: "Add events only" for calendars, reminders turned
+        // off in System Settings, on the Calendar page and on Permissions.
+        model.setCalendarAccessForSnapshot(events: .writeOnly, reminders: .denied)
+        navigation.query = ""
+        navigation.open(.calendar)
+        shoot("calendar-access-write-only", dark: false)
+        navigation.open(.permissions)
+        shoot("permissions-calendar-write-only", dark: false)
+        model.setCalendarAccessForSnapshot(events: .notDetermined, reminders: .restricted)
+        navigation.open(.calendar)
+        shoot("calendar-access-not-asked", dark: false)
+        model.setCalendarAccessForSnapshot(events: .fullAccess, reminders: .fullAccess)
 
         if ProcessInfo.processInfo.environment["ISLET_SNAPSHOT_EXTRA"] == "1" {
             let extra = dir.appendingPathComponent("extra")
@@ -81,6 +97,35 @@ enum SettingsSnapshots {
             navigation.open(.general)
             shoot("general-click", in: extra, dark: false)
             model.settings = sampleSettings
+            // Let the save that change queued go first: a save that works clears the problem.
+            RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+            // config.json with an error: the last good settings stay, and Advanced says so.
+            model.setSettingsProblemForSnapshot(FileProblem(line: 12, message: "Badly formed object around line 12, column 3."))
+            window.setContentSize(NSSize(width: SettingsWindow.defaultSize.width, height: 1500))
+            navigation.open(.advanced, at: "advanced.config")
+            shoot("advanced-config-error", in: extra)
+            // Already broken at launch, with no copy of a good one: the defaults, said plainly.
+            model.setSettingsProblemForSnapshot(FileProblem(line: 3, message: "Unexpected character around line 3, column 1."),
+                                                origin: .defaults)
+            shoot("advanced-config-error-defaults", in: extra, dark: false)
+            model.setSettingsProblemForSnapshot(nil)
+            // Islet.app moved since Claude Code was connected: it runs from a new place, and the
+            // isletctl the hooks call is gone. Needs an update, and a dot.
+            window.setContentSize(SettingsWindow.defaultSize)
+            let installed = AppActions.bundleURL
+            AppActions.bundleURL = URL(fileURLWithPath: "/Users/Shared/Apps/Islet.app")
+            let movedCLI = AppActions.cliPath
+            AppActions.isExecutable = { $0 == movedCLI }
+            navigation.open(.general)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+            navigation.open(.agents)
+            shoot("agents-moved", in: extra, dark: false)
+            AppActions.bundleURL = installed
+            AppActions.isExecutable = { _ in true }
+            navigation.open(.general)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+            navigation.open(.agents)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.5))
             window.setContentSize(SettingsWindow.minimumSize)
             for (i, page) in SettingsPage.allCases.enumerated() {
                 navigation.open(page)
@@ -101,6 +146,7 @@ enum SettingsSnapshots {
     static var sampleSettings: IsletSettings {
         var s = IsletSettings()
         s.clipboardEnabled = true
+        s.clipboardIgnoredApps = ["com.apple.Notes"]
         s.remindersEnabled = true
         s.pluginsEnabled = true
         s.weatherEnabled = true

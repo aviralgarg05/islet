@@ -36,6 +36,19 @@ public enum AgentHookSetup {
         }
     }
 
+    /// What disconnecting would change: Islet's hooks out, everything else as it is.
+    public static func disconnectPlan(_ agent: CodingAgent, home: URL = FileManager.default.homeDirectoryForCurrentUser) throws -> AgentHookPlan {
+        try AgentHookPlan.disconnect(agent, home: home) { url in try AgentConfigFile.read(url.resolvingSymlinksInPath()) }
+    }
+
+    /// The `isletctl` paths an agent's hooks call that are gone (Islet.app moved or was deleted).
+    /// Reads one file, only if it is there; never writes.
+    public static func missingExecutables(_ agent: CodingAgent, home: URL = FileManager.default.homeDirectoryForCurrentUser,
+                                          exists: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }) -> [String] {
+        AgentHookPlan.missingExecutables(agent, home: home, read: { url in try AgentConfigFile.read(url.resolvingSymlinksInPath()) },
+                                         exists: exists)
+    }
+
     /// Writes the files a plan changes, each with a `.bak` of what was there.
     public static func apply(_ plan: AgentHookPlan) throws {
         for file in plan.changedFiles {

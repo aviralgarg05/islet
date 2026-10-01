@@ -199,6 +199,16 @@ public enum GestureMap {
     }
 }
 
+extension GestureMap {
+    /// Whether a swipe dismisses what the closed island shows: up, over a reminder you can
+    /// dismiss (a meeting reminder), in its compact form or its sneak peek. Elsewhere swiping up
+    /// does nothing on the closed island, so nothing else is lost by accident.
+    public static func dismisses(_ swipe: SwipeDirection, on surface: GestureSurface, dismissable: Bool, settings s: IsletSettings) -> Bool {
+        guard s.gesturesEnabled, swipe == .up, dismissable else { return false }
+        return surface == .compactActivity || surface == .sneak
+    }
+}
+
 /// Swiping through the activities in the closed island (the compact one and its bubbles).
 public enum CompactCycle {
     /// The activity to bring forward after `current`, or nil when there is nothing to cycle to.
