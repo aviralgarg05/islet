@@ -184,6 +184,20 @@ public struct AppRule: Codable, Equatable, Sendable, Identifiable {
 }
 
 extension AppRule {
+    /// Lenient, like the settings around it: a value that can't be read (a misspelt priority,
+    /// an icon in an unknown form) leaves that one choice at "its own" instead of losing every
+    /// app's rules. Only the bundle id is required.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        bundleID = try c.decode(String.self, forKey: .bundleID)
+        tint = try? c.decodeIfPresent(String.self, forKey: .tint)
+        icon = try? c.decodeIfPresent(ActivityIcon.self, forKey: .icon)
+        hideIsland = try? c.decodeIfPresent(Bool.self, forKey: .hideIsland)
+        showInFullscreen = try? c.decodeIfPresent(Bool.self, forKey: .showInFullscreen)
+        muteNotifications = try? c.decodeIfPresent(Bool.self, forKey: .muteNotifications)
+        priority = try? c.decodeIfPresent(ActivityPriority.self, forKey: .priority)
+    }
+
     /// Rules with the given bundle ids switched on for fullscreen and for hiding the island.
     /// An id that already has a rule gets the flag on that rule; others get a new rule, once.
     public static func merging(_ rules: [AppRule], showInFullscreen: [String], hideIsland: [String]) -> [AppRule] {
@@ -459,8 +473,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var showsAnyHUD: Bool { HUDKind.allCases.contains(where: showsHUD) }
 
     /// Appearance → "Reset appearance": the theme, colours, sizes, motion and the music's look
-    /// go back to how Islet came. "Fit to the notch" (a calibration for this Mac's hardware)
-    /// and everything on other pages stay.
+    /// (the playing indicator, the music colour and the progress ring, which Now Playing also
+    /// shows) go back to how Islet came. "Fit to the notch" (a calibration for this Mac's
+    /// hardware) and everything else on other pages stay.
     public func resettingAppearance() -> IsletSettings {
         let d = IsletSettings()
         var s = self
