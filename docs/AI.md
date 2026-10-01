@@ -14,7 +14,7 @@ Nothing goes over the network until you ask a cloud provider a question, save an
 Open it in any of three ways:
 
 - Press the Ask shortcut, **⌃⌥A** by default, from any app (see [Keyboard shortcut](#keyboard-shortcut)).
-- Open the island and click the **sparkles** button in the top row, next to the pin.
+- Open the island and click **Ask**, the disc on the right of the page switcher under it.
 - Open an `islet://ask` link (see [below](#islet-ask)).
 
 | Action | How |
