@@ -434,7 +434,23 @@ struct PlayingIndicator: View {
                     Circle().fill(tint).frame(width: 4 * k, height: 4 * k).offset(y: playing ? -CGFloat([3, 6, 2][i]) * k : 0)
                 }
             }
+        case .mirror:
+            let heights = EqualizerNSView.mirrorLively
+            let w = (width - 1.5 * k * 4) / 5
+            HStack(alignment: .center, spacing: 1.5 * k) {
+                ForEach(Array(heights.enumerated()), id: \.offset) { _, h in
+                    RoundedRectangle(cornerRadius: min(1.25 * k, w / 2)).fill(tint)
+                        .frame(width: w, height: height * (playing ? h : 0.2))
+                }
+            }
+            .frame(height: height)
+        case .vinyl:
+            Circle().fill(tint)
+                .frame(width: DotNSView.diameter * k, height: DotNSView.diameter * k)
+                .scaleEffect(playing ? 1 : 0.8)
+                .frame(width: width, height: height)
         default:
+            // Bars, slim bars, and the bars that stand in for a sticker outside the closed island.
             let heights: [CGFloat] = style == .slim ? [0.55, 0.9, 0.45, 0.75, 0.6, 0.8] : [0.45, 0.8, 0.35, 0.65]
             HStack(alignment: .bottom, spacing: (style == .slim ? 1.5 : 2) * k) {
                 ForEach(Array(heights.enumerated()), id: \.offset) { _, h in

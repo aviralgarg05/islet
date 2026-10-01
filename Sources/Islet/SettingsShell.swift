@@ -345,6 +345,13 @@ struct SettingsPageView: View {
     let page: SettingsPage
 
     var body: some View {
+        Group {
+            pageView
+        }
+        .environment(\.stickerLibrary, model.stickers)
+    }
+
+    @ViewBuilder private var pageView: some View {
         switch page {
         case .general: GeneralSettings(model: model)
         case .appearance: AppearanceSettings(model: model)

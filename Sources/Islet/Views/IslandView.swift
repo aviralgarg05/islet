@@ -196,6 +196,7 @@ enum IslandLayout {
         case .compact(.nowPlaying): return "compact-media"
         case .compact(.activity(let a, _)): return "compact-\(a.id)"
         case .compact(.battery): return "compact-battery"
+        case .compact(.sticker): return "compact-sticker"
         case .expanded: return "expanded"
         }
     }
@@ -292,7 +293,7 @@ extension AppModel {
             }
         case .nowPlaying:
             break
-        case .battery:
+        case .battery, .sticker:
             return .none
         }
         items += acts.map(IslandBubble.activity)
@@ -1049,7 +1050,8 @@ struct IslandRow: View {
     /// value within one kind changes in place.
     private func trailingKey(_ p: IslandPresentation) -> String {
         switch p {
-        case .compact(.nowPlaying), .songPeek: return "indicator"
+        // The resting sticker is the same sticker the music plays: it carries on in place.
+        case .compact(.nowPlaying), .songPeek, .compact(.sticker): return "indicator"
         case .compact(.activity(let a, _)), .sneak(let a): return "activity-\(a.id)-\(Self.trailingKind(a, model: model))"
         case .compact(.battery): return "percent"
         case .hud: return "level"
@@ -1125,7 +1127,13 @@ struct IslandRow: View {
     private func trailing(_ p: IslandPresentation) -> some View {
         switch p {
         case .compact(.nowPlaying(let np)), .songPeek(let np):
-            PlayingIndicator(tint: model.musicTint(np), playing: np.isPlaying)
+            if model.settings.visualiserStyle == .gif {
+                stickerWing(np.isPlaying ? .playing : .paused)
+            } else {
+                PlayingIndicator(tint: model.musicTint(np), playing: np.isPlaying)
+            }
+        case .compact(.sticker):
+            stickerWing(.idle)
         case .compact(.activity(let a, _)), .sneak(let a):
             TemplateTrailing(activity: a, model: model, tint: model.tint(for: a))
         case .compact(.battery(let ev)):
@@ -1145,6 +1153,13 @@ struct IslandRow: View {
         default:
             EmptyView()
         }
+    }
+
+    /// The GIF look's sticker, in the row's height (a floating pill's is a little shorter) and
+    /// allowed half the wing's edge space.
+    private func stickerWing(_ mode: StickerMode) -> some View {
+        StickerWing(model: model, mode: mode, row: metrics.notch.height - 2 * geometry.inset,
+                    outerSpace: Wings<EmptyView, EmptyView>.inset(for: geometry.wing) / 2)
     }
 
     /// The peek's text, lined up under the wing's glyph so the peek reads as one column.
@@ -1192,9 +1207,10 @@ struct IslandRow: View {
     }
 }
 
-/// The artwork beside the notch: corners from Settings, and dimmed while the music is paused,
-/// in step with the indicator settling. With "Show song progress" a thin ring round it fills
-/// as the song plays; it sits outside the artwork, so the artwork doesn't move.
+/// The artwork beside the notch: corners from Settings (a turning record with Vinyl), and
+/// dimmed while the music is paused, in step with the indicator settling. With "Show song
+/// progress" a thin ring round it fills as the song plays; it sits outside the artwork, so the
+/// artwork doesn't move.
 struct ClosedArtwork: View {
     let media: NowPlaying
     let model: AppModel
@@ -1208,18 +1224,26 @@ struct ClosedArtwork: View {
     static let ringLine: CGFloat = 1.5
 
     var body: some View {
-        let corner = model.artworkCorner(size: size, standard: 5)
-        TrackArtwork(media: media, size: size, corner: corner)
-            .overlay {
-                if model.settings.songProgressRing, media.duration != nil {
-                    let pad = Self.ringGap + Self.ringLine
-                    SongRing(media: media, tint: model.musicTint(media), corner: corner + pad, lineWidth: Self.ringLine)
-                        .frame(width: size + 2 * pad, height: size + 2 * pad)
-                        .allowsHitTesting(false)
-                }
+        // Vinyl turns the artwork into a round record.
+        let vinyl = model.settings.visualiserStyle == .vinyl
+        let corner = vinyl ? size / 2 : model.artworkCorner(size: size, standard: 5)
+        Group {
+            if vinyl {
+                VinylArtwork(media: media, size: size, tint: model.musicTint(media))
+            } else {
+                TrackArtwork(media: media, size: size, corner: corner)
             }
-            .opacity(media.isPlaying ? 1 : PausedLook.artworkOpacity)
-            .animation(motion == .off ? nil : .easeInOut(duration: PausedLook.fade), value: media.isPlaying)
+        }
+        .overlay {
+            if model.settings.songProgressRing, media.duration != nil {
+                let pad = Self.ringGap + Self.ringLine
+                SongRing(media: media, tint: model.musicTint(media), corner: corner + pad, lineWidth: Self.ringLine)
+                    .frame(width: size + 2 * pad, height: size + 2 * pad)
+                    .allowsHitTesting(false)
+            }
+        }
+        .opacity(media.isPlaying ? 1 : PausedLook.artworkOpacity)
+        .animation(motion == .off ? nil : .easeInOut(duration: PausedLook.fade), value: media.isPlaying)
     }
 }
 

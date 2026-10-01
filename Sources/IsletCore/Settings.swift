@@ -115,6 +115,12 @@ public enum VisualiserStyle: String, Codable, Sendable, CaseIterable {
     case wave
     /// A dot with a ring that ripples out from it.
     case pulse
+    /// Bars reflected around a centre line, growing up and down from it.
+    case mirror
+    /// The artwork turns slowly like a record while the song plays; a small dot beside the notch.
+    case vinyl
+    /// A small animated sticker (`StickerSettings`): one of Islet's own or a GIF of yours.
+    case gif
     /// No indicator: the artwork alone shows what's playing.
     case off
 }
@@ -300,6 +306,8 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// Show a new song for a moment below the notch when the track changes (`SongPeek`).
     public var songChangePeek = true
     public var visualiserStyle: VisualiserStyle = .bars
+    /// Which sticker the GIF look shows, where and how big, and whether it stays when nothing plays.
+    public var sticker = StickerSettings()
     /// The music's colour (`MusicColour`). Read from `visualiserColour` in older configs.
     public var musicColour: MusicColour = .artwork
     /// A thin ring round the artwork beside the notch that fills as the song plays.
@@ -540,7 +548,7 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         s.urgentGlow = d.urgentGlow; s.reduceMotion = d.reduceMotion; s.hapticsMode = d.hapticsMode; s.alertDuration = d.alertDuration
         s.maxConcurrent = d.maxConcurrent; s.bubblePlacement = d.bubblePlacement
         s.artworkCornerRadius = d.artworkCornerRadius; s.visualiserStyle = d.visualiserStyle; s.musicColour = d.musicColour
-        s.songProgressRing = d.songProgressRing
+        s.songProgressRing = d.songProgressRing; s.sticker = d.sticker
         return s
     }
 
@@ -615,6 +623,7 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         for i in s.appRules.indices where s.appRules[i].tint.map({ RGBA.parse($0) == nil }) ?? false {
             s.appRules[i].tint = nil
         }
+        s.sticker = s.sticker.sanitized()
         s.teleprompter = s.teleprompter.sanitized()
         s.sales = s.sales.sanitized()
         s.stocks = s.stocks.sanitized()
@@ -728,6 +737,9 @@ public enum IsletPaths {
         }
         return home.appendingPathComponent("Library/Application Support/Islet")
     }
+
+    /// The user's own stickers for the playing indicator's GIF look (`StickerStore`).
+    public static var stickersDirectory: URL { supportDirectory.appendingPathComponent("stickers") }
 
     /// Discovery file written by the app: `{"port": 47831, "token": "…"}` (mode 0600).
     public static var apiDiscoveryFile: URL { supportDirectory.appendingPathComponent("api.json") }

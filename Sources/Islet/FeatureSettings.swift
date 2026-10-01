@@ -64,6 +64,9 @@ struct NowPlayingSettings: View {
             Section {
                 IndicatorStylePicker(model: model)
                     .settingsAnchor("nowPlaying.indicator")
+                if model.settings.visualiserStyle == .gif {
+                    StickerSettingsRows(model: model)
+                }
                 Picker(selection: musicColour) {
                     Text("From the artwork").tag(MusicColour.artwork)
                     // With the accent on "auto" it is the artwork's colour, so it isn't offered twice.
@@ -80,7 +83,9 @@ struct NowPlayingSettings: View {
                 Text("Look")
             } footer: {
                 HStack(spacing: 4) {
-                    SettingsFooter("The indicator settles and dims when you pause, and springs back when you play.")
+                    SettingsFooter(model.settings.visualiserStyle == .gif
+                                   ? "The sticker plays with the music and stops, dimmed, when you pause. It stays still with Reduce Motion or Low Power Mode."
+                                   : "The indicator settles and dims when you pause, and springs back when you play.")
                     SettingsLink(text: "Accent colour", page: .appearance, anchor: "appearance.accent").fixedSize()
                 }
             }
@@ -113,60 +118,6 @@ struct NowPlayingSettings: View {
             let c = model.settings.musicColour
             return c == .accent && model.settings.accentColor == "auto" ? .artwork : c
         }, set: { model.settings.musicColour = $0 })
-    }
-}
-
-/// The playing indicator's looks, each drawn as it moves in the island.
-struct IndicatorStylePicker: View {
-    @Bindable var model: AppModel
-
-    private static let styles: [VisualiserStyle] = [.bars, .slim, .dots, .wave, .pulse, .off]
-
-    static func name(_ style: VisualiserStyle) -> String {
-        switch style {
-        case .bars: return "Bars"
-        case .slim: return "Slim bars"
-        case .dots: return "Dots"
-        case .wave: return "Wave"
-        case .pulse: return "Pulse"
-        case .off: return "None"
-        }
-    }
-
-    var body: some View {
-        SettingsRow(title: "Playing indicator") {
-            HStack(spacing: 8) {
-                ForEach(Self.styles, id: \.self) { style in
-                    let selected = model.settings.visualiserStyle == style
-                    Button { model.settings.visualiserStyle = style } label: {
-                        VStack(spacing: 5) {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.black)
-                                if style == .off {
-                                    Image(systemName: "nosign").foregroundStyle(.white.opacity(0.45))
-                                } else {
-                                    PlayingIndicator(tint: IslandSketch.indicatorTint(model.settings), playing: true)
-                                        .environment(\.visualiserStyle, style)
-                                }
-                            }
-                            .frame(width: 52, height: 34)
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    .strokeBorder(selected ? Color.accentColor : Color.primary.opacity(0.1), lineWidth: selected ? 2.5 : 1)
-                            }
-                            Text(Self.name(style)).font(.caption).foregroundStyle(selected ? .primary : .secondary)
-                                .lineLimit(1).fixedSize()
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(Self.name(style))
-                    .accessibilityAddTraits(selected ? .isSelected : [])
-                }
-            }
-            // Islet's own Reduce motion holds the previews still, as it does the island.
-            .environment(\.islandReduceMotion, model.settings.reduceMotion || model.settings.animationStyle == .off)
-        }
     }
 }
 

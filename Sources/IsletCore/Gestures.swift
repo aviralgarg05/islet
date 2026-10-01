@@ -147,7 +147,7 @@ public enum GestureSurface: Equatable, Sendable {
     public static func from(_ p: IslandPresentation, homeShowsMedia: Bool) -> GestureSurface? {
         switch p {
         case .hidden: return nil
-        case .idle, .hud, .compact(.battery): return .closed
+        case .idle, .hud, .compact(.battery), .compact(.sticker): return .closed
         case .sneak: return .sneak
         // A new song on show is music too: swiping sideways changes track.
         case .compact(.nowPlaying), .songPeek: return .compactMedia

@@ -5,6 +5,9 @@ public enum CompactContent: Equatable, Sendable {
     case nowPlaying(NowPlaying)
     case activity(Activity, others: Int)
     case battery(BatteryEvent)
+    /// Nothing to show, and the sticker stays beside the notch, still ("Also when nothing is
+    /// playing").
+    case sticker
 }
 
 /// The single source of truth for what the island looks like right now.
@@ -37,13 +40,15 @@ public struct PresenterInputs: Sendable {
     /// A new song to show for a moment (`SongPeek.current`). It gives way to a HUD and to an
     /// activity's sneak peek, and never shows while the island is open or hidden.
     public var songPeek: NowPlaying?
+    /// With nothing else to show, the sticker stays beside the notch (`showsIdleSticker`).
+    public var idleSticker: Bool
 
     public init(now: Date, center: ActivityCenter, nowPlaying: NowPlaying? = nil, batteryEvent: BatteryEvent? = nil,
                 isExpanded: Bool = false, isSuppressed: Bool = false, pausedMedia: PausedMediaShow = .hidden,
-                focusedActivityID: String? = nil, songPeek: NowPlaying? = nil) {
+                focusedActivityID: String? = nil, songPeek: NowPlaying? = nil, idleSticker: Bool = false) {
         self.now = now; self.center = center; self.nowPlaying = nowPlaying; self.batteryEvent = batteryEvent
         self.isExpanded = isExpanded; self.isSuppressed = isSuppressed; self.pausedMedia = pausedMedia
-        self.focusedActivityID = focusedActivityID; self.songPeek = songPeek
+        self.focusedActivityID = focusedActivityID; self.songPeek = songPeek; self.idleSticker = idleSticker
     }
 }
 
@@ -86,7 +91,13 @@ public enum Presenter {
         if let np = i.nowPlaying, i.pausedMedia == .kept {
             return .compact(.nowPlaying(np))
         }
-        return .idle
+        return i.idleSticker ? .compact(.sticker) : .idle
+    }
+
+    /// Whether the sticker stays beside the notch when nothing is playing: the GIF look with
+    /// "Also when nothing is playing" on, and Now Playing on.
+    public static func showsIdleSticker(_ s: IsletSettings) -> Bool {
+        s.mediaEnabled && s.visualiserStyle == .gif && s.sticker.whenIdle
     }
 
     /// "Only on hover" on a display without a notch, while the pointer is elsewhere: the closed

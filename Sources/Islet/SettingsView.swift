@@ -309,6 +309,8 @@ struct AppearanceSettings: View {
 
     static func indicatorSummary(_ s: IsletSettings) -> String {
         guard s.visualiserStyle != .off else { return "Off" }
+        // A sticker keeps its own colours.
+        if s.visualiserStyle == .gif { return "GIF sticker" }
         let style = IndicatorStylePicker.name(s.visualiserStyle)
         switch s.musicColour {
         case .artwork: return "\(style), artwork colour"
@@ -557,6 +559,7 @@ struct IslandSketch: View {
     var detailed = true
     /// Whether the sample song plays (the closed island).
     var playing = true
+    @Environment(\.stickerLibrary) private var stickers
 
     /// The notch of a 14-inch MacBook Pro.
     static let notch = CGSize(width: 185, height: 32)
@@ -597,8 +600,15 @@ struct IslandSketch: View {
             .overlay { if settings.outline { IslandEdge(shape: shape).stroke(Color.white.opacity(0.18), lineWidth: 0.5) } }
             .frame(width: width, height: height)
             .overlay(alignment: .leading) {
-                let corner = CGFloat(settings.artworkCorner(size: 20, standard: 5)) * scale
-                artworkTile(size: art, corner: corner)
+                let vinyl = settings.visualiserStyle == .vinyl
+                let corner = vinyl ? art / 2 : CGFloat(settings.artworkCorner(size: 20, standard: 5)) * scale
+                Group {
+                    if vinyl {
+                        VinylDisc(image: Self.artworkImage, size: art, tint: Self.indicatorTint(settings), playing: playing)
+                    } else {
+                        artworkTile(size: art, corner: corner)
+                    }
+                }
                     .overlay {
                         if settings.songProgressRing {
                             let pad = (ClosedArtwork.ringGap + ClosedArtwork.ringLine) * scale
@@ -617,11 +627,28 @@ struct IslandSketch: View {
                     .padding(.leading, inset)
             }
             .overlay(alignment: .trailing) {
-                PlayingIndicator(tint: Self.indicatorTint(settings), playing: playing, height: 14 * scale)
-                    .environment(\.visualiserStyle, settings.visualiserStyle)
-                    .padding(.trailing, inset)
+                if settings.visualiserStyle == .gif, let stickers {
+                    StickerSketch(library: stickers, settings: settings, scale: scale, playing: playing)
+                        .padding(.trailing, inset)
+                } else {
+                    PlayingIndicator(tint: Self.indicatorTint(settings), playing: playing, height: 14 * scale)
+                        .environment(\.visualiserStyle, settings.visualiserStyle)
+                        .padding(.trailing, inset)
+                }
             }
     }
+
+    /// The sample song's artwork as a picture, for the Vinyl look's turning record.
+    static let artworkImage: CGImage? = {
+        let side = 64
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let ctx = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+              let gradient = CGGradient(colorsSpace: space, colors: artwork.map { NSColor($0).cgColor } as CFArray, locations: [0, 1])
+        else { return nil }
+        ctx.drawLinearGradient(gradient, start: CGPoint(x: 0, y: side), end: CGPoint(x: side, y: 0), options: [])
+        return ctx.makeImage()
+    }()
 
     /// The notched display the sketch is drawn for.
     private static let screen = ScreenDescriptor(id: 0, name: "Sketch", frame: CGRect(x: 0, y: 0, width: 1512, height: 982),

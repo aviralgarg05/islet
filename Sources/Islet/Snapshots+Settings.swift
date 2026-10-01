@@ -66,6 +66,27 @@ enum SettingsSnapshots {
         shoot("calendar-access-not-asked", dark: false)
         model.setCalendarAccessForSnapshot(events: .fullAccess, reminders: .fullAccess)
 
+        // The GIF look on Now Playing: Islet's stickers and one of your own (made from a
+        // built-in, in the temporary support folder), with the position, size and idle rows.
+        if let notes = model.stickers.url(for: .builtIn(.notes)) { _ = try? model.stickers.store.add(from: notes) }
+        model.stickers.reload()
+        var gif = sampleSettings
+        gif.visualiserStyle = .gif
+        gif.sticker = StickerSettings(id: "jelly", offsetX: -2, offsetY: 0, scale: 1.1, whenIdle: true)
+        model.settings = gif
+        window.setContentSize(NSSize(width: SettingsWindow.defaultSize.width, height: 2150))
+        navigation.open(.nowPlaying)
+        shoot("now-playing-gif")
+        model.stickers.problem = StickerImportError.tooLarge.message
+        shoot("now-playing-gif-problem", dark: false)
+        model.stickers.problem = nil
+        gif.visualiserStyle = .vinyl
+        model.settings = gif
+        shoot("now-playing-vinyl", dark: false)
+        model.settings = sampleSettings
+        window.setContentSize(SettingsWindow.defaultSize)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+
         if ProcessInfo.processInfo.environment["ISLET_SNAPSHOT_EXTRA"] == "1" {
             let extra = dir.appendingPathComponent("extra")
             try? FileManager.default.createDirectory(at: extra, withIntermediateDirectories: true)

@@ -15,13 +15,14 @@ extension Snapshots {
         var paused = playing
         paused.isPlaying = false
 
-        for style in [VisualiserStyle.bars, .wave, .pulse] {
+        for style in [VisualiserStyle.bars, .wave, .pulse, .mirror, .vinyl] {
             model.settings.visualiserStyle = style
             model.forcedPresentation = .compact(.nowPlaying(playing))
             shoot("40-compact-media-\(style.rawValue)")
             model.forcedPresentation = .compact(.nowPlaying(paused))
             shoot("40-compact-media-\(style.rawValue)-paused")
         }
+        renderStickers(model: model, metrics: metrics, playing: playing, paused: paused, shoot: shoot)
         model.settings.visualiserStyle = saved.visualiserStyle
         model.forcedPresentation = .compact(.nowPlaying(playing))
         for (name, corner) in [("square", 0.0), ("round", 10.0)] {
@@ -100,13 +101,105 @@ extension Snapshots {
             .background(backdrop(metrics: metrics))
         write(view, to: dir.appendingPathComponent("42-compact-media-notch-fit.png"))
         renderLiveIndicators(to: dir.appendingPathComponent("43-live-indicators.png"))
+        renderLiveRecordsAndStickers(to: dir.appendingPathComponent("43-live-records-stickers.png"), library: model.stickers)
+    }
+
+    /// The layer-drawn record (playing, just paused, Reduce Motion) and each sticker's layer
+    /// (playing, paused, resting), as the island draws them, large on black.
+    static func renderLiveRecordsAndStickers(to url: URL, library: StickerLibrary) {
+        let cell = CGSize(width: 24, height: 24), gap: CGFloat = 8, scale: CGFloat = 5
+        let stickers = BuiltInSticker.allCases.map(StickerChoice.builtIn)
+        let columns = max(3, stickers.count)
+        let size = CGSize(width: CGFloat(columns) * (cell.width + gap) + gap, height: 4 * (cell.height + gap) + gap)
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let ctx = CGContext(data: nil, width: Int(size.width * scale), height: Int(size.height * scale), bitsPerComponent: 8,
+                                  bytesPerRow: 0, space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+        ctx.setFillColor(NSColor.black.cgColor)
+        ctx.fill(CGRect(x: 0, y: 0, width: size.width * scale, height: size.height * scale))
+        ctx.scaleBy(x: scale, y: scale)
+        let window = NSWindow(contentRect: CGRect(x: -20000, y: -20000, width: 200, height: 200), styleMask: .borderless,
+                              backing: .buffered, defer: false)
+        let host = NSView(frame: CGRect(x: 0, y: 0, width: 200, height: 200))
+        host.wantsLayer = true
+        window.contentView = host
+        defer { window.close() }
+        func draw(_ view: NSView, row: Int, column: Int) {
+            view.layoutSubtreeIfNeeded()
+            window.displayIfNeeded()
+            CATransaction.flush()
+            ctx.saveGState()
+            ctx.translateBy(x: gap + CGFloat(column) * (cell.width + gap), y: size.height - CGFloat(row + 1) * (cell.height + gap))
+            view.layer?.render(in: ctx)
+            ctx.restoreGState()
+            view.removeFromSuperview()
+        }
+        // Row 0: the record, playing, just paused, and with Reduce Motion.
+        for (c, state) in [(nil, true, false), (true, false, false), (nil, true, true)].enumerated() {
+            let vinyl = VinylNSView(frame: CGRect(origin: .zero, size: cell))
+            host.addSubview(vinyl)
+            vinyl.setArtwork(IslandSketch.artworkImage)
+            vinyl.layoutSubtreeIfNeeded()
+            if let first = state.0 { vinyl.update(color: .systemOrange, playing: first, still: state.2) }
+            vinyl.update(color: .systemOrange, playing: state.1, still: state.2)
+            draw(vinyl, row: 0, column: c)
+        }
+        // Rows 1 to 3: each sticker playing, paused, and resting.
+        let held = stickers.compactMap { library.decodedNow($0, pixel: Int(cell.height * 2)) }
+        for (r, mode) in [StickerMode.playing, .paused, .idle].enumerated() {
+            for (c, choice) in stickers.enumerated() {
+                let view = StickerNSView(frame: CGRect(origin: .zero, size: cell))
+                host.addSubview(view)
+                view.update(library: library, choice: choice, mode: .playing, reduceMotion: false)
+                view.update(library: library, choice: choice, mode: mode, reduceMotion: false)
+                draw(view, row: r + 1, column: c)
+            }
+        }
+        withExtendedLifetime(held) {}
+        guard let image = ctx.makeImage(),
+              let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else { return }
+        try? png.write(to: url)
+    }
+
+    /// The GIF look: each of Islet's stickers playing, one paused, resting when nothing plays,
+    /// moved and resized to the ends of the sliders, in a song's peek, and in narrow wings.
+    static func renderStickers(model: AppModel, metrics: IslandMetrics, playing: NowPlaying, paused: NowPlaying,
+                               shoot: (String) -> Void) {
+        let saved = model.settings
+        let placement = model.closedPlacements[1]
+        defer {
+            model.settings = saved
+            model.closedPlacements[1] = placement
+        }
+        model.settings.visualiserStyle = .gif
+        model.forcedPresentation = .compact(.nowPlaying(playing))
+        for b in BuiltInSticker.allCases {
+            model.settings.sticker = StickerSettings(id: b.rawValue)
+            shoot("46-compact-sticker-\(b.rawValue)")
+        }
+        model.settings.sticker = StickerSettings(id: "cat")
+        model.forcedPresentation = .compact(.nowPlaying(paused))
+        shoot("46-compact-sticker-paused")
+        model.forcedPresentation = .compact(.sticker)
+        shoot("46-compact-sticker-idle")
+        model.forcedPresentation = .songPeek(playing)
+        shoot("46-song-peek-sticker")
+        model.forcedPresentation = .compact(.nowPlaying(playing))
+        for (name, s) in [("big-low-out", StickerSettings(id: "star", offsetX: 12, offsetY: 12, scale: 1.6)),
+                          ("small-high-in", StickerSettings(id: "star", offsetX: -12, offsetY: -12, scale: 0.6))] {
+            model.settings.sticker = s
+            shoot("46-compact-sticker-\(name)")
+        }
+        // A crowded menu bar: icon-only wings, and the sticker shrinks to fit them.
+        model.settings.sticker = StickerSettings(id: "jelly", scale: 1.6)
+        model.closedPlacements[1] = ClosedPlacement(wing: 30, slack: 0)
+        shoot("46-compact-sticker-narrow-wings")
     }
 
     /// The layer-drawn indicators themselves (the island draws a stand-in in snapshots), at
     /// rest in each style: playing, just paused, and playing with Reduce Motion. Rows top to
     /// bottom, styles left to right; drawn large on black so their shapes can be checked.
     static func renderLiveIndicators(to url: URL) {
-        let styles: [VisualiserStyle] = [.bars, .slim, .dots, .wave, .pulse]
+        let styles: [VisualiserStyle] = [.bars, .slim, .dots, .wave, .pulse, .mirror, .vinyl]
         // (playing first, then, still): "just paused" plays first so it goes through the move.
         let rows: [(Bool?, Bool, Bool)] = [(nil, true, false), (true, false, false), (nil, true, true)]
         let cell = CGSize(width: 18, height: 14), gap: CGFloat = 10, scale: CGFloat = 6

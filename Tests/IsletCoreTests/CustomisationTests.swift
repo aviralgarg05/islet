@@ -223,7 +223,7 @@ private func at(_ t: Double) -> Date { t0.addingTimeInterval(t) }
     }
 
     @Test func waveAndPulseAreIndicatorStyles() {
-        #expect(VisualiserStyle.allCases == [.bars, .slim, .dots, .wave, .pulse, .off])
+        #expect(VisualiserStyle.allCases.starts(with: [.bars, .slim, .dots, .wave, .pulse]))
         #expect(decode(#"{"visualiserStyle": "wave"}"#).visualiserStyle == .wave)
         #expect(decode(#"{"visualiserStyle": "pulse"}"#).visualiserStyle == .pulse)
     }

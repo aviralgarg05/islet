@@ -137,6 +137,8 @@ final class AppModel {
     let toolUsage: ToolUsageModel
     let teleprompter: TeleprompterController
     let mirror = MirrorModel()
+    /// The playing indicator's stickers: Islet's own and the user's (StickerLibrary.swift).
+    let stickers = StickerLibrary(folder: IsletPaths.stickersDirectory)
     @ObservationIgnored lazy var timers = TimerController(model: self)
     /// Coding-agent approval cards (ApprovalController.swift).
     @ObservationIgnored lazy var approvals = ApprovalController(model: self)
@@ -798,7 +800,8 @@ final class AppModel {
             pausedMedia: showsMedia ? pausedMusic.show(timeout: settings.pausedMusicTimeout, now: now) : .hidden,
             focusedActivityID: controls.focusedActivityID,
             songPeek: Presenter.hoverPeek(showsMedia ? nowPlaying : nil, hovering: hoverPeekDisplay == display, settings: settings)
-                ?? (showsMedia && settings.songChangePeek ? songPeek.current(now: now) : nil)
+                ?? (showsMedia && settings.songChangePeek ? songPeek.current(now: now) : nil),
+            idleSticker: showsMedia && Presenter.showsIdleSticker(settings)
         )
         let p = Presenter.present(inputs)
         // "Only on hover" on a display without a notch: nothing until the pointer is there.

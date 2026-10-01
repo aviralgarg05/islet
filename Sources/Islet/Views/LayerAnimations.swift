@@ -16,8 +16,8 @@ enum PausedLook {
     static let fade: CFTimeInterval = 0.2
 }
 
-/// The "playing" indicator: bars, dots, a wave or a pulse that move while music plays and
-/// settle when it pauses. Moving between the two is animated too, so pausing never snaps.
+/// The "playing" indicator: bars, mirrored bars, dots, a wave or a pulse that move while music
+/// plays and settle when it pauses (Vinyl's still dot too). Moving between the two is animated too, so pausing never snaps.
 /// The loops stand still with Reduce Motion and in Low Power Mode.
 struct EqualizerView: NSViewRepresentable {
     var color: NSColor
@@ -65,7 +65,10 @@ final class PlayingIndicatorNSView: NSView {
         switch style {
         case .wave: return WaveNSView()
         case .pulse: return PulseNSView()
-        default: return EqualizerNSView(style: style)
+        case .vinyl: return DotNSView()
+        // The sticker has its own view in the closed island; anywhere else, the bars.
+        case .gif, .off: return EqualizerNSView(style: .bars)
+        case .bars, .slim, .dots, .mirror: return EqualizerNSView(style: style)
         }
     }
 
@@ -223,15 +226,18 @@ class IndicatorLayerView: NSView {
     }
 }
 
-// MARK: - Bars, slim bars and dots
+// MARK: - Bars, slim bars, mirrored bars and dots
 
-/// Bars or dots that bob while playing and settle to a low, dim line when paused.
+/// Bars or dots that bob while playing and settle to a low, dim line when paused. Mirrored
+/// bars grow up and down from the middle and settle to a short dash there.
 final class EqualizerNSView: IndicatorLayerView {
     private var bars: [CALayer] = []
     private let style: VisualiserStyle
     private static let durations: [CFTimeInterval] = [0.52, 0.41, 0.63, 0.47, 0.58, 0.44]
     /// Heights while playing without motion (Reduce Motion), and where a rise lands.
     private static let lively: [CGFloat] = [0.55, 0.9, 0.45, 0.75, 0.6, 0.8]
+    /// Mirrored bars at rest: tallest in the middle, the same on both sides.
+    static let mirrorLively: [CGFloat] = [0.45, 0.75, 1.0, 0.7, 0.5]
     /// Height while paused: a low, even line.
     private static let pausedScale: CGFloat = 0.2
     /// The lowest a bar goes while playing.
@@ -244,11 +250,13 @@ final class EqualizerNSView: IndicatorLayerView {
         switch style {
         case .slim: count = 6
         case .dots: count = 3
+        case .mirror: count = 5
         default: count = 4
         }
+        let mirrored = style == .mirror
         bars = (0..<count).map { _ in
             let bar = CALayer()
-            bar.anchorPoint = CGPoint(x: 0.5, y: 0)
+            bar.anchorPoint = CGPoint(x: 0.5, y: mirrored ? 0.5 : 0)
             layer?.addSublayer(bar)
             return bar
         }
@@ -257,6 +265,7 @@ final class EqualizerNSView: IndicatorLayerView {
     required init?(coder: NSCoder) { fatalError() }
 
     private var isDots: Bool { style == .dots }
+    private var isMirror: Bool { style == .mirror }
 
     override func apply(color: NSColor) {
         bars.forEach { $0.backgroundColor = color.cgColor }
@@ -265,14 +274,15 @@ final class EqualizerNSView: IndicatorLayerView {
     override func layoutLayers() {
         guard !bars.isEmpty else { return }
         let n = CGFloat(bars.count)
-        let gap: CGFloat = style == .slim ? 1.5 : isDots ? 3 : 2
+        let gap: CGFloat = style == .slim || isMirror ? 1.5 : isDots ? 3 : 2
         let w = max(1.5, (bounds.width - gap * (n - 1)) / n)
         // Dots are round and sit at the bottom; they move up and down instead of stretching.
         let h = isDots ? min(w, bounds.height) : bounds.height
         for (i, bar) in bars.enumerated() {
             bar.bounds = CGRect(x: 0, y: 0, width: w, height: h)
             bar.cornerRadius = isDots ? w / 2 : min(1.25, w / 2)
-            bar.position = CGPoint(x: CGFloat(i) * (w + gap) + w / 2, y: 0)
+            // Mirrored bars are centred on the middle line and stretch both ways.
+            bar.position = CGPoint(x: CGFloat(i) * (w + gap) + w / 2, y: isMirror ? bounds.midY : 0)
             if bar.animation(forKey: "eq") == nil { pose(rest(i), bar) }
         }
     }
@@ -280,6 +290,7 @@ final class EqualizerNSView: IndicatorLayerView {
     /// The resting value of bar `i` in the current state: its height (bars) or lift (dots).
     private func rest(_ i: Int) -> CGFloat {
         guard isPlaying else { return isDots ? 0 : Self.pausedScale }
+        if isMirror { return Self.mirrorLively[i % Self.mirrorLively.count] }
         return isDots ? Self.lively[i % Self.lively.count] * 0.5 : Self.lively[i % Self.lively.count]
     }
 
@@ -572,6 +583,296 @@ final class PulseNSView: IndicatorLayerView {
         ripple.timingFunction = CAMediaTimingFunction(name: .easeOut)
         ripple.capFrameRate()
         ring.add(ripple, forKey: "ripple")
+    }
+}
+
+// MARK: - Vinyl
+
+/// Vinyl's mark beside the notch: one small dot, still, that shrinks and dims when the music
+/// pauses. The artwork on the other side does the moving.
+final class DotNSView: IndicatorLayerView {
+    private let dot = CALayer()
+    static let diameter: CGFloat = 5
+    private static let pausedScale: CGFloat = 0.8
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        layer?.addSublayer(dot)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func apply(color: NSColor) { dot.backgroundColor = color.cgColor }
+
+    override func layoutLayers() {
+        let d = min(Self.diameter, bounds.height)
+        dot.bounds = CGRect(x: 0, y: 0, width: d, height: d)
+        dot.cornerRadius = d / 2
+        dot.position = CGPoint(x: bounds.midX, y: bounds.midY)
+        if dot.animationKeys() == nil { pose() }
+    }
+
+    private var scale: CGFloat { isPlaying ? 1 : Self.pausedScale }
+
+    private func pose() {
+        dot.transform = CATransform3DMakeScale(scale, scale, 1)
+        dot.opacity = isPlaying ? 1 : PausedLook.indicatorOpacity
+    }
+
+    override func settle() {
+        setQuietly {
+            dot.removeAllAnimations()
+            pose()
+        }
+    }
+
+    override func transition() {
+        let fromScale = dot.presentation()?.value(forKeyPath: "transform.scale.x") ?? scale
+        let fromOpacity = dot.presentation()?.opacity ?? dot.opacity
+        dot.removeAllAnimations()
+        setQuietly { pose() }
+        fade(dot, "opacity", from: fromOpacity)
+        if still {
+            fade(dot, "transform.scale", from: fromScale, duration: 0.15)
+        } else {
+            _ = spring(dot, "transform.scale", from: fromScale, damping: isPlaying ? 12 : 16)
+        }
+    }
+}
+
+/// The closed artwork as a record for the Vinyl look: round, with a spindle hole and a couple
+/// of grooves, turning slowly while the song plays. It spins up when the music starts and
+/// coasts to a stop when it pauses, where it stays until the music plays again. Core Animation
+/// turns it; it holds still with Reduce Motion and in Low Power Mode.
+final class VinylNSView: IndicatorLayerView {
+    private let disc = CALayer()
+    /// Drawn instead of the artwork when there's none: a dark record with a label in the music colour.
+    private let label = CALayer()
+    private let grooves = CAShapeLayer()
+    private let hole = CALayer()
+    /// One turn, in seconds: slow enough to stay calm beside the menu bar.
+    static let period: CFTimeInterval = 6
+    /// Spinning up from still, and coasting down to it.
+    private static let spinUp: CFTimeInterval = 1.2
+    private static let coast: CFTimeInterval = 0.9
+    private static var speed: CGFloat { 2 * .pi / CGFloat(period) }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        disc.masksToBounds = true
+        disc.contentsGravity = .resizeAspectFill
+        disc.backgroundColor = NSColor(white: 0.13, alpha: 1).cgColor
+        grooves.fillColor = nil
+        grooves.strokeColor = NSColor.white.withAlphaComponent(0.2).cgColor
+        grooves.lineWidth = 0.7
+        hole.backgroundColor = NSColor.black.cgColor
+        hole.borderColor = NSColor.white.withAlphaComponent(0.45).cgColor
+        hole.borderWidth = 0.75
+        disc.addSublayer(label)
+        disc.addSublayer(grooves)
+        disc.addSublayer(hole)
+        layer?.addSublayer(disc)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func apply(color: NSColor) { label.backgroundColor = color.withAlphaComponent(0.85).cgColor }
+
+    /// The artwork, or nil for the drawn record. A new song's artwork fades in.
+    func setArtwork(_ image: CGImage?) {
+        guard image !== artwork else { return }
+        artwork = image
+        disc.contents = image
+        label.isHidden = image != nil
+    }
+    private var artwork: CGImage?
+
+    override func layoutLayers() {
+        let d = min(bounds.width, bounds.height)
+        disc.bounds = CGRect(x: 0, y: 0, width: d, height: d)
+        disc.cornerRadius = d / 2
+        disc.position = CGPoint(x: bounds.midX, y: bounds.midY)
+        let centre = CGPoint(x: d / 2, y: d / 2)
+        let l = d * 0.42
+        label.bounds = CGRect(x: 0, y: 0, width: l, height: l)
+        label.cornerRadius = l / 2
+        label.position = centre
+        grooves.frame = disc.bounds
+        let path = CGMutablePath()
+        for share in [0.62, 0.82] as [CGFloat] {
+            let r = d / 2 * share
+            path.addEllipse(in: CGRect(x: centre.x - r, y: centre.y - r, width: 2 * r, height: 2 * r))
+        }
+        grooves.path = path
+        let h = max(2, d * 0.13)
+        hole.bounds = CGRect(x: 0, y: 0, width: h, height: h)
+        hole.cornerRadius = h / 2
+        hole.position = centre
+    }
+
+    private var angle: CGFloat {
+        (disc.presentation()?.value(forKeyPath: "transform.rotation.z") as? CGFloat)
+            ?? (disc.value(forKeyPath: "transform.rotation.z") as? CGFloat) ?? 0
+    }
+
+    private func setAngle(_ a: CGFloat) {
+        setQuietly { disc.transform = CATransform3DMakeRotation(a, 0, 0, 1) }
+    }
+
+    override func settle() {
+        let a = angle
+        disc.removeAllAnimations()
+        setAngle(a)
+        loop(after: 0) { [weak self] in self?.startLoop() }
+    }
+
+    override func transition() {
+        let a = angle
+        disc.removeAllAnimations()
+        guard !still else {
+            setAngle(a)
+            return
+        }
+        // Clockwise, as a record turns: negative in the layer's upward y.
+        let turn = CABasicAnimation(keyPath: "transform.rotation.z")
+        turn.fromValue = a
+        if isPlaying {
+            // From rest, speeding up until it meets the loop's pace (the curve ends at twice
+            // its average speed).
+            let end = a - Self.speed * CGFloat(Self.spinUp) / 2
+            setAngle(end)
+            turn.toValue = end
+            turn.duration = Self.spinUp
+            turn.timingFunction = CAMediaTimingFunction(controlPoints: 0.6, 0, 0.8, 0.6)
+            turn.capFrameRate()
+            disc.add(turn, forKey: "spin")
+            loop(after: Self.spinUp) { [weak self] in self?.startLoop() }
+        } else {
+            // Coasting: from the loop's pace to rest.
+            let end = a - Self.speed * CGFloat(Self.coast) / 2
+            setAngle(end)
+            turn.toValue = end
+            turn.duration = Self.coast
+            turn.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.4, 0.4, 1)
+            turn.capFrameRate()
+            disc.add(turn, forKey: "spin")
+        }
+    }
+
+    private func startLoop() {
+        let a = disc.value(forKeyPath: "transform.rotation.z") as? CGFloat ?? 0
+        let spin = CABasicAnimation(keyPath: "transform.rotation.z")
+        spin.fromValue = a
+        spin.toValue = a - 2 * .pi
+        spin.duration = Self.period
+        spin.repeatCount = .infinity
+        spin.capFrameRate()
+        disc.add(spin, forKey: "spin")
+    }
+}
+
+/// The artwork for the Vinyl look: the song's artwork as a turning record.
+struct VinylArtwork: View {
+    let media: NowPlaying
+    var size: CGFloat
+    var tint: Color
+
+    var body: some View {
+        VinylDisc(image: Self.image(media), size: size, tint: tint, playing: media.isPlaying)
+    }
+
+    /// The song's artwork as a picture: from its bytes, or from the copy the island already
+    /// loaded from its address (never a new download).
+    static func image(_ np: NowPlaying) -> CGImage? {
+        if let data = np.artworkData, let img = ArtworkCache.image(for: data) {
+            return img.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        }
+        if let url = np.artworkURL, let cached = URLCache.shared.cachedResponse(for: URLRequest(url: url)),
+           let img = NSImage(data: cached.data) {
+            return img.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        }
+        return nil
+    }
+}
+
+/// A record with `image` as its face (or a drawn label in `tint`), turning while `playing`:
+/// Core Animation in the island and in Settings, one still drawing in snapshots.
+struct VinylDisc: View {
+    var image: CGImage?
+    var size: CGFloat
+    var tint: Color
+    var playing: Bool
+    @Environment(\.snapshotMode) private var snapshotMode
+
+    var body: some View {
+        if snapshotMode {
+            ZStack {
+                if let image {
+                    Image(decorative: image, scale: 1).resizable().aspectRatio(contentMode: .fill)
+                        .frame(width: size, height: size).clipShape(Circle())
+                } else {
+                    Circle().fill(Color(white: 0.13))
+                    Circle().fill(tint.opacity(0.85)).frame(width: size * 0.42, height: size * 0.42)
+                }
+                ForEach([0.62, 0.82], id: \.self) { share in
+                    Circle().stroke(Color.white.opacity(0.2), lineWidth: 0.7).frame(width: size * share, height: size * share)
+                }
+                Circle().fill(Color.black).frame(width: max(2, size * 0.13), height: max(2, size * 0.13))
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.45), lineWidth: 0.75))
+            }
+            .frame(width: size, height: size)
+        } else {
+            VinylLayer(image: image, color: NSColor(tint), playing: playing).frame(width: size, height: size)
+        }
+    }
+}
+
+private struct VinylLayer: NSViewRepresentable {
+    var image: CGImage?
+    var color: NSColor
+    var playing: Bool
+
+    func makeNSView(context: Context) -> VinylHostView { VinylHostView() }
+
+    func updateNSView(_ view: VinylHostView, context: Context) {
+        view.vinyl.setArtwork(image)
+        view.vinyl.update(color: color, playing: playing, still: context.environment.reduceMotionAnywhere || view.lowPower)
+        view.lastState = (color, playing, context.environment.reduceMotionAnywhere)
+    }
+}
+
+/// Holds the record and follows Low Power Mode, as the indicator does.
+final class VinylHostView: NSView {
+    let vinyl = VinylNSView()
+    private(set) var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+    var lastState: (color: NSColor, playing: Bool, reduceMotion: Bool)?
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        addSubview(vinyl)
+        // Removed by the system when the view goes.
+        NotificationCenter.default.addObserver(self, selector: #selector(powerStateChanged(_:)),
+                                               name: .NSProcessInfoPowerStateDidChange, object: nil)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        if vinyl.frame != bounds { vinyl.frame = bounds }
+    }
+
+    @objc nonisolated private func powerStateChanged(_ note: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+                if let s = self.lastState {
+                    self.vinyl.update(color: s.color, playing: s.playing, still: s.reduceMotion || self.lowPower)
+                }
+            }
+        }
     }
 }
 
