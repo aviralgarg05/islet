@@ -104,7 +104,8 @@ enum SettingsSnapshots {
         s.remindersEnabled = true
         s.pluginsEnabled = true
         s.appRules = [
-            AppRule(bundleID: "com.apple.Safari", tint: "blue"),
+            // A colour from the colour panel shows as "Custom".
+            AppRule(bundleID: "com.apple.Safari", tint: "#2F7CF6"),
             AppRule(bundleID: "com.apple.Music", showInFullscreen: true),
             AppRule(bundleID: "com.apple.MobileSMS", tint: "green", muteNotifications: true),
         ]

@@ -254,6 +254,7 @@ final class AppModel {
         center.hudDuration = settings.hudDuration
         // A new song stays as long as a new activity does.
         songPeek.duration = settings.alertDuration
+        Motion.pace = settings.animationSpeed.multiplier
         // "Hide paused music after" may have moved the moment paused music goes.
         reschedule()
     }

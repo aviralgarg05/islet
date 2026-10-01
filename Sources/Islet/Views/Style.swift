@@ -49,13 +49,16 @@ enum Haptics {
 // MARK: - Motion
 
 extension AnimationStyle {
+    /// Every duration below is scaled by "Animation speed" (`Motion.pace`).
+    private var k: Double { Motion.pace }
+
     /// Shape morphing between island states (expanding).
     var morph: Animation? {
         switch self {
         case .fluid: return Motion.open
-        case .snappy: return .snappy(duration: 0.26, extraBounce: 0.04)
-        case .smooth: return .smooth(duration: 0.38)
-        case .minimal: return .easeInOut(duration: 0.16)
+        case .snappy: return .snappy(duration: 0.26 * k, extraBounce: 0.04)
+        case .smooth: return .smooth(duration: 0.38 * k)
+        case .minimal: return .easeInOut(duration: 0.16 * k)
         case .off: return nil
         }
     }
@@ -64,9 +67,9 @@ extension AnimationStyle {
     var collapse: Animation? {
         switch self {
         case .fluid: return Motion.close
-        case .snappy: return .snappy(duration: 0.22)
-        case .smooth: return .smooth(duration: 0.3)
-        case .minimal: return .easeInOut(duration: 0.14)
+        case .snappy: return .snappy(duration: 0.22 * k)
+        case .smooth: return .smooth(duration: 0.3 * k)
+        case .minimal: return .easeInOut(duration: 0.14 * k)
         case .off: return nil
         }
     }
@@ -76,11 +79,13 @@ extension AnimationStyle {
         switch self {
         case .fluid, .smooth:
             return .asymmetric(
-                insertion: AnyTransition(.blurReplace).combined(with: .scale(scale: 0.94, anchor: .top)).animation(.easeOut(duration: 0.26).delay(0.05)),
-                removal: .opacity.animation(.easeIn(duration: 0.08))
+                insertion: AnyTransition(.blurReplace).combined(with: .scale(scale: 0.94, anchor: .top))
+                    .animation(.easeOut(duration: 0.26 * k).delay(0.05 * k)),
+                removal: .opacity.animation(.easeIn(duration: 0.08 * k))
             )
         case .snappy:
-            return .asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.14).delay(0.03)), removal: .opacity.animation(.linear(duration: 0.06)))
+            return .asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.14 * k).delay(0.03 * k)),
+                               removal: .opacity.animation(.linear(duration: 0.06 * k)))
         case .minimal:
             return .opacity
         case .off:
@@ -142,7 +147,8 @@ private struct GlassBody: View {
             }
             shape.fill(Color.black)
                 .opacity(expanded ? 0 : 1)
-                .animation(expanded ? .easeOut(duration: 0.18).delay(0.15) : .easeIn(duration: 0.08), value: expanded)
+                .animation(expanded ? .easeOut(duration: 0.18 * Motion.pace).delay(0.15 * Motion.pace)
+                                    : .easeIn(duration: 0.08 * Motion.pace), value: expanded)
         }
     }
 

@@ -258,6 +258,8 @@ public enum SettingsIndex {
         SettingsEntry("appearance.fitHeight", .appearance, "Notch height", section: "Fit to the notch",
                       keywords: ["taller", "shorter", "adjust", "line up"], anchor: "appearance.fitNotch"),
         SettingsEntry("appearance.animation", .appearance, "Animation", section: "Motion", keywords: ["fluid", "snappy", "smooth", "minimal", "spring"]),
+        SettingsEntry("appearance.speed", .appearance, "Animation speed", section: "Motion",
+                      keywords: ["slower", "faster", "relaxed", "quick", "spring", "pace"], anchor: "appearance.animation"),
         SettingsEntry("appearance.bounce", .appearance, "Bounce when something new arrives", section: "Motion", keywords: ["animation"]),
         SettingsEntry("appearance.glow", .appearance, "Glow while something needs you", section: "Motion", keywords: ["urgent", "attention"]),
         SettingsEntry("appearance.reduceMotion", .appearance, "Reduce motion", section: "Motion", keywords: ["accessibility", "animation"]),
@@ -367,7 +369,7 @@ public enum SettingsIndex {
 
     private static let system: [SettingsEntry] = [
         SettingsEntry("apps.add", .apps, "Add an app", keywords: ["app rules", "per-app", "application"]),
-        SettingsEntry("apps.tint", .apps, "App colour", keywords: ["color", "tint", "per-app"], anchor: "apps.add"),
+        SettingsEntry("apps.tint", .apps, "App colour", keywords: ["color", "tint", "per-app", "custom", "any colour", "colour panel"], anchor: "apps.add"),
         SettingsEntry("apps.hide", .apps, "Hide the island while an app is in front", keywords: ["per-app", "frontmost"], anchor: "apps.add"),
         SettingsEntry("apps.fullscreen", .apps, "Keep the island in fullscreen", keywords: ["per-app", "full screen", "games"], anchor: "apps.add"),
         SettingsEntry("apps.mute", .apps, "Mute an app's notifications", keywords: ["per-app", "silence"], anchor: "apps.add"),

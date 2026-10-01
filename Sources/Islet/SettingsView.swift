@@ -176,6 +176,15 @@ struct AppearanceSettings: View {
                 }
                 .pickerStyle(.segmented)
                 .settingsAnchor("appearance.animation")
+                if s.animationStyle != .off {
+                    Picker("Animation speed", selection: $model.settings.animationSpeed) {
+                        Text("Relaxed").tag(AnimationSpeed.relaxed)
+                        Text("Normal").tag(AnimationSpeed.normal)
+                        Text("Quick").tag(AnimationSpeed.quick)
+                    }
+                    .pickerStyle(.segmented)
+                    .settingsAnchor("appearance.speed")
+                }
                 Toggle("Bounce when something new arrives", isOn: $model.settings.bounceOnActivity)
                     .settingsAnchor("appearance.bounce")
                 Toggle("Glow while something needs you", isOn: $model.settings.urgentGlow)
@@ -354,19 +363,7 @@ private struct AccentPicker: View {
 
     /// Any colour, from the system colour panel. Each change is saved as `#RRGGBB`.
     private func pickColour() {
-        let panel = NSColorPanel.shared
-        panel.showsAlpha = false
-        if let c = RGBA.parse(isCustom ? selection : "#FF8800") {
-            panel.color = NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: 1)
-        }
-        ColourPanelRelay.shared.onChange = { colour in
-            if let c = colour.usingColorSpace(.sRGB) {
-                selection = RGBA(r: c.redComponent, g: c.greenComponent, b: c.blueComponent).hex
-            }
-        }
-        panel.setTarget(ColourPanelRelay.shared)
-        panel.setAction(#selector(ColourPanelRelay.changed(_:)))
-        panel.orderFront(nil)
+        ColourPanelRelay.pick(starting: isCustom ? selection : nil) { selection = $0 }
     }
 
     private func swatch(_ fill: AnyShapeStyle, selected: Bool) -> some View {
@@ -388,6 +385,24 @@ final class ColourPanelRelay: NSObject {
     var onChange: ((NSColor) -> Void)?
 
     @objc func changed(_ sender: NSColorPanel) { onChange?(sender.color) }
+
+    /// Open the system colour panel at `hex` (orange when nil); each change comes back as
+    /// `#RRGGBB`. The accent and the app colours both pick this way.
+    static func pick(starting hex: String?, onChange: @escaping (String) -> Void) {
+        let panel = NSColorPanel.shared
+        panel.showsAlpha = false
+        if let c = RGBA.parse(hex ?? "#FF8800") {
+            panel.color = NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: 1)
+        }
+        shared.onChange = { colour in
+            if let c = colour.usingColorSpace(.sRGB) {
+                onChange(RGBA(r: c.redComponent, g: c.greenComponent, b: c.blueComponent).hex)
+            }
+        }
+        panel.setTarget(shared)
+        panel.setAction(#selector(ColourPanelRelay.changed(_:)))
+        panel.orderFront(nil)
+    }
 }
 
 /// The closed and the open island with the current look: theme, glass level, accent, size,
@@ -816,16 +831,29 @@ struct AppRuleRow: View {
                 Text(name).font(.body.weight(.medium)).lineLimit(1)
                 Spacer(minLength: 8)
                 // Menus draw their icons in one colour, so the chosen colour shows beside the menu.
-                Circle()
-                    .fill(rule.tint.map { Color(tint: $0) } ?? Color.clear)
-                    .overlay(Circle().strokeBorder(Color.primary.opacity(rule.tint == nil ? 0.25 : 0.12), lineWidth: 1))
-                    .frame(width: 12, height: 12)
-                Picker("Colour", selection: Binding(get: { rule.tint ?? "" }, set: { rule.tint = $0.isEmpty ? nil : $0 })) {
+                // Clicking it picks any colour, as the accent's custom swatch does.
+                Button(action: pickColour) {
+                    Circle()
+                        .fill(rule.tint.map { Color(tint: $0) } ?? Color.clear)
+                        .overlay(Circle().strokeBorder(Color.primary.opacity(rule.tint == nil ? 0.25 : 0.12), lineWidth: 1))
+                        .frame(width: 12, height: 12)
+                        .padding(3)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Pick any colour")
+                .accessibilityLabel("Pick any colour for \(name)")
+                Picker("Colour", selection: tintChoice) {
                     Text("Its own colour").tag("")
                     Divider()
                     ForEach(Self.tints, id: \.self) { tint in
                         Text(tint == "gray" ? "Grey" : tint.capitalized).tag(tint)
                     }
+                    Divider()
+                    if let custom = customTint {
+                        Text("Custom").tag(custom)
+                    }
+                    Text("Other colour…").tag(Self.otherColour)
                 }
                 .labelsHidden()
                 .fixedSize()
@@ -843,6 +871,29 @@ struct AppRuleRow: View {
             .padding(.leading, 34)
         }
         .padding(.vertical, 3)
+    }
+
+    /// The menu item that opens the colour panel instead of choosing a colour.
+    private static let otherColour = "other"
+
+    /// A colour picked from the panel (a hex value), which the menu shows as "Custom".
+    private var customTint: String? {
+        guard let t = rule.tint, !Self.tints.contains(t.lowercased()) else { return nil }
+        return t
+    }
+
+    private var tintChoice: Binding<String> {
+        Binding(get: { rule.tint ?? "" }, set: { choice in
+            if choice == Self.otherColour {
+                pickColour()
+            } else {
+                rule.tint = choice.isEmpty ? nil : choice
+            }
+        })
+    }
+
+    private func pickColour() {
+        ColourPanelRelay.pick(starting: customTint) { rule.tint = $0 }
     }
 
     @ViewBuilder private var options: some View {

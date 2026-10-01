@@ -116,10 +116,15 @@ extension View {
 /// One spring family for everything that moves on the island. Opening is lively; closing
 /// starts quicker and settles without overshoot. Small in-place changes (the page highlight
 /// sliding, a row arriving) use `settle`, the same spring with a shorter response.
+/// "Animation speed" (Appearance) scales every response through `pace`.
 enum Motion {
-    static let open = Animation.spring(response: 0.42, dampingFraction: 0.80)
-    static let close = Animation.spring(response: 0.34, dampingFraction: 1.0)
-    static let settle = Animation.spring(response: 0.30, dampingFraction: 0.86)
+    /// How long moves take against Normal (`AnimationSpeed.multiplier`). Set on the main thread
+    /// when settings apply, and read while views draw there.
+    nonisolated(unsafe) static var pace: Double = 1
+
+    static var open: Animation { .spring(response: 0.42 * pace, dampingFraction: 0.80) }
+    static var close: Animation { .spring(response: 0.34 * pace, dampingFraction: 1.0) }
+    static var settle: Animation { .spring(response: 0.30 * pace, dampingFraction: 0.86) }
     /// Pressed controls give a little.
     static let pressScale: CGFloat = 0.94
 }

@@ -39,6 +39,20 @@ public enum AnimationStyle: String, Codable, Sendable, CaseIterable {
     case off
 }
 
+/// How quickly the island moves, whatever the animation style.
+public enum AnimationSpeed: String, Codable, Sendable, CaseIterable {
+    case relaxed, normal, quick
+
+    /// How long each move takes against Normal: springs and fades are this much longer.
+    public var multiplier: Double {
+        switch self {
+        case .relaxed: return 1.25
+        case .normal: return 1
+        case .quick: return 0.8
+        }
+    }
+}
+
 /// When the trackpad taps.
 public enum HapticsMode: String, Codable, Sendable, CaseIterable {
     case off
@@ -204,6 +218,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// melts only near the bottom, 1 turns to glass right below the menu bar row.
     public var glassLevel: Double = 0.6
     public var animationStyle: AnimationStyle = .fluid
+    /// Scales the one spring family (and the other styles' fades). The music indicator's loops
+    /// keep their own pace.
+    public var animationSpeed: AnimationSpeed = .normal
     /// Hex or named color, or "auto" to follow album art / activity tints.
     public var accentColor = "auto"
     public var roundedFont = true
@@ -443,6 +460,10 @@ public struct IsletSettings: Codable, Equatable, Sendable {
             s.lanPort = s.apiPort == d.lanPort ? d.apiPort : d.lanPort
         }
         if s.accentColor != "auto", RGBA.parse(s.accentColor) == nil { s.accentColor = "auto" }
+        // An app colour that isn't a colour name or a hex value means "its own colour".
+        for i in s.appRules.indices where s.appRules[i].tint.map({ RGBA.parse($0) == nil }) ?? false {
+            s.appRules[i].tint = nil
+        }
         return s
     }
 

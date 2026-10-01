@@ -415,6 +415,14 @@ Everything in Settings lives in `~/.config/islet/config.json` (or `$XDG_CONFIG_H
 }
 ```
 
+Look and motion keys:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `animationSpeed` | `"normal"` | `"relaxed"`, `"normal"` or `"quick"`: how long the island's springs and fades take. The playing indicator keeps its own pace. |
+
+An app rule's `tint` is a colour name or any hex value (`"#2F7CF6"`); anything else means the app's own colour.
+
 Now Playing, closed island, HUD, gestures and battery keys:
 
 | Key | Default | Meaning |

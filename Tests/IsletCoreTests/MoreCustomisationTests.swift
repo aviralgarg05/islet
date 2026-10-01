@@ -161,3 +161,31 @@ private func song(playing: Bool, elapsed: Double? = 60, duration: Double? = 240,
         #expect(!none.showsAnyHUD)
     }
 }
+
+@Suite struct AnimationSpeedTests {
+    @Test func normalByDefaultAndScalesEveryMove() {
+        #expect(IsletSettings().animationSpeed == .normal)
+        #expect(AnimationSpeed.normal.multiplier == 1)
+        #expect(AnimationSpeed.relaxed.multiplier > 1)
+        #expect(AnimationSpeed.quick.multiplier < 1)
+        #expect(AnimationSpeed.allCases == [.relaxed, .normal, .quick])
+        #expect(decode(#"{"animationSpeed": "quick"}"#).animationSpeed == .quick)
+        #expect(decode(#"{"animationSpeed": "ludicrous"}"#).animationSpeed == .normal)
+    }
+}
+
+@Suite struct AppColourTests {
+    @Test func anyColourIsKept() {
+        let s = decode(##"{"appRules": [{"bundleID": "a.b", "tint": "#2F7CF6"}, {"bundleID": "c.d", "tint": "teal"}]}"##)
+        #expect(s.rule(for: "a.b")?.tint == "#2F7CF6")
+        #expect(s.rule(for: "c.d")?.tint == "teal")
+    }
+
+    @Test func somethingThatIsNotAColourMeansItsOwn() {
+        let s = decode(##"{"appRules": [{"bundleID": "a.b", "tint": "sparkly"}, {"bundleID": "c.d", "tint": "#12"}]}"##)
+        #expect(s.rule(for: "a.b")?.tint == nil)
+        #expect(s.rule(for: "c.d")?.tint == nil)
+        // The rule itself stays.
+        #expect(s.appRules.map(\.bundleID) == ["a.b", "c.d"])
+    }
+}

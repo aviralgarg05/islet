@@ -382,7 +382,7 @@ struct IslandView: View {
         default:
             return .asymmetric(
                 insertion: AnyTransition.scale(scale: 0.6, anchor: .top).combined(with: .opacity).combined(with: .offset(y: -PageSwitcher.height / 2))
-                    .animation(Motion.open.delay(0.14)),
+                    .animation(Motion.open.delay(0.14 * Motion.pace)),
                 removal: .opacity.animation(.easeIn(duration: 0.08))
             )
         }
