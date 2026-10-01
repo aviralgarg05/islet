@@ -601,7 +601,8 @@ struct TemplateTrailing: View {
         case .liveAudio? where a.templateTrailing(now: Date()) == nil:
             VoiceWave(tint: tint, active: a.state == .running && motion.perpetual, width: 18, height: 13)
         case .media? where a.templateTrailing(now: Date()) == nil:
-            PlayingIndicator(tint: tint, playing: a.state == .running && motion.perpetual)
+            // The real state: the indicator holds a lively, still pose under Reduce Motion itself.
+            PlayingIndicator(tint: tint, playing: a.state == .running)
                 .scaleEffect(compact ? 0.85 : 1)
         default:
             TemplateValueText(activity: a, model: model, size: size, tint: tint)

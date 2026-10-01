@@ -66,7 +66,8 @@ final class IslandWindowController {
         self.metrics = NotchGeometry.metrics(
             for: descriptor,
             expandedSize: CGSize(width: size.width, height: size.height),
-            wingWidth: model.settings.effectiveWingWidth
+            wingWidth: model.settings.effectiveWingWidth,
+            adjust: model.settings.notchAdjust
         )
         panel = IslandPanel(frame: IslandLayout.windowFrame(for: descriptor, metrics: metrics))
         panel.sharingType = model.settings.hideFromScreenCapture ? .none : .readOnly

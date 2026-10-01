@@ -367,7 +367,7 @@ struct IslandView: View {
         case .hidden, .idle:
             Color.clear
         case .hud(let hud):
-            HUDContent(hud: hud, metrics: metrics, geometry: g)
+            HUDContent(hud: hud, metrics: metrics, geometry: g, tint: model.hudTint(hud.kind))
         case .compact(let c):
             CompactContentView(content: c, metrics: metrics, geometry: g, model: model)
                 .contentShape(Rectangle())
@@ -493,7 +493,7 @@ struct CompactContentView: View {
         case .nowPlaying(let np):
             // A new song swaps the artwork; the equaliser beside it keeps running.
             Wings(metrics: metrics, wing: geometry.wing) {
-                TrackArtwork(media: np, size: min(20, metrics.notch.height - 10), corner: 5)
+                ClosedArtwork(media: np, model: model, size: ClosedArtwork.size(metrics))
             } trailing: {
                 PlayingIndicator(tint: model.visualiserTint(np), playing: np.isPlaying)
             }
@@ -526,6 +526,24 @@ struct CompactContentView: View {
                     .minimumScaleFactor(0.6)
             }
         }
+    }
+}
+
+/// The artwork beside the notch: corners from Settings, and dimmed while the music is paused,
+/// in step with the indicator settling.
+struct ClosedArtwork: View {
+    let media: NowPlaying
+    let model: AppModel
+    var size: CGFloat
+    @Environment(\.islandMotion) private var motion
+
+    /// Fits the menu bar row, up to 20 points.
+    static func size(_ metrics: IslandMetrics) -> CGFloat { max(8, min(20, metrics.notch.height - 10)) }
+
+    var body: some View {
+        TrackArtwork(media: media, size: size, corner: model.artworkCorner(size: size, standard: 5))
+            .opacity(media.isPlaying ? 1 : PausedLook.artworkOpacity)
+            .animation(motion == .off ? nil : .easeInOut(duration: PausedLook.fade), value: media.isPlaying)
     }
 }
 
@@ -645,7 +663,7 @@ struct SongPeekView: View {
         let lead = max(Space.m, (geometry.size.width - row) / 2 + Wings<EmptyView, EmptyView>.inset(for: geometry.wing))
         VStack(spacing: 0) {
             Wings(metrics: metrics, wing: geometry.wing) {
-                TrackArtwork(media: media, size: min(20, metrics.notch.height - 10), corner: 5)
+                ClosedArtwork(media: media, model: model, size: ClosedArtwork.size(metrics))
             } trailing: {
                 PlayingIndicator(tint: model.visualiserTint(media), playing: media.isPlaying)
             }
@@ -673,6 +691,8 @@ struct HUDContent: View {
     let hud: HUDEvent
     let metrics: IslandMetrics
     let geometry: IslandGeometry
+    /// White, the accent or the kind's own colour (Settings → Notifications & HUDs).
+    var tint: Color = .white
 
     var symbol: String {
         switch hud.kind {
@@ -689,7 +709,7 @@ struct HUDContent: View {
         Wings(metrics: metrics, wing: geometry.wing) {
             icon
         } trailing: {
-            LevelBar(value: hud.muted ? 0 : hud.value, tint: .white, height: 4)
+            LevelBar(value: hud.muted ? 0 : hud.value, tint: tint, height: 4)
                 .frame(width: max(22, geometry.wing - 20))
                 .animation(.snappy(duration: 0.18), value: hud.value)
         }
@@ -698,7 +718,7 @@ struct HUDContent: View {
     private var icon: some View {
         Image(systemName: symbol)
             .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(tint)
             .contentTransition(.symbolEffect(.replace))
     }
 }

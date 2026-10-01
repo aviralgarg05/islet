@@ -236,7 +236,7 @@ public enum SettingsIndex {
     ]
 
     private static let appearance: [SettingsEntry] = [
-        SettingsEntry("appearance.preview", .appearance, "Preview", keywords: ["sample", "try", "test"]),
+        SettingsEntry("appearance.preview", .appearance, "Preview", keywords: ["sample", "try", "test", "play", "pause"]),
         SettingsEntry("appearance.theme", .appearance, "Theme", section: "Theme", keywords: ["glass", "black", "graphite", "dark", "liquid"]),
         SettingsEntry("appearance.glass", .appearance, "Glass level", section: "Theme", keywords: ["transparency", "blur", "liquid glass"],
                       anchor: "appearance.theme"),
@@ -249,6 +249,12 @@ public enum SettingsIndex {
         SettingsEntry("appearance.closed", .appearance, "Width", section: "Closed island",
                       keywords: ["closed island width", "menu bar", "fit", "full width", "wings", "layout", "beside the notch"]),
         SettingsEntry("appearance.wing", .appearance, "Wing width", section: "Closed island", keywords: ["wings", "closed size"]),
+        SettingsEntry("appearance.fitNotch", .appearance, "Fit to the notch", section: "Closed island",
+                      keywords: ["line up", "match", "align", "calibrate", "fine tune", "adjust", "hardware notch"]),
+        SettingsEntry("appearance.fitWidth", .appearance, "Notch width", section: "Fit to the notch",
+                      keywords: ["wider", "narrower", "adjust", "line up"], anchor: "appearance.fitNotch"),
+        SettingsEntry("appearance.fitHeight", .appearance, "Notch height", section: "Fit to the notch",
+                      keywords: ["taller", "shorter", "adjust", "line up"], anchor: "appearance.fitNotch"),
         SettingsEntry("appearance.animation", .appearance, "Animation", section: "Motion", keywords: ["fluid", "snappy", "smooth", "minimal", "spring"]),
         SettingsEntry("appearance.bounce", .appearance, "Bounce when something new arrives", section: "Motion", keywords: ["animation"]),
         SettingsEntry("appearance.glow", .appearance, "Glow while something needs you", section: "Motion", keywords: ["urgent", "attention"]),
@@ -257,6 +263,8 @@ public enum SettingsIndex {
         SettingsEntry("appearance.alertDuration", .appearance, "New activities stay open for", section: "Motion", keywords: ["duration", "seconds", "sneak peek"]),
         SettingsEntry("appearance.together", .appearance, "Activities shown together", section: "Several at once", keywords: ["bubbles", "multiple"]),
         SettingsEntry("appearance.bubbles", .appearance, "Extra activities appear", section: "Several at once", keywords: ["bubbles", "left", "right"]),
+        SettingsEntry("appearance.artworkCorners", .appearance, "Artwork corners", section: "Now Playing",
+                      keywords: ["album art", "cover", "rounded", "square", "round", "radius", "music"]),
         SettingsEntry("appearance.indicator", .appearance, "Playing indicator", section: "Now Playing",
                       keywords: ["music", "equaliser", "equalizer", "visualiser", "bars"]),
     ]
@@ -268,18 +276,20 @@ public enum SettingsIndex {
 
     private static let features: [SettingsEntry] = [
         SettingsEntry("nowPlaying.enabled", .nowPlaying, "Now Playing", keywords: ["music", "media", "song"]),
+        SettingsEntry("nowPlaying.preview", .nowPlaying, "Preview", keywords: ["play", "pause", "sample", "try"]),
         SettingsEntry("nowPlaying.sources", .nowPlaying, "Sources", keywords: ["media apps", "players"]),
         SettingsEntry("nowPlaying.music", .nowPlaying, "Music", section: "Sources", keywords: ["Apple Music"], anchor: "nowPlaying.sources"),
         SettingsEntry("nowPlaying.spotify", .nowPlaying, "Spotify", section: "Sources", anchor: "nowPlaying.sources"),
         SettingsEntry("nowPlaying.browsers", .nowPlaying, "Web browsers", section: "Sources", keywords: ["Safari", "Chrome", "YouTube"],
                       anchor: "nowPlaying.sources"),
         SettingsEntry("nowPlaying.other", .nowPlaying, "Other apps", section: "Sources", keywords: ["podcasts", "video"], anchor: "nowPlaying.sources"),
-        SettingsEntry("nowPlaying.paused", .nowPlaying, "Show paused music", section: "Closed island", keywords: ["pause", "artwork"]),
+        SettingsEntry("nowPlaying.paused", .nowPlaying, "Hide paused music after", section: "Closed island",
+                      keywords: ["pause", "artwork", "keep", "stay", "linger", "timeout", "seconds", "never"]),
         SettingsEntry("nowPlaying.peek", .nowPlaying, "Show the new song for a moment", section: "Closed island",
                       keywords: ["track change", "song change", "peek"]),
         SettingsEntry("nowPlaying.remaining", .nowPlaying, "Show time left", section: "Open island", keywords: ["elapsed", "track length", "duration"]),
         SettingsEntry("nowPlaying.indicator", .nowPlaying, "Playing indicator", section: "Playing indicator",
-                      keywords: ["equaliser", "equalizer", "visualiser", "bars", "dots", "animation"]),
+                      keywords: ["equaliser", "equalizer", "visualiser", "bars", "dots", "wave", "waves", "pulse", "circle", "animation"]),
         SettingsEntry("nowPlaying.indicatorColour", .nowPlaying, "Indicator colour", section: "Playing indicator", keywords: ["color", "artwork"]),
 
         SettingsEntry("live.enabled", .liveActivities, "Show Live Activities",
@@ -306,6 +316,8 @@ public enum SettingsIndex {
                       keywords: ["HUD", "keys", "overlay", "accessibility"]),
         SettingsEntry("notifications.hudDuration", .notifications, "Stays on screen for", section: "Volume and brightness",
                       keywords: ["HUD", "duration", "seconds"]),
+        SettingsEntry("notifications.hudColour", .notifications, "HUD colour", section: "Volume and brightness",
+                      keywords: ["HUD", "color", "colourful", "green", "yellow", "accent", "tint", "keyboard"]),
         SettingsEntry("notifications.battery", .notifications, "Battery and charging", section: "Battery", keywords: ["power", "charger", "plugged in"]),
         SettingsEntry("notifications.batteryLow", .notifications, "Low battery warning", section: "Battery", keywords: ["percent"],
                       anchor: "notifications.battery"),

@@ -76,6 +76,10 @@ final class AppModel {
     var closedPlacements: [CGDirectDisplayID: ClosedPlacement] = [:]
     /// When a new song shows for a moment below the notch.
     private(set) var songPeek = SongPeek()
+    /// When the music was paused, so the closed island keeps it for `pausedMusicTimeout`.
+    private(set) var pausedMusic = PausedMusic()
+    /// Play or pause just clicked, shown before the player confirms it.
+    private var playbackIntent: PlaybackIntent?
 
     // Services
     let shelfService = ShelfService()
@@ -240,6 +244,8 @@ final class AppModel {
     func applyTiming() {
         center.sneakDuration = settings.alertDuration
         center.hudDuration = settings.hudDuration
+        // "Hide paused music after" may have moved the moment paused music goes.
+        reschedule()
     }
 
     func stop() {
@@ -450,7 +456,7 @@ final class AppModel {
             batteryEvent: batteryEvent,
             isExpanded: expandedScreen == display || (isDraggingFile && expandedScreen == display),
             isSuppressed: isSuppressed(display) && expandedScreen != display,
-            showPausedMedia: settings.showPausedMedia,
+            pausedMedia: showsMedia ? pausedMusic.show(timeout: settings.pausedMusicTimeout, now: now) : .hidden,
             focusedActivityID: controls.focusedActivityID,
             songPeek: showsMedia && settings.songChangePeek ? songPeek.current(now: now) : nil
         )
@@ -549,6 +555,8 @@ final class AppModel {
         if let d = center.nextDeadline(now: now) { candidates.append(d) }
         if let d = media.nextDeadline(now: now) { candidates.append(d) }
         if let d = songPeek.nextDeadline(now: now) { candidates.append(d) }
+        if let d = pausedMusic.nextDeadline(timeout: settings.pausedMusicTimeout, now: now) { candidates.append(d) }
+        if let i = playbackIntent { candidates.append(max(now, i.expires)) }
         if let b = batteryEvent { candidates.append(b.until) }
         guard let next = candidates.min() else { return }
         let t = Timer(fire: next.addingTimeInterval(0.01), interval: 0, repeats: false) { [weak self] _ in
@@ -563,18 +571,32 @@ final class AppModel {
         let now = Date()
         center.expire(now: now)
         if let b = batteryEvent, b.until <= now { batteryEvent = nil }
-        // A paused player timed out: show whatever is left, or nothing.
-        if media.expire(now: now) { setNowPlaying(media.current(now: now), now: now) }
+        // A paused player timed out: show whatever is left, or nothing. A track that ran past
+        // its end shows as stopped, and a click the player never confirmed shows its real state.
+        // (With no player reporting there is nothing to work out, and the demo's song stays.)
+        if media.expire(now: now) || !media.snapshots.isEmpty {
+            setNowPlaying(media.current(now: now), now: now)
+        }
         songPeek.advance(now: now, context: songPeekContext(now: now))
         tick &+= 1
         reschedule()
     }
 
-    /// The one way `nowPlaying` changes, so a new song can be shown for a moment.
-    private func setNowPlaying(_ next: NowPlaying?, now: Date) {
+    /// The one way `nowPlaying` changes, so a new song can be shown for a moment and a pause
+    /// can stay in view. A play or pause just clicked shows until the player catches up.
+    private func setNowPlaying(_ reported: NowPlaying?, now: Date) {
+        var next = reported
+        if let intent = playbackIntent {
+            if intent.isSettled(by: reported, now: now) {
+                playbackIntent = nil
+            } else if let r = reported {
+                next = intent.applied(to: r, now: now)
+            }
+        }
         guard next != nowPlaying else { return }
         nowPlaying = next
         songPeek.ingest(next, now: now)
+        pausedMusic.ingest(next, now: now)
     }
 
     // MARK: Inputs
@@ -832,8 +854,23 @@ final class AppModel {
 
     // MARK: Media control
 
+    /// Send a command to the player. Play and pause show at once (`PlaybackIntent`), then
+    /// follow what the player reports.
     @discardableResult
     func send(_ command: PlaybackCommand, position: Double? = nil) -> Bool {
+        let now = Date()
+        let intent = nowPlaying.flatMap { PlaybackIntent.intended(command, on: $0, at: now) }
+        let sent = route(command, position: position)
+        // Only for a player that reports back (not the demo's made-up song).
+        if sent, let intent, !media.snapshots.isEmpty {
+            playbackIntent = intent
+            setNowPlaying(media.current(now: now), now: now)
+            reschedule()
+        }
+        return sent
+    }
+
+    private func route(_ command: PlaybackCommand, position: Double?) -> Bool {
         if let routed = sendControl(command, position: position) { return routed }
         // The bridge controls whatever macOS considers "now playing" without Automation prompts.
         if systemMedia.isRunning, systemMedia.send(command, position: position) { return true }
@@ -1138,6 +1175,8 @@ extension AppModel {
         nowPlaying = nil
         // Switched back on, the song already playing is the first one again, not a new one.
         songPeek.reset()
+        pausedMusic = PausedMusic()
+        playbackIntent = nil
     }
 
     func stopCalendar() {

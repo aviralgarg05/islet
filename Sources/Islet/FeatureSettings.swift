@@ -20,15 +20,21 @@ struct NowPlayingSettings: View {
                     .settingsAnchor("nowPlaying.enabled")
             }
             Section {
+                IslandPreview(settings: model.settings, showsOpen: false)
+                    .settingsAnchor("nowPlaying.preview")
+            }
+            Section {
                 MediaSourceToggles(model: model)
             } header: {
                 Text("Sources").settingsAnchor("nowPlaying.sources")
             }
             .disabled(!on)
             Section("Closed island") {
-                Toggle(isOn: $model.settings.showPausedMedia) {
-                    Text("Show paused music")
-                    Text("Keeps the artwork beside the notch after you pause.")
+                Picker(selection: $model.settings.pausedMusicTimeout) {
+                    ForEach(pausedChoices, id: \.self) { Text(Self.pausedLabel($0)).tag($0) }
+                } label: {
+                    Text("Hide paused music after")
+                    Text("The artwork dims and the indicator settles, then the island goes back to the notch.")
                 }
                 .settingsAnchor("nowPlaying.paused")
                 Toggle(isOn: $model.settings.songChangePeek) {
@@ -49,9 +55,12 @@ struct NowPlayingSettings: View {
             Section {
                 IndicatorStylePicker(model: model)
                     .settingsAnchor("nowPlaying.indicator")
-                Picker("Colour", selection: $model.settings.visualiserColour) {
+                Picker("Colour", selection: indicatorColour) {
                     Text("From the artwork").tag(VisualiserColour.artwork)
-                    Text("Accent colour").tag(VisualiserColour.accent)
+                    // With the accent on "auto" it is the artwork's colour, so it isn't offered twice.
+                    if model.settings.accentColor != "auto" {
+                        Text("Accent colour").tag(VisualiserColour.accent)
+                    }
                     Text("White").tag(VisualiserColour.white)
                 }
                 .disabled(model.settings.visualiserStyle == .off)
@@ -60,7 +69,7 @@ struct NowPlayingSettings: View {
                 Text("Playing indicator")
             } footer: {
                 HStack(spacing: 4) {
-                    SettingsFooter("It settles to a dim line when you pause and springs back when you play.")
+                    SettingsFooter("It settles and dims when you pause, and springs back when you play.")
                     SettingsLink(text: "Accent colour", page: .appearance, anchor: "appearance.accent").fixedSize()
                 }
             }
@@ -68,23 +77,55 @@ struct NowPlayingSettings: View {
         }
         .formStyle(.grouped)
     }
+
+    /// The offered times, and a hand-edited one from config.json.
+    private var pausedChoices: [Double] {
+        var choices = IsletSettings.pausedMusicChoices
+        let current = model.settings.pausedMusicTimeout
+        if !choices.contains(current) {
+            choices.insert(current, at: choices.firstIndex { $0 < 0 || $0 > current } ?? choices.endIndex)
+        }
+        return choices
+    }
+
+    static func pausedLabel(_ seconds: Double) -> String {
+        if seconds < 0 { return "Never" }
+        if seconds == 0 { return "Right away" }
+        let s = Int(seconds.rounded())
+        if s % 60 == 0 { return s == 60 ? "1 minute" : "\(s / 60) minutes" }
+        return s == 1 ? "1 second" : "\(s) seconds"
+    }
+
+    /// "Accent colour" on "auto" shows as "From the artwork", which is what it draws.
+    private var indicatorColour: Binding<VisualiserColour> {
+        Binding(get: {
+            let c = model.settings.visualiserColour
+            return c == .accent && model.settings.accentColor == "auto" ? .artwork : c
+        }, set: { model.settings.visualiserColour = $0 })
+    }
 }
 
 /// The playing indicator's looks, each drawn as it moves in the island.
-private struct IndicatorStylePicker: View {
+struct IndicatorStylePicker: View {
     @Bindable var model: AppModel
 
-    private static let styles: [(VisualiserStyle, String)] = [(.bars, "Bars"), (.slim, "Slim bars"), (.dots, "Dots"), (.off, "None")]
+    private static let styles: [VisualiserStyle] = [.bars, .slim, .dots, .wave, .pulse, .off]
 
-    /// With no song playing, "from the artwork" shows the sample artwork's colour.
-    private var tint: Color {
-        model.settings.visualiserColour == .artwork ? IslandSketch.artwork[0] : model.visualiserTint(nil)
+    static func name(_ style: VisualiserStyle) -> String {
+        switch style {
+        case .bars: return "Bars"
+        case .slim: return "Slim bars"
+        case .dots: return "Dots"
+        case .wave: return "Wave"
+        case .pulse: return "Pulse"
+        case .off: return "None"
+        }
     }
 
     var body: some View {
         SettingsRow(title: "Look") {
-            HStack(spacing: 10) {
-                ForEach(Self.styles, id: \.0) { style, name in
+            HStack(spacing: 8) {
+                ForEach(Self.styles, id: \.self) { style in
                     let selected = model.settings.visualiserStyle == style
                     Button { model.settings.visualiserStyle = style } label: {
                         VStack(spacing: 5) {
@@ -93,20 +134,22 @@ private struct IndicatorStylePicker: View {
                                 if style == .off {
                                     Image(systemName: "nosign").foregroundStyle(.white.opacity(0.45))
                                 } else {
-                                    PlayingIndicator(tint: tint, playing: true).environment(\.visualiserStyle, style)
+                                    PlayingIndicator(tint: IslandSketch.indicatorTint(model.settings), playing: true)
+                                        .environment(\.visualiserStyle, style)
                                 }
                             }
-                            .frame(width: 54, height: 34)
+                            .frame(width: 52, height: 34)
                             .overlay {
                                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                                     .strokeBorder(selected ? Color.accentColor : Color.primary.opacity(0.1), lineWidth: selected ? 2.5 : 1)
                             }
-                            Text(name).font(.caption).foregroundStyle(selected ? .primary : .secondary)
+                            Text(Self.name(style)).font(.caption).foregroundStyle(selected ? .primary : .secondary)
+                                .lineLimit(1).fixedSize()
                         }
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(name)
+                    .accessibilityLabel(Self.name(style))
                     .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }
@@ -242,6 +285,16 @@ struct NotificationsSettings: View {
                                step: 0.2, format: SettingsSlider.seconds)
                     .disabled(!model.settings.hudEnabled && !model.settings.brightnessHUDEnabled)
                     .settingsAnchor("notifications.hudDuration")
+                Picker(selection: $model.settings.hudColour) {
+                    Text("White").tag(HUDColour.white)
+                    Text("Accent colour").tag(HUDColour.accent)
+                    Text("Colourful").tag(HUDColour.colourful)
+                } label: {
+                    Text("Colour")
+                    Text(hudColourDetail)
+                }
+                .disabled(!model.settings.hudEnabled && !model.settings.brightnessHUDEnabled)
+                .settingsAnchor("notifications.hudColour")
             }
             Section {
                 Toggle(isOn: $model.settings.batteryEnabled) {
@@ -270,6 +323,17 @@ struct NotificationsSettings: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var hudColourDetail: String {
+        switch model.settings.hudColour {
+        case .white: return "Like the rest of the closed island."
+        case .accent:
+            return model.settings.accentColor == "auto"
+                ? "The playing artwork's colour, or your Mac's accent colour."
+                : "The accent colour from Appearance."
+        case .colourful: return "Volume green, brightness yellow, keyboard light blue."
+        }
     }
 
     private func askForAccessibility(_ text: String) -> some View {

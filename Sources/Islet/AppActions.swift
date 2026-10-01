@@ -80,6 +80,15 @@ enum AppActions {
         ))
     }
 
+    /// Hold the closed island on screen for a few seconds while "Fit to the notch" changes, so
+    /// its edges can be matched against the notch by eye. No sneak peek and no bounce.
+    static func previewNotchFit(_ model: AppModel) {
+        _ = try? model.commit(ActivitySpec(
+            id: "preview-fit", source: "preview", title: "Fit to the notch", icon: .symbol("arrow.left.and.right"),
+            trailing: "Fit", state: .info, tint: "blue", priority: .high, ttl: 4, sneak: false
+        ))
+    }
+
     /// The token is a secret: concealed from clipboard history (including Islet's own) and kept
     /// off other devices.
     static func copyToken() {

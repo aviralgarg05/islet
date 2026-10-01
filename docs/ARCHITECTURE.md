@@ -69,7 +69,7 @@ Settings follow the same path. The Settings window saves after a quarter of a se
 hidden · idle · hud(HUDEvent) · sneak(Activity) · songPeek(NowPlaying) · compact(nowPlaying | activity | battery) · expanded
 ```
 
-Precedence: suppressed (a fullscreen app, or a per-app rule) → only the HUD or a critical sneak peek; expanded; HUD; sneak peek; a new song (`SongPeek`: once it has played for 0.6 s, for 2.5 s, never the first song after launch or one shown a moment ago); the activity brought forward by a sideways swipe (unless a critical one is on top); high-priority activity; battery event; playing media; other activities; paused media (with `showPausedMedia`); idle.
+Precedence: suppressed (a fullscreen app, or a per-app rule) → only the HUD or a critical sneak peek; expanded; HUD; sneak peek; a new song (`SongPeek`: once it has played for 0.6 s, for 2.5 s, never the first song after launch or one shown a moment ago); the activity brought forward by a sideways swipe (unless a critical one is on top); high-priority activity; battery event; playing media, or media paused a moment ago (`PausedMusic`, for `pausedMusicTimeout` seconds, so the pause is seen); other activities; paused media kept for good (`pausedMusicTimeout` of -1); idle.
 
 `AppModel.bubbles(for:)` picks up to one fewer than `maxConcurrent` extra items (media or activities) for the detached bubbles, iPhone-style, with an overflow count. The default of 3 gives two bubbles; 1 turns them off. A battery event shows no bubbles.
 

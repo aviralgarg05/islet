@@ -152,6 +152,7 @@ struct AppearanceSettings: View {
                     AccessRow(text: "Islet needs Accessibility to see the menu bar. Until then it uses narrow wings.",
                               button: "Allow…") { MediaKeyInterceptor.requestAccessibility() }
                 }
+                NotchFitRows(model: model)
             } header: {
                 Text("Closed island")
             } footer: {
@@ -201,6 +202,19 @@ struct AppearanceSettings: View {
                 .settingsAnchor("appearance.bubbles")
             }
             Section("Now Playing") {
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        Text("Square").font(.caption).foregroundStyle(.secondary)
+                        Slider(value: artworkCorners, in: IsletSettings.artworkCornerRange) { Text("Artwork corners") }
+                            .labelsHidden()
+                            .frame(minWidth: 120, maxWidth: 200)
+                        Text("Round").font(.caption).foregroundStyle(.secondary)
+                    }
+                } label: {
+                    Text("Artwork corners")
+                    Text("Beside the notch, in a new song's peek and in the open island.")
+                }
+                .settingsAnchor("appearance.artworkCorners")
                 LabeledContent("Playing indicator") {
                     HStack(spacing: 10) {
                         Text(Self.indicatorSummary(s)).foregroundStyle(.secondary)
@@ -214,18 +228,20 @@ struct AppearanceSettings: View {
     }
 
     static func indicatorSummary(_ s: IsletSettings) -> String {
-        let style: String
-        switch s.visualiserStyle {
-        case .bars: style = "Bars"
-        case .slim: style = "Slim bars"
-        case .dots: style = "Dots"
-        case .off: return "Off"
-        }
+        guard s.visualiserStyle != .off else { return "Off" }
+        let style = IndicatorStylePicker.name(s.visualiserStyle)
         switch s.visualiserColour {
         case .artwork: return "\(style), artwork colour"
-        case .accent: return "\(style), accent colour"
+        // With the accent on "auto" the accent is the artwork's colour.
+        case .accent: return s.accentColor == "auto" ? "\(style), artwork colour" : "\(style), accent colour"
         case .white: return "\(style), white"
         }
+    }
+
+    /// Half-point steps, so a hand-dragged value saves as a tidy number.
+    private var artworkCorners: Binding<Double> {
+        Binding(get: { model.settings.artworkCornerRadius },
+                set: { model.settings.artworkCornerRadius = ($0 * 2).rounded() / 2 })
     }
 
     /// Picking Custom starts from the size on show, so nothing jumps.
@@ -369,20 +385,30 @@ final class ColourPanelRelay: NSObject {
 }
 
 /// The closed and the open island with the current look: theme, glass level, accent, size,
-/// wings, text and playing indicator.
+/// wings, notch fit, artwork corners, text and playing indicator. The closed island moves as it
+/// does beside the notch, and its button pauses and plays the sample song, so the pause can be
+/// judged without music playing.
 struct IslandPreview: View {
     let settings: IsletSettings
+    /// The Now Playing page shows the closed island alone.
+    var showsOpen = true
     @ViewState private var width: CGFloat = 500
+    @ViewState private var playing = true
 
     var body: some View {
         // Both drawings keep one scale whatever the size, so a bigger island looks bigger.
         let open = min(0.42, (width - 24) / IsletSettings.expandedWidthRange.upperBound)
-        let closed = min(0.62, (width - 24) / (IslandSketch.notch.width + 2 * IsletSettings.wingWidthRange.upperBound))
+        let closed = min(showsOpen ? 0.62 : 1, (width - 24) / (IslandSketch.notch.width + 2 * IsletSettings.wingWidthRange.upperBound))
         VStack(spacing: 8) {
-            scene("Closed", IslandSketch(settings: settings, theme: settings.theme, open: false, scale: closed),
+            scene("Closed", IslandSketch(settings: settings, theme: settings.theme, open: false, scale: closed, playing: playing),
                   height: IslandSketch.notch.height * closed + 24)
-            scene("Open", IslandSketch(settings: settings, theme: settings.theme, open: true, scale: open),
-                  height: settings.expandedSize.height * open + 20)
+                .overlay(alignment: .bottomTrailing) {
+                    PreviewPlayButton(playing: $playing).padding(6)
+                }
+            if showsOpen {
+                scene("Open", IslandSketch(settings: settings, theme: settings.theme, open: true, scale: open),
+                      height: settings.expandedSize.height * open + 20)
+            }
         }
         .frame(maxWidth: .infinity)
         .background {
@@ -393,8 +419,6 @@ struct IslandPreview: View {
             }
         }
         .padding(.vertical, 2)
-        .accessibilityElement()
-        .accessibilityLabel("Preview of the island")
     }
 
     private func scene(_ label: String, _ sketch: IslandSketch, height: CGFloat) -> some View {
@@ -405,11 +429,36 @@ struct IslandPreview: View {
                 Text(label).font(.caption2.weight(.semibold)).foregroundStyle(.white.opacity(0.85))
                     .padding(.horizontal, 8).padding(.vertical, 5)
             }
+            .accessibilityElement()
+            .accessibilityLabel("Preview of the \(label.lowercased()) island")
+    }
+}
+
+/// Pauses and plays the preview's sample song. The glyph morphs, as the island's own does.
+private struct PreviewPlayButton: View {
+    @Binding var playing: Bool
+
+    var body: some View {
+        Button { playing.toggle() } label: {
+            Image(systemName: playing ? "pause.fill" : "play.fill")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.white)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(Color.black.opacity(0.35)))
+                .overlay(Circle().strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .animation(.snappy(duration: 0.2), value: playing)
+        .help(playing ? "Pause the sample song" : "Play the sample song")
+        .accessibilityLabel(playing ? "Pause the sample song" : "Play the sample song")
     }
 }
 
 /// A drawing of the island for Settings: the menu bar with the notch, and the island in it,
-/// closed or open. Not the real island: cheap, static, and drawable in snapshots.
+/// closed or open. Not the real island: cheap, and drawable in snapshots. The closed island's
+/// playing indicator is the real one, so it moves in the Settings window.
 struct IslandSketch: View {
     let settings: IsletSettings
     var theme: IslandTheme
@@ -418,6 +467,8 @@ struct IslandSketch: View {
     var scale: CGFloat
     /// Real text and the playing indicator; off for the small theme pictures.
     var detailed = true
+    /// Whether the sample song plays (the closed island).
+    var playing = true
 
     /// The notch of a 14-inch MacBook Pro.
     static let notch = CGSize(width: 185, height: 32)
@@ -425,10 +476,11 @@ struct IslandSketch: View {
 
     private var accent: Color { settings.accentColor == "auto" ? Self.artwork[0] : Color(tint: settings.accentColor) }
 
-    private var indicatorTint: Color {
-        switch settings.visualiserColour {
-        case .artwork: return Self.artwork[0]
-        case .accent: return settings.accentColor == "auto" ? .accentColor : Color(tint: settings.accentColor)
+    /// The playing indicator's colour on the sample song. "Accent" on "auto" is the artwork's.
+    static func indicatorTint(_ s: IsletSettings) -> Color {
+        switch s.visualiserColour {
+        case .artwork: return artwork[0]
+        case .accent: return s.accentColor == "auto" ? artwork[0] : Color(tint: s.accentColor)
         case .white: return .white
         }
     }
@@ -441,34 +493,50 @@ struct IslandSketch: View {
             Rectangle().fill(Color.white.opacity(0.18)).frame(height: row)
             if open { openIsland(row: row) } else { closedIsland(row: row) }
         }
+        .environment(\.islandReduceMotion, settings.reduceMotion || settings.animationStyle == .off)
     }
 
+    /// The closed island with the sample song, sized like the real one: the notch with its fit,
+    /// the wings, 20 pt artwork with the chosen corners, and the indicator.
     private func closedIsland(row: CGFloat) -> some View {
+        let notch = NotchGeometry.metrics(for: Self.screen, adjust: settings.notchAdjust).notch
         let wing = settings.effectiveWingWidth * scale
-        let width = Self.notch.width * scale + wing * 2
-        return IslandShape(topRadius: 4 * scale, bottomRadius: 10 * scale)
+        let width = notch.width * scale + wing * 2
+        let height = notch.height * scale
+        let art = 20 * scale
+        let inset = Wings<EmptyView, EmptyView>.inset(for: settings.effectiveWingWidth) * scale
+        return IslandShape(topRadius: 6 * scale, bottomRadius: min(12, notch.height / 2.4) * scale)
             .fill(Color.black)
-            .frame(width: width, height: row)
+            .frame(width: width, height: height)
             .overlay(alignment: .leading) {
-                artworkTile(size: row * 0.62).padding(.leading, max(4, wing / 2 - row * 0.31) + 4 * scale)
+                artworkTile(size: art, corner: CGFloat(settings.artworkCorner(size: 20, standard: 5)) * scale)
+                    .opacity(playing ? 1 : PausedLook.artworkOpacity)
+                    .animation(.easeInOut(duration: PausedLook.fade), value: playing)
+                    .padding(.leading, inset)
             }
             .overlay(alignment: .trailing) {
-                if settings.visualiserStyle != .off {
-                    IndicatorSketch(style: settings.visualiserStyle, tint: indicatorTint, height: row * 0.5)
-                        .padding(.trailing, max(4, wing / 2 - row * 0.3) + 4 * scale)
-                }
+                PlayingIndicator(tint: Self.indicatorTint(settings), playing: playing, height: 14 * scale)
+                    .environment(\.visualiserStyle, settings.visualiserStyle)
+                    .padding(.trailing, inset)
             }
     }
+
+    /// The notched display the sketch is drawn for.
+    private static let screen = ScreenDescriptor(id: 0, name: "Sketch", frame: CGRect(x: 0, y: 0, width: 1512, height: 982),
+                                                 safeAreaTop: notch.height, auxiliaryLeftWidth: (1512 - notch.width) / 2,
+                                                 auxiliaryRightWidth: (1512 - notch.width) / 2)
 
     private func openIsland(row: CGFloat) -> some View {
         let size = settings.expandedSize
         let w = size.width * scale, h = size.height * scale
         let shape = IslandShape(topRadius: 6 * scale, bottomRadius: 30 * scale)
         let design: Font.Design = settings.roundedFont ? .rounded : .default
+        let art = min(h - row - 10, 64 * scale)
         return ZStack(alignment: .topLeading) {
             surface(shape: shape, row: row, height: h)
             HStack(alignment: .center, spacing: max(4, 12 * scale)) {
-                artworkTile(size: min(h - row - 10, 64 * scale))
+                // The open island's 72 pt artwork, at this size.
+                artworkTile(size: art, corner: CGFloat(settings.artworkCorner(size: 72, standard: Radius.m)) * art / 72)
                 if detailed {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Evening walk").font(.system(size: 10, weight: .semibold, design: design)).foregroundStyle(.white)
@@ -481,9 +549,6 @@ struct IslandSketch: View {
                             .padding(.top, 3)
                     }
                     .lineLimit(1)
-                    if settings.visualiserStyle != .off {
-                        IndicatorSketch(style: settings.visualiserStyle, tint: indicatorTint, height: 10)
-                    }
                 } else {
                     VStack(alignment: .leading, spacing: 3) {
                         Capsule().fill(Color.white.opacity(0.85)).frame(width: w * 0.32, height: 3)
@@ -522,35 +587,88 @@ struct IslandSketch: View {
         }
     }
 
-    private func artworkTile(size: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
+    private func artworkTile(size: CGFloat, corner: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: corner, style: .continuous)
             .fill(LinearGradient(colors: Self.artwork, startPoint: .topLeading, endPoint: .bottomTrailing))
             .frame(width: size, height: size)
     }
 }
 
-/// The playing indicator at rest, in the chosen look.
-struct IndicatorSketch: View {
-    let style: VisualiserStyle
-    let tint: Color
-    var height: CGFloat = 14
+/// Settings → Appearance → Closed island: nudges the notch's width and height so the closed
+/// island lines up with the hardware. Folded away, since most Macs need nothing here; it opens
+/// when a value is set or a search leads to it. While a value changes, a sample activity holds
+/// the closed island on screen so its edges can be matched by eye.
+private struct NotchFitRows: View {
+    @Bindable var model: AppModel
+    @ViewState private var expanded = false
+    @Environment(\.snapshotMode) private var snapshotMode
+    @Environment(\.settingsHighlight) private var highlight
+
+    private var adjusted: Bool { model.settings.notchAdjust != .zero }
 
     var body: some View {
-        let heights: [CGFloat] = style == .slim ? [0.55, 0.9, 0.45, 0.75, 0.6, 0.8] : [0.45, 0.8, 0.35, 0.65]
-        HStack(alignment: style == .dots ? .center : .bottom, spacing: height * (style == .slim ? 0.1 : style == .dots ? 0.22 : 0.15)) {
-            if style == .dots {
-                ForEach(0..<3, id: \.self) { i in
-                    Circle().fill(tint).frame(width: height * 0.3, height: height * 0.3).offset(y: -height * [0.2, 0.38, 0.12][i])
+        // One row that folds the sliders away, with its title in line with the rows above.
+        LabeledContent {
+            HStack(spacing: 6) {
+                Text(adjusted ? Self.summary(model.settings) : "No change").foregroundStyle(.secondary)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
+            }
+        } label: {
+            Text("Fit to the notch")
+            Text("If the island's edges don't meet the notch's, move them here.")
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { withAnimation(.snappy(duration: 0.2)) { expanded.toggle() } }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint(expanded ? "Hides the adjustments" : "Shows the adjustments")
+        .settingsAnchor("appearance.fitNotch")
+        .onAppear {
+            if snapshotMode || adjusted || highlight?.hasPrefix("appearance.fit") == true { expanded = true }
+        }
+        if expanded {
+            SettingsSlider(title: "Notch width", value: binding(\.notchWidthAdjust), range: IsletSettings.notchWidthAdjustRange,
+                           step: 1, format: Self.signedPoints)
+            SettingsSlider(title: "Notch height", value: binding(\.notchHeightAdjust), range: IsletSettings.notchHeightAdjustRange,
+                           step: 1, format: Self.signedPoints)
+            HStack {
+                Text("Something shows beside the notch while you change these.").font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button("Reset") {
+                    model.settings.notchWidthAdjust = 0
+                    model.settings.notchHeightAdjust = 0
                 }
-            } else if style != .off {
-                ForEach(Array(heights.enumerated()), id: \.offset) { _, h in
-                    RoundedRectangle(cornerRadius: height * 0.09).fill(tint)
-                        .frame(width: height * (style == .slim ? 0.12 : 0.2), height: height * h)
-                }
+                .controlSize(.small)
+                .disabled(!adjusted)
             }
         }
-        .frame(height: height, alignment: .bottom)
     }
+
+    private func binding(_ key: WritableKeyPath<IsletSettings, Double>) -> Binding<Double> {
+        Binding(get: { model.settings[keyPath: key] }, set: { value in
+            guard value != model.settings[keyPath: key] else { return }
+            model.settings[keyPath: key] = value
+            AppActions.previewNotchFit(model)
+        })
+    }
+
+    static func signedPoints(_ v: Double) -> String {
+        let n = Int(v.rounded())
+        return n == 0 ? "0 pt" : n > 0 ? "+\(n) pt" : "\u{2212}\(-n) pt"
+    }
+
+    static func summary(_ s: IsletSettings) -> String {
+        var parts: [String] = []
+        if s.notchWidthAdjust != 0 { parts.append("width \(signedPoints(s.notchWidthAdjust))") }
+        if s.notchHeightAdjust != 0 { parts.append("height \(signedPoints(s.notchHeightAdjust))") }
+        return parts.joined(separator: ", ").capitalizedFirst
+    }
+}
+
+private extension String {
+    var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
 }
 
 // MARK: - Shortcuts

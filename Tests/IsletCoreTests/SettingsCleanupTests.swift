@@ -144,6 +144,9 @@ private func writtenKeys(_ s: IsletSettings) throws -> Set<String> {
         (\.wingWidth, IsletSettings.wingWidthRange),
         (\.alertDuration, IsletSettings.alertDurationRange),
         (\.hudDuration, IsletSettings.hudDurationRange),
+        (\.artworkCornerRadius, IsletSettings.artworkCornerRange),
+        (\.notchWidthAdjust, IsletSettings.notchWidthAdjustRange),
+        (\.notchHeightAdjust, IsletSettings.notchHeightAdjustRange),
     ] }
 
     @Test func sanitizeClampsToTheSameRangesAsTheSliders() {

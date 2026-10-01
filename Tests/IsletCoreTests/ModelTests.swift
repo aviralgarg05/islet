@@ -73,6 +73,51 @@ import Testing
         let strip = CGRect(x: external.frame.midX - 50, y: external.frame.maxY - 4, width: 100, height: 4)
         #expect(strip.contains(NotchGeometry.hitPoint(CGPoint(x: external.frame.midX, y: external.frame.maxY), in: external.frame)))
     }
+
+    @Test func fitToTheNotchMovesTheNotchAndEverythingPlacedFromIt() {
+        let plain = NotchGeometry.metrics(for: mbp, wingWidth: 60)
+        let m = NotchGeometry.metrics(for: mbp, wingWidth: 60, adjust: CGSize(width: 6, height: -2))
+        #expect(m.notch == CGSize(width: 191, height: 30))
+        // The wings keep their width and sit beside the adjusted notch.
+        #expect(m.wingWidth == plain.wingWidth)
+        #expect(m.compact == CGSize(width: 191 + 120, height: 30))
+        // The hover zone and the trigger's notch rectangle follow, centred as before.
+        let zone = NotchGeometry.hoverZone(for: mbp, metrics: m, slop: 0)
+        #expect(zone.width == 191)
+        #expect(zone.height == 30)
+        #expect(abs(zone.midX - mbp.frame.midX) < 0.001)
+        #expect(zone.maxY == mbp.frame.maxY)
+        let notchRect = NotchGeometry.visibleRect(for: mbp, size: m.notch)
+        #expect(notchRect.minX == 660.5)
+        #expect(notchRect.minY == CGFloat(952))
+        // The window still has room for the widest state.
+        #expect(NotchGeometry.windowFrame(for: mbp, metrics: m).width >= m.compact.width)
+    }
+
+    @Test func fitToTheNotchWorksOnDisplaysWithoutOne() {
+        let m = NotchGeometry.metrics(for: external, adjust: CGSize(width: -20, height: 4))
+        #expect(m.isSynthetic)
+        #expect(m.notch == CGSize(width: NotchGeometry.syntheticWidth - 20, height: 29))
+    }
+
+    @Test func fitToTheNotchNeverLeavesTooSmallANotch() {
+        let m = NotchGeometry.metrics(for: mbp, adjust: CGSize(width: -500, height: -500))
+        #expect(m.notch == NotchGeometry.minimumNotch)
+        // Nonsense values change nothing.
+        #expect(NotchGeometry.metrics(for: mbp, adjust: CGSize(width: CGFloat.nan, height: CGFloat.infinity)).notch == CGSize(width: 185, height: 32))
+        // No adjustment leaves a notch alone, even one below the minimum.
+        var low = external
+        low.menuBarHeight = 10
+        #expect(NotchGeometry.metrics(for: low).notch.height == 10)
+    }
+
+    @Test func fitToTheNotchComesFromTheSettings() {
+        var s = IsletSettings()
+        #expect(s.notchAdjust == .zero)
+        s.notchWidthAdjust = 3
+        s.notchHeightAdjust = -1
+        #expect(NotchGeometry.metrics(for: mbp, adjust: s.notchAdjust).notch == CGSize(width: 188, height: 31))
+    }
 }
 
 @Suite struct NowPlayingTests {
@@ -345,7 +390,27 @@ import Testing
         var np = playing()
         np.isPlaying = false
         #expect(Presenter.present(PresenterInputs(now: t0, center: ActivityCenter(), nowPlaying: np)) == .idle)
-        #expect(Presenter.present(PresenterInputs(now: t0, center: ActivityCenter(), nowPlaying: np, showPausedMedia: true)) == .compact(.nowPlaying(np)))
+        #expect(Presenter.present(PresenterInputs(now: t0, center: ActivityCenter(), nowPlaying: np, pausedMedia: .kept)) == .compact(.nowPlaying(np)))
+        #expect(Presenter.present(PresenterInputs(now: t0, center: ActivityCenter(), nowPlaying: np, pausedMedia: .recent)) == .compact(.nowPlaying(np)))
+    }
+
+    @Test func musicPausedAMomentAgoKeepsItsPlace() throws {
+        var c = ActivityCenter(sneakDuration: 1)
+        try c.apply(ActivitySpec(id: "n", title: "normal"), now: t0)
+        let later = t0.addingTimeInterval(2)
+        var np = playing()
+        np.isPlaying = false
+        // Just paused: still ahead of a normal activity, so the pause is seen.
+        #expect(Presenter.present(PresenterInputs(now: later, center: c, nowPlaying: np, pausedMedia: .recent)) == .compact(.nowPlaying(np)))
+        // Kept for good, it waits behind other activities as before.
+        if case .compact(.activity(let a, _)) = Presenter.present(PresenterInputs(now: later, center: c, nowPlaying: np, pausedMedia: .kept)) {
+            #expect(a.id == "n")
+        } else { Issue.record("expected the activity") }
+        // A high-priority activity still comes first.
+        try c.apply(ActivitySpec(id: "h", title: "high", priority: .high, sneak: false), now: later)
+        if case .compact(.activity(let a, _)) = Presenter.present(PresenterInputs(now: later, center: c, nowPlaying: np, pausedMedia: .recent)) {
+            #expect(a.id == "h")
+        } else { Issue.record("expected the high-priority activity") }
     }
 
     @Test func fullscreenSuppression() throws {

@@ -148,6 +148,7 @@ struct ExpandedLayout {
 // MARK: - Shared controls
 
 /// A round, borderless icon button: a wash appears on hover and it gives a little when pressed.
+/// A new symbol (play becoming pause) morphs into place.
 struct IconButton: View {
     let symbol: String
     let help: String
@@ -156,6 +157,7 @@ struct IconButton: View {
     var glyph: CGFloat = 12
     var ink: Color = Ink.secondary
     var action: () -> Void
+    @Environment(\.islandMotion) private var motion
 
     var body: some View {
         Button {
@@ -165,6 +167,8 @@ struct IconButton: View {
             Image(systemName: symbol)
                 .font(.system(size: glyph, weight: .semibold))
                 .foregroundStyle(ink)
+                .contentTransition(.symbolEffect(.replace))
+                .animation(motion == .off ? nil : Motion.settle, value: symbol)
                 .frame(width: size, height: size)
                 .contentShape(Circle())
         }

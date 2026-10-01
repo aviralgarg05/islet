@@ -23,7 +23,7 @@ struct NowPlayingHero: View {
         let showsSound = !roomy && model.controls.soundRowShown
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: Space.m) {
-                TrackArtwork(media: media, size: art, corner: art >= 56 ? Radius.m : Radius.s)
+                TrackArtwork(media: media, size: art, corner: model.artworkCorner(size: art, standard: art >= 56 ? Radius.m : Radius.s))
                     .shadow(color: media.artworkData == nil ? .clear : accent.opacity(0.35), radius: 10, y: 2)
                     .onTapGesture { model.openPlayer() }
                     .help("Open \(media.appName ?? "player")")

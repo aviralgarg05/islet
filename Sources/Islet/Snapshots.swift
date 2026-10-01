@@ -24,7 +24,7 @@ enum Snapshots {
         model.loadDemo(includeActivities: true)
         func metricsFor(_ s: IsletSettings) -> IslandMetrics {
             NotchGeometry.metrics(for: screen, expandedSize: CGSize(width: s.expandedSize.width, height: s.expandedSize.height),
-                                  wingWidth: s.effectiveWingWidth)
+                                  wingWidth: s.effectiveWingWidth, adjust: s.notchAdjust)
         }
         var metrics = metricsFor(settings)
         let now = Date()
@@ -101,6 +101,7 @@ enum Snapshots {
                 shoot(prefix + name)
             }
         }
+        renderClosedLooks(to: dir, model: model, metrics: metrics, now: now, metricsFor: metricsFor, shoot: shoot)
         model.closedPlacements[1] = nil
 
         // A call with a live count-up timer, and the urgent glow on a failed deploy.

@@ -29,8 +29,9 @@ public struct PresenterInputs: Sendable {
     public var isExpanded: Bool
     /// A fullscreen app (or screen sharing, or a per-app rule) asked us to get out of the way.
     public var isSuppressed: Bool
-    /// Show paused media in the compact island (off by default: paused music is noise).
-    public var showPausedMedia: Bool
+    /// How paused media shows in the compact island (`PausedMusic`). Hidden unless it was paused
+    /// a moment ago or is kept for good: paused music is noise once the pause has been seen.
+    public var pausedMedia: PausedMediaShow
     /// The activity the user brought forward by swiping; it stays in the compact island while it exists.
     public var focusedActivityID: String?
     /// A new song to show for a moment (`SongPeek.current`). It gives way to a HUD and to an
@@ -38,10 +39,10 @@ public struct PresenterInputs: Sendable {
     public var songPeek: NowPlaying?
 
     public init(now: Date, center: ActivityCenter, nowPlaying: NowPlaying? = nil, batteryEvent: BatteryEvent? = nil,
-                isExpanded: Bool = false, isSuppressed: Bool = false, showPausedMedia: Bool = false,
+                isExpanded: Bool = false, isSuppressed: Bool = false, pausedMedia: PausedMediaShow = .hidden,
                 focusedActivityID: String? = nil, songPeek: NowPlaying? = nil) {
         self.now = now; self.center = center; self.nowPlaying = nowPlaying; self.batteryEvent = batteryEvent
-        self.isExpanded = isExpanded; self.isSuppressed = isSuppressed; self.showPausedMedia = showPausedMedia
+        self.isExpanded = isExpanded; self.isSuppressed = isSuppressed; self.pausedMedia = pausedMedia
         self.focusedActivityID = focusedActivityID; self.songPeek = songPeek
     }
 }
@@ -75,13 +76,14 @@ public enum Presenter {
         if let b = i.batteryEvent, b.until > i.now {
             return .compact(.battery(b))
         }
-        if let np = i.nowPlaying, np.isPlaying {
+        // Music paused a moment ago keeps its place, so the pause is seen before it goes.
+        if let np = i.nowPlaying, np.isPlaying || i.pausedMedia == .recent {
             return .compact(.nowPlaying(np))
         }
         if let top = ordered.first {
             return .compact(.activity(top, others: others))
         }
-        if let np = i.nowPlaying, i.showPausedMedia {
+        if let np = i.nowPlaying, i.pausedMedia == .kept {
             return .compact(.nowPlaying(np))
         }
         return .idle

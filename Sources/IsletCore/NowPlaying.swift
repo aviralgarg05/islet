@@ -251,3 +251,109 @@ public struct MediaArbiter: Sendable {
         }
     }
 }
+
+/// When music was paused, so the closed island can keep it for a while (`pausedMusicTimeout`)
+/// and the pause can be seen: the indicator springs down and the artwork dims before it goes.
+/// The app feeds it every Now Playing change; the hiding moment is one of its deadlines, so
+/// nothing runs while the music stays paused.
+///
+/// Only a pause counts: music that was already paused when it appeared (at launch, or a player
+/// reporting a paused track) isn't brought back, unless paused music is kept for good.
+public struct PausedMusic: Equatable, Sendable {
+    /// When the music last went from playing to paused; nil while it plays or after it went.
+    public private(set) var since: Date?
+    private var wasPlaying = false
+
+    public init() {}
+
+    /// Feed every change to what is playing (nil when nothing is).
+    public mutating func ingest(_ np: NowPlaying?, now: Date) {
+        guard let np else {
+            since = nil
+            wasPlaying = false
+            return
+        }
+        if np.isPlaying {
+            since = nil
+            wasPlaying = true
+        } else if wasPlaying {
+            since = now
+            wasPlaying = false
+        }
+    }
+
+    /// How paused music shows at `now`. `timeout` is `pausedMusicTimeout`.
+    public func show(timeout: Double, now: Date) -> PausedMediaShow {
+        if let since, now < since.addingTimeInterval(Self.window(timeout)) { return .recent }
+        return timeout < 0 ? .kept : .hidden
+    }
+
+    /// The next moment `show` changes: when the pause stops being recent.
+    public func nextDeadline(timeout: Double, now: Date) -> Date? {
+        guard let since else { return nil }
+        let end = since.addingTimeInterval(Self.window(timeout))
+        return end > now ? end : nil
+    }
+
+    /// How long a pause counts as recent. Music kept for good is recent for the default time,
+    /// then waits behind other activities, as paused music always did.
+    static func window(_ timeout: Double) -> TimeInterval {
+        timeout < 0 ? IsletSettings.standardPausedMusicTimeout : timeout
+    }
+}
+
+/// How paused music shows in the closed island.
+public enum PausedMediaShow: Equatable, Sendable {
+    /// Not at all: the island goes back to whatever else there is, or to the bare notch.
+    case hidden
+    /// Paused a moment ago: it keeps the place it had while playing, so the pause is seen.
+    case recent
+    /// Kept for good (`pausedMusicTimeout` is never), behind any other activity.
+    case kept
+}
+
+/// Play and pause show at once when clicked, before the player confirms. For `window` seconds
+/// the intended state wins over reports that still say otherwise; once the player agrees, or the
+/// window ends, the player's own state shows again (the command may have failed).
+public struct PlaybackIntent: Equatable, Sendable {
+    public var isPlaying: Bool
+    /// `NowPlaying.trackKey` of the track clicked; another track ignores the intent.
+    public var track: String
+    public var at: Date
+    public var window: TimeInterval
+
+    public init(isPlaying: Bool, track: String, at: Date, window: TimeInterval = 2) {
+        self.isPlaying = isPlaying
+        self.track = track
+        self.at = at
+        self.window = window
+    }
+
+    public var expires: Date { at.addingTimeInterval(window) }
+
+    /// The intended state of `play`/`pause`/`togglePlayPause` on `np`; nil for other commands.
+    public static func intended(_ command: PlaybackCommand, on np: NowPlaying, at now: Date) -> PlaybackIntent? {
+        switch command {
+        case .play: return PlaybackIntent(isPlaying: true, track: np.trackKey, at: now)
+        case .pause: return PlaybackIntent(isPlaying: false, track: np.trackKey, at: now)
+        case .togglePlayPause: return PlaybackIntent(isPlaying: !np.isPlaying, track: np.trackKey, at: now)
+        default: return nil
+        }
+    }
+
+    /// Whether `np` shows the player has done what was asked (or moved on to another track).
+    public func isSettled(by np: NowPlaying?, now: Date) -> Bool {
+        guard let np, now < expires, now >= at else { return true }
+        return np.trackKey != track || np.isPlaying == isPlaying
+    }
+
+    /// `np` with the intended state, its position held where it was at the click.
+    public func applied(to np: NowPlaying, now: Date) -> NowPlaying {
+        guard !isSettled(by: np, now: now) else { return np }
+        var shown = np
+        shown.elapsed = np.position(at: at) ?? np.elapsed
+        shown.timestamp = at
+        shown.isPlaying = isPlaying
+        return shown
+    }
+}

@@ -331,13 +331,36 @@ extension AppModel {
         settings.accentColor == "auto" ? ArtworkCache.accent(for: np) : Color(tint: settings.accentColor)
     }
 
-    /// The playing indicator's colour (Settings → Now Playing).
+    /// The playing indicator's colour (Settings → Now Playing). "Accent" follows the accent
+    /// colour, which, set to "auto", means the artwork's colour here as everywhere else.
     func visualiserTint(_ np: NowPlaying?) -> Color {
         switch settings.visualiserColour {
         case .artwork: return ArtworkCache.accent(for: np)
-        case .accent: return settings.accentColor == "auto" ? Color.accentColor : Color(tint: settings.accentColor)
+        case .accent: return mediaAccent(np)
         case .white: return .white
         }
+    }
+
+    /// The colour of a volume, brightness or other HUD (Settings → Notifications & HUDs),
+    /// lifted until it reads on black. With the accent on "auto" it takes the playing artwork's
+    /// colour, and the Mac's accent colour when nothing with artwork is playing.
+    func hudTint(_ kind: HUDKind) -> Color {
+        switch settings.hudColour {
+        case .white:
+            return .white
+        case .accent:
+            if settings.accentColor != "auto" { return Color(tint: settings.accentColor).readableOnBlack }
+            guard let np = nowPlaying, np.artworkData != nil else { return Color.accentColor.readableOnBlack }
+            return ArtworkCache.accent(for: np).readableOnBlack
+        case .colourful:
+            return Color(tint: HUDColour.colourful(kind)).readableOnBlack
+        }
+    }
+
+    /// The corner for artwork `size` points wide whose designed corner is `standard`
+    /// (Settings → Appearance → Artwork corners).
+    func artworkCorner(size: CGFloat, standard: CGFloat) -> CGFloat {
+        CGFloat(settings.artworkCorner(size: Double(size), standard: Double(standard)))
     }
 
     /// Whether the given presentation deserves the urgent glow, and in which color.

@@ -153,12 +153,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var width: Double, height: Double, wing: Double
         var nonNotch: Bool, hideFromCapture: Bool
         var layout: ClosedLayoutPreference
+        /// "Fit to the notch" moves the notch, and everything placed from it.
+        var notchAdjust: CGSize
 
         init(_ s: IsletSettings) {
             displayMode = s.displayMode; size = s.sizePreset
             width = s.expandedWidth; height = s.expandedHeight; wing = s.wingWidth
             nonNotch = s.showOnNonNotchDisplays; hideFromCapture = s.hideFromScreenCapture
             layout = s.closedLayout
+            notchAdjust = s.notchAdjust
         }
     }
 

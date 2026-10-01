@@ -63,16 +63,23 @@ public enum NotchGeometry {
     public static let syntheticHeight: CGFloat = 24
     public static let syntheticWidth: CGFloat = 180
 
+    /// The narrowest and shortest notch an adjustment can leave.
+    public static let minimumNotch = CGSize(width: 40, height: 12)
+
     /// Derive island metrics for a screen.
     /// - Parameters:
     ///   - expandedSize: requested expanded panel size (clamped to fit the screen).
     ///   - wingWidth: compact wing width on each side.
+    ///   - adjust: points added to the notch's width and height ("Fit to the notch"), so the
+    ///     closed island lines up with the hardware. Everything placed from the notch follows:
+    ///     the wings, hit-testing, the hover zone and the trigger window.
     public static func metrics(
         for screen: ScreenDescriptor,
         expandedSize: CGSize = CGSize(width: 640, height: 200),
-        wingWidth: CGFloat = 84
+        wingWidth: CGFloat = 84,
+        adjust: CGSize = .zero
     ) -> IslandMetrics {
-        let notch: CGSize
+        var notch: CGSize
         let synthetic: Bool
         if screen.hasNotch {
             let width: CGFloat
@@ -88,6 +95,13 @@ public enum NotchGeometry {
             let height = screen.menuBarHeight > 0 ? min(screen.menuBarHeight, 32) : syntheticHeight
             notch = CGSize(width: syntheticWidth, height: height)
             synthetic = true
+        }
+        // Never below the minimum (or the notch itself, if that is smaller still).
+        if adjust.width.isFinite, adjust.width != 0 {
+            notch.width = max(min(notch.width, minimumNotch.width), notch.width + adjust.width)
+        }
+        if adjust.height.isFinite, adjust.height != 0 {
+            notch.height = max(min(notch.height, minimumNotch.height), notch.height + adjust.height)
         }
 
         let maxWidth = max(notch.width, screen.frame.width - 40)

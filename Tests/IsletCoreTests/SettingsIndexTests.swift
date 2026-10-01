@@ -111,6 +111,14 @@ import Testing
         ("reset", .advanced),
         ("api guide", .advanced),
         ("paused music", .nowPlaying),
+        ("hide paused", .nowPlaying),
+        ("artwork corners", .appearance),
+        ("rounded artwork", .appearance),
+        ("fit to the notch", .appearance),
+        ("notch height", .appearance),
+        ("wave", .nowPlaying),
+        ("pulse", .nowPlaying),
+        ("colourful", .notifications),
         ("closed island width", .appearance),
         ("airdrop", .shelf),
     ])
@@ -170,8 +178,8 @@ import Testing
 
     @Test func tiedPagesKeepSidebarOrder() {
         #expect(SettingsIndex.search("frontmost").map(\.page) == [.apps])
-        // "colour" is a whole title word on three pages: they come in sidebar order.
+        // "colour" is a whole title word on four pages: they come in sidebar order.
         let colour = SettingsIndex.search("colour").map(\.page)
-        #expect(colour.prefix(3) == [.appearance, .nowPlaying, .apps])
+        #expect(colour.prefix(4) == [.appearance, .nowPlaying, .notifications, .apps])
     }
 }

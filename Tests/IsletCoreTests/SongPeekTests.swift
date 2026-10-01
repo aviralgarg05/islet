@@ -254,9 +254,9 @@ private func started(with first: NowPlaying = song("Intro")) -> SongPeek {
         #expect(s.songChangePeek)
         #expect(!IsletSettings.decodeLenient(Data(#"{"songChangePeek": false}"#.utf8)).songChangePeek)
         // A bad value falls back to the default without touching the other keys.
-        let bad = IsletSettings.decodeLenient(Data(#"{"songChangePeek": "sometimes", "showPausedMedia": true}"#.utf8))
+        let bad = IsletSettings.decodeLenient(Data(#"{"songChangePeek": "sometimes", "pausedMusicTimeout": 30}"#.utf8))
         #expect(bad.songChangePeek)
-        #expect(bad.showPausedMedia)
+        #expect(bad.pausedMusicTimeout == 30)
         let keys = try JSONSerialization.jsonObject(with: JSONEncoder().encode(s)) as? [String: Any]
         #expect(keys?["songChangePeek"] as? Bool == true)
     }

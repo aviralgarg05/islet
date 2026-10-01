@@ -72,6 +72,10 @@ public enum VisualiserStyle: String, Codable, Sendable, CaseIterable {
     case slim
     /// Three bobbing dots.
     case dots
+    /// One flowing line, like a sound wave.
+    case wave
+    /// A dot with a ring that ripples out from it.
+    case pulse
     /// No indicator: the artwork alone shows what's playing.
     case off
 }
@@ -83,6 +87,26 @@ public enum VisualiserColour: String, Codable, Sendable, CaseIterable {
     /// The accent colour from Appearance.
     case accent
     case white
+}
+
+/// What colour the volume, brightness and other HUDs take.
+public enum HUDColour: String, Codable, Sendable, CaseIterable {
+    /// White, like the rest of the closed island.
+    case white
+    /// The accent colour from Appearance.
+    case accent
+    /// One colour per kind: volume green, brightness yellow, keyboard light blue, microphone orange.
+    case colourful
+
+    /// The colour a HUD of `kind` takes in the colourful look, as hex (system colours for dark mode).
+    public static func colourful(_ kind: HUDKind) -> String {
+        switch kind {
+        case .volume: return "#30D158"
+        case .brightness: return "#FFD60A"
+        case .keyboardBrightness: return "#64D2FF"
+        case .microphone: return "#FF9F0A"
+        }
+    }
 }
 
 /// Per-app customisation, keyed by bundle identifier.
@@ -156,6 +180,10 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var expandedWidth: Double = 468
     public var expandedHeight: Double = 150
     public var wingWidth: Double = 52
+    /// Points added to the notch's width and height (negative to take away), so the closed
+    /// island lines up with the hardware notch. Hit-testing and hover follow.
+    public var notchWidthAdjust: Double = 0
+    public var notchHeightAdjust: Double = 0
 
     // Look & feel
     public var theme: IslandTheme = .glass
@@ -185,14 +213,20 @@ public struct IsletSettings: Codable, Equatable, Sendable {
 
     // Modules
     public var mediaEnabled = true
-    public var showPausedMedia = false
+    /// Seconds the closed island keeps paused music before it hides: 0 hides it right away and
+    /// `neverHide` (-1) keeps it. Replaces `showPausedMedia` (true became `neverHide`).
+    public var pausedMusicTimeout: Double = IsletSettings.standardPausedMusicTimeout
     /// Show a new song for a moment below the notch when the track changes (`SongPeek`).
     public var songChangePeek = true
     public var visualiserStyle: VisualiserStyle = .bars
     public var visualiserColour: VisualiserColour = .artwork
+    /// Corner radius of the artwork beside the notch, in points: 0 is square and 10 is round.
+    /// The song peek and the open island's artwork scale it to their size (`artworkCorner`).
+    public var artworkCornerRadius: Double = IsletSettings.standardArtworkCorner
     public var disabledMediaSources: [MediaSourceKind] = []
     public var hudEnabled = true
     public var brightnessHUDEnabled = true
+    public var hudColour: HUDColour = .white
     /// Swallow the volume/brightness keys so only Islet's HUD shows. Needs Accessibility.
     public var replaceSystemHUD = false
     public var batteryEnabled = true
@@ -294,6 +328,19 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public static let alertDurationRange: ClosedRange<Double> = 1...6
     public static let hudDurationRange: ClosedRange<Double> = 0.8...4
     public static let glassLevelRange: ClosedRange<Double> = 0...1
+    public static let artworkCornerRange: ClosedRange<Double> = 0...10
+    /// The default `artworkCornerRadius`, which keeps every artwork at its designed corner.
+    public static let standardArtworkCorner: Double = 5
+    public static let notchWidthAdjustRange: ClosedRange<Double> = -20...20
+    public static let notchHeightAdjustRange: ClosedRange<Double> = -4...4
+    /// The default `pausedMusicTimeout`, the 10 seconds NotchNook shows.
+    public static let standardPausedMusicTimeout: Double = 10
+    /// `pausedMusicTimeout` for "never hide".
+    public static let neverHide: Double = -1
+    /// The longest `pausedMusicTimeout` short of never.
+    public static let pausedMusicTimeoutRange: ClosedRange<Double> = 0...300
+    /// The choices Settings offers for `pausedMusicTimeout`, in order.
+    public static let pausedMusicChoices: [Double] = [0, 5, 10, 30, 60, 300, neverHide]
     public static let clipboardLimitRange: ClosedRange<Int> = 1...500
     /// Ports for the local API and the LAN bridge (unprivileged, and never the same one).
     public static let portRange: ClosedRange<Int> = 1024...65535
@@ -305,6 +352,23 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     }
 
     public var effectiveWingWidth: Double { sizePreset.dimensions?.wing ?? wingWidth }
+
+    /// What `notchWidthAdjust` and `notchHeightAdjust` add to the notch.
+    public var notchAdjust: CGSize { CGSize(width: notchWidthAdjust, height: notchHeightAdjust) }
+
+    /// Whether paused music stays in the closed island for good.
+    public var keepsPausedMusic: Bool { pausedMusicTimeout < 0 }
+
+    /// The corner for artwork `size` points wide whose corner is `standard` at the default
+    /// setting: square at 0, `standard` at the default 5, round at 10. The closed island's
+    /// 20 pt artwork has a standard of 5, so there the corner is the setting itself.
+    public func artworkCorner(size: Double, standard: Double) -> Double {
+        let v = Self.clamp(artworkCornerRadius, Self.artworkCornerRange)
+        let mid = Self.standardArtworkCorner
+        let round = max(standard, size / 2)
+        if v <= mid { return standard * v / mid }
+        return standard + (round - standard) * (v - mid) / (Self.artworkCornerRange.upperBound - mid)
+    }
 
     public func rule(for bundleID: String?) -> AppRule? {
         guard let bundleID else { return nil }
@@ -328,6 +392,10 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         s.alertDuration = Self.clamp(s.alertDuration, Self.alertDurationRange)
         s.hudDuration = Self.clamp(s.hudDuration, Self.hudDurationRange)
         s.glassLevel = Self.clamp(s.glassLevel, Self.glassLevelRange)
+        s.artworkCornerRadius = Self.clamp(s.artworkCornerRadius, Self.artworkCornerRange)
+        s.notchWidthAdjust = Self.clamp(s.notchWidthAdjust, Self.notchWidthAdjustRange)
+        s.notchHeightAdjust = Self.clamp(s.notchHeightAdjust, Self.notchHeightAdjustRange)
+        s.pausedMusicTimeout = s.pausedMusicTimeout < 0 ? Self.neverHide : Self.clamp(s.pausedMusicTimeout, Self.pausedMusicTimeoutRange)
         s.batteryLowThreshold = min(50, max(5, s.batteryLowThreshold))
         s.batteryCriticalThreshold = min(s.batteryLowThreshold - 1, max(1, s.batteryCriticalThreshold))
         if s.batteryChargedAlert != 0 { s.batteryChargedAlert = min(100, max(50, s.batteryChargedAlert)) }
@@ -364,6 +432,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         // Older configs switched haptics off with `hapticFeedback: false`, whatever `hapticsMode` said
         // (the app wrote both keys). `hapticsMode` replaced it, and the old key isn't written back.
         if user["hapticFeedback"] as? Bool == false { s.hapticsMode = .off }
+        // `showPausedMedia: true` kept paused music for good; `pausedMusicTimeout` replaced it.
+        // false (or no key) now means the new default, and the old key isn't written back.
+        if user["pausedMusicTimeout"] == nil, user["showPausedMedia"] as? Bool == true { s.pausedMusicTimeout = Self.neverHide }
         // Older configs kept two bundle id lists beside `appRules`. They are folded into the
         // rules and not written back. (`launchAtLogin` is gone too: Login Items is the truth.)
         s.appRules = AppRule.merging(s.appRules,

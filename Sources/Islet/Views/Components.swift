@@ -372,35 +372,63 @@ struct ActivityProgress: View {
     }
 }
 
-/// "Playing" equalizer (Core Animation; static bars in snapshots).
+/// The "playing" indicator in the look chosen in Settings (Core Animation; its resting pose in
+/// snapshots). 18 × 14 points in the island; `height` scales it for drawings in Settings.
 struct PlayingIndicator: View {
     var tint: Color
     var playing: Bool
+    var height: CGFloat = 14
     @Environment(\.snapshotMode) private var snapshotMode
     @Environment(\.visualiserStyle) private var style
+
+    private var width: CGFloat { height * 18 / 14 }
 
     var body: some View {
         if style == .off {
             EmptyView()
         } else if snapshotMode {
-            // Snapshots can't host the layer view: draw the resting state of the same look.
-            let heights: [CGFloat] = style == .slim ? [0.55, 0.9, 0.45, 0.75, 0.6, 0.8] : [0.45, 0.8, 0.35, 0.65]
-            HStack(alignment: .bottom, spacing: style == .slim ? 1.5 : style == .dots ? 3 : 2) {
-                if style == .dots {
-                    ForEach(0..<3, id: \.self) { i in
-                        Circle().fill(tint).frame(width: 4, height: 4).offset(y: playing ? -CGFloat([3, 6, 2][i]) : 0)
-                    }
-                } else {
-                    ForEach(Array(heights.enumerated()), id: \.offset) { _, h in
-                        RoundedRectangle(cornerRadius: 1.25).fill(tint)
-                            .frame(width: style == .slim ? 1.75 : 3, height: 14 * (playing ? h : 0.2))
-                    }
+            // Snapshots can't host the layer view: draw the resting pose of the same look.
+            still
+                .opacity(playing ? 1 : Double(PausedLook.indicatorOpacity))
+                .frame(width: width, height: height, alignment: .bottom)
+        } else {
+            EqualizerView(color: NSColor(tint), playing: playing, style: style).frame(width: width, height: height)
+        }
+    }
+
+    @ViewBuilder private var still: some View {
+        let k = height / 14
+        switch style {
+        case .wave:
+            let line = 1.5 * max(1, k)
+            Path(IndicatorWave.path(in: CGRect(x: 0, y: 0, width: width, height: height),
+                                    phase: IndicatorWave.stillPhase, amplitude: playing ? 1 : 0, lineWidth: line))
+                .stroke(tint, style: StrokeStyle(lineWidth: line, lineCap: .round, lineJoin: .round))
+        case .pulse:
+            ZStack {
+                Circle().strokeBorder(tint, lineWidth: 1.5 * max(1, k))
+                    .frame(width: height, height: height)
+                    .scaleEffect(0.8)
+                    .opacity(playing ? 0.45 : 0)
+                Circle().fill(tint)
+                    .frame(width: height / 2, height: height / 2)
+                    .scaleEffect(playing ? 1 : 0.8)
+            }
+            .frame(width: width, height: height)
+        case .dots:
+            HStack(alignment: .bottom, spacing: 3 * k) {
+                ForEach(0..<3, id: \.self) { i in
+                    Circle().fill(tint).frame(width: 4 * k, height: 4 * k).offset(y: playing ? -CGFloat([3, 6, 2][i]) * k : 0)
                 }
             }
-            .opacity(playing ? 1 : 0.55)
-            .frame(width: 18, height: 14, alignment: .bottom)
-        } else {
-            EqualizerView(color: NSColor(tint), playing: playing, style: style).frame(width: 18, height: 14)
+        default:
+            let heights: [CGFloat] = style == .slim ? [0.55, 0.9, 0.45, 0.75, 0.6, 0.8] : [0.45, 0.8, 0.35, 0.65]
+            HStack(alignment: .bottom, spacing: (style == .slim ? 1.5 : 2) * k) {
+                ForEach(Array(heights.enumerated()), id: \.offset) { _, h in
+                    RoundedRectangle(cornerRadius: 1.25 * k).fill(tint)
+                        .frame(width: (style == .slim ? 1.75 : 3) * k, height: height * (playing ? h : 0.2))
+                }
+            }
         }
     }
 }
