@@ -250,9 +250,10 @@ Turn on **Run scripts from the plugins folder** in *Settings → Advanced → Sc
 ## Per-app customisation
 
 *Settings → Apps* (or `appRules` in `config.json`) lets you set, per app:
-- a tint and icon for its activities and notifications;
+- a tint (a named colour, or any colour from the colour panel) and icon for its activities and notifications;
+- a **priority** for its activities and notifications (low, normal, high or urgent), in place of their own;
 - **hide the island while it's in front** (games, presentations);
-- **keep the island in fullscreen** (for example, a call app);
-- **mute its notifications**, or raise their priority.
+- **keep the island in full screen** (for example, a call app), whatever *General → In full screen* says;
+- **mute its notifications**.
 
 Right-click any activity in the island to dismiss it or mute its source.
