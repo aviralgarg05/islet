@@ -432,6 +432,21 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var claudeUsageHint = true
     /// Codex plan limits, from its session logs in `~/.codex/sessions`. Local files only.
     public var codexUsageEnabled = true
+    /// OpenRouter spending on Home, with the user's own key (Keychain). Asks OpenRouter when the
+    /// island opens, at most every few minutes.
+    public var openRouterUsageEnabled = false
+    /// Models Ollama has loaded on this Mac, on Home. Asks the local Ollama when the island opens.
+    public var ollamaUsageEnabled = false
+    /// Copilot premium requests this month on Home, with a GitHub token the user pastes (Keychain).
+    public var copilotUsageEnabled = false
+    /// The Copilot plan's monthly premium requests, for the bar.
+    public var copilotPlan: CopilotPlan = .pro
+
+    // Tools under "More": each starts off.
+    public var mirror = MirrorSettings()
+    public var teleprompter = TeleprompterSettings()
+    public var sales = SalesSettings()
+    public var stocks = StocksSettings()
     /// Per-app tint, icon, visibility and notification handling. Replaces the old
     /// `fullscreenAllowList` and `hideForApps` lists, which are read once and folded in here.
     public var appRules: [AppRule] = []
@@ -600,6 +615,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         for i in s.appRules.indices where s.appRules[i].tint.map({ RGBA.parse($0) == nil }) ?? false {
             s.appRules[i].tint = nil
         }
+        s.teleprompter = s.teleprompter.sanitized()
+        s.sales = s.sales.sanitized()
+        s.stocks = s.stocks.sanitized()
         return s
     }
 

@@ -3,9 +3,10 @@ import IsletCore
 import IsletSystem
 import SwiftUI
 
-// Settings for the tools that start off. Shortcuts and Weather are pages of their own, on the
-// Tools page; lyrics, the month calendar, the stopwatch and focus sounds sit on the pages of
-// the features they belong to (Now Playing, Calendar & Reminders, Timers).
+// Settings for the tools that start off. Shortcuts, Weather, Mirror, Teleprompter, Stocks and
+// Sales are pages of their own, set on the Tools page (the last four in ToolsSettingsView.swift);
+// lyrics, the month calendar, the stopwatch and focus sounds sit on the pages of the features
+// they belong to (Now Playing, Calendar & Reminders, Timers).
 
 // MARK: - Tools page
 
@@ -27,6 +28,10 @@ struct ToolsSettings: View {
                 SettingsFooter("Shortcuts run on this Mac, as they do in the Shortcuts app.")
             }
             WeatherSettingsSection(model: model)
+            MirrorSettingsSection(model: model)
+            TeleprompterSettingsSection(model: model)
+            StocksSettingsSection(model: model)
+            SalesSettingsSection(model: model)
         }
         .formStyle(.grouped)
     }

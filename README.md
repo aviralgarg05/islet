@@ -16,7 +16,7 @@
 - **Calendar and Reminders**: meeting reminders that count down beside the notch and stay until you join, a large Join button, the rest of today, and reminders you can tick off. When macOS hasn't allowed Islet to read your calendar, it says why and opens the right page of System Settings.
 - **Calls, HUDs and system events**: call timers, volume and brightness, charging and battery, Focus, keep awake, a summary when you unlock.
 - **A file shelf, clipboard history, download progress and script widgets** (xbar and SwiftBar plugins run unchanged).
-- **Tools you switch on when you want them**: time-synced lyrics, your Shortcuts, the weather, a month calendar on Today, a stopwatch, Pomodoro lengths and focus sounds. Each starts off until you turn it on in Settings; Shortcuts and Weather then appear under More.
+- **Tools you turn on when you want them**: time-synced lyrics, your Shortcuts, the weather, a month calendar on Today, a stopwatch, Pomodoro lengths and focus sounds, a camera mirror and a teleprompter just under the camera, a stocks watchlist with sparklines, and today's sales from Stripe, Shopify, Lemon Squeezy, Gumroad, Dodo Payments, Polar and Paddle. Home can also show OpenRouter, Copilot and Ollama usage. Each starts off until you turn it on in Settings; the pages among them then appear under More. See [Tools](docs/TOOLS.md).
 - **Your own activities** from the command line, a local HTTP API, the `islet://` URL scheme or iPhone Shortcuts. See the [API](docs/API.md).
 
 ## How it stays out of the way
@@ -24,7 +24,7 @@
 - **It sits beside the notch, like the iPhone's.** It always stays in the menu bar row. With Accessibility it measures the menu bar and shrinks to the free space, down to just an icon each side, so it covers a menu bar icon only when the bar is packed right up to the notch.
 - **It costs nothing when idle.** Everything is driven by events, looping animations run in Core Animation, and the pointer isn't watched until it reaches the notch. `make perf` checks each state against a CPU budget; the latest figures are in the [changelog](CHANGELOG.md).
 - **It asks for nothing up front.** Each permission is requested when you turn on the feature that needs it.
-- **It keeps things on your Mac.** No account, no telemetry, no licence server. Questions go to an AI provider only when you ask one, with your own key. Lyrics and the weather go online only once you turn them on, and send no more than the song or a rounded position.
+- **It keeps things on your Mac.** No account, no telemetry, no licence server. Questions go to an AI provider only when you ask one, with your own key. Lyrics, the weather, sales, stocks and OpenRouter or Copilot usage reach the network only once you turn them on; lyrics and the weather send no more than the song or a rounded position, and Islet never reads another app's sign-in.
 - **It's free and MIT-licensed**, written from scratch.
 
 ## Download

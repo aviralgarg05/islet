@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import AVFoundation
 import CoreServices
 import IsletCore
 
@@ -27,6 +28,8 @@ public enum PermissionProbe {
             completion(.calendar(CalendarService.reminderAccess))
         case .location:
             completion(status(LocationProvider.access))
+        case .camera:
+            completion(CameraMirror.access)
         case .downloadsFolder:
             guard readDownloads else { return completion(.unknown) }
             readFolder(completion)
@@ -54,6 +57,8 @@ public enum PermissionProbe {
             provider.requestLocation { _ in
                 withExtendedLifetime(provider) { completion(status(LocationProvider.access)) }
             }
+        case .camera:
+            CameraMirror.requestAccess(completion)
         case .calendars, .reminders:
             status(of: kind, readDownloads: false, completion: completion)
         }

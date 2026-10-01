@@ -3,7 +3,7 @@ import Foundation
 /// A page in the Settings window, in sidebar order.
 public enum SettingsPage: String, CaseIterable, Sendable, Identifiable {
     case general, appearance, shortcuts
-    case nowPlaying, liveActivities, calendar, timers, notifications, shelf, downloads, tools, ai, agents
+    case nowPlaying, liveActivities, calendar, timers, notifications, shelf, downloads, ai, agents, tools
     case apps, permissions, about
     case advanced
 
@@ -21,9 +21,9 @@ public enum SettingsPage: String, CaseIterable, Sendable, Identifiable {
         case .notifications: return "Notifications & HUDs"
         case .shelf: return "Shelf & Clipboard"
         case .downloads: return "Downloads"
-        case .tools: return "Tools"
         case .ai: return "Ask & AI"
         case .agents: return "Coding agents"
+        case .tools: return "Tools"
         case .apps: return "Apps"
         case .permissions: return "Permissions"
         case .about: return "About"
@@ -44,9 +44,9 @@ public enum SettingsPage: String, CaseIterable, Sendable, Identifiable {
         case .notifications: return "Notifications, volume, brightness, battery, calls, camera and microphone."
         case .shelf: return "Keep files handy, share them, and find what you copied."
         case .downloads: return "Browser downloads with their progress, then Open and Show when they finish."
-        case .tools: return "Extra pages for the island, each off until you turn it on."
         case .ai: return "Ask a question from anywhere, answered on this Mac or by Claude or ChatGPT."
         case .agents: return "See what your coding agents are doing and answer their questions in the notch."
+        case .tools: return "Shortcuts, weather, a camera mirror, a teleprompter, stocks and sales, each a page under More. All start off."
         case .apps: return "Give an app a colour or a priority, hide the island for it, or mute its notifications."
         case .permissions: return "What Islet may use, and what uses it. None is needed to run."
         case .about: return "Version and licence."
@@ -67,9 +67,9 @@ public enum SettingsPage: String, CaseIterable, Sendable, Identifiable {
         case .notifications: return "bell.badge.fill"
         case .shelf: return "tray.full.fill"
         case .downloads: return "arrow.down"
-        case .tools: return "puzzlepiece.fill"
         case .ai: return "sparkles"
         case .agents: return "chevron.left.forwardslash.chevron.right"
+        case .tools: return "rectangle.3.group.fill"
         case .apps: return "square.grid.2x2.fill"
         case .permissions: return "hand.raised.fill"
         case .about: return "info"
@@ -89,9 +89,9 @@ public enum SettingsPage: String, CaseIterable, Sendable, Identifiable {
         case .timers: return "orange"
         case .shelf: return "cyan"
         case .downloads: return "teal"
-        case .tools: return "yellow"
         case .ai: return "purple"
         case .agents: return "brown"
+        case .tools: return "yellow"
         case .apps: return "mint"
         case .advanced: return "graphite"
         }
@@ -100,7 +100,7 @@ public enum SettingsPage: String, CaseIterable, Sendable, Identifiable {
     public var group: SettingsPageGroup {
         switch self {
         case .general, .appearance, .shortcuts: return .basics
-        case .nowPlaying, .liveActivities, .calendar, .timers, .notifications, .shelf, .downloads, .tools, .ai, .agents: return .features
+        case .nowPlaying, .liveActivities, .calendar, .timers, .notifications, .shelf, .downloads, .ai, .agents, .tools: return .features
         case .apps, .permissions, .about: return .system
         case .advanced: return .advanced
         }
@@ -387,15 +387,6 @@ public enum SettingsIndex {
 
         SettingsEntry("downloads.enabled", .downloads, "Download progress", keywords: ["files", "Safari", "Chrome", "browser"]),
 
-        SettingsEntry("tools.shortcuts", .tools, "Run your shortcuts", section: "Shortcuts",
-                      keywords: ["Shortcuts app", "automation", "run", "workflow"]),
-        SettingsEntry("tools.weather", .tools, "Show the weather", section: "Weather",
-                      keywords: ["forecast", "temperature", "rain", "sun", "week", "Open-Meteo"]),
-        SettingsEntry("tools.weatherLocation", .tools, "Weather location", section: "Weather",
-                      keywords: ["where I am", "my location", "city", "town", "place"]),
-        SettingsEntry("tools.temperature", .tools, "Temperature in", section: "Weather",
-                      keywords: ["Celsius", "Fahrenheit", "units", "degrees"]),
-
         SettingsEntry("ai.provider", .ai, "Answer with", section: "Ask", keywords: ["provider", "Claude", "ChatGPT", "on-device", "default"]),
         SettingsEntry("ai.effort", .ai, "Effort", section: "Ask", keywords: ["reasoning", "thinking"]),
         SettingsEntry("ai.followUps", .ai, "Keep follow-ups in memory", section: "Ask", keywords: ["history", "conversation"]),
@@ -415,6 +406,46 @@ public enum SettingsIndex {
         SettingsEntry("agents.wait", .agents, "Hand back to the terminal after", section: "Approvals", keywords: ["timeout", "wait"]),
         SettingsEntry("agents.claudeUsage", .agents, "Claude Code limits", section: "Usage limits", keywords: ["usage", "plan", "5-hour", "weekly"]),
         SettingsEntry("agents.codexUsage", .agents, "Codex limits", section: "Usage limits", keywords: ["usage", "plan", "5-hour", "weekly"]),
+        SettingsEntry("agents.openRouterUsage", .agents, "OpenRouter spending", section: "Usage limits",
+                      keywords: ["usage", "credits", "limit", "key", "API key", "Keychain", "dollars"]),
+        SettingsEntry("agents.ollamaUsage", .agents, "Ollama models", section: "Usage limits",
+                      keywords: ["usage", "local models", "memory", "loaded", "LLM"]),
+        SettingsEntry("agents.copilotUsage", .agents, "Copilot premium requests", section: "Usage limits",
+                      keywords: ["usage", "GitHub", "key", "plan", "month", "Keychain"]),
+        SettingsEntry("agents.copilotPlan", .agents, "Copilot plan", section: "Usage limits",
+                      keywords: ["Free", "Pro", "Business", "Enterprise", "allowance"], anchor: "agents.copilotUsage"),
+
+        SettingsEntry("tools.shortcuts", .tools, "Run your shortcuts", section: "Shortcuts",
+                      keywords: ["Shortcuts app", "automation", "run", "workflow"]),
+        SettingsEntry("tools.weather", .tools, "Show the weather", section: "Weather",
+                      keywords: ["forecast", "temperature", "rain", "sun", "week", "Open-Meteo"]),
+        SettingsEntry("tools.weatherLocation", .tools, "Weather location", section: "Weather",
+                      keywords: ["where I am", "my location", "city", "town", "place"]),
+        SettingsEntry("tools.temperature", .tools, "Temperature in", section: "Weather",
+                      keywords: ["Celsius", "Fahrenheit", "units", "degrees"]),
+
+        SettingsEntry("tools.mirror", .tools, "Camera mirror", section: "Mirror",
+                      keywords: ["camera", "webcam", "video call", "look", "hair", "check", "selfie"]),
+        SettingsEntry("tools.mirrorFlip", .tools, "Flip like a mirror", section: "Mirror",
+                      keywords: ["camera", "reverse", "horizontal"], anchor: "tools.mirror"),
+        SettingsEntry("tools.teleprompter", .tools, "Teleprompter", section: "Teleprompter",
+                      keywords: ["autocue", "script", "read", "presentation", "recording", "camera", "talk"]),
+        SettingsEntry("tools.script", .tools, "Script", section: "Teleprompter",
+                      keywords: ["teleprompter", "text", "paste", "words"], anchor: "tools.teleprompter"),
+        SettingsEntry("tools.teleprompterSpeed", .tools, "Words a minute", section: "Teleprompter",
+                      keywords: ["reading speed", "words per minute", "pace", "scroll", "faster", "slower"], anchor: "tools.teleprompter"),
+        SettingsEntry("tools.teleprompterSize", .tools, "Text size", section: "Teleprompter",
+                      keywords: ["teleprompter", "font", "bigger", "smaller"], anchor: "tools.teleprompter"),
+        SettingsEntry("tools.seeThrough", .tools, "See-through while reading", section: "Teleprompter",
+                      keywords: ["glass", "transparent", "clear", "teleprompter"], anchor: "tools.teleprompter"),
+        SettingsEntry("tools.stocks", .tools, "Stocks", section: "Stocks",
+                      keywords: ["shares", "watchlist", "prices", "market", "sparkline", "ticker", "index"]),
+        SettingsEntry("tools.stockSymbols", .tools, "Watchlist", section: "Stocks",
+                      keywords: ["symbols", "ticker", "add", "remove", "stocks"], anchor: "tools.stocks"),
+        SettingsEntry("tools.sales", .tools, "Sales today", section: "Sales",
+                      keywords: ["revenue", "takings", "money", "orders", "store", "shop"]),
+        SettingsEntry("tools.salesStores", .tools, "Stores", section: "Sales",
+                      keywords: SalesStore.allCases.map(\.title) + ["key", "connect", "Keychain", "read-only"], anchor: "tools.sales"),
     ]
 
     private static let system: [SettingsEntry] = [

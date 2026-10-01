@@ -180,6 +180,7 @@ private struct PermissionRow: View {
         case .calendars: return "calendar"
         case .reminders: return "checklist"
         case .location: return "location.fill"
+        case .camera: return "camera"
         case .downloadsFolder: return "arrow.down.circle"
         case .automationMusic, .automationSpotify: return "applescript"
         }

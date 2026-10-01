@@ -217,9 +217,10 @@ struct SettingsTile: View {
         case "orange": return .orange
         case "cyan": return .cyan
         case "mint": return .mint
-        case "yellow": return .yellow
         case "brown": return .brown
         case "purple": return .purple
+        // Amber rather than pure yellow, so the white glyph still reads.
+        case "yellow": return Color(red: 0.93, green: 0.66, blue: 0.0)
         case "graphite": return Color(white: 0.32)
         default: return Color(white: 0.56)
         }
@@ -355,9 +356,9 @@ struct SettingsPageView: View {
         case .notifications: NotificationsSettings(model: model)
         case .shelf: ShelfSettings(model: model)
         case .downloads: DownloadsSettings(model: model)
-        case .tools: ToolsSettings(model: model)
         case .ai: AISettingsView(model: model)
         case .agents: CodingAgentsSettings(model: model)
+        case .tools: ToolsSettings(model: model)
         case .apps: AppRulesSettings(model: model)
         case .permissions: PermissionsSettings(model: model)
         case .about: AboutSettings()

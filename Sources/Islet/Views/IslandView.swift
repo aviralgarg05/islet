@@ -549,8 +549,10 @@ struct IslandView: View {
     private func shell(_ p: IslandPresentation, geometry g: IslandGeometry, stretch: CGFloat) -> some View {
         let shape = g.stretched(by: stretch)
         return ZStack {
-            model.settings.theme.background(expanded: p == .expanded, shape: shape, row: g.stemHeight, height: g.size.height,
-                                            glassLevel: model.settings.glassLevel,
+            // The teleprompter's "See-through while reading" turns the open island to clear glass.
+            let seeThrough = p == .expanded && model.seeThroughPage
+            (seeThrough ? IslandTheme.glass : model.settings.theme).background(expanded: p == .expanded, shape: shape, row: g.stemHeight, height: g.size.height,
+                                            glassLevel: seeThrough ? 1 : model.settings.glassLevel,
                                             closedGlass: closedGlass,
                                             stem: p == .expanded && model.look(for: display).stemmedOpen ? g.stemWidth : nil)
                 .shadow(color: .black.opacity(p == .expanded ? 0.45 : 0), radius: 14, y: 6)

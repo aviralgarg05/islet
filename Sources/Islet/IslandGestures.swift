@@ -6,9 +6,15 @@ import SwiftUI
 /// already receives while the pointer is on the island: no event monitor, no permission.
 final class IslandHostingView: NSHostingView<IslandView> {
     var onSwipe: ((SwipeDirection) -> Void)?
+    /// A page that scrolls by itself (the teleprompter) takes the scroll first; then it isn't a swipe.
+    var onScroll: ((NSEvent) -> Bool)?
     private var swipes = SwipeRecognizer()
 
     override func scrollWheel(with event: NSEvent) {
+        if onScroll?(event) == true {
+            swipes = SwipeRecognizer()
+            return
+        }
         if let direction = swipes.feed(ScrollSample(event)) { onSwipe?(direction) }
         super.scrollWheel(with: event)
     }

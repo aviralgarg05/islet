@@ -38,10 +38,11 @@ struct UsageLimitsSection: View {
                 Text(model.settings.codexUsageEnabled ? codexText : "Its 5-hour and weekly limits, on Home.")
             }
             .settingsAnchor("agents.codexUsage")
+            MoreUsageRows(model: model)
         } header: {
             Text("Usage limits")
         } footer: {
-            SettingsFooter("Islet reads these on this Mac and sends nothing anywhere. The closed island stays quiet until a limit reaches 90%.")
+            SettingsFooter("Claude Code, Codex and Ollama are read on this Mac. OpenRouter and Copilot are asked with your own key when the island opens, at most every few minutes; no other app's sign-in is ever read. The closed island stays quiet until a Claude or Codex limit reaches 90%.")
         }
         .onAppear(perform: refresh)
         .sheet(item: $pending) { p in

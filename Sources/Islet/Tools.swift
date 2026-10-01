@@ -5,7 +5,7 @@ import IsletSystem
 import Observation
 
 /// The tools that start off: lyrics, shortcuts, weather, the month calendar, the stopwatch and
-/// focus sounds. Each keeps its own state; `AppModel.applyTools()` follows their switches.
+/// focus sounds. Each keeps its own state; `AppModel.applyEverydayTools()` follows their switches.
 @MainActor
 final class Tools {
     let lyrics: LyricsController
@@ -25,8 +25,9 @@ final class Tools {
 }
 
 extension AppModel {
-    /// Follow the tools' switches: whatever was turned off stops and forgets what it had.
-    func applyTools() {
+    /// Follow these tools' switches: whatever was turned off stops and forgets what it had.
+    /// Called from `applyTools()` (AppModel+Tools.swift) with the tools under More.
+    func applyEverydayTools() {
         let s = settings
         if !s.lyricsEnabled { tools.lyrics.clear() }
         if !s.stopwatchEnabled { tools.stopwatch.reset() }

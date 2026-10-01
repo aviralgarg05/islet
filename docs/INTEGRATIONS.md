@@ -102,7 +102,9 @@ The Home tab shows the 5-hour and weekly plan limits of Claude Code and Codex, o
 
 The closed island shows nothing about usage until a window reaches 90%, and again at 100%. Each crossing posts one normal activity ("Claude 5-hour limit at 90%", "Resets 16:40") that leaves on its own. Alerts are armed again when the window resets.
 
-Islet reads only what the two tools already write on this Mac. It doesn't read their login tokens, doesn't call their usage endpoints and sends nothing over the network. Switch either source off in Settings → Coding agents → Usage limits (`claudeUsageEnabled` and `codexUsageEnabled` in `config.json`).
+For Claude Code and Codex, Islet reads only what the two tools already write on this Mac. It doesn't read their login tokens, doesn't call their usage endpoints and sends nothing over the network. Switch either source off in Settings → Coding agents → Usage limits (`claudeUsageEnabled` and `codexUsageEnabled` in `config.json`).
+
+The same section can add OpenRouter, Copilot and Ollama to Home, each off until you switch it on ([below](#openrouter-copilot-and-ollama)).
 
 ### Claude Code
 
@@ -138,6 +140,16 @@ Each run writes `~/Library/Application Support/Islet/usage/claude.json` (mode 06
 ### Codex
 
 Codex CLI writes its limits into its session logs (`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`) after each reply, so there is nothing to install. While the setting is on, Islet watches that folder with FSEvents and, after a change, reads only the last 64 KB of the newest log. If Codex hasn't run on this Mac yet, switch the setting off and on again after its first session.
+
+### OpenRouter, Copilot and Ollama
+
+Each is a line in Home's column with a bar where there is a limit. They are asked for when the island opens, and only if the figures are older than a few minutes (OpenRouter 5, Copilot 15, Ollama 15 seconds); nothing runs while the island is closed. None of them raises alerts in the closed island.
+
+- **OpenRouter spending** (`openRouterUsageEnabled`). Paste your OpenRouter key (it starts with `sk-or-`); Islet checks it once and keeps it in the Keychain. Islet asks `GET https://openrouter.ai/api/v1/key` with it: with a limit on the key, Home shows what's left and today's spend; without one, today's and this month's spend; on the free tier, the free requests used today.
+- **Copilot premium requests** (`copilotUsageEnabled`, `copilotPlan`). Make a fine-grained GitHub token with read access to Plan (Settings → Developer settings → Fine-grained tokens) and paste it. Islet learns your login from `GET https://api.github.com/user`, then asks for this month's premium request usage (`GET /users/{login}/settings/billing/premium_request/usage`, with the month in UTC as GitHub bills it) and shows the count against your plan's allowance (Free 50, Pro or Business 300, Enterprise 1,000, Pro+ 1,500).
+- **Ollama models** (`ollamaUsageEnabled`). Islet asks the Ollama running on this Mac (`GET http://127.0.0.1:11434/api/ps`) which models are loaded and how much memory they use. With nothing loaded, or Ollama not running, Home shows nothing.
+
+Islet never reads another app's sign-in. Cursor shares usage only with team admins through its Admin API, and has no documented source for individual plans, so it isn't included; neither is anything that would need Claude's, Codex's or Cursor's own login tokens.
 
 ---
 

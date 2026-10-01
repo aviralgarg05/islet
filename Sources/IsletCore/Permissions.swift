@@ -2,7 +2,7 @@ import Foundation
 
 /// A macOS privacy permission that some Islet feature can use. None is needed to run.
 public enum PermissionKind: String, CaseIterable, Sendable, Identifiable {
-    case accessibility, calendars, reminders, location, downloadsFolder, automationMusic, automationSpotify
+    case accessibility, calendars, reminders, location, camera, downloadsFolder, automationMusic, automationSpotify
 
     public var id: String { rawValue }
 
@@ -12,6 +12,7 @@ public enum PermissionKind: String, CaseIterable, Sendable, Identifiable {
         case .calendars: return "Calendars"
         case .reminders: return "Reminders"
         case .location: return "Location"
+        case .camera: return "Camera"
         case .downloadsFolder: return "Downloads folder"
         case .automationMusic: return "Automation: Music"
         case .automationSpotify: return "Automation: Spotify"
@@ -35,6 +36,7 @@ public enum PermissionKind: String, CaseIterable, Sendable, Identifiable {
         case .calendars: anchor = "Privacy_Calendars"
         case .reminders: anchor = "Privacy_Reminders"
         case .location: anchor = "Privacy_LocationServices"
+        case .camera: anchor = "Privacy_Camera"
         case .downloadsFolder: anchor = "Privacy_FilesAndFolders"
         case .automationMusic, .automationSpotify: anchor = "Privacy_Automation"
         }
@@ -57,6 +59,8 @@ public enum PermissionKind: String, CaseIterable, Sendable, Identifiable {
             return [PermissionUse("Reminders due today", on: s.remindersEnabled)]
         case .location:
             return [PermissionUse("Weather where you are", on: s.weatherEnabled && s.weatherUsesLocation)]
+        case .camera:
+            return [PermissionUse("Camera mirror", on: s.mirror.enabled)]
         case .downloadsFolder:
             return [PermissionUse("Download progress", on: s.downloadsEnabled)]
         case .automationMusic:

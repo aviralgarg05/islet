@@ -76,6 +76,10 @@ final class IslandWindowController {
         host.sizingOptions = []
         let id = display
         host.onSwipe = { [weak model] direction in model?.handleSwipe(direction, display: id) }
+        host.onScroll = { [weak model] e in
+            model?.teleprompterScroll(deltaX: Double(e.scrollingDeltaX), deltaY: Double(e.scrollingDeltaY),
+                                      precise: e.hasPreciseScrollingDeltas) ?? false
+        }
         panel.contentView = host
         panel.orderFrontRegardless()
     }

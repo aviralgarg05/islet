@@ -36,6 +36,10 @@ struct ExpandedView: View {
         case .widgets: WidgetsTab(model: model)
         case .clipboard: ClipboardTab(model: model)
         case .stats: StatsTab(model: model)
+        case .mirror: MirrorTab(model: model, size: size)
+        case .teleprompter: TeleprompterTab(model: model, size: size)
+        case .stocks: StocksTab(model: model, size: size)
+        case .sales: SalesTab(model: model, size: size)
         case .shortcuts: ShortcutsTab(model: model)
         case .weather: WeatherTab(model: model)
         case .ask: AskView(model: model)
@@ -113,6 +117,8 @@ struct HomePlan {
         case event(AgendaItem)
         case activity(Activity)
         case usage(AgentUsage)
+        /// OpenRouter, Copilot or Ollama (Settings → Coding agents → Usage limits).
+        case toolUsage(ToolUsageCard)
         /// Claude before its figures arrive: an offer to show them, or waiting for them.
         case claudeHint(ClaudeUsageHint)
         /// The calendar is on but macOS doesn't let Islet read it (turned off in System
@@ -126,6 +132,7 @@ struct HomePlan {
             case .event(let e): return "event-\(e.id)"
             case .activity(let a): return "activity-\(a.id)"
             case .usage(let u): return "usage-\(u.id)"
+            case .toolUsage(let c): return "tool-usage-\(c.id)"
             case .claudeHint: return "usage-claude-hint"
             case .calendarAccess: return "calendar-access"
             }
@@ -190,6 +197,7 @@ struct HomePlan {
         // Claude's hint sits where its card will be, before Codex's.
         if let hint = model.agentUsage.claudeHint { glances.append(.claudeHint(hint)) }
         glances += model.agentUsage.visible(now: now).map(Glance.usage)
+        glances += model.toolUsage.visible.map(Glance.toolUsage)
         self.glances = glances
     }
 
@@ -390,6 +398,8 @@ struct GlanceColumn: View {
         case .activity(let a): ActivityGlance(activity: a, model: model)
         case .usage(let u):
             TimelineView(.everyMinute) { _ in AgentUsageGlance(usage: u, now: Date()) }
+        case .toolUsage(let card):
+            ToolUsageGlance(card: card)
         case .claudeHint(let hint):
             ClaudeUsageHintRow(hint: hint, model: model)
         case .calendarAccess(let advice):
