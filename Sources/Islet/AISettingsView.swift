@@ -130,7 +130,7 @@ struct AISettingsView: View {
                 })) {
                     ForEach(options, id: \.self) { Text($0).tag($0) }
                 }
-                Button("Refresh List") { fetchModels(kind) }
+                Button("Refresh list") { fetchModels(kind) }
                     .disabled(keyStored[kind] != true)
                     .help("Fetch the models your key can use")
             }

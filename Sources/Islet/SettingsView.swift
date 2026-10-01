@@ -88,7 +88,7 @@ struct AppearanceSettings: View {
                 HStack {
                     Text("Changes show here and in the island straight away.").font(.caption).foregroundStyle(.secondary)
                     Spacer()
-                    Button("Show a Sample in the Island") { AppActions.previewAppearance(model) }
+                    Button("Show a sample in the island") { AppActions.previewAppearance(model) }
                         .controlSize(.small)
                 }
             }
@@ -629,12 +629,12 @@ struct AppRulesSettings: View {
     }
 
     private var addMenu: some View {
-        Menu("Add App") {
+        Menu("Add app") {
             ForEach(runningApps, id: \.processIdentifier) { app in
                 Button(app.localizedName ?? app.bundleIdentifier!) { add(app.bundleIdentifier!) }
             }
             if !runningApps.isEmpty { Divider() }
-            Button("Other App…", action: chooseApp)
+            Button("Other app…", action: chooseApp)
         }
         .fixedSize()
         .settingsAnchor("apps.add")

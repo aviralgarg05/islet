@@ -129,7 +129,7 @@ struct AskView: View {
                 .fixedSize(horizontal: false, vertical: true)
             if status == .needsKey {
                 // Straight to the key's row on Ask & AI.
-                Button("Add a Key…") { AppActions.openSettings(.ai, at: kind == .openai ? "ai.openai" : "ai.anthropic") }
+                Button("Add a key…") { AppActions.openSettings(.ai, at: kind == .openai ? "ai.openai" : "ai.anthropic") }
                     .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
             }
         }

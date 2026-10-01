@@ -487,7 +487,7 @@ private let sk = "s" + "k-"
         defer { cleanUp(service) }
         #expect(service.status(of: .codex) == .notInstalled)
         #expect(await collect(service, AskRequest(provider: .codex, turns: [.user("x")]))
-                == [.error("Codex wasn't found in ~/.local/bin, /opt/homebrew/bin or /usr/local/bin.")])
+                == [.error("Codex isn't installed. Install it, then try again.")])
     }
 }
 

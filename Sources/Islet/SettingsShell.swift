@@ -89,7 +89,7 @@ struct SettingsShell: View {
         .environment(\.openSettingsPage) { page, anchor in navigation.open(page, at: anchor) }
         .background {
             // ⌘F from anywhere in the window.
-            Button("Search Settings") { navigation.searchFocusRequest += 1 }
+            Button("Search settings") { navigation.searchFocusRequest += 1 }
                 .keyboardShortcut("f")
                 .opacity(0)
                 .accessibilityHidden(true)

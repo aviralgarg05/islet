@@ -245,7 +245,7 @@ curl -s -X POST http://127.0.0.1:47831/v1/awake -H "Authorization: Bearer $TOKEN
 ```
 
 - A new request replaces the current one; `DELETE` ends it early.
-- While it's on, a live activity with a cup icon counts down (or shows "On" when it has no end), with a **Turn Off** button.
+- While it's on, a live activity with a cup icon counts down (or shows "On" when it has no end), with a **Turn off** button.
 - On battery below 20% it turns itself off (and a new request is refused: the reply says `"active": false`). It never outlives Islet: quitting releases it.
 - `minutes` outside 0–1440 gets a `422`.
 ### Timers
@@ -301,7 +301,7 @@ Off by default. When enabled (Settings → Advanced → iPhone bridge), a second
 
 Everything else is `403`: the bridge can't read activities or state, remove anything, send agent hooks, or control media, the HUD, keep awake or the island.
 
-The bridge has its own token, shown in Settings → Advanced → iPhone bridge with **Copy** and **New Token**, and kept in `~/Library/Application Support/Islet/lan.json` (mode `0600`). The local API's token is refused on the bridge, and the bridge's token is refused on the local API. A missing or wrong token gets `401` as soon as the headers arrive, before the body is read. Bodies are limited to 16 KB (`413`), 8 connections are served at once (`503`), and each client gets 30 requests per 10 seconds (`429`; an IPv6 /64 counts as one client). Browser origins are refused. See [iPhone recipes](INTEGRATIONS.md#iphone).
+The bridge has its own token, shown in Settings → Advanced → iPhone bridge with **Copy** and **New token**, and kept in `~/Library/Application Support/Islet/lan.json` (mode `0600`). The local API's token is refused on the bridge, and the bridge's token is refused on the local API. A missing or wrong token gets `401` as soon as the headers arrive, before the body is read. Bodies are limited to 16 KB (`413`), 8 connections are served at once (`503`), and each client gets 30 requests per 10 seconds (`429`; an IPv6 /64 counts as one client). Browser origins are refused. See [iPhone recipes](INTEGRATIONS.md#iphone).
 
 ---
 

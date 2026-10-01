@@ -56,7 +56,7 @@ struct UsageLimitsSection: View {
     @ViewBuilder private var claudeButton: some View {
         switch claudeStatus {
         case .notInstalled?:
-            Button("Show Usage…") { plan(install: true) }.disabled(!cliAvailable)
+            Button("Show usage…") { plan(install: true) }.disabled(!cliAvailable)
         case .installed?:
             Button("Remove…") { plan(install: false) }
         default:
@@ -71,8 +71,8 @@ struct UsageLimitsSection: View {
         case .notInstalled(let current)?:
             guard cliAvailable else { return "This copy of Islet can't add the status line Claude Code needs to share its limits." }
             return current == nil
-                ? "Claude Code shares its limits only with its status line, the line under its prompt. Show Usage adds Islet's line there."
-                : "Claude Code shares its limits only with its status line, the line under its prompt. Show Usage adds Islet's around yours, which keeps showing."
+                ? "Claude Code shares its limits only with its status line, the line under its prompt. Show usage adds Islet's line there."
+                : "Claude Code shares its limits only with its status line, the line under its prompt. Show usage adds Islet's around yours, which keeps showing."
         case .installed?:
             return model.agentUsage.claude == nil
                 ? "Waiting for Claude Code. The figures arrive the next time it shows its status line."

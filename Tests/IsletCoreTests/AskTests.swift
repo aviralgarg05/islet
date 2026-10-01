@@ -478,7 +478,9 @@ func joinedText(_ events: [AskEvent]) -> String {
         #expect(AskProviderKind(alias: "claude_code") == .claudeCode)
         #expect(AskProviderKind(alias: "") == nil)
         #expect(AskProviderStatus.needsKey.message(for: .openai) == "Add an OpenAI API key in Settings → Ask & AI to ask ChatGPT.")
-        #expect(AskProviderStatus.notInstalled.message(for: .claudeCode).hasSuffix("/usr/local/bin or ~/.claude/local."))
+        #expect(AskProviderStatus.notInstalled.message(for: .claudeCode) == "Claude Code isn't installed. Install it, then try again.")
+        // Folder paths belong in Advanced → Diagnostics, not in the Ask box.
+        #expect(!AskProviderStatus.notInstalled.message(for: .codex).contains("/"))
         #expect(AskProviderStatus.unavailable(AskProviderStatus.onDeviceReason("modelNotReady")).message(for: .onDevice)
                 == "Apple Intelligence is still downloading. Pick another provider from the menu.")
     }

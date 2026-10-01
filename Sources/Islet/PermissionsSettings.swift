@@ -189,7 +189,7 @@ private struct PermissionRow: View {
     private func buttonTitle(_ status: PermissionStatus) -> String? {
         switch status.action {
         case .request: return "Allow…"
-        case .openSettings: return "Open Settings"
+        case .openSettings: return "Open System Settings"
         case .none: return nil
         }
     }

@@ -271,11 +271,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.button?.image?.isTemplate = true
         let menu = NSMenu()
         menu.delegate = self
-        menu.addItem(withTitle: "Open Island", action: #selector(toggleIsland), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Open island", action: #selector(toggleIsland), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Settings…", action: #selector(openSettingsAction), keyEquivalent: ",").target = self
         // For scripts and dotfiles; they show while Option is held as the menu opens.
         advancedMenuItems = [.separator()]
-        for (title, action) in [("Copy API Token", #selector(copyToken)), ("Open Plugins Folder", #selector(openPlugins)),
+        for (title, action) in [("Copy API token", #selector(copyToken)), ("Open plugins folder", #selector(openPlugins)),
                                 ("Edit config.json", #selector(openConfig))] {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
             item.target = self
@@ -315,7 +315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension AppDelegate: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
-        menu.items.first?.title = model.expandedScreen == nil ? "Open Island" : "Close Island"
+        menu.items.first?.title = model.expandedScreen == nil ? "Open island" : "Close island"
         let option = NSEvent.modifierFlags.contains(.option)
         advancedMenuItems.forEach { $0.isHidden = !option }
     }

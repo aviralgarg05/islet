@@ -32,7 +32,7 @@ struct LANBridgeSection: View {
                             Self.copy(token)
                             copied = true
                         }
-                        Button("New Token…") { confirming = true }
+                        Button("New token…") { confirming = true }
                     } else {
                         Text("Made when the bridge is on").foregroundStyle(.secondary)
                     }
@@ -40,7 +40,7 @@ struct LANBridgeSection: View {
             }
             .settingsAnchor("advanced.bridgeToken")
             .alert("Make a new bridge token?", isPresented: $confirming) {
-                Button("New Token") {
+                Button("New token") {
                     model.lan.rotateToken()
                     copied = false
                 }

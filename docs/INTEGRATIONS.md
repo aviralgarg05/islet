@@ -106,7 +106,7 @@ Claude Code keeps no usage on disk that Islet can read. It passes plan usage onl
 
 While Claude Code is installed (it has a `~/.claude` folder) without Islet's status line, Home shows Claude with a **Show usage** button that opens this part of Settings. Once the status line is in place, Home says "Waiting for Claude Code" until the first figures arrive. The "x" on that row hides it for good (`"claudeUsageHint": false`).
 
-In Settings → Coding agents → Usage limits, click **Show Usage…** beside Claude Code limits. A sheet shows the `statusLine` command before and after, and nothing is written until you click Add.
+In Settings → Coding agents → Usage limits, click **Show usage…** beside Claude Code limits. A sheet shows the `statusLine` command before and after, and nothing is written until you click Add.
 
 - Without a status line, Islet sets one:
   ```json
@@ -231,7 +231,7 @@ To set up the bridge, turn on **Accept requests from this network** in *Settings
 | NFC tag (e.g. on your desk) | POST `/v1/timer` with `{"seconds":1500,"title":"Focus session"}` |
 | Timer started (via a Shortcut) | POST `/v1/timer` with the same duration, so the Mac counts down too |
 
-The bridge is not encrypted: anyone on the same Wi-Fi can read what a Shortcut sends, token included. So it only accepts notifications, timers, Focus and simple activities, and everything else gets `403`. It can't read your notifications, activities or state, control media or the island, or take part in agent approvals. Activities from the bridge have no links or buttons, use symbols, emoji or app icons only, get ids starting with `lan-`, and are at most `high` priority. If the token may have leaked, press **New Token** and paste the new one into your Shortcuts.
+The bridge is not encrypted: anyone on the same Wi-Fi can read what a Shortcut sends, token included. So it only accepts notifications, timers, Focus and simple activities, and everything else gets `403`. It can't read your notifications, activities or state, control media or the island, or take part in agent approvals. Activities from the bridge have no links or buttons, use symbols, emoji or app icons only, get ids starting with `lan-`, and are at most `high` priority. If the token may have leaked, press **New token** and paste the new one into your Shortcuts.
 
 The bridge also rejects browser origins, rate-limits each client (30 requests / 10 s), limits bodies to 16 KB and serves 8 connections at once. Bonjour advertises it as "Islet", not by your Mac's name. The full list of routes is in [API.md](API.md#local-network-bridge-iphone-shortcuts).
 
@@ -239,7 +239,7 @@ The bridge also rejects browser origins, rate-limits each client (30 requests / 
 
 ## Script widgets (xbar-compatible)
 
-Turn on **Run scripts from the plugins folder** in *Settings → Advanced → Script widgets*, then drop executables into `~/.config/islet/plugins/` (**Open Folder** there):
+Turn on **Run scripts from the plugins folder** in *Settings → Advanced → Script widgets*, then drop executables into `~/.config/islet/plugins/` (**Open folder** there):
 
 - **Existing xbar/SwiftBar plugins** from [xbarapp.com](https://xbarapp.com) work as-is: the header appears in the Widgets tab, items with `href=` or `shell=` are clickable, and `refresh=true` re-runs.
 - **JSON widgets** become live activities. [`integrations/plugins/cpu.10s.sh`](../integrations/plugins/cpu.10s.sh) turns CPU load into a low-priority activity every 10 s.

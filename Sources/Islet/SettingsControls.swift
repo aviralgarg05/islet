@@ -1,5 +1,6 @@
 import AppKit
 import IsletCore
+import IsletSystem
 import ServiceManagement
 import SwiftUI
 
@@ -92,7 +93,8 @@ struct ClipboardLimitPicker: View {
 }
 
 /// A global shortcut, set by pressing it. Saved as text ("ctrl+option+i"), the form
-/// config.json uses. Delete turns it off; Esc keeps the one there was.
+/// config.json uses. Delete turns it off; Esc keeps the one there was. While it records,
+/// Islet's own shortcuts are let through, so one of them can be pressed and recorded.
 struct ShortcutField: View {
     @Binding var text: String
     /// Islet's own shortcut, which the reset button goes back to.
@@ -101,7 +103,11 @@ struct ShortcutField: View {
     @ViewState private var hint: String?
     @ViewState private var monitor = Monitor()
 
-    final class Monitor { var token: Any? }
+    final class Monitor {
+        var token: Any?
+        /// Whether this field has Islet's shortcuts suspended.
+        var suspended = false
+    }
 
     private var label: String { Hotkey.parse(text)?.label ?? (text.isEmpty ? "Off" : "Not valid") }
 
@@ -127,6 +133,11 @@ struct ShortcutField: View {
     private func start() {
         recording = true
         hint = nil
+        // Islet's shortcuts would fire before the field saw the keys.
+        if !monitor.suspended {
+            monitor.suspended = true
+            GlobalHotkey.suspendAll()
+        }
         monitor.token = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             handle(event)
             return nil
@@ -136,6 +147,10 @@ struct ShortcutField: View {
     private func stop() {
         if let token = monitor.token { NSEvent.removeMonitor(token) }
         monitor.token = nil
+        if monitor.suspended {
+            monitor.suspended = false
+            GlobalHotkey.resumeAll()
+        }
         recording = false
         hint = nil
     }
@@ -215,7 +230,7 @@ struct PluginFolderRow: View {
                     .textSelection(.enabled)
                 Button("Choose…", action: choose)
                 if model.settings.pluginDirectory != nil {
-                    Button("Use Default") { model.settings.pluginDirectory = nil }
+                    Button("Use default") { model.settings.pluginDirectory = nil }
                 }
             }
         }

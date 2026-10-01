@@ -290,7 +290,7 @@ struct OutputPickerButton: View {
             })
         }
         items.append(.separator)
-        items.append(IslandMenu.Item(title: "Sound Settings…") {
+        items.append(IslandMenu.Item(title: "Sound settings…") {
             if let url = URL(string: "x-apple.systempreferences:com.apple.Sound-Settings.extension") { NSWorkspace.shared.open(url) }
         })
         IslandMenu.show(items, model: model)
@@ -330,7 +330,7 @@ struct KeepAwakeButton: View {
     private func showMenu() {
         Haptics.play(.tap)
         let session = model.controls.awake
-        var items = [IslandMenu.Item(title: session.map(Self.status) ?? "Keep Awake", enabled: false)]
+        var items = [IslandMenu.Item(title: session.map(Self.status) ?? "Keep awake", enabled: false)]
         for preset in KeepAwake.presets {
             items.append(IslandMenu.Item(title: preset.title) {
                 model.setKeepAwake(.start(minutes: preset.minutes), announce: false)
@@ -338,7 +338,7 @@ struct KeepAwakeButton: View {
         }
         if session != nil {
             items.append(.separator)
-            items.append(IslandMenu.Item(title: "Turn Off") { model.setKeepAwake(.stop, announce: false) })
+            items.append(IslandMenu.Item(title: "Turn off") { model.setKeepAwake(.stop, announce: false) })
         }
         IslandMenu.show(items, model: model)
     }

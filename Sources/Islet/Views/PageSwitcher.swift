@@ -143,9 +143,9 @@ struct PageSwitcher: View {
         }
         if awake != nil {
             awakeItems.append(.separator)
-            awakeItems.append(IslandMenu.Item(title: "Turn Off") { model.setKeepAwake(.stop, announce: false) })
+            awakeItems.append(IslandMenu.Item(title: "Turn off") { model.setKeepAwake(.stop, announce: false) })
         }
-        items.append(IslandMenu.Item(title: "Keep Awake", symbol: "cup.and.saucer", checked: awake != nil, children: awakeItems))
+        items.append(IslandMenu.Item(title: "Keep awake", symbol: "cup.and.saucer", checked: awake != nil, children: awakeItems))
         items.append(IslandMenu.Item(title: "Settings…", symbol: "gearshape") { AppActions.openSettings() })
         IslandMenu.show(items, model: model)
     }

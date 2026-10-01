@@ -114,7 +114,7 @@ public enum KeepAwake {
             subtitle: session.until.map { "Display stays on until \(timeStyle($0))" } ?? "Display stays on until you turn it off",
             icon: .symbol(symbol), trailing: session.until == nil ? "On" : "", state: .running, tint: tint,
             priority: .low, ttl: 0, endsAt: session.until,
-            actions: [ActivityAction(title: "Turn Off", url: URL(string: "islet://awake/off"), dismiss: false)],
+            actions: [ActivityAction(title: "Turn off", url: URL(string: "islet://awake/off"), dismiss: false)],
             sneak: sneak
         )
     }

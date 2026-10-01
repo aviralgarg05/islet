@@ -675,12 +675,12 @@ struct FileTile: View {
             Button("Open") { ShelfService.open(url) }
             Button("Show in Finder") { ShelfService.reveal([url]) }
             Button("AirDrop") { ShelfService.airDrop([url]) }
-            Button("Copy Path") {
+            Button("Copy path") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(item.path, forType: .string)
             }
             Divider()
-            Button("Remove from Shelf") { model.removeFromShelf(item.id) }
+            Button("Remove from shelf") { model.removeFromShelf(item.id) }
         }
         .help(item.path)
     }
@@ -728,8 +728,8 @@ struct WidgetsTab: View {
         if results.isEmpty {
             EmptyHint(symbol: "square.grid.2x2", text: "Script widgets: drop an executable into the plugins folder. xbar and SwiftBar plugins work as they are.",
                       detail: "~/.config/islet/plugins/cpu.10s.sh") {
-                Button("Open Plugins Folder") { AppActions.openPluginsFolder(model) }.buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
-                Button("Install Examples") { AppActions.installExamplePlugins(model) }.buttonStyle(CapsuleButtonStyle())
+                Button("Open plugins folder") { AppActions.openPluginsFolder(model) }.buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
+                Button("Install examples") { AppActions.installExamplePlugins(model) }.buttonStyle(CapsuleButtonStyle())
             }
         } else {
             // Up to three side by side, split by hairlines; more scroll.
@@ -821,7 +821,7 @@ struct ClipboardTab: View {
         if !model.settings.clipboardEnabled {
             EmptyHint(symbol: "doc.on.clipboard",
                       text: "Clipboard history is off. It stays on this Mac, skips passwords from password managers, and holds \(model.settings.clipboardLimit) items.") {
-                Button("Turn On") { AppActions.setClipboard(model, enabled: true) }.buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
+                Button("Turn on") { AppActions.setClipboard(model, enabled: true) }.buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
             }
         } else if model.clipboard.entries.isEmpty {
             EmptyHint(symbol: "doc.on.clipboard", text: "Copy some text and it shows up here.")

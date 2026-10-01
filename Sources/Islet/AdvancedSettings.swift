@@ -80,11 +80,11 @@ struct AdvancedSettings: View {
                 .settingsAnchor("advanced.apiPort")
             LabeledContent("Token") {
                 HStack(spacing: 8) {
-                    Button(copiedToken ? "Copied" : "Copy Token") {
+                    Button(copiedToken ? "Copied" : "Copy token") {
                         AppActions.copyToken()
                         copiedToken = true
                     }
-                    Button("API Guide") {
+                    Button("API guide") {
                         if let doc = Bundle.main.url(forResource: "API", withExtension: "md") { NSWorkspace.shared.open(doc) }
                     }
                 }
@@ -134,8 +134,8 @@ struct AdvancedSettings: View {
                     .settingsAnchor("advanced.pluginsFolder")
                 HStack {
                     Spacer()
-                    Button("Add Examples") { AppActions.installExamplePlugins(model) }
-                    Button("Open Folder") { AppActions.openPluginsFolder(model) }
+                    Button("Add examples") { AppActions.installExamplePlugins(model) }
+                    Button("Open folder") { AppActions.openPluginsFolder(model) }
                 }
             }
             .disabled(!model.settings.pluginsEnabled)
@@ -156,13 +156,36 @@ struct AdvancedSettings: View {
             LabeledContent("Accessibility") {
                 Text(MediaKeyInterceptor.hasAccessibility ? "Allowed" : "Not allowed").foregroundStyle(.secondary)
             }
+            // The Ask box only says a tool isn't installed; where Islet looked is here.
+            ForEach([AskProviderKind.claudeCode, .codex], id: \.self) { kind in
+                let found = model.ask.service.cliBinary(for: kind)
+                LabeledContent {
+                    Text(found.map { Self.tilde($0.path) } ?? "Not found")
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                } label: {
+                    Text(kind.title)
+                    if found == nil { Text("Looked in \(searchedFolders(kind))").textSelection(.enabled) }
+                }
+            }
+            .settingsAnchor("advanced.cliPaths")
             HStack {
                 Spacer()
-                Button("Show a Test Activity") { AppActions.previewAppearance(model) }
+                Button("Show a test activity") { AppActions.previewAppearance(model) }
             }
         } header: {
             Text("Diagnostics")
         }
+    }
+
+    private static func tilde(_ path: String) -> String { (path as NSString).abbreviatingWithTildeInPath }
+
+    /// The folders the Ask box looks in for a command-line tool, as a list.
+    private func searchedFolders(_ kind: AskProviderKind) -> String {
+        let folders = AskCLI.searchPaths(for: kind, home: IsletPaths.home.path)
+            .map { Self.tilde(($0 as NSString).deletingLastPathComponent) }
+        guard let last = folders.last else { return "" }
+        return folders.count > 1 ? folders.dropLast().joined(separator: ", ") + " and " + last : last
     }
 
     /// The hooks Connect would add to a fresh file, from the installers themselves.

@@ -395,9 +395,8 @@ public enum AskProviderStatus: Equatable, Sendable {
         case .needsKey:
             return "Add \(kind == .openai ? "an OpenAI" : "an Anthropic") API key in Settings → Ask & AI to ask \(kind.title)."
         case .notInstalled:
-            let dirs = kind == .claudeCode ? "~/.local/bin, /opt/homebrew/bin, /usr/local/bin or ~/.claude/local"
-                                           : "~/.local/bin, /opt/homebrew/bin or /usr/local/bin"
-            return "\(kind.title) wasn't found in \(dirs)."
+            // Where Islet looked is in Settings → Advanced → Diagnostics, not here.
+            return "\(kind.title) isn't installed. Install it, then try again."
         case .unavailable(let reason):
             return reason + " Pick another provider from the menu."
         }

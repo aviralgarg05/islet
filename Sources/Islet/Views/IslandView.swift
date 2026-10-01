@@ -355,7 +355,7 @@ struct IslandView: View {
             Button("Mute “\(a.source)”") { model.mute(source: a.source) }
             Divider()
         }
-        Button(model.expandedScreen == nil ? "Open Island" : "Close Island") {
+        Button(model.expandedScreen == nil ? "Open island" : "Close island") {
             model.setExpanded(model.expandedScreen == nil ? display : nil)
         }
         Button("Settings…") { AppActions.openSettings() }

@@ -594,7 +594,7 @@ final class AppModel {
                     icon: .symbol(ev.kind == .critical ? "battery.0percent" : "battery.25percent"), state: .warning,
                     tint: "red", priority: ev.kind == .critical ? .critical : .high, ttl: ev.kind == .critical ? 0 : 6,
                     url: batterySettings,
-                    actions: [ActivityAction(title: "Battery Settings", url: batterySettings)], sneak: true
+                    actions: [ActivityAction(title: "Battery settings", url: batterySettings)], sneak: true
                 ))
             case .lowPowerOn, .lowPowerOff:
                 let on = ev.kind == .lowPowerOn
@@ -824,7 +824,7 @@ final class AppModel {
 
     func perform(_ action: ActivityAction, activityID: String) {
         if let url = action.url {
-            // Islet's own links (keep awake's Turn Off, for one) are handled here, not via Launch Services.
+            // Islet's own links (keep awake's Turn off, for one) are handled here, not via Launch Services.
             if url.scheme == "islet" { AppActions.handle(url: url, model: self) } else { NSWorkspace.shared.open(url) }
         }
         if action.dismiss ?? true { remove(activityID: activityID) }

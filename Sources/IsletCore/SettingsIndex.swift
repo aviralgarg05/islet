@@ -378,6 +378,8 @@ public enum SettingsIndex {
         SettingsEntry("advanced.config", .advanced, "Settings file", section: "Settings file", keywords: ["config.json", "dotfiles", "JSON"]),
         SettingsEntry("advanced.diagnostics", .advanced, "Diagnostics", section: "Diagnostics",
                       keywords: ["status", "debug", "troubleshoot", "Now Playing helper", "test activity"]),
+        SettingsEntry("advanced.cliPaths", .advanced, "Where Claude Code and Codex were found", section: "Diagnostics",
+                      keywords: ["not installed", "path", "folder", "CLI", "command-line", "Ask"]),
         SettingsEntry("advanced.reset", .advanced, "Reset all settings", section: "Reset", keywords: ["defaults", "restore"]),
     ]
 }
