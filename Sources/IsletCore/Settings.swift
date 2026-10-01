@@ -323,6 +323,14 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var remindersEnabled = false
     /// Calendar identifiers the user hid.
     public var hiddenCalendars: [String] = []
+    /// Minutes before a meeting that it shows in the closed island, counting down (one of
+    /// `meetingReminderChoices`); 0 turns meeting reminders off.
+    public var meetingReminderMinutes = 10
+    /// A meeting that has started stays, urgent, until you join or dismiss it or it ends.
+    /// Off, it goes a few minutes after the start.
+    public var meetingRemindUntilJoined = true
+    /// Only meetings with a call link (Zoom, Google Meet, Teams, Webex, FaceTime and others).
+    public var meetingRemindersNeedLink = true
     public var shelfEnabled = true
     /// Off by default: clipboard history is sensitive.
     public var clipboardEnabled = false
@@ -437,6 +445,8 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// The choices Settings offers for `pausedMusicTimeout`, in order.
     public static let pausedMusicChoices: [Double] = [0, 5, 10, 30, 60, 300, neverHide]
     public static let clipboardLimitRange: ClosedRange<Int> = 1...500
+    /// The choices Settings offers for `meetingReminderMinutes`, Off first.
+    public static let meetingReminderChoices = [0, 5, 10, 15, 30]
     /// Ports for the local API and the LAN bridge (unprivileged, and never the same one).
     public static let portRange: ClosedRange<Int> = 1024...65535
 
@@ -550,6 +560,12 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         s.batteryCriticalThreshold = min(s.batteryLowThreshold - 1, max(1, s.batteryCriticalThreshold))
         if s.batteryChargedAlert != 0 { s.batteryChargedAlert = min(100, max(50, s.batteryChargedAlert)) }
         s.approvalWait = min(3600, max(30, s.approvalWait))
+        // A hand-edited lead time becomes the nearest choice Settings offers.
+        if !Self.meetingReminderChoices.contains(s.meetingReminderMinutes) {
+            let wanted = s.meetingReminderMinutes
+            s.meetingReminderMinutes = wanted <= 0 ? 0
+                : Self.meetingReminderChoices.dropFirst().min { abs($0 - wanted) < abs($1 - wanted) } ?? 10
+        }
         let d = IsletSettings()
         if !Self.portRange.contains(s.apiPort) { s.apiPort = d.apiPort }
         if !Self.portRange.contains(s.lanPort) || s.lanPort == s.apiPort {

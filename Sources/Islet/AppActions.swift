@@ -16,6 +16,9 @@ enum AppActions {
     /// `SettingsIndex`), or else on the page it showed last.
     static func openSettings(_ page: SettingsPage? = nil, at anchor: String? = nil) { openSettingsHandler?(page, anchor) }
 
+    /// Whether an app is installed (for a meeting's call app icon).
+    static var isInstalled: (String) -> Bool = { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) != nil }
+
     static func pluginsFolder(_ model: AppModel) -> URL {
         model.settings.pluginDirectory.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) } ?? IsletPaths.pluginsDirectory
     }

@@ -279,6 +279,23 @@ extension AppModel {
         return BubbleSet(items: Array(items.prefix(room)), overflow: items.count - room)
     }
 
+    /// A click on the closed island. An activity with a link opens it; a meeting reminder opens
+    /// the island on Home, where it leads with its Join button; anything else opens the island.
+    func activateClosedIsland(_ display: CGDirectDisplayID, presentation p: IslandPresentation) {
+        if let a = focusedActivity(for: p) {
+            if meetingReminder(for: a.id) != nil {
+                select(tab: .home)
+                setExpanded(display)
+                return
+            }
+            if canOpen(a) {
+                openActivity(a)
+                return
+            }
+        }
+        setExpanded(display)
+    }
+
     /// The activity the closed island is currently about, if any.
     func focusedActivity(for p: IslandPresentation) -> Activity? {
         switch p {
@@ -448,14 +465,11 @@ struct IslandView: View {
         }
     }
 
-    /// Clicking an activity with a link opens it; anything else expands the island.
+    /// Clicking an activity with a link opens it; a meeting reminder opens Home on it; anything
+    /// else expands the island.
     private func activate(_ p: IslandPresentation) {
         Haptics.play(.tap)
-        if let a = model.focusedActivity(for: p), model.canOpen(a) {
-            model.openActivity(a)
-        } else {
-            model.setExpanded(display)
-        }
+        model.activateClosedIsland(display, presentation: p)
     }
 
     @ViewBuilder

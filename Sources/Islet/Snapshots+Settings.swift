@@ -31,6 +31,8 @@ enum SettingsSnapshots {
         let secrets = MemorySecretStore([AskProviderKind.anthropic.keyAccount ?? "": "snapshot-sample-0000"])
         let model = AppModel(settings: sampleSettings, ask: AskController(service: AskService(secrets: secrets)))
         model.apiStatus = "Listening on 127.0.0.1:\(model.settings.apiPort)"
+        // Drawn as if macOS allowed calendars and reminders; the other states have shots of their own.
+        model.setCalendarAccessForSnapshot(events: .fullAccess, reminders: .fullAccess)
         let navigation = SettingsNavigation()
         let window = SettingsWindow.make(model: model, navigation: navigation, window: OffscreenWindow(), snapshot: true)
         window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
@@ -46,6 +48,18 @@ enum SettingsSnapshots {
         }
         navigation.query = "colour"
         capture(window, appearance: .aqua, to: dir.appendingPathComponent("search-results.png"))
+        // Calendar access that explains itself: "Add events only" for calendars, reminders turned
+        // off in System Settings, on the Calendar page and on Permissions.
+        model.setCalendarAccessForSnapshot(events: .writeOnly, reminders: .denied)
+        navigation.query = ""
+        navigation.open(.calendar)
+        shoot("calendar-access-write-only", dark: false)
+        navigation.open(.permissions)
+        shoot("permissions-calendar-write-only", dark: false)
+        model.setCalendarAccessForSnapshot(events: .notDetermined, reminders: .restricted)
+        navigation.open(.calendar)
+        shoot("calendar-access-not-asked", dark: false)
+        model.setCalendarAccessForSnapshot(events: .fullAccess, reminders: .fullAccess)
 
         if ProcessInfo.processInfo.environment["ISLET_SNAPSHOT_EXTRA"] == "1" {
             let extra = dir.appendingPathComponent("extra")

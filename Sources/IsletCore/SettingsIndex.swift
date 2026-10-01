@@ -291,7 +291,7 @@ public enum SettingsIndex {
     private static let features: [SettingsEntry] = [
         SettingsEntry("nowPlaying.enabled", .nowPlaying, "Now Playing", keywords: ["music", "media", "song"]),
         SettingsEntry("nowPlaying.preview", .nowPlaying, "Preview", keywords: ["play", "pause", "sample", "try"]),
-        SettingsEntry("nowPlaying.sources", .nowPlaying, "Sources", keywords: ["media apps", "players"]),
+        SettingsEntry("nowPlaying.sources", .nowPlaying, "Sources", keywords: ["media apps", "players", "switch player", "several players"]),
         SettingsEntry("nowPlaying.music", .nowPlaying, "Music", section: "Sources", keywords: ["Apple Music"], anchor: "nowPlaying.sources"),
         SettingsEntry("nowPlaying.spotify", .nowPlaying, "Spotify", section: "Sources", anchor: "nowPlaying.sources"),
         SettingsEntry("nowPlaying.browsers", .nowPlaying, "Web browsers", section: "Sources", keywords: ["Safari", "Chrome", "YouTube"],
@@ -314,8 +314,18 @@ public enum SettingsIndex {
         SettingsEntry("live.hiddenOnly", .liveActivities, "Only when the notch hides them", section: "When to show them", keywords: ["menu bar", "twice"]),
 
         SettingsEntry("calendar.enabled", .calendar, "Calendar", keywords: ["events", "meetings", "join", "agenda"]),
+        SettingsEntry("calendar.access", .calendar, "Calendar access",
+                      keywords: ["permission", "privacy", "allow", "full access", "add events only", "write only", "stuck", "System Settings"]),
         SettingsEntry("calendar.shown", .calendar, "Calendars shown", keywords: ["hide calendar"], anchor: "calendar.enabled"),
+        SettingsEntry("calendar.meetingLead", .calendar, "Remind me before meetings", section: "Meeting reminders",
+                      keywords: ["meeting reminder", "alert", "countdown", "minutes", "join", "call", "Meet", "Teams", "Webex"]),
+        SettingsEntry("calendar.keepReminding", .calendar, "Keep reminding until I join", section: "Meeting reminders",
+                      keywords: ["meeting reminder", "stay", "nag", "urgent", "dismiss"]),
+        SettingsEntry("calendar.needsLink", .calendar, "Only meetings with a call link", section: "Meeting reminders",
+                      keywords: ["meeting reminder", "video call", "link", "Meet", "Teams"]),
         SettingsEntry("calendar.reminders", .calendar, "Reminders due today", keywords: ["to-do", "tasks"]),
+        SettingsEntry("calendar.remindersAccess", .calendar, "Reminders access", section: "Reminders",
+                      keywords: ["permission", "privacy", "allow", "System Settings"]),
 
         SettingsEntry("timers.sound", .timers, "Sound when a timer ends", keywords: ["alarm", "chime", "ring"]),
         SettingsEntry("timers.focus", .timers, "Focus", section: "Pomodoro", keywords: ["work", "length"]),

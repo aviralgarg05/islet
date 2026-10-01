@@ -8,19 +8,19 @@ extension AppModel {
     // MARK: Media controls
 
     /// Routes the commands that need more than a pass-through: ±15 s become a seek from the
-    /// shown position, and shuffle/repeat are set explicitly when the state is known.
-    /// Returns nil to let `send` handle the command as before.
-    func sendControl(_ command: PlaybackCommand, position: Double?) -> Bool? {
+    /// shown position, and shuffle/repeat are set explicitly when the state is known and the
+    /// command goes through the bridge (`bridge`). Returns nil to let `send` route the command.
+    func sendControl(_ command: PlaybackCommand, position: Double?, bridge: Bool) -> Bool? {
         switch command {
         case .skipForward, .skipBackward:
             let delta = command == .skipForward ? MediaSeek.skipInterval : -MediaSeek.skipInterval
             // Position unknown: fall back to the player's own skip command.
             return skip(by: delta) ? true : nil
         case .toggleShuffle:
-            guard systemMedia.isRunning, let on = nowPlaying?.shuffle else { return nil }
+            guard bridge, systemMedia.isRunning, let on = nowPlaying?.shuffle else { return nil }
             return systemMedia.setShuffle(!on)
         case .toggleRepeat:
-            guard systemMedia.isRunning, let mode = nowPlaying?.repeatMode else { return nil }
+            guard bridge, systemMedia.isRunning, let mode = nowPlaying?.repeatMode else { return nil }
             return systemMedia.setRepeat(MediaModes.next(after: mode))
         default:
             return nil
@@ -108,8 +108,15 @@ extension AppModel {
     func handleSwipe(_ direction: SwipeDirection, display: CGDirectDisplayID) {
         let p = presentation(for: display)
         let homeMedia = tab == .home && settings.mediaEnabled && nowPlaying != nil
-        guard let surface = GestureSurface.from(p, homeShowsMedia: homeMedia),
-              let action = GestureMap.action(for: direction, on: surface, settings: settings) else { return }
+        guard let surface = GestureSurface.from(p, homeShowsMedia: homeMedia) else { return }
+        // Up over a meeting reminder dismisses it.
+        if let a = focusedActivity(for: p),
+           GestureMap.dismisses(direction, on: surface, dismissable: isDismissableReminder(a), settings: settings) {
+            Haptics.play(.snap)
+            remove(activityID: a.id)
+            return
+        }
+        guard let action = GestureMap.action(for: direction, on: surface, settings: settings) else { return }
         if action != .expand { Haptics.play(.snap) }
         switch action {
         case .expand:

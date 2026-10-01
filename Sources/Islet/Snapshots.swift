@@ -22,6 +22,9 @@ enum Snapshots {
         settings.animationStyle = .off
         let model = AppModel(settings: settings)
         model.loadDemo(includeActivities: true)
+        // Drawn as if macOS allowed both; the access states have shots of their own.
+        model.setCalendarAccessForSnapshot(events: .fullAccess, reminders: .fullAccess)
+        AppActions.isInstalled = { $0 == "com.apple.FaceTime" }
         func metricsFor(_ s: IsletSettings) -> IslandMetrics {
             NotchGeometry.metrics(for: screen, expandedSize: CGSize(width: s.expandedSize.width, height: s.expandedSize.height),
                                   wingWidth: s.effectiveWingWidth, adjust: s.notchAdjust)
@@ -180,6 +183,8 @@ enum Snapshots {
         model.forcedPresentation = .expanded
         shoot("25-expanded-keep-awake-on")
         model.controls.awake = nil
+        renderCalendarAndPlayers(model: model, now: now, shoot: shoot) { model.settings.sizePreset = $0; metrics = metricsFor(model.settings) }
+            placement: { model.closedPlacements[1] = $0 }
 
         // Home without media shows the Today card.
         model.clearNowPlayingForSnapshot()

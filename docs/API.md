@@ -189,7 +189,7 @@ echo '{"title":"Lakers at Celtics","teams":[{"abbr":"LAL","score":3},{"abbr":"BO
 | Method & path | Body | Result |
 |---|---|---|
 | `GET /v1/health` | — | `{"ok":"true","version":"…"}` (no token needed) |
-| `GET /v1/state` | — | presentation, activities, now playing, battery |
+| `GET /v1/state` | — | presentation, activities, now playing, battery, and `calendar` (see below) |
 | `GET /v1/activities` | — | activities in display order |
 | `POST /v1/activities` | activity | `201` + the activity (upsert) |
 | `PUT` / `PATCH /v1/activities/{id}` | partial activity | the updated activity |
@@ -205,7 +205,7 @@ echo '{"title":"Lakers at Celtics","teams":[{"abbr":"LAL","score":3},{"abbr":"BO
 | `POST /v1/focus` | `{name, on}` | iPhone-style Focus pill |
 | `POST /v1/media` | `{title, artist?, album?, isPlaying?, duration?, elapsed?, bundleID?, appName?, artworkURL?}` | report playback from any player |
 | `DELETE /v1/media` | — | clear it |
-| `POST /v1/media/command` | `{command: play\|pause\|togglePlayPause\|next\|previous\|seek\|skipForward\|skipBackward\|toggleShuffle\|toggleRepeat, position?}` | controls whatever is playing (see [Media commands](#media-commands)) |
+| `POST /v1/media/command` | `{command: play\|pause\|togglePlayPause\|next\|previous\|seek\|skipForward\|skipBackward\|toggleShuffle\|toggleRepeat, position?}` | controls the player on show: the one picked in the island, or the newest (see [Media commands](#media-commands)) |
 | `GET /v1/awake` | — | keep-awake status |
 | `POST /v1/awake` | `{minutes?}` (omitted or `0` = until turned off, up to `1440`) | keeps the Mac awake; returns the status |
 | `DELETE /v1/awake` | — | lets the Mac sleep again; returns the status |
@@ -222,6 +222,8 @@ curl -s -X POST http://127.0.0.1:47831/v1/activities \
   -d '{"id":"backup","title":"Backing up","progress":0.3}'
 ```
 
+`GET /v1/state` (and `isletctl state`) includes `"calendar": {"events": "fullAccess", "reminders": "notDetermined", "upcoming": 3}`: what macOS allows for calendars and for reminders (`notDetermined`, `fullAccess`, `writeOnly` for "Add events only", `denied` or `restricted`), read afresh for each request, and how many timed events are left today. It never includes a title. Meeting reminders (ids starting with `meeting-`, source `calendar`) carry the meeting's title, so `GET /v1/activities` and `/v1/state` always leave them out.
+
 Live Activities mirrored from the menu bar (ids starting with `live-`, source `live-activity`) belong to the mirror. Creating, changing or removing one, or sending that source, gets a `403` whether or not the id exists. `GET /v1/activities` and `/v1/state` leave them out, and `/v1/debug/menubar` leaves out their text, unless **Share mirrored activities with scripts** is on; see [LIVE-ACTIVITIES.md](LIVE-ACTIVITIES.md).
 
 ### Media commands
@@ -233,7 +235,7 @@ Live Activities mirrored from the menu bar (ids starting with `live-`, source `l
 | `skipForward`, `skipBackward` | 15 s forward or back, worked out from the current position so it works with any player. If Islet doesn't know the position, the player's own 15 s skip is used. |
 | `toggleShuffle`, `toggleRepeat` | Shuffle on or off; repeat cycles off → all → one. Players that don't report shuffle or repeat may ignore them, and the island only shows these buttons for players that do. |
 
-A `503` means no player is available for the command.
+A `503` means no player is available for the command. With several players at once, commands go to the one the island shows: through the system's Now Playing when that is the same app, otherwise to Music or Spotify directly (which needs Automation for that player, allowed in Settings → Permissions).
 
 ### Keep awake
 
@@ -439,6 +441,9 @@ Now Playing, closed island, HUD, gestures and battery keys:
 | `songChangePeek` | `true` | Show a new song for a moment below the notch when the track changes, for as long as `alertDuration`. |
 | `peekOnHover` | `true` | While the island opens on click (`hoverToOpen: false`), resting the pointer on the notch shows what's playing until it leaves. |
 | `songProgressRing` | `false` | A thin ring round the artwork beside the notch that fills as the song plays. |
+| `meetingReminderMinutes` | `10` | Minutes before a meeting that it shows beside the notch, counting down: `0` (off), `5`, `10`, `15` or `30`. Other values become the nearest. |
+| `meetingRemindUntilJoined` | `true` | A meeting that has started stays, glowing, until you join it, dismiss it or it ends. `false`: it goes 5 minutes after the start. |
+| `meetingRemindersNeedLink` | `true` | Only meetings with a call link remind you. All-day events and declined invitations never do. |
 | `pausedMusicTimeout` | `10` | Seconds the closed island keeps paused music before it hides (0–300; `0` = right away, `-1` = never). Replaces `showPausedMedia`, which is read once: `true` becomes `-1`. |
 | `visualiserStyle` | `"bars"` | The playing indicator: `"bars"`, `"slim"`, `"dots"`, `"wave"`, `"pulse"` or `"off"`. |
 | `musicColour` | `"artwork"` | The playing indicator, the progress ring and the open island's progress bar: `"artwork"`, `"accent"` (the artwork's colour while `accentColor` is `"auto"`) or `"white"`. Replaces `visualiserColour`, which is read once. |

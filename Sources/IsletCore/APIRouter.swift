@@ -38,10 +38,13 @@ public struct StateSnapshot: Codable, Equatable, Sendable {
     public var activities: [Activity]
     public var nowPlaying: NowPlayingSummary?
     public var battery: BatteryState?
+    /// Calendar and reminders access, and how many events are left today; never a title.
+    public var calendar: CalendarStatus?
 
-    public init(version: String, presentation: String, activities: [Activity], nowPlaying: NowPlayingSummary?, battery: BatteryState?) {
+    public init(version: String, presentation: String, activities: [Activity], nowPlaying: NowPlayingSummary?, battery: BatteryState?,
+                calendar: CalendarStatus? = nil) {
         self.version = version; self.presentation = presentation; self.activities = activities
-        self.nowPlaying = nowPlaying; self.battery = battery
+        self.nowPlaying = nowPlaying; self.battery = battery; self.calendar = calendar
     }
 }
 
@@ -261,10 +264,13 @@ public struct APIRouter: Sendable {
         return await backend.removeActivity(id: id)
     }
 
-    /// What scripts may read: mirrored Live Activities only when the user shares them.
+    /// What scripts may read: mirrored Live Activities only when the user shares them, and
+    /// meeting reminders never (they carry the meeting's title; `calendar` in the state says
+    /// how many events are left instead).
     func readable(_ activities: [Activity]) async -> [Activity] {
-        if await backend.sharesMirroredActivities() { return activities }
-        return activities.filter { !MenuBarLiveActivities.isMirrored($0) }
+        let shown = activities.filter { !MeetingReminders.isReminder($0) }
+        if await backend.sharesMirroredActivities() { return shown }
+        return shown.filter { !MenuBarLiveActivities.isMirrored($0) }
     }
 
     private func route(_ r: HTTPRequest, _ seg: [String]) async throws -> HTTPResponse {

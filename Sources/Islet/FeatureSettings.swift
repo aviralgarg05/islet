@@ -172,8 +172,6 @@ struct IndicatorStylePicker: View {
 
 struct CalendarSettings: View {
     @Bindable var model: AppModel
-    @ViewState private var calendarAccess = CalendarService.eventAccess
-    @ViewState private var reminderAccess = CalendarService.reminderAccess
     @Environment(\.snapshotMode) private var snapshotMode
 
     /// Snapshots show made-up calendars, never the ones on this Mac.
@@ -182,19 +180,19 @@ struct CalendarSettings: View {
             : model.calendar.calendars()
     }
 
+    private var remindsBeforeMeetings: Bool { model.settings.meetingReminderMinutes > 0 }
+
     var body: some View {
         Form {
             Section {
                 SettingsHero(page: .calendar, switchTitle: "Show your calendar", isOn: $model.settings.calendarEnabled)
                     .settingsAnchor("calendar.enabled")
-                if model.settings.calendarEnabled && calendarAccess != .granted {
-                    access(calendarAccess, what: "calendars", pane: "Privacy_Calendars") {
-                        model.requestCalendarAccess()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { calendarAccess = CalendarService.eventAccess }
-                    }
+                CalendarAccessRow(title: "Calendar access", advice: model.calendarAdvice(.calendars)) {
+                    model.requestCalendarAccess(.calendars, turnOn: false)
                 }
+                .settingsAnchor("calendar.access")
             }
-            if calendarAccess == .granted {
+            if model.calendarAccess.events.canRead {
                 Section("Calendars shown") {
                     ForEach(calendars, id: \.id) { c in
                         Toggle(isOn: Binding(
@@ -213,37 +211,78 @@ struct CalendarSettings: View {
                 .disabled(!model.settings.calendarEnabled)
             }
             Section {
+                Picker(selection: $model.settings.meetingReminderMinutes) {
+                    ForEach(IsletSettings.meetingReminderChoices, id: \.self) { minutes in
+                        Text(minutes == 0 ? "Off" : "\(minutes) minutes before").tag(minutes)
+                    }
+                } label: {
+                    Text("Remind me before meetings")
+                    Text("The next meeting shows beside the notch and counts down, with a Join button. It glows when it starts.")
+                }
+                .settingsAnchor("calendar.meetingLead")
+                Toggle(isOn: $model.settings.meetingRemindUntilJoined) {
+                    Text("Keep reminding until I join")
+                    Text(model.settings.meetingRemindUntilJoined
+                         ? "Once it starts, it stays until you press Join, dismiss it or the meeting ends."
+                         : "Once it starts, it goes after a few minutes.")
+                }
+                .settingsAnchor("calendar.keepReminding")
+                .disabled(!remindsBeforeMeetings)
+                Toggle(isOn: $model.settings.meetingRemindersNeedLink) {
+                    Text("Only meetings with a call link")
+                    Text("Zoom, Google Meet, Teams, Webex, FaceTime and other calls. All-day events and invitations you declined never remind you.")
+                }
+                .settingsAnchor("calendar.needsLink")
+                .disabled(!remindsBeforeMeetings)
+            } header: {
+                Text("Meeting reminders")
+            }
+            .disabled(!model.settings.calendarEnabled)
+            Section {
                 Toggle(isOn: $model.settings.remindersEnabled) {
                     Text("Reminders due today")
                     Text("On the Today page, with an alert when each one is due.")
                 }
                 .settingsAnchor("calendar.reminders")
-                if model.settings.remindersEnabled && reminderAccess != .granted {
-                    access(reminderAccess, what: "reminders", pane: "Privacy_Reminders") {
-                        model.requestReminderAccess()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { reminderAccess = CalendarService.reminderAccess }
-                    }
+                CalendarAccessRow(title: "Reminders access", advice: model.calendarAdvice(.reminders)) {
+                    model.requestCalendarAccess(.reminders, turnOn: false)
                 }
+                .settingsAnchor("calendar.remindersAccess")
+                .disabled(!model.settings.remindersEnabled)
             } header: {
                 Text("Reminders")
             }
         }
         .formStyle(.grouped)
-        .onAppear {
-            if snapshotMode {
-                calendarAccess = .granted
-                reminderAccess = .granted
-            }
-        }
+        // Back from System Settings, the rows say what changed.
+        .onAppear { if !snapshotMode { model.recheckCalendarAccess() } }
     }
+}
 
-    private func access(_ status: CalendarService.Access, what: String, pane: String, request: @escaping () -> Void) -> some View {
-        AccessRow(text: status == .denied ? "Islet isn't allowed to see your \(what)." : "Islet needs your permission to see your \(what).",
-                  button: status == .denied ? "Open System Settings" : "Allow…") {
-            if status == .denied {
-                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")!)
-            } else {
-                request()
+/// Whether Islet may read calendars (or reminders), in plain words: allowed, not asked yet,
+/// turned off in System Settings, or "Add events only". With the one button that helps: Allow
+/// asks macOS; otherwise it opens Privacy & Security at the right page.
+struct CalendarAccessRow: View {
+    let title: String
+    let advice: CalendarAccessAdvice
+    let action: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .center, spacing: 10) {
+                Text(title)
+                Spacer(minLength: 8)
+                HStack(spacing: 5) {
+                    Circle().fill(advice.isAllowed ? Color.green : advice.action == .ask ? Color.secondary.opacity(0.5) : Color.orange)
+                        .frame(width: 7, height: 7)
+                    Text(advice.status).font(.callout).foregroundStyle(.secondary)
+                }
+                if let button = advice.button {
+                    Button(button, action: action)
+                }
+            }
+            if let detail = advice.detail, !advice.isAllowed {
+                Text(detail).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
     }
