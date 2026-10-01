@@ -331,7 +331,7 @@ let args = CommandLine.arguments
 // Snapshots and the demo fill the island with sample content; keep it out of the real shelf,
 // config and API files.
 let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("islet-demo-\(ProcessInfo.processInfo.processIdentifier)")
-if args.contains("--snapshot") || args.contains("--demo") {
+if args.contains("--snapshot") || args.contains("--snapshot-motion") || args.contains("--demo") {
     try? FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
     if ProcessInfo.processInfo.environment["ISLET_SUPPORT_DIR"] == nil {
         setenv("ISLET_SUPPORT_DIR", scratch.appendingPathComponent("support").path, 1)
@@ -372,6 +372,14 @@ if let i = args.firstIndex(of: "--settings-snapshot") {
     }
     try? FileManager.default.removeItem(at: scratch)
     exit(status)
+}
+
+// The island's transitions as contact sheets, each frame frozen part of the way through.
+if let i = args.firstIndex(of: "--snapshot-motion") {
+    let dir = i + 1 < args.count ? args[i + 1] : "motion-snapshots"
+    MainActor.assumeIsolated { Snapshots.renderMotion(to: URL(fileURLWithPath: dir)) }
+    try? FileManager.default.removeItem(at: scratch)
+    exit(0)
 }
 
 if let i = args.firstIndex(of: "--snapshot") {

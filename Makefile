@@ -1,7 +1,7 @@
 # Islet — builds with the Xcode Command Line Tools alone.
 SWIFT_TEST_FLAGS = -Xswiftc -plugin-path -Xswiftc /Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing
 
-.PHONY: build app run demo test e2e e2e-media perf snapshots settings-snapshots check install release clean
+.PHONY: build app run demo test e2e e2e-media perf snapshots motion-snapshots settings-snapshots check install release clean
 
 build:            ## Debug build of the app and CLI
 	swift build
@@ -29,6 +29,9 @@ perf: app         ## CPU per island state against the performance budget
 
 snapshots:        ## Render every island state to build/snapshots/*.png
 	swift build --product Islet && .build/debug/Islet --snapshot build/snapshots
+
+motion-snapshots: ## Render each island transition as a contact sheet to build/motion-snapshots/*.png
+	swift build --product Islet && .build/debug/Islet --snapshot-motion build/motion-snapshots
 
 settings-snapshots: ## Render every Settings page, light and dark, to build/settings-snapshots/*.png
 	swift build --product Islet && .build/debug/Islet --settings-snapshot build/settings-snapshots
