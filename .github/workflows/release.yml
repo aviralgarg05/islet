@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write   # to create the draft release
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # bundle.sh uses the commit count as the build number
+
+      # Islet needs the macOS 27 SDK (FoundationModels' LanguageModelError in OnDeviceAsk.swift).
+      - name: Select the newest Xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | grep -vi beta | sort -V | tail -1)"
+          swift --version
+          sdk="$(xcrun --show-sdk-version)"
+          [ "${sdk%%.*}" -ge 27 ] || { echo "::error::Islet needs the macOS 27 SDK; the newest Xcode here has $sdk."; exit 1; }
+
+      - name: Read the version from the tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      # Developer ID signing and notarisation need a paid Apple Developer account. When there is one,
+      # add the repository secrets named below, uncomment this step, and give the next two steps
+      # `env: { SIGN_IDENTITY: "${{ secrets.SIGN_IDENTITY }}" }`. scripts/release.sh then notarises
+      # with the islet-notary profile, staples, and stops unless spctl accepts the app.
+      #
+      # - name: Import the Developer ID certificate and notary credentials
+      #   env:
+      #     P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+      #     P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+      #     NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+      #     NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+      #     NOTARY_PASSWORD: ${{ secrets.NOTARY_APP_SPECIFIC_PASSWORD }}
+      #   run: |
+      #     KC="$RUNNER_TEMP/signing.keychain-db"; KC_PASS="$(uuidgen)"
+      #     security create-keychain -p "$KC_PASS" "$KC"
+      #     security set-keychain-settings -lut 3600 "$KC"
+      #     security unlock-keychain -p "$KC_PASS" "$KC"
+      #     security list-keychains -d user -s "$KC"
+      #     security default-keychain -s "$KC"
+      #     printf '%s' "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/id.p12"
+      #     security import "$RUNNER_TEMP/id.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign
+      #     rm -f "$RUNNER_TEMP/id.p12"
+      #     security set-key-partition-list -S apple-tool:,apple: -s -k "$KC_PASS" "$KC" >/dev/null
+      #     xcrun notarytool store-credentials islet-notary \
+      #       --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD"
+
+      - name: Build Islet.app (ad-hoc signed)
+        run: make app
+
+      # Zips build/Islet.app, extracts the zip with ditto and with unzip, and stops unless
+      # codesign --verify --strict passes on both. Also writes the zip's SHA-256 and this version's
+      # section of CHANGELOG.md (extracted with awk) to build/, and stops if that section's heading
+      # still says "unreleased" or it holds a placeholder line.
+      - name: Zip and self-check
+        run: scripts/release.sh --no-build
+
+      - name: Draft the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "A release for $GITHUB_REF_NAME already exists; leaving it alone."
+            exit 0
+          fi
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
+            --title "Islet $VERSION" --notes-file "build/release-notes-$VERSION.md" \
+            "build/Islet-$VERSION.zip" "build/Islet-$VERSION.zip.sha256"

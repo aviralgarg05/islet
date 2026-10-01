@@ -26,12 +26,37 @@
 - **It keeps things on your Mac.** No account, no telemetry, no licence server. Questions go to an AI provider only when you ask one, with your own key.
 - **It's free and MIT-licensed**, written from scratch.
 
-## Install
+## Download
 
-Islet needs macOS 14 or later (Live Activity mirroring needs macOS 26, and is built for 27). Build it with the Xcode Command Line Tools; full Xcode isn't needed.
+Islet is free and needs macOS 14 or later (Live Activity mirroring needs macOS 26, and is built for 27).
+
+1. Download the zip from the [latest release](https://github.com/aviralgarg05/islet/releases/latest) and double-click it in Finder to unzip it.
+2. Move `Islet.app` to Applications.
+3. To use `isletctl` from Terminal, link it onto your `PATH`:
+
+   ```bash
+   ln -sf /Applications/Islet.app/Contents/MacOS/isletctl /opt/homebrew/bin/isletctl
+   ```
+
+The Releases page of this repository is the only official download. Each release is built from this repository's source at its tag. From 0.2.0 on, the release notes give the zip's SHA-256, which you can check with `shasum -a 256` on the downloaded file.
+
+### Opening it the first time
+
+Releases aren't notarised by Apple yet, so macOS blocks the first launch. To allow it:
+
+1. Open Islet. macOS says it can't verify the app. Close the message, without choosing *Move to Trash*.
+2. Open *System Settings → Privacy & Security* and scroll down to *Security*.
+3. Next to the message that Islet was blocked, click **Open Anyway**.
+4. Click **Open Anyway** again to confirm, and enter your password or use Touch ID.
+
+You only need to do this once. On macOS 15 and later, Control-clicking the app and choosing *Open* no longer gets past this check, so use the steps above.
+
+## Build from source
+
+To build Islet yourself, you need the Xcode Command Line Tools with the macOS 27 SDK (`xcrun --show-sdk-version` prints 27 or later); full Xcode isn't needed.
 
 ```bash
-git clone <this repo> islet && cd islet
+git clone https://github.com/aviralgarg05/islet.git islet && cd islet
 make app          # builds build/Islet.app
 make run          # builds and opens it
 ```
@@ -43,7 +68,7 @@ make install
 ln -sf /Applications/Islet.app/Contents/MacOS/isletctl /opt/homebrew/bin/isletctl
 ```
 
-The zipped app on the Releases page is ad-hoc signed, so the first time you open it macOS will ask you to confirm it in *System Settings → Privacy & Security*.
+A build you make yourself opens without the steps above.
 
 ## Try it
 
@@ -87,6 +112,10 @@ make demo        # runs with sample content
 ```
 
 The code is split into `IsletCore` (pure, tested logic), `IsletSystem` (macOS adapters), `Islet` (the app) and `isletctl` (the CLI and MCP server). See [Architecture](docs/ARCHITECTURE.md) and [Research](docs/RESEARCH.md).
+
+## Help and contributing
+
+Questions go to [Discussions](https://github.com/aviralgarg05/islet/discussions), and bugs and ideas to [issues](https://github.com/aviralgarg05/islet/issues); [SUPPORT.md](SUPPORT.md) says what to include. Report security problems privately, as [SECURITY.md](SECURITY.md) describes. To send a change, read [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Licence
 

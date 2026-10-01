@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Islet needs the macOS 27 SDK (FoundationModels' LanguageModelError in OnDeviceAsk.swift),
+      # so use the newest release Xcode on the runner rather than its default.
+      - name: Select the newest Xcode
+        id: xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | grep -vi beta | sort -V | tail -1)"
+          swift --version
+          sdk="$(xcrun --show-sdk-version)"
+          [ "${sdk%%.*}" -ge 27 ] || { echo "::error::Islet needs the macOS 27 SDK; the newest Xcode here has $sdk."; exit 1; }
+          echo "toolchain=$(swift --version 2>/dev/null | head -1 | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache .build
+        uses: actions/cache@v4
+        with:
+          path: .build
+          # Islet has no dependencies yet, so there is no Package.resolved; Package.swift stands in.
+          key: spm-${{ runner.os }}-${{ steps.xcode.outputs.toolchain }}-${{ hashFiles('Package.swift', 'Package.resolved') }}
+
+      - name: Build
+        run: swift build
+
+      # Unit and system tests only. The end-to-end suite (make e2e) needs a logged-in GUI session.
+      - name: Test
+        run: swift test

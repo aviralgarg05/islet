@@ -2,9 +2,11 @@
 
 Thanks for helping. A few ground rules keep Islet fast and trustworthy.
 
+Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md). Issues and pull requests are public, so please report security problems privately as [SECURITY.md](SECURITY.md) describes.
+
 ## Setup
 
-Command Line Tools are enough (`xcode-select --install`). Then:
+Command Line Tools are enough (`xcode-select --install`), as long as they include the macOS 27 SDK (`xcrun --show-sdk-version` prints 27 or later). Then:
 
 ```bash
 make test     # must pass
@@ -20,6 +22,13 @@ make perf     # must stay within budget
 - **Private APIs are capability-checked** (`dlsym`, weak linking, helper processes) so that removing them only disables that feature.
 - **Clean-room code only.** Several notch apps are GPL-3.0; don't copy from them. MIT/BSD code is fine with attribution.
 - **Match the surrounding style:** small files, doc comments on public types, no force-unwraps outside tests.
+
+## Before you open a PR
+
+- [ ] `make test` passes, and `make e2e` and `make perf` too if behaviour or timing changed.
+- [ ] For a UI change, `make snapshots` (or `make settings-snapshots`) renders it as intended, and the PR shows before and after images.
+- [ ] `CHANGELOG.md` has a line under the unreleased version.
+- [ ] Nothing new polls while idle.
 
 ## Adding an integration
 
