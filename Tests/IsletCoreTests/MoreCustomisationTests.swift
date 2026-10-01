@@ -273,3 +273,13 @@ private func song(playing: Bool, elapsed: Double? = 60, duration: Double? = 240,
         #expect(Presenter.untilHover(.hidden) == .hidden)
     }
 }
+
+@Suite struct OutlineAndGlassTests {
+    @Test func bothOffByDefault() {
+        #expect(!IsletSettings().outline)
+        #expect(!IsletSettings().glassOnNotchless)
+        let s = decode(#"{"outline": true, "glassOnNotchless": true}"#)
+        #expect(s.outline && s.glassOnNotchless)
+        #expect(!decode(#"{"outline": "yes"}"#).outline)
+    }
+}

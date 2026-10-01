@@ -104,15 +104,35 @@ extension IslandTheme {
     /// - Parameters:
     ///   - row: height of the menu bar row, which stays black in every theme.
     ///   - height: the island's current height, to place the seam below that row.
+    ///   - closedGlass: the closed island is glass too ("Glass on displays without a notch").
     @ViewBuilder
-    func background(expanded: Bool, shape: IslandShape, row: CGFloat = 0, height: CGFloat = 0, glassLevel: Double = 0.6) -> some View {
+    func background(expanded: Bool, shape: IslandShape, row: CGFloat = 0, height: CGFloat = 0, glassLevel: Double = 0.6,
+                    closedGlass: Bool = false) -> some View {
         switch self {
         case .graphite where expanded:
             shape.fill(Color(white: 0.105)).overlay(shape.stroke(Color.white.opacity(0.08), lineWidth: 1))
         case .glass:
-            GlassBody(shape: shape, expanded: expanded, row: row, height: height, level: glassLevel)
+            GlassBody(shape: shape, expanded: expanded, row: row, height: height, level: glassLevel, closedGlass: closedGlass)
         default:
             shape.fill(Color.black)
+        }
+    }
+}
+
+/// "Subtle outline": a faint edge round the island so black shows on a dark wallpaper. The
+/// system's Increase Contrast always draws it, firmer. The top edge, at the top of the screen,
+/// is left out.
+struct IslandOutline: View {
+    let shape: IslandShape
+    let on: Bool
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    var body: some View {
+        let increased = contrast == .increased
+        if on || increased {
+            IslandEdge(shape: shape)
+                .stroke(Color.white.opacity(increased ? 0.25 : 0.14), lineWidth: increased ? 1 : 0.75)
+                .allowsHitTesting(false)
         }
     }
 }
@@ -131,6 +151,8 @@ private struct GlassBody: View {
     let height: CGFloat
     /// 0 keeps the island mostly black, 1 turns it to glass right below the row.
     let level: Double
+    /// Closed, the island is glass as well (a display without a notch).
+    var closedGlass = false
 
     /// The least black left over the glass, so text always has a floor of contrast.
     static let smoke = 0.3
@@ -144,9 +166,14 @@ private struct GlassBody: View {
                 shape.fill(LinearGradient(stops: Self.stops(row: row, height: height, level: level), startPoint: .top, endPoint: .bottom))
                 // An AppKit view, which offline snapshots can't draw.
                 if !snapshotMode { GlassSheen().clipShape(shape).allowsHitTesting(false) }
+            } else if closedGlass {
+                // No hardware to match: glass under the same smoke, and no sheen on something
+                // that is always there.
+                GlassSurface(shape: shape, tint: Color.black.opacity(0.2), fallback: Color(white: 0.13).opacity(0.78))
+                shape.fill(Color.black.opacity(Self.smoke))
             }
             shape.fill(Color.black)
-                .opacity(expanded ? 0 : 1)
+                .opacity(expanded || closedGlass ? 0 : 1)
                 .animation(expanded ? .easeOut(duration: 0.18 * Motion.pace).delay(0.15 * Motion.pace)
                                     : .easeIn(duration: 0.08 * Motion.pace), value: expanded)
         }

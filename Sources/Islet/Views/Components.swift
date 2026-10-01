@@ -37,7 +37,12 @@ struct IslandShape: Shape {
         }
     }
 
-    func path(in rect: CGRect) -> Path {
+    func path(in rect: CGRect) -> Path { outline(in: rect, closed: true) }
+
+    /// The silhouette; open (`closed: false`) leaves out the top edge, which sits at the top of
+    /// the screen, so an outline traces only the sides and the bottom. A floating pill is
+    /// always closed.
+    func outline(in rect: CGRect, closed: Bool) -> Path {
         if inset > 0.01 {
             let pill = rect.insetBy(dx: 0, dy: min(inset, rect.height / 3))
             return Path(roundedRect: pill, cornerRadius: min(bottomRadius, pill.height / 2, pill.width / 2), style: .continuous)
@@ -59,7 +64,7 @@ struct IslandShape: Shape {
             p.addQuadCurve(to: CGPoint(x: bodyR, y: rect.maxY - b), control: CGPoint(x: bodyR, y: rect.maxY))
             p.addLine(to: CGPoint(x: bodyR, y: rect.minY + t))
             p.addQuadCurve(to: CGPoint(x: rect.maxX, y: rect.minY), control: CGPoint(x: bodyR, y: rect.minY))
-            p.closeSubpath()
+            if closed { p.closeSubpath() }
             return p
         }
 
@@ -86,9 +91,21 @@ struct IslandShape: Shape {
         p.addQuadCurve(to: CGPoint(x: sR, y: row - shoulder), control: CGPoint(x: sR, y: row))
         p.addLine(to: CGPoint(x: sR, y: top + t))
         p.addQuadCurve(to: CGPoint(x: sR + t, y: top), control: CGPoint(x: sR, y: top))
-        p.closeSubpath()
+        if closed { p.closeSubpath() }
         return p
     }
+}
+
+/// The island's outline without its top edge (Appearance → Subtle outline).
+struct IslandEdge: Shape {
+    var shape: IslandShape
+
+    var animatableData: IslandShape.AnimatableData {
+        get { shape.animatableData }
+        set { shape.animatableData = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path { shape.outline(in: rect, closed: false) }
 }
 
 extension Color {

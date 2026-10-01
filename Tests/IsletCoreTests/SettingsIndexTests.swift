@@ -129,6 +129,7 @@ import Testing
         ("animation speed", .appearance),
         ("full screen", .general),
         ("floating pill", .general),
+        ("outline", .appearance),
     ])
     func queryFindsPage(query: String, page: SettingsPage) {
         let groups = SettingsIndex.search(query)

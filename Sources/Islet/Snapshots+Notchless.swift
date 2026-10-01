@@ -28,6 +28,21 @@ extension Snapshots {
             ("hud", .hud(hud)),
             ("song-peek", .songPeek(model.nowPlaying!)),
         ]
+        // Glass on displays without a notch, and the subtle outline. (Snapshots draw glass as
+        // its solid stand-in.)
+        do {
+            model.settings.notchlessStyle = .pill
+            model.settings.glassOnNotchless = true
+            let s = model.settings
+            let metrics = NotchGeometry.metrics(for: notchlessScreen, expandedSize: CGSize(width: s.expandedSize.width, height: s.expandedSize.height),
+                                                wingWidth: s.effectiveWingWidth, adjust: s.notchAdjust, notchless: .pill)
+            model.closedPlacements[2] = ClosedPlacement(wing: metrics.wingWidth, slack: .infinity)
+            model.forcedPresentation = .compact(.nowPlaying(model.nowPlaying!))
+            shootNotchless("51-notchless-pill-glass", model: model, metrics: metrics, dir: dir)
+            model.settings.outline = true
+            shootNotchless("51-notchless-pill-glass-outline", model: model, metrics: metrics, dir: dir)
+            model.settings = saved
+        }
         for style in [NotchlessStyle.pill, .notch] {
             model.settings.notchlessStyle = style
             let s = model.settings

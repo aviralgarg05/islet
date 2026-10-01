@@ -246,6 +246,12 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// How much of the open island is glass in the Glass theme: 0 keeps it mostly black and
     /// melts only near the bottom, 1 turns to glass right below the menu bar row.
     public var glassLevel: Double = 0.6
+    /// A faint edge round the island so it shows on a dark wallpaper. Always on with the
+    /// system's Increase Contrast.
+    public var outline = false
+    /// With the Glass theme, the closed island on a display without a notch is glass too. On a
+    /// notch it stays black, so it matches the hardware.
+    public var glassOnNotchless = false
     public var animationStyle: AnimationStyle = .fluid
     /// Scales the one spring family (and the other styles' fades). The music indicator's loops
     /// keep their own pace.

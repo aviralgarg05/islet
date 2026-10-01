@@ -295,8 +295,10 @@ struct IslandView: View {
                     }
                 }
                 model.settings.theme.background(expanded: p == .expanded, shape: shape, row: metrics.notch.height, height: g.size.height,
-                                                glassLevel: model.settings.glassLevel)
+                                                glassLevel: model.settings.glassLevel,
+                                                closedGlass: metrics.isSynthetic && model.settings.glassOnNotchless)
                     .shadow(color: .black.opacity(p == .expanded ? 0.45 : 0), radius: 14, y: 6)
+                IslandOutline(shape: shape, on: model.settings.outline)
                 content(p, geometry: g)
                     .opacity(stale ? 0.55 : 1)
                     // Out-of-date content stops its spinner, glow and other looping motion.

@@ -137,6 +137,9 @@ enum Snapshots {
         model.settings.glassLevel = 1
         shoot("18d-expanded-glass-level-glass")
         model.settings.glassLevel = IsletSettings().glassLevel
+        model.settings.outline = true
+        shoot("18e-expanded-glass-outline")
+        model.settings.outline = false
         model.settings.theme = .black
         model.settings.sizePreset = .large
         metrics = metricsFor(model.settings)

@@ -421,6 +421,8 @@ Placement, look and motion keys:
 |---|---|---|
 | `notchlessStyle` | `"pill"` | Displays without a notch: `"pill"` (floating in the menu bar), `"notch"` (a notch shape at the top edge), `"hover"` (nothing until the pointer reaches the top edge) or `"hidden"`. Replaces `showOnNonNotchDisplays`, which is read once: `false` becomes `"hidden"`. |
 | `fullscreenBehaviour` | `"hide"` | Over a full screen app: `"show"`, `"hideMusic"` (activities, timers and HUDs stay) or `"hide"` (only HUDs and critical alerts). An app rule's `showInFullscreen` keeps everything. Replaces `hideInFullscreen`, which is read once: `false` becomes `"show"`. |
+| `outline` | `false` | A faint edge round the island so it shows on a dark wallpaper. Always drawn, firmer, with Increase Contrast. |
+| `glassOnNotchless` | `false` | With the Glass theme, the closed island on a display without a notch is glass too. |
 | `animationSpeed` | `"normal"` | `"relaxed"`, `"normal"` or `"quick"`: how long the island's springs and fades take. The playing indicator keeps its own pace. |
 
 An app rule's `tint` is a colour name or any hex value (`"#2F7CF6"`); anything else means the app's own colour.

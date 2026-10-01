@@ -56,6 +56,7 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 ### Look
 - A calmer open island. The pages move out of the menu bar row into a small glass switcher under the island (Home, Today, Shelf and a menu for the rest), with a timer button on one side and Ask on the other. Home shows one main thing large, usually what's playing, with a quiet column beside it. Cards lost their borders, and spacing, corners and type follow one set of sizes.
 - Dynamic Glass is the default theme. The strip beside the notch stays black so it blends with the hardware, and the open island melts into Liquid Glass below it (a blurred material before macOS 26). A faint smoke keeps text readable, and a slow sheen drifts across unless Reduce Motion or Low Power Mode is on. **Glass level** in Settings sets how far down the black reaches. Black and Graphite are still there.
+- **Subtle outline** (Appearance) draws a faint edge round the island for dark wallpapers; Increase Contrast always draws it. **Glass on displays without a notch** makes the closed pill glass too with the Glass theme.
 - **Animation speed** (Appearance) makes every move Relaxed, Normal or Quick, whatever the animation style.
 - An app on the Apps page can take any colour from the system colour panel, as the accent can.
 - **Artwork corners** (Appearance) go from square to round beside the notch, in a new song's peek and in the open island.

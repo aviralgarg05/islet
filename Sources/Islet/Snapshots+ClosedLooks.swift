@@ -66,6 +66,14 @@ extension Snapshots {
         shoot("41-hud-accent-volume")
         model.settings = saved
 
+        // The subtle outline, on the closed island and on a peek.
+        model.settings.outline = true
+        model.forcedPresentation = .compact(.nowPlaying(playing))
+        shoot("45-outline-compact-media")
+        model.forcedPresentation = .songPeek(playing)
+        shoot("45-outline-song-peek")
+        model.settings = saved
+
         // The detailed HUD: below the notch, with a percentage. White, colourful and muted.
         model.settings.hudStyle = .detailed
         model.forcedPresentation = .hud(HUDEvent(kind: .volume, value: 0.62, until: now.addingTimeInterval(2)))

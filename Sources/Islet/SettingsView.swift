@@ -145,7 +145,17 @@ struct AppearanceSettings: View {
                         Text("Glass level")
                         Text("The strip beside the notch stays black; below it the island melts into glass.")
                     }
+                    Toggle(isOn: $model.settings.glassOnNotchless) {
+                        Text("Glass on displays without a notch")
+                        Text("The closed island there is glass too. Beside a notch it stays black to match it.")
+                    }
+                    .settingsAnchor("appearance.glassNotchless")
                 }
+                Toggle(isOn: $model.settings.outline) {
+                    Text("Subtle outline")
+                    Text("A faint edge so the island shows on a dark wallpaper. Always on with Increase Contrast.")
+                }
+                .settingsAnchor("appearance.outline")
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Accent colour")
                     AccentPicker(selection: $model.settings.accentColor)
@@ -557,8 +567,10 @@ struct IslandSketch: View {
         let height = notch.height * scale
         let art = 20 * scale
         let inset = Wings<EmptyView, EmptyView>.inset(for: settings.effectiveWingWidth) * scale
-        return IslandShape(topRadius: 6 * scale, bottomRadius: min(12, notch.height / 2.4) * scale)
+        let shape = IslandShape(topRadius: 6 * scale, bottomRadius: min(12, notch.height / 2.4) * scale)
+        return shape
             .fill(Color.black)
+            .overlay { if settings.outline { IslandEdge(shape: shape).stroke(Color.white.opacity(0.18), lineWidth: 0.5) } }
             .frame(width: width, height: height)
             .overlay(alignment: .leading) {
                 let corner = CGFloat(settings.artworkCorner(size: 20, standard: 5)) * scale
@@ -600,6 +612,7 @@ struct IslandSketch: View {
         let art = min(h - row - 10, 64 * scale)
         return ZStack(alignment: .topLeading) {
             surface(shape: shape, row: row, height: h)
+            if settings.outline { IslandEdge(shape: shape).stroke(Color.white.opacity(0.18), lineWidth: 0.5) }
             HStack(alignment: .center, spacing: max(4, 12 * scale)) {
                 // The open island's 72 pt artwork, at this size.
                 artworkTile(size: art, corner: CGFloat(settings.artworkCorner(size: 72, standard: Radius.m)) * art / 72)
