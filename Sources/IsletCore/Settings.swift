@@ -64,6 +64,27 @@ public enum IslandTheme: String, Codable, Sendable, CaseIterable {
     case glass
 }
 
+/// How the playing indicator beside the notch looks.
+public enum VisualiserStyle: String, Codable, Sendable, CaseIterable {
+    /// Four bars.
+    case bars
+    /// Six thin bars.
+    case slim
+    /// Three bobbing dots.
+    case dots
+    /// No indicator: the artwork alone shows what's playing.
+    case off
+}
+
+/// Where the playing indicator takes its colour from.
+public enum VisualiserColour: String, Codable, Sendable, CaseIterable {
+    /// The artwork's main colour.
+    case artwork
+    /// The accent colour from Appearance.
+    case accent
+    case white
+}
+
 /// Per-app customisation, keyed by bundle identifier.
 public struct AppRule: Codable, Equatable, Sendable, Identifiable {
     public var bundleID: String
@@ -167,6 +188,8 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var showPausedMedia = false
     /// Show a new song for a moment below the notch when the track changes (`SongPeek`).
     public var songChangePeek = true
+    public var visualiserStyle: VisualiserStyle = .bars
+    public var visualiserColour: VisualiserColour = .artwork
     public var disabledMediaSources: [MediaSourceKind] = []
     public var hudEnabled = true
     public var brightnessHUDEnabled = true

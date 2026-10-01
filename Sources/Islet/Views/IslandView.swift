@@ -281,6 +281,7 @@ struct IslandView: View {
         .fontDesign(model.settings.roundedFont ? .rounded : .default)
         .environment(\.islandReduceMotion, model.settings.reduceMotion || model.settings.animationStyle == .off)
         .environment(\.islandMotion, style)
+        .environment(\.visualiserStyle, model.settings.visualiserStyle)
         .environment(\.colorScheme, .dark)
     }
 
@@ -494,7 +495,7 @@ struct CompactContentView: View {
             Wings(metrics: metrics, wing: geometry.wing) {
                 TrackArtwork(media: np, size: min(20, metrics.notch.height - 10), corner: 5)
             } trailing: {
-                PlayingIndicator(tint: model.mediaAccent(np), playing: np.isPlaying)
+                PlayingIndicator(tint: model.visualiserTint(np), playing: np.isPlaying)
             }
         case .activity(let a, let others):
             let tint = model.tint(for: a)
@@ -646,7 +647,7 @@ struct SongPeekView: View {
             Wings(metrics: metrics, wing: geometry.wing) {
                 TrackArtwork(media: media, size: min(20, metrics.notch.height - 10), corner: 5)
             } trailing: {
-                PlayingIndicator(tint: model.mediaAccent(media), playing: media.isPlaying)
+                PlayingIndicator(tint: model.visualiserTint(media), playing: media.isPlaying)
             }
             .frame(maxWidth: .infinity)
             TrackText(media: media) {

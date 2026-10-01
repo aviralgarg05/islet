@@ -314,6 +314,21 @@ struct ModulesSettings: View {
                     .disabled(!model.settings.mediaEnabled)
                 Text("When the track changes, the closed island opens a little below the notch with the artwork, title and artist, then closes again.")
                     .font(.caption).foregroundStyle(.secondary)
+                Picker("Playing indicator", selection: $model.settings.visualiserStyle) {
+                    Text("Bars").tag(VisualiserStyle.bars)
+                    Text("Slim bars").tag(VisualiserStyle.slim)
+                    Text("Dots").tag(VisualiserStyle.dots)
+                    Text("Off").tag(VisualiserStyle.off)
+                }
+                .disabled(!model.settings.mediaEnabled)
+                if model.settings.visualiserStyle != .off {
+                    Picker("Indicator colour", selection: $model.settings.visualiserColour) {
+                        Text("From the artwork").tag(VisualiserColour.artwork)
+                        Text("Accent colour").tag(VisualiserColour.accent)
+                        Text("White").tag(VisualiserColour.white)
+                    }
+                    .disabled(!model.settings.mediaEnabled)
+                }
                 LabeledContent("System-wide bridge") {
                     Text(model.systemMedia.isRunning ? "Running" : "Unavailable")
                         .foregroundStyle(model.systemMedia.isRunning ? .green : .orange)

@@ -331,6 +331,15 @@ extension AppModel {
         settings.accentColor == "auto" ? ArtworkCache.accent(for: np) : Color(tint: settings.accentColor)
     }
 
+    /// The playing indicator's colour (Settings → Now Playing).
+    func visualiserTint(_ np: NowPlaying?) -> Color {
+        switch settings.visualiserColour {
+        case .artwork: return ArtworkCache.accent(for: np)
+        case .accent: return settings.accentColor == "auto" ? Color.accentColor : Color(tint: settings.accentColor)
+        case .white: return .white
+        }
+    }
+
     /// Whether the given presentation deserves the urgent glow, and in which color.
     func urgentGlow(for p: IslandPresentation) -> Color? {
         guard settings.urgentGlow else { return nil }

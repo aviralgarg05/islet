@@ -377,18 +377,43 @@ struct PlayingIndicator: View {
     var tint: Color
     var playing: Bool
     @Environment(\.snapshotMode) private var snapshotMode
+    @Environment(\.visualiserStyle) private var style
 
     var body: some View {
-        if snapshotMode {
-            HStack(alignment: .bottom, spacing: 2) {
-                ForEach([0.45, 0.8, 0.35, 0.65], id: \.self) { h in
-                    RoundedRectangle(cornerRadius: 1.25).fill(tint).frame(width: 3, height: 14 * h)
+        if style == .off {
+            EmptyView()
+        } else if snapshotMode {
+            // Snapshots can't host the layer view: draw the resting state of the same look.
+            let heights: [CGFloat] = style == .slim ? [0.55, 0.9, 0.45, 0.75, 0.6, 0.8] : [0.45, 0.8, 0.35, 0.65]
+            HStack(alignment: .bottom, spacing: style == .slim ? 1.5 : style == .dots ? 3 : 2) {
+                if style == .dots {
+                    ForEach(0..<3, id: \.self) { i in
+                        Circle().fill(tint).frame(width: 4, height: 4).offset(y: playing ? -CGFloat([3, 6, 2][i]) : 0)
+                    }
+                } else {
+                    ForEach(Array(heights.enumerated()), id: \.offset) { _, h in
+                        RoundedRectangle(cornerRadius: 1.25).fill(tint)
+                            .frame(width: style == .slim ? 1.75 : 3, height: 14 * (playing ? h : 0.2))
+                    }
                 }
             }
+            .opacity(playing ? 1 : 0.55)
             .frame(width: 18, height: 14, alignment: .bottom)
         } else {
-            EqualizerView(color: NSColor(tint), playing: playing).frame(width: 18, height: 14)
+            EqualizerView(color: NSColor(tint), playing: playing, style: style).frame(width: 18, height: 14)
         }
+    }
+}
+
+private struct VisualiserStyleKey: EnvironmentKey {
+    static let defaultValue: VisualiserStyle = .bars
+}
+
+extension EnvironmentValues {
+    /// How the playing indicator looks (Settings → Now Playing).
+    var visualiserStyle: VisualiserStyle {
+        get { self[VisualiserStyleKey.self] }
+        set { self[VisualiserStyleKey.self] = newValue }
     }
 }
 

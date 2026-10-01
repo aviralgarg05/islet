@@ -119,6 +119,14 @@ private func writtenKeys(_ s: IsletSettings) throws -> Set<String> {
         #expect(decode(#"{"theme": "black"}"#).theme == .black)
     }
 
+    @Test func playingIndicatorSettingsLoadAndFallBack() {
+        #expect(IsletSettings().visualiserStyle == .bars)
+        #expect(IsletSettings().visualiserColour == .artwork)
+        #expect(decode(#"{"visualiserStyle": "dots", "visualiserColour": "white"}"#).visualiserStyle == .dots)
+        #expect(decode(#"{"visualiserStyle": "dots", "visualiserColour": "white"}"#).visualiserColour == .white)
+        #expect(decode(#"{"visualiserStyle": "laser"}"#).visualiserStyle == .bars)
+    }
+
     @Test func remainingChoicesStillLoad() {
         #expect(decode(#"{"closedLayout": "wings"}"#).closedLayout == .wings)
         #expect(decode(#"{"closedLayout": "auto"}"#).closedLayout == .auto)

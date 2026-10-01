@@ -39,6 +39,7 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 - Two-finger swipes: down to open, up to close, sideways over music to change track.
 - Keep awake for 15 minutes, an hour, two hours or until you turn it off.
 - Battery thresholds are adjustable, with an optional "charged to 80%" alert.
+- The playing indicator springs down to a dim, flat line when you pause and rises back into motion when you play, instead of jumping. Settings → Now Playing chooses its look (bars, slim bars, dots or none) and its colour (from the artwork, the accent colour or white).
 
 ### Calendar and reminders
 - A Today tab with the rest of the day's events, Join buttons and reminders you can tick off. Repeating meetings now alert every time, and the agenda rolls over at midnight.
