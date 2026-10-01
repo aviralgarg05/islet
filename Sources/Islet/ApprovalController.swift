@@ -1,6 +1,8 @@
 import AppKit
 import IsletCore
+import IsletSystem
 import Observation
+import os
 
 /// Pending coding-agent approvals and the card that answers them.
 ///
@@ -47,7 +49,7 @@ final class ApprovalController {
                 guard queue.enqueue(request, id: id, now: Date()) else { return waiter.resume(returning: nil) }
                 waiters[id] = waiter
                 let expiry = DispatchWorkItem { [weak self] in
-                    MainActor.assumeIsolated { self?.finish(id, with: nil) }
+                    MainActor.assumeIsolated { self?.expire(id) }
                 }
                 expiries[id] = expiry
                 DispatchQueue.main.asyncAfter(deadline: .now() + model.settings.approvalWait, execute: expiry)
@@ -69,11 +71,27 @@ final class ApprovalController {
         queueChanged()
     }
 
+    /// Nobody answered in time: the agent asks in the terminal, and its status says so.
+    private func expire(_ id: String) {
+        if waiters[id] != nil, let entry = queue.entries.first(where: { $0.id == id }) {
+            Log.approvals.notice("A \(entry.request.provider.rawValue, privacy: .public) card ran out of time; the agent asks in the terminal")
+            _ = try? model.applyLocal(entry.request.statusUpdate(backToTerminal: .expired))
+        }
+        finish(id, with: nil)
+    }
+
     /// The user's answer from the card.
     func decide(_ decision: ApprovalDecision, for entry: ApprovalQueue.Entry) {
         guard waiters[entry.id] != nil, Date().timeIntervalSince(front.since) >= Self.clickGuard else { return }
         Haptics.play(.tap)
-        if decision == .terminal { TerminalJump.jump(entry.request.terminal) }
+        if decision == .terminal {
+            let request = entry.request
+            TerminalJump.jump(request.terminal) { [weak self] reached in
+                guard !reached else { return }
+                Log.approvals.notice("Couldn't bring the \(request.provider.rawValue, privacy: .public) terminal forward")
+                _ = try? self?.model.applyLocal(request.statusUpdate(backToTerminal: .jumpFailed))
+            }
+        }
         if let status = entry.request.statusUpdate(after: decision) { _ = try? model.applyLocal(status) }
         finish(entry.id, with: decision)
     }
@@ -201,7 +219,9 @@ enum TerminalJump {
         return NSRunningApplication.runningApplications(withBundleIdentifier: id).first
     }
 
-    static func jump(_ t: TerminalContext) {
+    /// - Parameter done: on the main thread, whether anything was brought forward (the
+    ///   terminal app, or the tmux or WezTerm pane).
+    static func jump(_ t: TerminalContext, done: @escaping @MainActor (Bool) -> Void = { _ in }) {
         var commands: [(String, [String])] = []
         if let (socket, pane) = t.tmux, let tmux = executable("tmux") {
             commands.append((tmux, ["-S", socket, "select-window", "-t", pane]))
@@ -210,7 +230,10 @@ enum TerminalJump {
         if let pane = t.weztermPane, let wezterm = executable("wezterm") {
             commands.append((wezterm, ["cli", "activate-pane", "--pane-id", pane]))
         }
+        let group = DispatchGroup()
+        let reached = JumpResult()
         if !commands.isEmpty {
+            group.enter()
             DispatchQueue.global(qos: .userInitiated).async {
                 for (exe, args) in commands {
                     let p = Process()
@@ -221,13 +244,22 @@ enum TerminalJump {
                     p.standardError = FileHandle.nullDevice
                     guard (try? p.run()) != nil else { continue }
                     p.waitUntilExit()
+                    if p.terminationStatus == 0 { reached.succeed() }
                 }
+                group.leave()
             }
         }
         if let url = runningHost(t)?.bundleURL {
             let config = NSWorkspace.OpenConfiguration()
             config.activates = true
-            NSWorkspace.shared.openApplication(at: url, configuration: config)
+            group.enter()
+            NSWorkspace.shared.openApplication(at: url, configuration: config) { app, error in
+                if app != nil, error == nil { reached.succeed() }
+                group.leave()
+            }
+        }
+        group.notify(queue: .main) {
+            MainActor.assumeIsolated { done(reached.value) }
         }
     }
 
@@ -235,5 +267,23 @@ enum TerminalJump {
         let dirs = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/run/current-system/sw/bin",
                     FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".nix-profile/bin").path]
         return dirs.map { $0 + "/" + name }.first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+}
+
+/// Whether any of a jump's steps reached the terminal; written from the steps' own queues.
+private final class JumpResult: @unchecked Sendable {
+    private let lock = NSLock()
+    private var reached = false
+
+    func succeed() {
+        lock.lock()
+        reached = true
+        lock.unlock()
+    }
+
+    var value: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return reached
     }
 }

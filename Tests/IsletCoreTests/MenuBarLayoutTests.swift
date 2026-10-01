@@ -263,7 +263,8 @@ import Testing
         let spec = MenuBarLiveActivities.activity(for: m, look: ("car.fill", "#000000"), isNew: true)
         #expect(spec.icon == .symbol("car.fill"))
         #expect(spec.trailing == "4 min")
-        #expect(spec.source == MenuBarLiveActivities.source)
+        #expect(spec.source == "live-activity:uber")
+        #expect(MenuBarLiveActivities.isMirroredSource(spec.source!))
         #expect(spec.sneak == true)
         #expect(ActivityCenter.isValidID(spec.id!))
         // Without a catalogue entry, smart icons still pick something sensible.

@@ -8,7 +8,7 @@
 
 ## What it does
 
-- **Your iPhone's Live Activities.** Rides, deliveries, scores and flights that macOS shows in the menu bar appear in the island with the app's icon and colour, including the ones the notch hides. 119 apps have their own look. See [Live Activities](docs/LIVE-ACTIVITIES.md).
+- **Your iPhone's Live Activities.** Rides, deliveries, scores and flights that macOS shows in the menu bar appear in the island with the app's icon and colour, including the ones the notch hides. 137 apps have their own look. See [Live Activities](docs/LIVE-ACTIVITIES.md).
 - **Now Playing** from any app, browsers included, with a scrubber that seeks, ±15 s, shuffle and repeat, volume and an output picker. Each new song shows for a moment below the notch. Beside the notch, bars, a wave, a pulse, mirrored bars, artwork that turns like a record, or a little animated sticker (five of Islet's own, or a GIF of yours) show that it's playing. With a video in Chrome and a song in Spotify at once, small app icons beside the title switch between them, and the controls follow.
 - **Coding agents.** See what Claude Code, Codex or Cursor is doing, answer their permission requests and questions from the notch, and watch your plan's usage limits. Agents can also drive the notch over MCP. See [Integrations](docs/INTEGRATIONS.md) and [MCP](docs/MCP.md).
 - **Ask** Apple Intelligence, Claude, ChatGPT or your command-line agent a quick question. See [AI](docs/AI.md).
@@ -97,6 +97,8 @@ To connect a coding agent, press **Connect…** beside it in *Settings → Codin
 | Music and Spotify extras when the system bridge can't help | Automation |
 
 Now Playing, volume, brightness, battery, calls, camera and microphone indicators, timers, the shelf, the Ask box and the API need no permission.
+
+Islet doesn't read what you type. With Accessibility it reads where menu bar items are, whether a window is in full screen, the text of Live Activities and banners, and, only with *Replace the system volume and brightness display* on, those keys. From macOS 27, System Settings calls Accessibility *Device Control and Data Access*.
 
 ## Configure
 

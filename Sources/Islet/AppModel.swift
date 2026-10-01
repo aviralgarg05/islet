@@ -3,6 +3,7 @@ import Foundation
 import IsletCore
 import IsletSystem
 import Observation
+import os
 
 enum IslandTab: String, CaseIterable, Identifiable {
     case home, today, shelf, widgets, clipboard, stats
@@ -73,6 +74,8 @@ final class AppModel {
     /// Meeting reminders: the meetings you joined or dismissed, and those already announced.
     private(set) var meetings = MeetingReminders()
     private(set) var shelf = Shelf()
+    /// Shelf items that can't be opened now (their disk or share isn't there): shown dimmed.
+    private(set) var shelfUnavailable: Set<String> = []
     private(set) var clipboard = ClipboardHistory()
     private(set) var stats: SystemStats?
     private(set) var plugins: [String: PluginResult] = [:]
@@ -83,8 +86,9 @@ final class AppModel {
     /// Display the island is expanded on (nil = collapsed everywhere).
     var expandedScreen: CGDirectDisplayID?
     var tab: IslandTab = .home
-    /// Displays covered by a fullscreen app, and that app.
-    private(set) var fullscreenDisplays: Set<CGDirectDisplayID> = []
+    /// The app in full screen on each display that has one (its bundle id, "" without one),
+    /// whichever app is in front.
+    private(set) var fullscreenApps: [CGDirectDisplayID: String] = [:]
     private(set) var frontBundleID: String?
     /// Bumped whenever time-driven state changes, so views re-evaluate the presentation.
     private(set) var tick = 0
@@ -147,6 +151,8 @@ final class AppModel {
     let ask: AskController
     private var mirroredKeys: Set<String> = []
     private var mirrorClock = LiveActivityClock()
+    /// Dismissed mirrored items, and when each item's text last changed.
+    private var mirrorTracker = MirrorTracker()
     /// Mirrored activity id → the menu bar item it came from. Clicking one presses that item;
     /// this never goes through a URL, so nothing outside Islet can trigger the press.
     private var mirroredActivityKeys: [String: String] = [:]
@@ -240,10 +246,13 @@ final class AppModel {
     func start() {
         Haptics.mode = settings.hapticsMode
         media.disabled = Set(settings.disabledMediaSources)
+        media.hidden = Set(settings.hiddenMediaApps)
         shelfService.onChange = { [weak self] s in self?.shelf = s }
+        shelfService.onAvailability = { [weak self] ids in self?.shelfUnavailable = ids }
+        shelfUnavailable = shelfService.unavailable
 
-        fullscreen.onChange = { [weak self] displays, bundle in
-            self?.fullscreenDisplays = displays
+        fullscreen.onChange = { [weak self] apps, bundle in
+            self?.fullscreenApps = apps
             self?.frontBundleID = bundle
         }
         fullscreen.start()
@@ -261,11 +270,20 @@ final class AppModel {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.recheckCalendarAccess() }
         })
+        systemObservers.append(NotificationCenter.default.addObserver(
+            forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled }
+        })
         // Timers don't count time asleep: catch up on what fell due (a meeting that started).
         systemObservers.append(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.expireNow() }
+            MainActor.assumeIsolated {
+                self?.expireNow()
+                // The helper may have given up while the Mac slept (mediaremoted restarts on wake).
+                if self?.systemMedia.gaveUp == true { self?.retryMedia() }
+            }
         })
     }
 
@@ -284,7 +302,8 @@ final class AppModel {
             for id in calls.active.keys.map(CallDetector.activityID) { remove(activityID: id) }
             calls = CallDetector()
         }
-        if settings.notificationMirroring {
+        let inFront = SessionWork.runs(sessionActive: sessionActive)
+        if settings.notificationMirroring && inFront {
             notificationMirror.onNotification = { [weak self] n in self?.mirrored(n) }
             notificationMirror.start()
         } else {
@@ -302,7 +321,7 @@ final class AppModel {
         }
         unlock.onUnlock = { [weak self] in self?.welcomeBack() }
         if settings.unlockSplash { unlock.start() } else { unlock.stop() }
-        if settings.mirrorMenuBarActivities && MenuBarLiveActivityMonitor.isAvailable {
+        if settings.mirrorMenuBarActivities && inFront && MenuBarLiveActivityMonitor.isAvailable {
             menuBarActivities.onChange = { [weak self] list in self?.syncMenuBarActivities(list) }
             menuBarActivities.knownApp = { $0.count <= 24 && LiveActivityCatalog.look(for: $0) != nil }
             menuBarActivities.onStructureChange = { NotificationCenter.default.post(name: .isletMenuBarChanged, object: nil) }
@@ -317,19 +336,24 @@ final class AppModel {
 
     /// Show the menu bar's Live Activities (iPhone and Mac) as island activities.
     private func syncMenuBarActivities(_ all: [MirroredLiveActivity]) {
-        let list = settings.mirrorOnlyHiddenActivities ? all.filter(\.hidden) : all
+        let now = Date()
+        // A dismissed item stays away while it is in the menu bar, whatever its text does.
+        let shown = mirrorTracker.sync(all, now: now).show
+        let list = settings.mirrorOnlyHiddenActivities ? shown.filter(\.hidden) : shown
         let keys = Set(list.map(\.key))
         for key in mirroredKeys.subtracting(keys) {
             let id = MenuBarLiveActivities.activityID(key)
-            remove(activityID: id)
+            // Forgotten first, so taking it away doesn't count as the user dismissing it.
             mirroredActivityKeys[id] = nil
+            remove(activityID: id)
             mirrorClock.forget(key)
         }
-        let now = Date()
         for m in list {
             let look = LiveActivityCatalog.look(for: m.appName).map { ($0.symbol, $0.tint) }
             let clock = mirrorClock.update(key: m.key, detail: m.detail, now: now)
-            let spec = MenuBarLiveActivities.activity(for: m, look: look, isNew: !mirroredKeys.contains(m.key), clock: clock)
+            // An item whose text stops changing dims after a while (`MirrorTracker.staleAfter`).
+            let spec = MenuBarLiveActivities.activity(for: m, look: look, isNew: !mirroredKeys.contains(m.key), clock: clock,
+                                                      staleAt: mirrorTracker.staleAt(key: m.key))
             let id = MenuBarLiveActivities.activityID(m.key)
             mirroredActivityKeys[id] = m.key
             // A spec can't clear a date: once the item shows no time at all, stop the clock Islet
@@ -364,7 +388,7 @@ final class AppModel {
         systemMedia.onUnavailable = { [weak self] reason in
             // Fall back to per-player enrichment. It uses AppleScript only where Automation is
             // already allowed, so this never brings up the prompt; Settings → Permissions does.
-            NSLog("Islet: %@", reason)
+            Log.media.error("\(reason, privacy: .public)")
             self?.bridgeFailed = true
             self?.syncPlayers()
         }
@@ -373,9 +397,28 @@ final class AppModel {
         syncPlayers()
     }
 
+    /// False while this user's session is in the background (fast user switching): nothing
+    /// reads the menu bar or banners then (`SessionWork`).
+    @ObservationIgnored var sessionActive = true
+    @ObservationIgnored private var volumeFilter = VolumeChangeFilter()
+
+    /// Low Power Mode: the island's loops hold still (`IslandLoops`). Follows the system's
+    /// notification; never polled.
+    private(set) var lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+
     /// The system bridge said it can't deliver (it may still be running), so the players fetch
-    /// their own details. Reset when media starts again.
-    @ObservationIgnored private var bridgeFailed = false
+    /// their own details. Reset when media starts again. Settings → Now Playing says so, with
+    /// Try again.
+    private(set) var bridgeFailed = false
+
+    /// Settings → Now Playing → Try again, and waking from sleep after the bridge gave up: a
+    /// fresh set of tries for the system-wide Now Playing helper.
+    func retryMedia() {
+        guard settings.mediaEnabled else { return }
+        bridgeFailed = false
+        systemMedia.retry()
+        syncPlayers()
+    }
 
     /// Music and Spotify run only while their source is on in Settings; a source switched off
     /// sends no AppleScript at all, even with the system bridge down.
@@ -517,7 +560,7 @@ final class AppModel {
         let restored = MeetingReminders.start(from: url)
         if let saved = restored.value { meetings = saved }
         canSaveMeetings = restored.canSave
-        if let moved = restored.setAside { NSLog("Islet: meetings.json couldn't be read; kept as %@", moved.lastPathComponent) }
+        if let moved = restored.setAside { Log.files.error("meetings.json couldn't be read; kept as \(moved.lastPathComponent, privacy: .public)") }
     }
 
     private func saveMeetings() {
@@ -525,7 +568,7 @@ final class AppModel {
         do {
             try meetings.save(to: url)
         } catch {
-            NSLog("Islet: couldn't save meetings.json: %@", error.localizedDescription)
+            Log.files.error("couldn't save meetings.json: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -666,7 +709,7 @@ final class AppModel {
         do {
             try configFile.save(settings)
         } catch {
-            NSLog("Islet: couldn't save config.json: %@", error.localizedDescription)
+            Log.files.error("couldn't save config.json: \(error.localizedDescription, privacy: .public)")
         }
         noteSettingsProblem(configFile.problem)
     }
@@ -677,7 +720,7 @@ final class AppModel {
         do {
             try configFile.replace(with: settings)
         } catch {
-            NSLog("Islet: couldn't replace config.json: %@", error.localizedDescription)
+            Log.files.error("couldn't replace config.json: \(error.localizedDescription, privacy: .public)")
         }
         noteSettingsProblem(configFile.problem)
     }
@@ -784,13 +827,14 @@ final class AppModel {
 
     // MARK: Presentation
 
-    func presentation(for display: CGDirectDisplayID) -> IslandPresentation {
+    /// - Parameter ignoringHUD: what shows under a HUD (`PresenterInputs.ignoresHUD`).
+    func presentation(for display: CGDirectDisplayID, ignoringHUD: Bool = false) -> IslandPresentation {
         _ = tick
         if let forcedPresentation { return forcedPresentation }
         let now = Date()
         // "Hide music only" over a full screen app: the music goes, everything else stays.
         let showsMedia = settings.mediaEnabled && fullscreenBehaviour(on: display) != .hideMusic
-        let inputs = PresenterInputs(
+        var inputs = PresenterInputs(
             now: now,
             center: center,
             nowPlaying: showsMedia ? nowPlaying : nil,
@@ -803,6 +847,7 @@ final class AppModel {
                 ?? (showsMedia && settings.songChangePeek ? songPeek.current(now: now) : nil),
             idleSticker: showsMedia && Presenter.showsIdleSticker(settings)
         )
+        inputs.ignoresHUD = ignoringHUD
         let p = Presenter.present(inputs)
         // "Only on hover" on a display without a notch: nothing until the pointer is there.
         if settings.notchlessStyle == .hover, notchlessDisplays.contains(display), hoverDisplay != display {
@@ -814,7 +859,8 @@ final class AppModel {
     /// What full screen asks of the island on `display` now (`show` when nothing is in full
     /// screen there, or the front app's rule keeps the island).
     func fullscreenBehaviour(on display: CGDirectDisplayID) -> FullscreenBehaviour {
-        settings.fullscreenEffect(isFullscreen: fullscreenDisplays.contains(display), frontApp: frontBundleID)
+        // The rule that counts is the full screen app's on that display, not the front app's.
+        settings.fullscreenEffect(isFullscreen: fullscreenApps[display] != nil, frontApp: fullscreenApps[display])
     }
 
     /// The pointer reached the closed island on `display`, or left it (nil).
@@ -954,6 +1000,7 @@ final class AppModel {
         if let d = center.nextDeadline(now: now) { candidates.append(d) }
         if let d = media.nextDeadline(now: now) { candidates.append(d) }
         if let d = songPeek.nextDeadline(now: now) { candidates.append(d) }
+        if settings.callDetection, let d = calls.nextDeadline(now: now) { candidates.append(d) }
         if let d = pausedMusic.nextDeadline(timeout: settings.pausedMusicTimeout, now: now) { candidates.append(d) }
         if let i = playbackIntent { candidates.append(max(now, i.expires)) }
         if let b = batteryEvent { candidates.append(b.until) }
@@ -978,6 +1025,7 @@ final class AppModel {
     private func expireNow() {
         let now = Date()
         center.expire(now: now)
+        if settings.callDetection, calls.nextDeadline(now: now).map({ $0 <= now }) ?? false { updateCalls() }
         syncMeetings(now: now)
         checkReminderAlerts(now: now)
         if let b = batteryEvent, b.until <= now { batteryEvent = nil }
@@ -1048,11 +1096,17 @@ final class AppModel {
         }
     }
 
+    /// A volume key Islet handled (it replaces the system display): changes just after it are its.
+    func volumeKeyHandled() { volumeFilter.keyHandled(at: Date()) }
+
     private func volumeChanged(_ out: AudioMonitor.Output) {
         let deviceChanged = out.deviceName != outputDeviceName
         outputDeviceName = out.deviceName
-        guard settings.hudEnabled else { return }
+        let now = Date()
+        if deviceChanged { volumeFilter.outputChanged(at: now) }
         if deviceChanged, let name = out.deviceName {
+            // A new output gets its card ("Sound output changes"), not a volume HUD.
+            guard settings.outputChangeCard else { return }
             let bt = AudioMonitor.isBluetooth(AudioMonitor.defaultDevice(input: false))
             _ = try? commit(ActivitySpec(
                 id: "audio-route", source: "audio", title: name, subtitle: bt ? "Connected" : "Audio output",
@@ -1060,7 +1114,10 @@ final class AppModel {
                 priority: .normal, ttl: 3, sneak: true
             ))
         } else {
-            center.showHUD(.volume, value: out.volume, muted: out.muted, label: out.deviceName, now: Date())
+            // A level the new output set for itself, or an app's change while the keys show
+            // their own HUD, isn't shown (`VolumeChangeFilter`).
+            guard settings.hudEnabled, volumeFilter.shows(now: now, replacing: settings.replaceSystemHUD) else { return }
+            center.showHUD(.volume, value: out.volume, muted: out.muted, label: out.deviceName, now: now)
         }
         reschedule()
     }
@@ -1112,7 +1169,7 @@ final class AppModel {
 
     @discardableResult
     func applyLocal(_ spec: ActivitySpec) throws -> Activity? {
-        if let source = spec.source, settings.mutedSources.contains(source) { return nil }
+        if let source = spec.source, settings.isMuted(source: source) { return nil }
         return try commit(spec)
     }
 
@@ -1158,7 +1215,9 @@ final class AppModel {
     private func updateCalls() {
         guard settings.callDetection else { return }
         var started = false
-        for change in calls.update(micUsers: lastMicUsers, cameraOn: cameraInUse, now: Date()) {
+        // Muting an app on the Apps page silences its calls too.
+        let muted = Set(settings.appRules.filter { $0.muteNotifications == true }.map(\.bundleID))
+        for change in calls.update(micUsers: lastMicUsers, cameraOn: cameraInUse, now: Date(), muted: muted) {
             switch change {
             case .started(let spec):
                 _ = try? applyLocal(spec)
@@ -1167,17 +1226,16 @@ final class AppModel {
             case .ended(let id): remove(activityID: id)
             }
         }
-        // A call in a meeting's app counts as joining it (`syncMeetings`).
-        if started {
-            syncMeetings(now: Date())
-            reschedule()
-        }
+        // A call in a meeting's app counts as joining it (`syncMeetings`). An app that has only
+        // just taken the microphone shows once it has held it a moment (`CallDetector.settle`).
+        if started { syncMeetings(now: Date()) }
+        reschedule()
     }
 
     private func mirrored(_ n: MirroredNotification) {
         let rule = settings.rule(for: n.bundleID)
         if rule?.muteNotifications == true { return }
-        guard let a = try? applyLocal(n.activity(rule: rule)) else { return }
+        guard let a = try? applyLocal(n.activity(rule: rule, peek: settings.notificationPeek)) else { return }
         if settings.aiAssist, let body = n.body, body.count > 90 {
             AIAssist.shared.summarize(body) { [weak self] summary in
                 guard let summary else { return }
@@ -1235,6 +1293,22 @@ final class AppModel {
         reschedule()
     }
 
+    /// Settings → Apps → Muted: hear from a source again. Its next activity shows as usual.
+    func unmute(source: String) {
+        settings.mutedSources.removeAll { $0 == source }
+        saveSettings()
+        // Mirrored Live Activities come back at once, rather than at their next change.
+        if MenuBarLiveActivities.isMirroredSource(source) { menuBarActivities.refresh() }
+    }
+
+    /// How a muted source reads in menus and Settings: an app's name rather than its bundle id.
+    static func mutedName(_ source: String) -> String {
+        MutedSources.displayName(source) { id in
+            NSWorkspace.shared.urlForApplication(withBundleIdentifier: id)
+                .map { FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "") }
+        }
+    }
+
     private func startLAN() {
         lan.start(port: settings.lanPort, backend: self, version: Self.version)
     }
@@ -1245,6 +1319,10 @@ final class AppModel {
 
     func remove(activityID: String) {
         center.remove(id: activityID)
+        // A dismissed call stays away until its app lets go of the microphone, and a dismissed
+        // Live Activity until it leaves the menu bar.
+        calls.dismiss(activityID: activityID)
+        if let key = mirroredActivityKeys[activityID] { mirrorTracker.dismiss(key: key) }
         meetingActivityRemoved(activityID)
         reschedule()
         timers.activityRemoved(activityID)
@@ -1351,6 +1429,7 @@ final class AppModel {
     /// none, back to the demo's song alone.
     func loadPlayersForSnapshot(_ list: [NowPlaying], bridge: NowPlaying?, now: Date, song: NowPlaying? = nil) {
         media = MediaArbiter(disabled: media.disabled)
+        media.hidden = Set(settings.hiddenMediaApps)
         for np in list { media.update(np) }
         media.updateFromBridge(bridge)
         nowPlaying = song ?? media.current(now: now)
@@ -1443,7 +1522,7 @@ extension AppModel: IsletBackend {
 
     nonisolated func applyActivity(_ spec: ActivitySpec) async throws -> Activity {
         try await MainActor.run {
-            if let source = spec.source, self.settings.mutedSources.contains(source) {
+            if let source = spec.source, self.settings.isMuted(source: source) {
                 // Validate and echo back, but show nothing: muted scripts shouldn't error out.
                 var scratch = ActivityCenter()
                 return try scratch.apply(spec, now: Date())
@@ -1567,7 +1646,7 @@ extension AppModel {
             modules.battery = s.batteryEnabled
         }
 
-        let wantAudio = s.hudEnabled || s.privacyIndicatorsEnabled
+        let wantAudio = s.hudEnabled || s.outputChangeCard || s.privacyIndicatorsEnabled
         if wantAudio != modules.audio {
             if wantAudio {
                 audio.onOutputChange = { [weak self] out in self?.volumeChanged(out) }
@@ -1610,6 +1689,11 @@ extension AppModel {
             let now = Date()
             setNowPlaying(media.current(now: now), now: now)
             reschedule()
+        }
+        if Set(s.hiddenMediaApps) != media.hidden {
+            media.hidden = Set(s.hiddenMediaApps)
+            let now = Date()
+            setNowPlaying(media.current(now: now), now: now)
         }
         if clipboard.limit != s.clipboardLimit { clipboard.limit = s.clipboardLimit }
         if clipboard.ignoredApps != Set(s.clipboardIgnoredApps) { clipboard.ignoredApps = Set(s.clipboardIgnoredApps) }

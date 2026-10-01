@@ -19,14 +19,26 @@ struct NowPlayingSettings: View {
                 SettingsHero(page: .nowPlaying, switchTitle: "Show what's playing", isOn: $model.settings.mediaEnabled)
                     .settingsAnchor("nowPlaying.enabled")
             }
+            if on && model.bridgeFailed {
+                Section {
+                    AccessRow(text: "Islet can't see what other apps are playing right now. Music and Spotify still show.",
+                              button: "Try again") { model.retryMedia() }
+                        .settingsAnchor("nowPlaying.status")
+                }
+            }
             Section {
                 IslandPreview(settings: model.settings, showsOpen: false)
                     .settingsAnchor("nowPlaying.preview")
             }
             Section {
                 MediaSourceToggles(model: model)
+                IgnoredAppsList(apps: $model.settings.hiddenMediaApps, title: "Ignore apps",
+                                detail: "What these apps play never shows, such as a game's music or a video that plays by itself.",
+                                anchor: "nowPlaying.ignore")
             } header: {
                 Text("Sources").settingsAnchor("nowPlaying.sources")
+            } footer: {
+                SettingsFooter("A short sound from an app that isn't a music or video player, such as a voice message, shows only once it has played for a few seconds.")
             }
             .disabled(!on)
             Section("Closed island") {
@@ -260,6 +272,12 @@ struct NotificationsSettings: View {
                 if model.settings.notificationMirroring && !axTrusted {
                     askForAccessibility("Islet needs Accessibility to read banners.")
                 }
+                Toggle(isOn: $model.settings.notificationPeek) {
+                    Text("Peek at new notifications")
+                    Text("Also open a little below the notch. macOS shows its own banner as well, so this is off at first.")
+                }
+                .settingsAnchor("notifications.peek")
+                .disabled(!model.settings.notificationMirroring)
                 Toggle(isOn: $model.settings.unlockSplash) {
                     Text("Welcome back summary when you unlock")
                     Text("What arrived while the screen was locked. Nothing shows when nothing did.")
@@ -277,6 +295,17 @@ struct NotificationsSettings: View {
                     Text("When you change the display's brightness.")
                 }
                 .settingsAnchor("notifications.brightness")
+                if !model.settings.hudOverlap.isEmpty {
+                    AccessRow(text: "macOS shows its own display too, so each press shows two.", button: "Show only Islet's",
+                              symbol: "info.circle", tint: .secondary) {
+                        model.settings.replaceSystemHUD = true
+                    }
+                }
+                Toggle(isOn: $model.settings.outputChangeCard) {
+                    Text("Sound output changes")
+                    Text("A short card when AirPods or another output connects, with its name.")
+                }
+                .settingsAnchor("notifications.outputCard")
                 Toggle(isOn: $model.settings.keyboardHUDEnabled) {
                     Text("Keyboard brightness")
                     Text("When you change the keyboard's light, while Islet replaces the system display.")

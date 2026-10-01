@@ -220,7 +220,7 @@ public enum SettingsIndex {
     // MARK: Entries
 
     private static let general: [SettingsEntry] = [
-        SettingsEntry("general.login", .general, "Launch at login", section: "Behaviour", keywords: ["startup", "login items", "start automatically"]),
+        SettingsEntry("general.login", .general, "Launch at login", section: "Behaviour", keywords: ["startup", "login items", "start automatically", "move to Applications"]),
         SettingsEntry("general.open", .general, "Open the island", section: "Behaviour", keywords: ["hover", "click"]),
         SettingsEntry("general.hoverDelay", .general, "Hover delay", section: "Behaviour", keywords: ["open delay", "wait"], anchor: "general.open"),
         SettingsEntry("general.peekOnHover", .general, "Peek at what's playing", section: "Behaviour",
@@ -295,12 +295,16 @@ public enum SettingsIndex {
     private static let features: [SettingsEntry] = [
         SettingsEntry("nowPlaying.enabled", .nowPlaying, "Now Playing", keywords: ["music", "media", "song"]),
         SettingsEntry("nowPlaying.preview", .nowPlaying, "Preview", keywords: ["play", "pause", "sample", "try"]),
+        SettingsEntry("nowPlaying.status", .nowPlaying, "Try again", keywords: ["not working", "missing", "other apps", "helper"],
+                      anchor: "nowPlaying.enabled"),
         SettingsEntry("nowPlaying.sources", .nowPlaying, "Sources", keywords: ["media apps", "players", "switch player", "several players"]),
         SettingsEntry("nowPlaying.music", .nowPlaying, "Music", section: "Sources", keywords: ["Apple Music"], anchor: "nowPlaying.sources"),
         SettingsEntry("nowPlaying.spotify", .nowPlaying, "Spotify", section: "Sources", anchor: "nowPlaying.sources"),
         SettingsEntry("nowPlaying.browsers", .nowPlaying, "Web browsers", section: "Sources", keywords: ["Safari", "Chrome", "YouTube"],
                       anchor: "nowPlaying.sources"),
         SettingsEntry("nowPlaying.other", .nowPlaying, "Other apps", section: "Sources", keywords: ["podcasts", "video"], anchor: "nowPlaying.sources"),
+        SettingsEntry("nowPlaying.ignore", .nowPlaying, "Ignore apps", section: "Sources",
+                      keywords: ["hide an app", "block", "autoplay", "games", "wrong player", "voice messages"]),
         SettingsEntry("nowPlaying.paused", .nowPlaying, "Hide paused music after", section: "Closed island",
                       keywords: ["pause", "artwork", "keep", "stay", "linger", "timeout", "seconds", "never"]),
         SettingsEntry("nowPlaying.peek", .nowPlaying, "Show the new song for a moment", section: "Closed island",
@@ -365,10 +369,14 @@ public enum SettingsIndex {
 
         SettingsEntry("notifications.mirror", .notifications, "Mirror notifications from every app", section: "Notifications",
                       keywords: ["banners", "iPhone", "messages"]),
+        SettingsEntry("notifications.peek", .notifications, "Peek at new notifications", section: "Notifications",
+                      keywords: ["banner", "sneak", "below the notch"]),
         SettingsEntry("notifications.welcome", .notifications, "Welcome back summary when you unlock", section: "Notifications",
                       keywords: ["unlock", "lock screen"]),
         SettingsEntry("notifications.volume", .notifications, "Volume", section: "HUDs", keywords: ["HUD", "sound", "level"]),
         SettingsEntry("notifications.brightness", .notifications, "Display brightness", section: "HUDs", keywords: ["HUD", "screen", "level"]),
+        SettingsEntry("notifications.outputCard", .notifications, "Sound output changes", section: "HUDs",
+                      keywords: ["AirPods", "headphones", "speaker", "connected", "audio device"]),
         SettingsEntry("notifications.keyboard", .notifications, "Keyboard brightness", section: "HUDs", keywords: ["HUD", "backlight", "keys"]),
         SettingsEntry("notifications.microphone", .notifications, "Microphone", section: "HUDs", keywords: ["HUD", "mic", "mute", "unmute"]),
         SettingsEntry("notifications.hudStyle", .notifications, "HUD style", section: "HUDs",
@@ -378,7 +386,7 @@ public enum SettingsIndex {
         SettingsEntry("notifications.hudDuration", .notifications, "Stays on screen for", section: "HUDs",
                       keywords: ["HUD", "duration", "seconds"]),
         SettingsEntry("notifications.replaceHUD", .notifications, "Replace the system volume and brightness display", section: "HUDs",
-                      keywords: ["HUD", "keys", "overlay", "accessibility"]),
+                      keywords: ["HUD", "keys", "overlay", "accessibility", "two HUDs", "shows twice", "only one HUD", "double"]),
         SettingsEntry("notifications.battery", .notifications, "Battery and charging", section: "Battery", keywords: ["power", "charger", "plugged in"]),
         SettingsEntry("notifications.batteryLow", .notifications, "Low battery warning", section: "Battery", keywords: ["percent"],
                       anchor: "notifications.battery"),
@@ -468,12 +476,14 @@ public enum SettingsIndex {
         SettingsEntry("apps.tint", .apps, "App colour", keywords: ["color", "tint", "per-app", "custom", "any colour", "colour panel"], anchor: "apps.add"),
         SettingsEntry("apps.hide", .apps, "Hide the island while an app is in front", keywords: ["per-app", "frontmost"], anchor: "apps.add"),
         SettingsEntry("apps.fullscreen", .apps, "Keep the island in full screen", keywords: ["per-app", "fullscreen", "games"], anchor: "apps.add"),
-        SettingsEntry("apps.mute", .apps, "Mute an app's notifications", keywords: ["per-app", "silence"], anchor: "apps.add"),
+        SettingsEntry("apps.mute", .apps, "Mute an app's notifications and calls", keywords: ["per-app", "silence", "microphone"], anchor: "apps.add"),
+        SettingsEntry("apps.muted", .apps, "Muted", keywords: ["unmute", "silenced", "right-click", "sources"]),
         SettingsEntry("apps.priority", .apps, "App priority", keywords: ["per-app", "urgent", "rank", "order", "first"], anchor: "apps.add"),
     ] + PermissionKind.allCases.map { kind in
         SettingsEntry("permissions.\(kind.rawValue)", .permissions, kind.title, keywords: ["privacy", "allow", "access"])
     } + [
         SettingsEntry("about.version", .about, "Version", keywords: ["licence", "license", "open source"]),
+        SettingsEntry("about.quit", .about, "Quit", keywords: ["exit", "close the app", "stop"]),
     ]
 
     private static let advanced: [SettingsEntry] = [

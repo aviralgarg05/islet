@@ -415,6 +415,14 @@ public struct TimerEngine: Codable, Equatable, Sendable {
         }
     }
 
+    /// One quiet note for a timer that ended more than `missedLimit` ago (the Mac was asleep, or
+    /// Islet wasn't running): too late to ring, but not dropped without a word. It stays for an
+    /// hour, beside the notch only.
+    public static func missedNotice(for t: TimerItem) -> ActivitySpec {
+        ActivitySpec(id: "timer-missed-" + t.id, source: source, title: t.displayTitle, subtitle: "Missed while the Mac was asleep",
+                     icon: .symbol("timer"), state: .info, tint: "gray", priority: .low, ttl: 3600, sneak: false)
+    }
+
     /// The activity that shows a timer. Running: a live countdown to `endsAt`. Paused: no
     /// countdown, "Paused" in the wing and the time left underneath. Ringing: critical, so it
     /// breaks through fullscreen, with Stop / Snooze / Restart.

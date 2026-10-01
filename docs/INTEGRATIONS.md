@@ -15,13 +15,13 @@ Ready-made files live in [`integrations/`](../integrations/). For recipes coveri
 | Source | What you see | Needs |
 |---|---|---|
 | Any app that reports Now Playing (Music, Spotify, Podcasts, TV, Safari/Chrome/Arc/Firefox tabs, VLC, IINA, Plexamp, Tidal, Cider…) | Artwork + equalizer in the closed island, and each new song for a moment below the notch; when open, a scrubber you can drag, ±15 s, shuffle and repeat (when the player reports them), system volume and an output picker. With several players at once (a Chrome video and a Spotify song), the others show as small app icons beside the title; clicking one shows and controls that player | nothing (Automation for Spotify or Music to control one the system doesn't treat as now playing) |
-| FaceTime, Zoom, Teams, Slack huddles, Discord, WhatsApp, Webex, Skype, Telegram, Signal, Meet in a browser | Green call pill with a live timer; video icon when the camera is on | nothing |
+| FaceTime, Zoom, Teams, Slack huddles, Discord, WhatsApp, Webex, Skype, Telegram, Signal, Meet in a browser | Green call pill with a live timer once the app has held the microphone for 3 seconds; video icon when the camera is on. A browser or a chat app first shows a quiet "Microphone in use" until the camera comes on or a minute passes. A dismissed pill stays away until the app lets go of the microphone | nothing |
 | Calendar (iCloud, Google and Exchange accounts added to macOS) | Meeting reminders: from 10 minutes before (5, 15 or 30, or off), the meeting counts down beside the notch with its call app's icon, glows when it starts and stays until you join, dismiss it or it ends. **Join** opens the Zoom, Meet, Teams, Webex or FaceTime link; being in a call in that app (joined up to 10 minutes early) counts as joining. All-day events, cancelled meetings and declined invitations never remind you | Calendar access (full access, not "Add events only") |
-| Battery | Charging splash with the adapter's watts, low and critical warnings at levels you choose, an optional "charged to 80%" alert, Low Power Mode on/off | nothing |
-| Volume, brightness, keyboard backlight | HUD in the notch (optionally replacing the system one) | nothing (Accessibility to replace) |
-| AirPods / headphones / displays / speakers | "Connected" card when the output device changes | nothing |
+| Battery | Charging splash (the adapter's watts show in the open island), low and critical warnings at levels you choose, an optional "charged to 80%" alert, Low Power Mode on/off | nothing |
+| Volume, brightness, keyboard backlight | HUD in the notch (optionally replacing the system one). Volume and brightness start off in a new setup, since macOS shows its own | nothing (Accessibility to replace) |
+| AirPods / headphones / displays / speakers | "Connected" card when the output device changes (its own switch, **Sound output changes**) | nothing |
 | Safari, Chrome, Firefox, Edge, Brave, Arc downloads | Progress (real % for Safari), then "Downloaded" with Open/Show | Downloads folder access |
-| Notifications from every app, including iPhone notifications forwarded by macOS | App icon + sender + one line; per-app mute, tint and priority; optional on-device summary | Accessibility (experimental) |
+| Notifications from every app, including iPhone notifications forwarded by macOS | App icon + sender + one line beside the notch (macOS shows its own banner too; **Peek at new notifications** opens it below the notch as well); per-app mute, tint and priority; optional on-device summary | Accessibility (experimental) |
 | Screen unlock | "Welcome back" with what arrived while you were away; nothing when nothing did | nothing |
 
 ---
@@ -211,7 +211,7 @@ A swipe fires once per flick, after about 24 pt of travel within a quarter of a 
 
 ## Keep awake
 
-The cup in the open island's header keeps the Mac awake for 15 minutes, 1 or 2 hours, or until you turn it off. A live activity counts down in the notch. It turns itself off on battery below 20%, and won't start then.
+**Keep awake** in the page switcher's More menu (the … under the open island) keeps the Mac awake for 15 minutes, 1 or 2 hours, or until you turn it off. While it is on, a cup shows in the open island's top row, with the same choices and Turn off. A live activity counts down in the notch. It turns itself off on battery below 20%, and won't start then.
 
 | From | Use |
 |---|---|
@@ -266,10 +266,10 @@ Turn on **Run scripts from the plugins folder** in *Settings → Advanced → Sc
 ## Per-app customisation
 
 *Settings → Apps* (or `appRules` in `config.json`) lets you set, per app:
-- a tint (a named colour, or any colour from the colour panel) and icon for its activities and notifications;
+- a tint (a named colour, or any colour from the colour panel) for its activities and notifications, and in `config.json` an icon;
 - a **priority** for its activities and notifications (low, normal, high or urgent), in place of their own;
 - **hide the island while it's in front** (games, presentations);
 - **keep the island in full screen** (for example, a call app), whatever *General → In full screen* says;
-- **mute its notifications**.
+- **mute its notifications and calls**.
 
-Right-click any activity in the island to dismiss it or mute its source.
+Right-click any activity in the island to dismiss it or mute its source. Muted sources are listed under *Settings → Apps → Muted*, each with **Unmute**. Each app's Live Activities are a source of their own, so muting one leaves the others, and one you dismiss stays away until it leaves the menu bar.

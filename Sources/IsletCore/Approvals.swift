@@ -383,6 +383,32 @@ public struct ApprovalRequest: Equatable, Sendable {
         return spec
     }
 
+    /// The id of the agent's status activity for this session (`AgentHooks`).
+    public var statusActivityID: String {
+        "\(provider.rawValue)-" + AgentHooks.shortID(sessionID)
+    }
+
+    /// Why the question went back to the terminal without an answer here.
+    public enum BackToTerminal: Equatable, Sendable {
+        /// The card waited `approvalWait` and nobody answered it.
+        case expired
+        /// "Answer in the terminal", but the terminal couldn't be brought forward.
+        case jumpFailed
+    }
+
+    /// The agent's status once its question has gone back to the terminal unanswered, so a
+    /// card that went away doesn't leave the agent waiting unseen. It changes the agent's own
+    /// activity only, which the hooks keep up to date; with none showing, nothing is added.
+    public func statusUpdate(backToTerminal reason: BackToTerminal) -> ActivitySpec {
+        let subtitle: String
+        switch reason {
+        case .expired: subtitle = "Answer in the terminal"
+        case .jumpFailed: subtitle = "Couldn't bring the terminal forward. Answer there."
+        }
+        return ActivitySpec(id: statusActivityID, subtitle: subtitle, trailing: "Waiting", state: .waiting,
+                            priority: .normal, ttl: 0, sneak: false)
+    }
+
     static func shellQuote(_ s: String) -> String {
         guard s.isEmpty || s.contains(where: { " \t\n'\"\\$`;&|<>()*?[]{}!#~".contains($0) }) else { return s }
         return "'" + s.replacingOccurrences(of: "'", with: #"'\''"#) + "'"

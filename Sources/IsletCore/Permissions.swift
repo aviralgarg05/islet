@@ -19,6 +19,20 @@ public enum PermissionKind: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// A plain line under the permission, when it needs one: what Accessibility lets Islet do
+    /// (people worry it reads their typing), and from macOS 27 the name System Settings uses.
+    /// - Parameter status: a refusal adds what to try when the switch is already on.
+    public func note(osMajor: Int, status: PermissionStatus? = nil) -> String? {
+        guard self == .accessibility else { return nil }
+        var lines: [String] = []
+        if osMajor >= 27 { lines.append("Called Device Control and Data Access in System Settings.") }
+        lines.append("Islet doesn't read what you type. It reads where menu bar items are, whether a window is in full screen, the text of Live Activities and banners, and, only with Replace the system volume and brightness display on, those keys.")
+        if status == .denied {
+            lines.append("Already on in System Settings? Remove Islet with the minus button and add it again.")
+        }
+        return lines.joined(separator: " ")
+    }
+
     /// The app Islet sends Apple Events to, for the Automation permissions.
     public var automationTarget: String? {
         switch self {
@@ -194,5 +208,49 @@ public enum PermissionPrompt {
     public static func shouldAsk(wasOn: Bool?, isOn: Bool) -> Bool {
         guard let wasOn else { return false }
         return isOn && !wasOn
+    }
+}
+
+/// Where Islet runs from. Opening at login is reliable only from an Applications folder: a copy
+/// run from Downloads, or one macOS moved to a random read-only place (App Translocation), may
+/// not open at the next login.
+public enum AppLocation {
+    public static func isSettled(bundlePath: String, home: String) -> Bool {
+        let path = (bundlePath as NSString).standardizingPath
+        if path.contains("/AppTranslocation/") { return false }
+        let homeApps = (home as NSString).appendingPathComponent("Applications")
+        return path.hasPrefix("/Applications/") || path.hasPrefix(homeApps + "/")
+    }
+}
+
+/// Background work that follows the user's session and permissions: reading the menu bar,
+/// banners and keys through Accessibility, and following the pointer.
+public enum SessionWork {
+    /// Accessibility was granted or taken away: whether to start (or stop) what uses it now,
+    /// rather than at the next launch. Nothing changes for a grant nobody uses.
+    /// - Parameter wasTrusted: what Islet knew before, nil before the first look.
+    public static func restartsOnTrustChange(wasTrusted: Bool?, isTrusted: Bool, settings: IsletSettings) -> Bool {
+        guard let was = wasTrusted, was != isTrusted else { return false }
+        return PermissionKind.accessibility.uses(settings).contains(where: \.isOn)
+    }
+
+    /// Whether the menu bar and banner readers, the key tap and the pointer watchers run. After
+    /// fast user switching this session is in the background and none of them do; back in front,
+    /// they start again as the settings say.
+    public static func runs(sessionActive: Bool) -> Bool { sessionActive }
+}
+
+/// When the island's panels are made again.
+public enum DisplayPolicy {
+    /// After waking: the displays are looked at once they have settled, rebuilt whatever they
+    /// say (the same displays can come back with other values, or panels that no longer draw),
+    /// then once more in case something settled later.
+    public static let wakeLooks: [(delay: TimeInterval, force: Bool)] = [(1, true), (2.5, false)]
+
+    /// Whether the panels must be made again: forced after waking, or because the displays
+    /// (which ones, in what order, at what size and with what notch) differ from the ones the
+    /// panels were made for.
+    public static func needsRebuild(current: [ScreenDescriptor], wanted: [ScreenDescriptor], force: Bool) -> Bool {
+        force || current != wanted
     }
 }

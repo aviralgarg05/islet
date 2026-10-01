@@ -528,7 +528,8 @@ import Testing
 
     @Test func detectedCallsUseLiveAudio() {
         var d = CallDetector()
-        guard case .started(let s) = d.update(micUsers: ["us.zoom.xos"], cameraOn: false, now: t0).first else {
+        _ = d.update(micUsers: ["us.zoom.xos"], cameraOn: false, now: t0)
+        guard case .started(let s) = d.update(micUsers: ["us.zoom.xos"], cameraOn: false, now: t0.addingTimeInterval(5)).first else {
             Issue.record("expected a call")
             return
         }

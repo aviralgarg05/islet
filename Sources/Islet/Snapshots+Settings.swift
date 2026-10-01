@@ -173,6 +173,10 @@ enum SettingsSnapshots {
         var s = IsletSettings()
         s.clipboardEnabled = true
         s.clipboardIgnoredApps = ["com.apple.Notes"]
+        s.hiddenMediaApps = ["com.apple.TV"]
+        // The volume HUD on without replacing macOS's display, so the "shows two" note shows.
+        s.hudEnabled = true
+        s.mutedSources = ["live-activity:uber-eats", "github-actions"]
         s.remindersEnabled = true
         s.pluginsEnabled = true
         s.weatherEnabled = true

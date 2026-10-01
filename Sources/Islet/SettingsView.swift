@@ -820,11 +820,13 @@ struct ShortcutSettings: View {
             Section { SettingsHero(page: .shortcuts) }
             Section {
                 SettingsRow(title: "Open or close the island", detail: "Opens it pinned, so it stays open until you press the keys again.") {
-                    ShortcutField(text: $model.settings.hotkey, standard: IsletSettings().hotkey)
+                    ShortcutField(text: $model.settings.hotkey, standard: IsletSettings().hotkey,
+                                  other: (model.settings.askHotkey, "open the Ask box"))
                 }
                 .settingsAnchor("shortcuts.island")
                 SettingsRow(title: "Open the Ask box", detail: "Ready to type a question. Press the keys again to close it.") {
-                    ShortcutField(text: $model.settings.askHotkey, standard: IsletSettings().askHotkey)
+                    ShortcutField(text: $model.settings.askHotkey, standard: IsletSettings().askHotkey,
+                                  other: (model.settings.hotkey, "open the island"))
                 }
                 .settingsAnchor("shortcuts.ask")
             } footer: {
@@ -866,6 +868,22 @@ struct AppRulesSettings: View {
                                 model.settings.appRules.removeAll { $0.bundleID == rule.bundleID }
                             }
                             .id(rule.bundleID)
+                        }
+                    }
+                }
+                // What "Mute" in the island's right-click menu silenced, so it can be heard again.
+                if !model.settings.mutedSources.isEmpty {
+                    Section("Muted") {
+                        Text("Muted from the island's right-click menu. Unmute one to see its activities again.")
+                            .font(.callout).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .settingsAnchor("apps.muted")
+                        ForEach(model.settings.mutedSources, id: \.self) { source in
+                            HStack {
+                                Text(AppModel.mutedName(source)).lineLimit(1)
+                                Spacer(minLength: 8)
+                                Button("Unmute") { model.unmute(source: source) }
+                            }
                         }
                     }
                 }
@@ -979,7 +997,7 @@ struct AppRuleRow: View {
             .fixedSize()
         Toggle("Keep it in full screen", isOn: Binding(get: { rule.showInFullscreen ?? false }, set: { rule.showInFullscreen = $0 ? true : nil }))
             .fixedSize()
-        Toggle("Mute notifications", isOn: Binding(get: { rule.muteNotifications ?? false }, set: { rule.muteNotifications = $0 ? true : nil }))
+        Toggle("Mute notifications and calls", isOn: Binding(get: { rule.muteNotifications ?? false }, set: { rule.muteNotifications = $0 ? true : nil }))
             .fixedSize()
     }
 
@@ -1027,6 +1045,17 @@ struct AboutSettings: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 20)
+            }
+            // The status item can end up behind the notch or in the menu bar's overflow, so
+            // Islet can also be quit from here, the island's right-click menu and its More menu.
+            Section {
+                LabeledContent {
+                    Button("Quit Islet") { NSApp.terminate(nil) }
+                } label: {
+                    Text("Quit")
+                    Text("Also in the island's right-click menu and its More menu.")
+                }
+                .settingsAnchor("about.quit")
             }
         }
         .formStyle(.grouped)

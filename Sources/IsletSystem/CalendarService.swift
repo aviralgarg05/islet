@@ -151,7 +151,7 @@ public final class CalendarService {
     static func item(from e: EKEvent) -> AgendaItem {
         let color = hex(e.calendar?.color)
         return AgendaItem(
-            id: e.eventIdentifier ?? UUID().uuidString,
+            id: Agenda.eventID(eventIdentifier: e.eventIdentifier, calendarItemIdentifier: e.calendarItemIdentifier, start: e.startDate),
             title: e.title ?? "Untitled",
             start: e.startDate,
             end: e.endDate,
@@ -161,8 +161,9 @@ public final class CalendarService {
             meetingURL: Agenda.meetingLink(in: [e.url?.absoluteString, e.location, e.notes]),
             calendarID: e.calendar?.calendarIdentifier,
             calendarTitle: e.calendar?.title,
-            // A cancelled meeting (Exchange keeps it in the calendar) is no more to join than one declined.
-            isDeclined: e.status == .canceled || e.attendees?.first(where: \.isCurrentUser)?.participantStatus == .declined
+            isDeclined: e.attendees?.first(where: \.isCurrentUser)?.participantStatus == .declined,
+            // A cancelled meeting (Exchange keeps it in the calendar) is left out, and never reminds.
+            isCancelled: e.status == .canceled
         )
     }
 }

@@ -106,7 +106,10 @@ extension AppModel {
 
     /// A two-finger swipe on the island of `display`.
     func handleSwipe(_ direction: SwipeDirection, display: CGDirectDisplayID) {
-        let p = presentation(for: display)
+        var p = presentation(for: display)
+        // A volume or brightness HUD is a moment's display over the island, not a surface of its
+        // own: a swipe acts on what is under it (sideways over music still changes track).
+        if case .hud = p { p = presentation(for: display, ignoringHUD: true) }
         let homeMedia = tab == .home && settings.mediaEnabled && nowPlaying != nil
         guard let surface = GestureSurface.from(p, homeShowsMedia: homeMedia) else { return }
         // Up over a meeting reminder dismisses it.

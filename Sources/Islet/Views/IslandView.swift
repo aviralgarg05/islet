@@ -165,12 +165,22 @@ enum IslandLayout {
     }
 
     /// Where the page switcher sits, relative to the top centre of the screen (y up), or nil
-    /// when it isn't shown. Generous in width: the switcher's own width depends on its labels.
-    static func switcherRect(for p: IslandPresentation, geometry g: IslandGeometry, showsApproval: Bool) -> CGRect? {
+    /// when it isn't shown. `width` is the switcher's own, as drawn (it depends on its labels);
+    /// before it has been drawn, a generous guess.
+    static func switcherRect(for p: IslandPresentation, geometry g: IslandGeometry, showsApproval: Bool,
+                             width drawn: CGFloat? = nil) -> CGRect? {
         guard p == .expanded, !showsApproval else { return nil }
-        let width = min(g.size.width, 340)
+        let width = min(g.size.width, drawn.map { $0 + 2 } ?? 340)
         let height = PageSwitcher.gap + PageSwitcher.height
         return CGRect(x: -width / 2, y: -g.size.height - height, width: width, height: height)
+    }
+
+    /// A peek below the notch: an activity's sneak peek or a new song.
+    static func isPeek(_ p: IslandPresentation) -> Bool {
+        switch p {
+        case .sneak, .songPeek: return true
+        default: return false
+        }
     }
 
     /// Gap between the island and the second-activity bubble.
@@ -475,7 +485,9 @@ struct IslandView: View {
             NotificationCenter.default.post(name: .isletLayoutChanged, object: nil)
         }
         .fontDesign(model.settings.roundedFont ? .rounded : .default)
-        .environment(\.islandReduceMotion, model.settings.reduceMotion || model.settings.animationStyle == .off)
+        .environment(\.islandReduceMotion, IslandLoops.holdStill(reduceMotion: model.settings.reduceMotion,
+                                                                 animationOff: model.settings.animationStyle == .off,
+                                                                 lowPower: model.lowPowerMode))
         .environment(\.islandMotion, style)
         .environment(\.visualiserStyle, model.settings.visualiserStyle)
         .environment(\.hiddenFromCapture, model.settings.hideFromScreenCapture)
@@ -549,13 +561,14 @@ struct IslandView: View {
     /// The island's surface and outline, `stretch` points wider on each side while it squashes.
     private func shell(_ p: IslandPresentation, geometry g: IslandGeometry, stretch: CGFloat) -> some View {
         let shape = g.stretched(by: stretch)
+        // The teleprompter's "See-through while reading" turns the open island to clear glass.
+        let seeThrough = p == .expanded && model.seeThroughPage
         return ZStack {
-            // The teleprompter's "See-through while reading" turns the open island to clear glass.
-            let seeThrough = p == .expanded && model.seeThroughPage
-            (seeThrough ? IslandTheme.glass : model.settings.theme).background(expanded: p == .expanded, shape: shape, row: g.stemHeight, height: g.size.height,
-                                            glassLevel: seeThrough ? 1 : model.settings.glassLevel,
-                                            closedGlass: closedGlass,
-                                            stem: p == .expanded && model.look(for: display).stemmedOpen ? g.stemWidth : nil)
+            (seeThrough ? IslandTheme.glass : model.settings.theme)
+                .background(expanded: p == .expanded, shape: shape, row: g.stemHeight, height: g.size.height,
+                            glassLevel: seeThrough ? 1 : model.settings.glassLevel,
+                            closedGlass: closedGlass,
+                            stem: p == .expanded && model.look(for: display).stemmedOpen ? g.stemWidth : nil)
                 .shadow(color: .black.opacity(p == .expanded ? 0.45 : 0), radius: 14, y: 6)
             IslandOutline(shape: shape, on: model.settings.outline)
         }
@@ -591,7 +604,9 @@ struct IslandView: View {
         view
             .opacity(stale ? 0.55 : 1)
             // Out-of-date content stops its spinner, glow and other looping motion.
-            .environment(\.islandReduceMotion, stale || model.settings.reduceMotion || model.settings.animationStyle == .off)
+            .environment(\.islandReduceMotion, IslandLoops.holdStill(reduceMotion: model.settings.reduceMotion,
+                                                                     animationOff: model.settings.animationStyle == .off,
+                                                                     lowPower: model.lowPowerMode, stale: stale))
             .padding(.horizontal, g.top)
             .frame(width: g.outerWidth, height: g.size.height, alignment: .top)
             .clipShape(g.shape)
@@ -614,6 +629,8 @@ struct IslandView: View {
             }
         } else if shows {
             PageSwitcher(model: model)
+                // Only the switcher itself takes clicks, not the band it sits in.
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { model.controls.switcherWidth = $0 }
                 .transition(SwitcherReveal.transition(style))
         }
     }
@@ -708,7 +725,7 @@ struct IslandView: View {
                 .contextMenu {
                     if case .activity(let a) = slot.bubble {
                         Button("Dismiss") { model.remove(activityID: a.id) }
-                        Button("Mute “\(a.source)”") { model.mute(source: a.source) }
+                        Button("Mute “\(AppModel.mutedName(a.source))”") { model.mute(source: a.source) }
                     }
                 }
         }
@@ -771,13 +788,15 @@ struct IslandView: View {
         if let a = model.focusedActivity(for: p) {
             if model.canOpen(a) { Button("Open") { model.openActivity(a) } }
             Button("Dismiss “\(a.title)”") { model.remove(activityID: a.id) }
-            Button("Mute “\(a.source)”") { model.mute(source: a.source) }
+            Button("Mute “\(AppModel.mutedName(a.source))”") { model.mute(source: a.source) }
             Divider()
         }
         Button(model.expandedScreen == nil ? "Open island" : "Close island") {
             model.setExpanded(model.expandedScreen == nil ? display : nil)
         }
         Button("Settings…") { AppActions.openSettings() }
+        Divider()
+        Button("Quit Islet") { NSApp.terminate(nil) }
     }
 
     /// - Parameter row: in a frozen frame whose content stays the row, the frame, so the row

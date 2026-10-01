@@ -4,6 +4,7 @@ import Foundation
 import IsletCore
 import IsletSystem
 import Observation
+import os
 
 /// The teleprompter page: the script, where it is, and whether it is moving. The page draws the
 /// text at `playback`'s position and, while playing, hands the rest of the way to one linear
@@ -47,7 +48,7 @@ final class TeleprompterController {
         guard let file else { return }
         pendingSave?.cancel()
         let work = DispatchWorkItem { [text] in
-            do { try file.write(text) } catch { NSLog("Islet: couldn't save the teleprompter script: %@", error.localizedDescription) }
+            do { try file.write(text) } catch { Log.files.error("couldn't save the teleprompter script: \(error.localizedDescription, privacy: .public)") }
         }
         pendingSave = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)

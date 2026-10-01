@@ -42,6 +42,9 @@ public struct PresenterInputs: Sendable {
     public var songPeek: NowPlaying?
     /// With nothing else to show, the sticker stays beside the notch (`showsIdleSticker`).
     public var idleSticker: Bool
+    /// Leave a HUD out: what the island shows under it. A swipe over a volume HUD acts on that
+    /// (sideways over music changes track).
+    public var ignoresHUD = false
 
     public init(now: Date, center: ActivityCenter, nowPlaying: NowPlaying? = nil, batteryEvent: BatteryEvent? = nil,
                 isExpanded: Bool = false, isSuppressed: Bool = false, pausedMedia: PausedMediaShow = .hidden,
@@ -54,7 +57,7 @@ public struct PresenterInputs: Sendable {
 
 public enum Presenter {
     public static func present(_ i: PresenterInputs) -> IslandPresentation {
-        let hud = i.center.currentHUD(now: i.now)
+        let hud = i.ignoresHUD ? nil : i.center.currentHUD(now: i.now)
         let sneak = i.center.currentSneak(now: i.now)
 
         if i.isSuppressed {

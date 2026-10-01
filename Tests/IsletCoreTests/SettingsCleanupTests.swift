@@ -74,6 +74,9 @@ private func writtenKeys(_ s: IsletSettings) throws -> Set<String> {
         let s = decode(#"{"launchAtLogin": true, "hoverToOpen": false}"#)
         var expected = IsletSettings()
         expected.hoverToOpen = false
+        // A file from before the HUDs started off, which doesn't mention them, keeps them on.
+        expected.hudEnabled = true
+        expected.brightnessHUDEnabled = true
         #expect(s == expected)
         let keys = try writtenKeys(IsletSettings())
         #expect(!keys.contains("launchAtLogin"))

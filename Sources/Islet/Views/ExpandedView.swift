@@ -517,7 +517,7 @@ struct ActivityGlance: View {
         .contextMenu {
             if model.canOpen(a) { Button("Open") { model.openActivity(a) } }
             Button("Dismiss") { model.remove(activityID: a.id) }
-            Button("Mute “\(a.source)”") { model.mute(source: a.source) }
+            Button("Mute “\(AppModel.mutedName(a.source))”") { model.mute(source: a.source) }
         }
     }
 
@@ -759,7 +759,8 @@ struct FileTile: View {
     var body: some View {
         let url = URL(fileURLWithPath: item.path)
         // On a disk or share that isn't connected: kept, dimmed, until it comes back.
-        let available = Shelf.isAvailable(item) { FileManager.default.fileExists(atPath: $0) }
+        // Checked in the background (`ShelfService.checkVolumes`), never while drawing.
+        let available = !model.shelfUnavailable.contains(item.id)
         VStack(spacing: Space.xs) {
             Image(nsImage: IconCache.file(item.path, size: 48))
                 .resizable()
@@ -783,7 +784,11 @@ struct FileTile: View {
             }
         }
         .onHover { hovering = $0 }
-        .onDrag { NSItemProvider(contentsOf: url) ?? NSItemProvider() }
+        .onDrag {
+            // The island stays open while the file is on its way out (`IslandHold.draggingOut`).
+            model.controls.draggingOut = true
+            return NSItemProvider(contentsOf: url) ?? NSItemProvider()
+        }
         .onTapGesture(count: 2) { ShelfService.open(url) }
         .contextMenu {
             Button("Open") { ShelfService.open(url) }

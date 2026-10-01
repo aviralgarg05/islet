@@ -209,6 +209,13 @@ func request(_ port: UInt16, _ method: String, _ path: String, token: String? = 
         let slow = ScriptPluginRunner.run(script("slow.sh", "sleep 10"), timeout: 1)
         #expect(slow.error?.contains("timed out") == true)
         #expect(Date().timeIntervalSince(started) < 5)
+        // Scripts get a short list of variables, not Islet's whole environment.
+        let env = ScriptPluginRunner.run(script("env.sh", "env"), timeout: 5, extraEnv: ["ISLET_TEST": "1"])
+        let keys = Set(env.stdout.split(separator: "\n").compactMap { $0.split(separator: "=", maxSplits: 1).first.map(String.init) })
+        let allowed: Set<String> = ["HOME", "USER", "LOGNAME", "TMPDIR", "SHELL", "LANG", "LC_ALL", "LC_CTYPE", "PATH",
+                                    "ISLET", "XBARDarkMode", "SWIFTBAR", "ISLET_TEST", "PWD", "SHLVL", "_", "OLDPWD", "__CF_USER_TEXT_ENCODING"]
+        #expect(keys.isSubset(of: allowed), "\(keys.subtracting(allowed))")
+        #expect(keys.contains("ISLET_TEST") && keys.contains("PATH"))
         // Big output doesn't deadlock on a full pipe.
         let big = ScriptPluginRunner.run(script("big.sh", "yes x | head -c 300000; yes y | head -c 300000 >&2"), timeout: 5)
         #expect(big.stdout.count == 300_000)
@@ -257,6 +264,27 @@ func request(_ port: UInt16, _ method: String, _ path: String, token: String? = 
         // Missing files are pruned on load.
         try FileManager.default.removeItem(at: file)
         #expect(ShelfService(storeURL: store).shelf.items.isEmpty)
+    }
+
+    /// A share that doesn't answer: launch isn't held up, and its files are dimmed, not dropped.
+    @MainActor @Test func aSlowShareNeitherBlocksNorLosesFiles() async throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = dir.appendingPathComponent("shelf.json")
+        var saved = Shelf()
+        saved.add(paths: ["/Volumes/IsletTestShare/report.pdf"], now: Date())
+        try JSONEncoder().encode(saved).write(to: store)
+        let started = Date()
+        let shelf = ShelfService(storeURL: store, exists: { _ in Thread.sleep(forTimeInterval: 1); return false }, volumeTimeout: 0.2)
+        #expect(Date().timeIntervalSince(started) < 0.5)
+        #expect(shelf.shelf.items.count == 1)
+        let id = try #require(shelf.shelf.items.first?.id)
+        for _ in 0..<50 where !shelf.unavailable.contains(id) { try await Task.sleep(nanoseconds: 20_000_000) }
+        #expect(shelf.unavailable.contains(id))
+        // The answer, when it comes (the volume isn't there), keeps it dimmed and on the shelf.
+        for _ in 0..<100 { try await Task.sleep(nanoseconds: 20_000_000) }
+        #expect(shelf.unavailable.contains(id))
+        #expect(shelf.shelf.items.count == 1)
     }
 }
 

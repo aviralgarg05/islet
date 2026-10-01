@@ -129,6 +129,23 @@ final class IslandWindowController {
     /// The notch (or synthetic pill) in global coordinates.
     var notchRect: CGRect { NotchGeometry.visibleRect(for: descriptor, size: metrics.notch) }
 
+    /// A peek that opened under the pointer: its body takes no clicks and doesn't open the
+    /// island until the pointer has left it (`PeekPointerGuard`). Set by the pointer coordinator.
+    var ignoresPeekBody = false {
+        didSet { if ignoresPeekBody != oldValue { updateTrigger() } }
+    }
+
+    /// The body of a peek below the menu bar row, in global coordinates; nil when no peek shows.
+    var peekBodyRect: CGRect? {
+        let p = model.presentation(for: display)
+        guard IslandLayout.isPeek(p) else { return nil }
+        let g = IslandLayout.geometry(for: p, metrics: metrics, wing: model.placement(for: display, metrics: metrics).wing,
+                                      look: model.look(for: display))
+        let top = descriptor.frame.maxY
+        return CGRect(x: descriptor.frame.midX - g.size.width / 2, y: top - g.size.height,
+                      width: g.size.width, height: max(0, g.size.height - g.stemHeight))
+    }
+
     /// Regions the island actually occupies right now, in global coordinates: the part in the
     /// menu bar row, the body below it (a sneak peek or the open island) and any bubbles.
     /// Everything else on the panel is transparent and passes clicks through.
@@ -140,14 +157,20 @@ final class IslandWindowController {
         let top = descriptor.frame.maxY
         let midX = descriptor.frame.midX
         var rects: [CGRect] = []
+        // A peek that opened under the pointer counts only in the menu bar row.
+        let rowOnly = ignoresPeekBody && IslandLayout.isPeek(p)
         if g.stemWidth > 0, g.stemWidth < g.size.width - 1 {
             let stem = g.stemWidth + 2 * g.top
             rects.append(CGRect(x: midX - stem / 2, y: top - g.stemHeight, width: stem, height: g.stemHeight))
-            rects.append(CGRect(x: midX - g.size.width / 2, y: top - g.size.height, width: g.size.width, height: g.size.height - g.stemHeight))
+            if !rowOnly {
+                rects.append(CGRect(x: midX - g.size.width / 2, y: top - g.size.height, width: g.size.width, height: g.size.height - g.stemHeight))
+            }
         } else {
-            rects.append(CGRect(x: midX - g.outerWidth / 2, y: top - g.size.height, width: g.outerWidth, height: g.size.height))
+            let height = rowOnly ? min(g.size.height, g.stemHeight) : g.size.height
+            rects.append(CGRect(x: midX - g.outerWidth / 2, y: top - height, width: g.outerWidth, height: height))
         }
-        if let band = IslandLayout.switcherRect(for: p, geometry: g, showsApproval: model.approvals.current != nil) {
+        if let band = IslandLayout.switcherRect(for: p, geometry: g, showsApproval: model.approvals.current != nil,
+                                                width: model.controls.switcherWidth) {
             rects.append(band.offsetBy(dx: midX, dy: top))
         }
         let bubbles = model.fittedBubbles(for: p, placement: placement, metrics: metrics, display: display).bubbles
@@ -187,7 +210,8 @@ final class IslandWindowController {
         }
         MenuBarInspector.measure(notch: notch, screenFrame: descriptor.frame) { [weak self] occupancy in
             guard let self else { return }
-            let measured = MenuBarLayoutEngine.wingWidth(preference: preference, notch: notch, preferredWing: preferred, occupancy: occupancy, hasMenuBar: true)
+            let measured = MenuBarLayoutEngine.wingWidth(preference: preference, notch: notch, preferredWing: preferred, occupancy: occupancy,
+                                                         hasMenuBar: true, displayWidth: self.descriptor.frame.width)
             let current = self.model.closedPlacements[display]
             var wing = measured
             if let kept = current?.wing, !MenuBarLayoutEngine.shouldReplace(kept, with: measured, preferredWing: preferred) { wing = kept }
@@ -225,7 +249,9 @@ final class IslandWindowController {
     /// Hovering here arms the island: the notch itself, nothing beside it.
     var hoverZone: CGRect { NotchGeometry.hoverZone(for: descriptor, metrics: metrics, slop: 0) }
 
-    /// The open island and the page switcher under it.
+    /// The open island and the page switcher under it, with a little room around them: used
+    /// only so that a pointer brushing past the edge doesn't start closing the island. Clicks
+    /// there go to what is underneath (`hitRects`).
     var expandedRect: CGRect {
         NotchGeometry.visibleRect(for: descriptor, size: CGSize(width: metrics.expanded.width + 20,
                                                                height: metrics.expanded.height + PageSwitcher.gap + PageSwitcher.height))
@@ -337,6 +363,11 @@ final class PointerCoordinator {
     private var restTimer: Timer?
     private var activeDisplay: CGDirectDisplayID?
     private var layoutObserver: NSObjectProtocol?
+    private var menuObservers: [NSObjectProtocol] = []
+    /// Per display: whether a peek that opened under the pointer is being ignored.
+    private var peekGuards: [CGDirectDisplayID: PeekPointerGuard] = [:]
+    /// The display the island was open on at the last layout change.
+    private var openDisplay: CGDirectDisplayID?
 
     init(model: AppModel) {
         self.model = model
@@ -346,8 +377,17 @@ final class PointerCoordinator {
 
     func start() {
         applySettings()
+        // A menu that was open when the pointer was last followed has long closed.
+        model.controls.menuOpen = false
         layoutObserver = NotificationCenter.default.addObserver(forName: .isletLayoutChanged, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.layoutChanged() }
+        }
+        // Any of Islet's menus, the island's right-click menus included, holds the island open
+        // while it shows, even where the menu reaches past the island's edge.
+        for (name, open) in [(NSMenu.didBeginTrackingNotification, true), (NSMenu.didEndTrackingNotification, false)] {
+            menuObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.model.controls.menuOpen = open }
+            })
         }
         refreshTriggers()
     }
@@ -355,6 +395,9 @@ final class PointerCoordinator {
     func stop() {
         deactivate()
         if let o = layoutObserver { NotificationCenter.default.removeObserver(o) }
+        layoutObserver = nil
+        menuObservers.forEach(NotificationCenter.default.removeObserver)
+        menuObservers.removeAll()
     }
 
     func applySettings() {
@@ -381,13 +424,29 @@ final class PointerCoordinator {
     }
 
     private func layoutChanged() {
+        let location = NSEvent.mouseLocation
+        // Closed while the pointer rests on the notch (the shortcut, a menu, a link, Ask):
+        // resting there doesn't open it again until the pointer has left.
+        if let was = openDisplay, let c = controllers.first(where: { $0.display == was }),
+           HoverIntent.blocksReopen(wasOpen: true, isOpen: model.expandedScreen != nil,
+                                    pointerOnNotch: c.hoverZone.contains(NotchGeometry.hitPoint(location, in: c.screen.frame))) {
+            model.controls.hoverOpenBlocked = true
+        }
+        openDisplay = model.expandedScreen
         controllers.forEach {
+            notePeek(on: $0, at: location)
             $0.updateTrigger()
             $0.measureIfStale()
         }
         // Opened by the API, a hotkey or the menu: start tracking so it can close on leave.
         if model.expandedScreen != nil, !isActive { activate(from: model.expandedScreen) }
+        // A peek opened under the pointer: follow the pointer until it leaves the peek's body,
+        // so the body takes clicks again once it has (`PeekPointerGuard.followsPointer`).
+        if !isActive, followsPeek { activate(from: nil) }
     }
+
+    /// Some display ignores its peek's body until the pointer leaves it.
+    private var followsPeek: Bool { controllers.contains { peekGuards[$0.display]?.followsPointer == true } }
 
     private func clicked(_ display: CGDirectDisplayID) {
         Haptics.play(.tap)
@@ -441,7 +500,12 @@ final class PointerCoordinator {
     }
 
     private func evaluate(at location: CGPoint, now: Date) {
-        guard let c = controller(at: location) else {
+        // A peek ignored on another display: the pointer has left its body.
+        let here = controller(at: location)
+        for other in controllers where other !== here && peekGuards[other.display]?.followsPointer == true {
+            notePeek(on: other, at: location)
+        }
+        guard let c = here else {
             let p = location
             // On a display without an island: that's leaving, so a pending open is cancelled and
             // an open island starts its close grace period instead of waiting for the pointer.
@@ -457,11 +521,19 @@ final class PointerCoordinator {
         }
         let p = NotchGeometry.hitPoint(location, in: c.screen.frame)
         let expandedHere = model.expandedScreen == c.display
+        // A shelf file dragged out has landed once the button is up.
+        if model.controls.draggingOut, NSEvent.pressedMouseButtons & 1 == 0 { model.controls.draggingOut = false }
+        let inBody = notePeek(on: c, at: location)
         let inIsland = c.hitRects.contains { $0.contains(p) }
-        c.setInteractive(inIsland || expandedHere && c.expandedRect.contains(p) || model.isDraggingFile)
+        // Only what is drawn takes the mouse: a click just outside the open island, or beside
+        // the page switcher, reaches the window underneath.
+        c.setInteractive(inIsland || model.isDraggingFile)
         for other in controllers where other !== c { other.setInteractive(model.isDraggingFile && model.expandedScreen == other.display) }
 
-        let inTrigger = c.hoverZone.contains(p) || (inIsland && !expandedHere)
+        // A peek's body doesn't arm opening (only its part in the menu bar row does), except
+        // the song peek the pointer itself brought up by resting on the notch.
+        let bodyArms = !inBody || model.hoverPeekDisplay == c.display
+        let inTrigger = c.hoverZone.contains(p) || (inIsland && !expandedHere && bodyArms)
         if !inTrigger { model.controls.hoverOpenBlocked = false }
         // Resting on the closed island: it grows a little, and may peek at what's playing.
         model.setHover(inTrigger && !expandedHere && model.expandedScreen == nil ? c.display : nil)
@@ -476,9 +548,31 @@ final class PointerCoordinator {
         maybeDeactivate(pointerNearIsland: inTrigger || inIsland || (expandedHere && c.expandedRect.contains(p)))
     }
 
+    /// Tells `c` whether to ignore its peek's body (`PeekPointerGuard`). Returns whether the
+    /// pointer is over that body.
+    @discardableResult
+    private func notePeek(on c: IslandWindowController, at location: CGPoint) -> Bool {
+        let p = model.presentation(for: c.display)
+        let body = c.peekBodyRect
+        let inBody = body?.contains(NotchGeometry.hitPoint(location, in: c.screen.frame)) ?? false
+        var guardState = peekGuards[c.display] ?? PeekPointerGuard()
+        let live = guardState.update(peek: IslandLayout.isPeek(p) ? IslandLayout.key(p) : nil, pointerInBody: inBody)
+        peekGuards[c.display] = guardState
+        c.ignoresPeekBody = body != nil && !live
+        return inBody
+    }
+
+    /// What holds the open island open while the pointer is away from it.
+    private var hold: IslandHold {
+        IslandHold(pinned: model.pinned, draggingIn: model.isDraggingFile,
+                   draggingOut: model.controls.draggingOut && NSEvent.pressedMouseButtons & 1 != 0,
+                   control: model.controls.holdsOpen, menu: model.controls.menuOpen,
+                   typing: model.ask.wantsKeyboard || IslandKeyboard.allowsKey)
+    }
+
     /// Stop listening once the island is closed and the pointer has moved away.
     private func maybeDeactivate(pointerNearIsland: Bool) {
-        guard isActive, model.expandedScreen == nil, !model.isDraggingFile, !pointerNearIsland,
+        guard isActive, model.expandedScreen == nil, !model.isDraggingFile, !pointerNearIsland, !followsPeek,
               intent.enteredAt == nil, intent.exitedAt == nil else { return }
         deactivate()
     }
@@ -492,7 +586,7 @@ final class PointerCoordinator {
                 model.peekOnHover(display)
             }
         case .close:
-            if !model.pinned, !model.isDraggingFile, !model.controls.holdsOpen, !model.ask.wantsKeyboard { model.setExpanded(nil) }
+            if hold.allowsClose { model.setExpanded(nil) }
             intent.reset()
         case .none:
             break

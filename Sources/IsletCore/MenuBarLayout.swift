@@ -50,6 +50,9 @@ public enum MenuBarLayoutEngine {
     /// Wing width when the menu bar can't be measured (no Accessibility). Narrow enough to clear
     /// the menus of most apps and the status items on a 14" MacBook Pro.
     public static let unmeasuredWing: CGFloat = 36
+    /// A display narrower than this (a 13" MacBook Air, or a larger one at a Larger Text
+    /// setting) has little room beside the notch: unmeasured, its wings are icon-only.
+    public static let narrowDisplayWidth: CGFloat = 1500
 
     /// Width of each wing of the closed island. Both wings get the same width, so the island
     /// stays centred on the notch.
@@ -59,15 +62,19 @@ public enum MenuBarLayoutEngine {
     ///   - occupancy: measured menu bar items; nil when they can't be measured (no Accessibility).
     ///   - hasMenuBar: false when the display has no menu bar row (auto-hidden, or a secondary
     ///     display without its own menu bar), in which case nothing can be covered.
+    ///   - displayWidth: the display's width in points; unmeasured, a narrow one gets icon-only wings.
     public static func wingWidth(
         preference: ClosedLayoutPreference,
         notch: CGRect,
         preferredWing: CGFloat,
         occupancy: MenuBarOccupancy?,
-        hasMenuBar: Bool
+        hasMenuBar: Bool,
+        displayWidth: CGFloat = .infinity
     ) -> CGFloat {
         guard preference == .auto, hasMenuBar else { return preferredWing }
-        guard let occupancy else { return min(preferredWing, unmeasuredWing) }
+        guard let occupancy else {
+            return min(preferredWing, displayWidth < narrowDisplayWidth ? iconOnlyWing : unmeasuredWing)
+        }
         let leftRoom = occupancy.leftObstacleMaxX.map { notch.minX - $0 - clearance } ?? preferredWing
         let rightRoom = occupancy.rightObstacleMinX.map { $0 - notch.maxX - clearance } ?? preferredWing
         // The narrower side decides, so the island stays symmetric around the notch.

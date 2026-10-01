@@ -8,6 +8,15 @@ import SwiftUI
 /// the switch shows what macOS has (also after a change in System Settings).
 struct LaunchAtLoginToggle: View {
     @ViewState private var status = SMAppService.mainApp.status
+    /// Why the last change didn't take, in macOS's words.
+    @ViewState private var problem: String?
+    @Environment(\.snapshotMode) private var snapshotMode
+
+    /// Running from Downloads or a translocated copy (only checked for the real app bundle).
+    private var unsettled: Bool {
+        guard !snapshotMode, Bundle.main.bundleIdentifier != nil else { return false }
+        return !AppLocation.isSettled(bundlePath: Bundle.main.bundlePath, home: NSHomeDirectory())
+    }
 
     var body: some View {
         Toggle("Launch at login", isOn: Binding(get: { status == .enabled || status == .requiresApproval }, set: change))
@@ -22,13 +31,22 @@ struct LaunchAtLoginToggle: View {
                 Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
             }
         }
+        if let problem {
+            Text(problem).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+        }
+        if unsettled {
+            AccessRow(text: "Move Islet to Applications so it opens at login.", button: "Show in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
+            }
+        }
     }
 
     private func change(_ on: Bool) {
         do {
             if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+            problem = nil
         } catch {
-            NSLog("Islet: login item: %@", error.localizedDescription)
+            problem = "Couldn't change it: \(error.localizedDescription)"
         }
         status = SMAppService.mainApp.status
     }
@@ -133,27 +151,31 @@ struct AddAppMenu: View {
     }
 }
 
-/// Settings → Shelf & Clipboard: apps whose copies clipboard history never keeps.
-struct ClipboardIgnoredApps: View {
-    @Bindable var model: AppModel
+/// A list of apps with an Add menu and a minus button on each: the apps clipboard history never
+/// keeps copies from, or whose media Now Playing never shows.
+struct IgnoredAppsList: View {
+    @Binding var apps: [String]
+    let title: String
+    let detail: String
+    let anchor: String
 
     var body: some View {
         LabeledContent {
-            AddAppMenu(existing: Set(model.settings.clipboardIgnoredApps)) { id in
-                if !model.settings.clipboardIgnoredApps.contains(id) { model.settings.clipboardIgnoredApps.append(id) }
+            AddAppMenu(existing: Set(apps)) { id in
+                if !apps.contains(id) { apps.append(id) }
             }
         } label: {
-            Text("Ignore apps")
-            Text("Nothing copied in these apps is kept. Password managers are always ignored.")
+            Text(title)
+            Text(detail)
         }
-        .settingsAnchor("shelf.clipboardIgnore")
-        ForEach(model.settings.clipboardIgnoredApps, id: \.self) { id in
+        .settingsAnchor(anchor)
+        ForEach(apps, id: \.self) { id in
             HStack(spacing: 10) {
                 AppIconView(bundleID: id, size: 20)
                 Text(AddAppMenu.name(id)).lineLimit(1)
                 Spacer(minLength: 8)
                 Button(role: .destructive) {
-                    model.settings.clipboardIgnoredApps.removeAll { $0 == id }
+                    apps.removeAll { $0 == id }
                 } label: {
                     Image(systemName: "minus.circle")
                 }
@@ -164,6 +186,17 @@ struct ClipboardIgnoredApps: View {
     }
 }
 
+/// Settings → Shelf & Clipboard: apps whose copies clipboard history never keeps.
+struct ClipboardIgnoredApps: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        IgnoredAppsList(apps: $model.settings.clipboardIgnoredApps, title: "Ignore apps",
+                        detail: "Nothing copied in these apps is kept. Password managers are always ignored.",
+                        anchor: "shelf.clipboardIgnore")
+    }
+}
+
 /// A global shortcut, set by pressing it. Saved as text ("ctrl+option+i"), the form
 /// config.json uses. Delete turns it off; Esc keeps the one there was. While it records,
 /// Islet's own shortcuts are let through, so one of them can be pressed and recorded.
@@ -171,6 +204,8 @@ struct ShortcutField: View {
     @Binding var text: String
     /// Islet's own shortcut, which the reset button goes back to.
     let standard: String
+    /// Islet's other shortcut, and what it does ("open the Ask box"): the same keys are refused.
+    var other: (text: String, does: String)?
     @ViewState private var recording = false
     @ViewState private var hint: String?
     @ViewState private var monitor = Monitor()
@@ -241,6 +276,10 @@ struct ShortcutField: View {
         if flags.contains(.shift) { modifiers.insert(.shift) }
         if flags.contains(.command) { modifiers.insert(.command) }
         if let recorded = Hotkey.text(keyCode: UInt32(event.keyCode), modifiers: modifiers) {
+            if let other, Hotkey.sameKeys(recorded, other.text) {
+                hint = "Already used to \(other.does)"
+                return
+            }
             text = recorded
             stop()
         } else {

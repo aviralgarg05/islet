@@ -62,14 +62,12 @@ public struct ClipboardHistory: Codable, Equatable, Sendable {
     ]
 
     /// Browsers, whose password manager extensions copy passwords as the browser.
-    public static let browsers: Set<String> = [
-        "com.apple.Safari", "com.apple.SafariTechnologyPreview", "com.google.Chrome", "com.google.Chrome.beta",
-        "com.google.Chrome.canary", "org.chromium.Chromium", "org.mozilla.firefox", "org.mozilla.firefoxdeveloperedition",
-        "com.microsoft.edgemac", "com.brave.Browser", "company.thebrowser.Browser", "com.operasoftware.Opera",
-        "com.vivaldi.Vivaldi", "com.kagi.kagimacOS", "app.zen-browser.zen", "com.duckduckgo.macos.browser",
-    ]
+    public static var browsers: Set<String> { Browsers.bundleIDs }
 
     public static let maxTextLength = 100_000
+    /// The most text kept in all (bytes of UTF-8), whatever the count: 500 long copies would
+    /// otherwise hold 50 MB. The oldest unpinned entries go first.
+    public static let maxTotalBytes = 4_000_000
 
     public init(limit: Int = 30) { self.limit = max(1, limit) }
 
@@ -138,6 +136,11 @@ public struct ClipboardHistory: Codable, Equatable, Sendable {
 
     mutating func trim() {
         while entries.count > limit, let i = entries.lastIndex(where: { !$0.pinned }) {
+            entries.remove(at: i)
+        }
+        var total = entries.reduce(0) { $0 + $1.text.utf8.count }
+        while total > Self.maxTotalBytes, let i = entries.lastIndex(where: { !$0.pinned }) {
+            total -= entries[i].text.utf8.count
             entries.remove(at: i)
         }
     }
@@ -214,6 +217,33 @@ public struct Shelf: Codable, Equatable, Sendable {
     public mutating func updatePath(id: String, to path: String) {
         guard let i = items.firstIndex(where: { $0.id == id }) else { return }
         items[i].path = path
+    }
+
+    /// The bookmark for an item, made after it was added (away from the main thread).
+    public mutating func setBookmark(_ data: Data?, forPath path: String) {
+        guard let i = items.firstIndex(where: { $0.path == path }) else { return }
+        items[i].bookmark = data
+    }
+
+    /// Items on the startup disk are quick to check, so they are checked at once. Ones on
+    /// another volume (an external disk, or a network share that may not answer) are checked
+    /// away from the main thread (`ShelfCheck`).
+    public static func isOnStartupDisk(_ item: ShelfItem) -> Bool { volume(of: item.path) == nil }
+}
+
+/// What a look at a shelf file on another volume found.
+public enum ShelfCheck: Equatable, Sendable {
+    /// The file is there.
+    case present
+    /// Its volume is there and the file isn't: it leaves the shelf.
+    case gone
+    /// Its volume isn't mounted (or didn't answer in time): it stays, dimmed, until it is back.
+    case unreachable
+
+    public static func check(path: String, exists: (String) -> Bool) -> ShelfCheck {
+        if exists(path) { return .present }
+        if let volume = Shelf.volume(of: path), !exists(volume) { return .unreachable }
+        return .gone
     }
 }
 

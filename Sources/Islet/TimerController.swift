@@ -1,6 +1,8 @@
 import AppKit
 import IsletCore
+import IsletSystem
 import Observation
+import os
 
 /// Runs the timers. Keeps a `TimerEngine`, shows each timer as an activity, saves them so
 /// they survive a relaunch, and wakes up once for the soonest end. The wake-up is a
@@ -46,7 +48,7 @@ final class TimerController {
         let restored = TimerEngine.start(from: url)
         if let saved = restored.value { engine = saved }
         canSave = restored.canSave
-        if let moved = restored.setAside { NSLog("Islet: timers.json couldn't be read; kept as %@", moved.lastPathComponent) }
+        if let moved = restored.setAside { Log.files.error("timers.json couldn't be read; kept as \(moved.lastPathComponent, privacy: .public)") }
         fire()
     }
 
@@ -119,8 +121,8 @@ final class TimerController {
                 rang = true
             case .phaseChanged(_, let t):
                 fresh.insert(t.id)
-            case .missed:
-                break
+            case .missed(let t):
+                _ = try? model.applyLocal(TimerEngine.missedNotice(for: t))
             }
         }
         changed(announce: fresh)

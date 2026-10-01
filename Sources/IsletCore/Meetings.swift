@@ -154,7 +154,7 @@ public struct MeetingReminders: Codable, Equatable, Sendable {
     }
 
     public static func isEligible(_ item: AgendaItem, options: MeetingReminderOptions) -> Bool {
-        !item.isAllDay && !item.isDeclined && (!options.onlyWithLink || item.meetingURL != nil)
+        !item.isAllDay && !item.isDeclined && !item.isCancelled && (!options.onlyWithLink || item.meetingURL != nil)
     }
 
     /// When an occurrence shows, starts and goes.

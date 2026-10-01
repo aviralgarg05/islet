@@ -16,8 +16,14 @@ public final class NotificationMirror {
     private var observer: AXObserver?
     private var appElement: AXUIElement?
     private var launchObserver: NSObjectProtocol?
-    private var seen: [String: Date] = [:]
     private var pendingScan = false
+    /// Reads Notification Center's tree away from the main thread, so a slow or stuck
+    /// Notification Center can't hold up the island (or the keys).
+    private let queue = DispatchQueue(label: "islet.notification-mirror", qos: .utility)
+    /// Banners already mirrored; touched only on `queue`.
+    private var deduper = BannerDeduper<BannerKey>()
+    /// How long one Accessibility call may take before it gives up.
+    static let messagingTimeout: Float = 0.25
 
     public init() {}
     deinit { stop() }
@@ -63,6 +69,7 @@ public final class NotificationMirror {
         }
         guard AXObserverCreate(pid, callback, &obs) == .success, let obs else { return }
         let element = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(element, Self.messagingTimeout)
         let refcon = Unmanaged.passUnretained(self).toOpaque()
         for name in [kAXWindowCreatedNotification, kAXCreatedNotification, kAXLayoutChangedNotification] {
             AXObserverAddNotification(obs, element, name as CFString, refcon)
@@ -70,15 +77,18 @@ public final class NotificationMirror {
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), .defaultMode)
         observer = obs
         appElement = element
+        // Banners on screen now are old news.
+        queue.async { [weak self] in self?.scan(element, known: [:], prime: true) }
     }
 
     /// Banners animate in over a few frames; read them once they've settled.
     private func scheduleScan() {
-        guard !pendingScan else { return }
+        guard !pendingScan, let element = appElement else { return }
         pendingScan = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-            self?.pendingScan = false
-            self?.scan()
+        let known = Self.knownApps()
+        queue.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            DispatchQueue.main.async { self?.pendingScan = false }
+            self?.scan(element, known: known, prime: false)
         }
     }
 
@@ -128,27 +138,32 @@ public final class NotificationMirror {
         }
     }
 
-    private func scan() {
-        guard let appElement else { return }
+    /// Runs on `queue`. Each banner is mirrored once (`BannerDeduper`); with `prime`, the ones
+    /// on screen are only remembered.
+    private func scan(_ appElement: AXUIElement, known: [String: String], prime: Bool) {
         let windows = (Self.attribute(appElement, kAXWindowsAttribute) as? [AXUIElement]) ?? []
-        let known = Self.knownApps()
         let now = Date()
-        seen = seen.filter { now.timeIntervalSince($0.value) < 60 }
+        var banners: [BannerKey] = []
         for w in windows {
             // The Notification Center panel is tall; banners are short.
             if let s = Self.size(w), s.height > 420 { continue }
             var groups: [AXUIElement] = []
             Self.bannerGroups(in: w, into: &groups)
-            for g in groups {
-                var texts: [String] = []
-                Self.texts(in: g, into: &texts)
-                let desc = Self.string(g, kAXDescriptionAttribute)
-                guard let n = NotificationParser.parse(texts: texts, description: desc, knownApps: known) else { continue }
-                if seen[n.fingerprint] != nil { continue }
-                seen[n.fingerprint] = now
-                onNotification?(n)
-            }
+            banners += groups.map(BannerKey.init)
         }
+        if prime {
+            deduper.prime(banners, now: now)
+            return
+        }
+        // A banner whose words can't be made out yet is read again at the next look.
+        let found = deduper.news(in: banners, now: now) { banner -> MirroredNotification? in
+            var texts: [String] = []
+            Self.texts(in: banner.element, into: &texts)
+            let desc = Self.string(banner.element, kAXDescriptionAttribute)
+            return NotificationParser.parse(texts: texts, description: desc, knownApps: known)
+        }
+        guard !found.isEmpty else { return }
+        DispatchQueue.main.async { [weak self] in found.forEach { self?.onNotification?($0) } }
     }
 
     /// Display name → bundle id for running regular apps (the likely senders).
@@ -159,4 +174,14 @@ public final class NotificationMirror {
         }
         return map
     }
+}
+
+/// One banner on screen: the same element compares equal while it is up.
+struct BannerKey: Hashable, @unchecked Sendable {
+    let element: AXUIElement
+
+    init(_ element: AXUIElement) { self.element = element }
+
+    static func == (a: BannerKey, b: BannerKey) -> Bool { CFEqual(a.element, b.element) }
+    func hash(into hasher: inout Hasher) { hasher.combine(CFHash(element)) }
 }
