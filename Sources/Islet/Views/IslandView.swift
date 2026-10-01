@@ -50,11 +50,23 @@ struct IslandGeometry: Equatable {
 struct IslandLook: Equatable {
     /// HUDs drop below the notch with a percentage ("Detailed").
     var detailedHUD = false
+    /// Points the closed island grows on each side while the pointer rests on it, before it
+    /// opens (0 when it isn't there, or with Reduce Motion).
+    var hoverGrow: CGFloat = 0
+    /// The open island takes the stem-and-body shape (the Glass theme): only a notch-wide stem
+    /// sits in the menu bar row, so the menu bar beside the notch stays in view, and the glass
+    /// body opens out below the row.
+    var stemmedOpen = false
 }
 
 extension AppModel {
     func look(for display: CGDirectDisplayID) -> IslandLook {
-        IslandLook(detailedHUD: settings.hudStyle == .detailed)
+        let calm = settings.reduceMotion || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let resting = hoverDisplay == display && expandedScreen == nil
+        // An approval card's header uses the whole row, so it keeps the full-width shape.
+        return IslandLook(detailedHUD: settings.hudStyle == .detailed,
+                          hoverGrow: resting && !calm ? IslandLayout.hoverGrow : 0,
+                          stemmedOpen: settings.theme == .glass && approvals.current == nil)
     }
 }
 
@@ -65,18 +77,25 @@ enum IslandLayout {
         let n = m.notch
         let small = min(12, n.height / 2.4)
         let row = n.width + 2 * wing
+        // Shapes without a stem give it their own width, so a move into a stemmed shape narrows
+        // the stem smoothly instead of passing through a thin one.
         switch p {
         case .hidden, .idle:
-            if m.floats { return pill(width: n.width, metrics: m, wing: 0) }
-            return IslandGeometry(size: n, top: 6, bottom: small)
+            if m.floats { return grown(pill(width: n.width, metrics: m, wing: 0), by: look.hoverGrow) }
+            return grown(IslandGeometry(size: n, top: 6, bottom: small, stemWidth: n.width, stemHeight: n.height), by: look.hoverGrow)
         case .compact where m.floats, .hud where m.floats && !look.detailedHUD:
-            return pill(width: row, metrics: m, wing: wing)
+            return grown(pill(width: row, metrics: m, wing: wing), by: look.hoverGrow)
+        case .expanded where look.stemmedOpen:
+            return IslandGeometry(size: m.expanded, top: stemFlare, bottom: Radius.shell,
+                                  stemWidth: n.width, stemHeight: ExpandedLayout(metrics: m).row)
         case .expanded:
-            return IslandGeometry(size: m.expanded, top: Radius.flare, bottom: Radius.shell)
+            return IslandGeometry(size: m.expanded, top: Radius.flare, bottom: Radius.shell,
+                                  stemWidth: m.expanded.width, stemHeight: n.height)
         case .hud where look.detailedHUD:
             return detailedHUD(metrics: m)
         case .compact, .hud:
-            return IslandGeometry(size: CGSize(width: row, height: n.height), top: 6, bottom: small, wing: wing)
+            return grown(IslandGeometry(size: CGSize(width: row, height: n.height), top: 6, bottom: small,
+                                        stemWidth: row, stemHeight: n.height, wing: wing), by: look.hoverGrow)
         case .sneak(let a):
             return peek(metrics: m, wing: wing, extra: sneakBar(a))
         case .songPeek:
@@ -91,7 +110,24 @@ enum IslandLayout {
         let row = n.width + 2 * wing
         let width = max(row + 32, 276)
         return IslandGeometry(size: CGSize(width: width, height: n.height + 46 + extra), top: 8, bottom: 18,
-                              stemWidth: width > row ? row : 0, stemHeight: n.height, wing: wing)
+                              stemWidth: min(row, width), stemHeight: n.height, wing: wing)
+    }
+
+    /// How much the closed island grows on each side while the pointer rests on it.
+    static let hoverGrow: CGFloat = 3
+    /// The stem's flare where it meets the top of the screen, in the stem-and-body shape.
+    static let stemFlare: CGFloat = 10
+
+    /// The closed island a little bigger: `d` points wider on each side and a point taller,
+    /// so it answers the pointer without hanging any lower.
+    private static func grown(_ g: IslandGeometry, by d: CGFloat) -> IslandGeometry {
+        guard d > 0 else { return g }
+        var g = g
+        g.size.width += 2 * d
+        g.size.height += 1
+        g.stemWidth += 2 * d
+        g.stemHeight += 1
+        return g
     }
 
     /// On a display without a notch: a capsule floating inside the menu bar row, clear of the
@@ -271,7 +307,8 @@ struct IslandView: View {
         let placement = model.placement(for: display, metrics: metrics)
         let look = model.look(for: display)
         let g = IslandLayout.geometry(for: p, metrics: metrics, wing: placement.wing, look: look)
-        let visible = IslandLayout.isVisible(p) || dropTargeted
+        // Resting on the notch shows the island growing out of it, even with nothing to show.
+        let visible = IslandLayout.isVisible(p) || dropTargeted || (p == .idle && look.hoverGrow > 0)
         let shape = g.shape
         let glow = model.urgentGlow(for: p)
         let fitted = model.fittedBubbles(for: p, placement: placement, metrics: metrics, display: display)
@@ -294,9 +331,10 @@ struct IslandView: View {
                             .frame(width: g.outerWidth, height: g.size.height)
                     }
                 }
-                model.settings.theme.background(expanded: p == .expanded, shape: shape, row: metrics.notch.height, height: g.size.height,
+                model.settings.theme.background(expanded: p == .expanded, shape: shape, row: g.stemHeight, height: g.size.height,
                                                 glassLevel: model.settings.glassLevel,
-                                                closedGlass: metrics.isSynthetic && model.settings.glassOnNotchless)
+                                                closedGlass: metrics.isSynthetic && model.settings.glassOnNotchless,
+                                                stem: p == .expanded && look.stemmedOpen ? g.stemWidth : nil)
                     .shadow(color: .black.opacity(p == .expanded ? 0.45 : 0), radius: 14, y: 6)
                 IslandOutline(shape: shape, on: model.settings.outline)
                 content(p, geometry: g)
@@ -334,6 +372,8 @@ struct IslandView: View {
         .animation(IslandLayout.isVisible(p) ? style.morph : style.collapse, value: IslandLayout.key(p))
         .animation(style.morph, value: bubbles.key)
         .animation(style.morph, value: placement)
+        // The hover response: a quick, small spring, in step with the others.
+        .animation(style == .off ? nil : Motion.settle, value: look.hoverGrow)
         .modifier(ShelfDropTarget(enabled: !snapshotMode && model.settings.shelfEnabled, targeted: $dropTargeted) { urls in
             model.addToShelf(urls)
         })
@@ -458,7 +498,9 @@ struct IslandView: View {
                 .contentShape(Rectangle())
                 .onTapGesture { activate(p) }
         case .expanded:
-            ApprovalGate(model: model, metrics: metrics) { ExpandedView(model: model, metrics: metrics, dropTargeted: dropTargeted) }
+            ApprovalGate(model: model, metrics: metrics) {
+                ExpandedView(model: model, metrics: metrics, dropTargeted: dropTargeted, stemmed: model.look(for: display).stemmedOpen)
+            }
         }
     }
 }

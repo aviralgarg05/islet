@@ -9,12 +9,17 @@ struct ExpandedView: View {
     let model: AppModel
     let metrics: IslandMetrics
     var dropTargeted: Bool
+    /// The stem-and-body shape: the menu bar beside the notch isn't the island's, so the row
+    /// stays empty (the pin is in the page switcher's menu).
+    var stemmed = false
 
     var body: some View {
         let layout = ExpandedLayout(metrics: metrics)
         VStack(spacing: 0) {
-            MenuBarRow(model: model, metrics: metrics)
-                .frame(height: layout.row)
+            Group {
+                if stemmed { Color.clear } else { MenuBarRow(model: model, metrics: metrics) }
+            }
+            .frame(height: layout.row)
             page(layout.content)
                 .frame(width: layout.content.width, height: layout.content.height, alignment: .topLeading)
                 .padding(.top, ExpandedLayout.top)

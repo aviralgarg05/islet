@@ -136,7 +136,7 @@ final class IslandWindowController {
         let top = descriptor.frame.maxY
         let midX = descriptor.frame.midX
         var rects: [CGRect] = []
-        if g.stemWidth > 0 {
+        if g.stemWidth > 0, g.stemWidth < g.size.width - 1 {
             let stem = g.stemWidth + 2 * g.top
             rects.append(CGRect(x: midX - stem / 2, y: top - g.stemHeight, width: stem, height: g.stemHeight))
             rects.append(CGRect(x: midX - g.size.width / 2, y: top - g.size.height, width: g.size.width, height: g.size.height - g.stemHeight))

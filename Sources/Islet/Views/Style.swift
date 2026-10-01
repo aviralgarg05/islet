@@ -105,14 +105,15 @@ extension IslandTheme {
     ///   - row: height of the menu bar row, which stays black in every theme.
     ///   - height: the island's current height, to place the seam below that row.
     ///   - closedGlass: the closed island is glass too ("Glass on displays without a notch").
+    ///   - stem: the stem's width when the open island has the stem-and-body shape.
     @ViewBuilder
     func background(expanded: Bool, shape: IslandShape, row: CGFloat = 0, height: CGFloat = 0, glassLevel: Double = 0.6,
-                    closedGlass: Bool = false) -> some View {
+                    closedGlass: Bool = false, stem: CGFloat? = nil) -> some View {
         switch self {
         case .graphite where expanded:
             shape.fill(Color(white: 0.105)).overlay(shape.stroke(Color.white.opacity(0.08), lineWidth: 1))
         case .glass:
-            GlassBody(shape: shape, expanded: expanded, row: row, height: height, level: glassLevel, closedGlass: closedGlass)
+            GlassBody(shape: shape, expanded: expanded, row: row, height: height, level: glassLevel, closedGlass: closedGlass, stem: stem)
         default:
             shape.fill(Color.black)
         }
@@ -153,6 +154,10 @@ private struct GlassBody: View {
     let level: Double
     /// Closed, the island is glass as well (a display without a notch).
     var closedGlass = false
+    /// The stem's width when the open island has the stem-and-body shape: then only the stem is
+    /// black, and the glass starts right at the bottom of the menu bar, with a short melt under
+    /// the stem whose depth follows the glass level.
+    var stem: CGFloat? = nil
 
     /// The least black left over the glass, so text always has a floor of contrast.
     static let smoke = 0.3
@@ -163,7 +168,13 @@ private struct GlassBody: View {
             if expanded {
                 GlassSurface(shape: shape, tint: Color.black.opacity(0.2), fallback: Color(white: 0.13).opacity(0.78))
                     .transition(.asymmetric(insertion: .identity, removal: .opacity.animation(.linear(duration: 0.12))))
-                shape.fill(LinearGradient(stops: Self.stops(row: row, height: height, level: level), startPoint: .top, endPoint: .bottom))
+                if let stem {
+                    shape.fill(Color.black.opacity(Self.stemSmoke(level: level)))
+                    StemMelt(stem: stem, row: row, depth: Self.melt(body: height - row, level: level))
+                        .clipShape(shape)
+                } else {
+                    shape.fill(LinearGradient(stops: Self.stops(row: row, height: height, level: level), startPoint: .top, endPoint: .bottom))
+                }
                 // An AppKit view, which offline snapshots can't draw.
                 if !snapshotMode { GlassSheen().clipShape(shape).allowsHitTesting(false) }
             } else if closedGlass {
@@ -177,6 +188,19 @@ private struct GlassBody: View {
                 .animation(expanded ? .easeOut(duration: 0.18 * Motion.pace).delay(0.15 * Motion.pace)
                                     : .easeIn(duration: 0.08 * Motion.pace), value: expanded)
         }
+    }
+
+    /// The smoke over the stem-and-body glass: the usual floor from the default level up, and
+    /// darker towards Black, so that end of the slider is still mostly black.
+    static func stemSmoke(level: Double) -> Double {
+        let l = min(1, max(0, level))
+        return smoke + 0.55 * max(0, (0.6 - l) / 0.6)
+    }
+
+    /// How far the black melts down under the stem: a few points at level 1, half the body
+    /// at level 0.
+    static func melt(body: CGFloat, level: Double) -> CGFloat {
+        6 + max(0, body) * 0.5 * CGFloat(1 - min(1, max(0, level)))
     }
 
     /// Black down to the row, then a fade to the smoke. The fade is short at level 1 and runs
@@ -193,6 +217,33 @@ private struct GlassBody: View {
             .init(color: .black.opacity(smoke), location: max(rowEnd, fadeEnd)),
             .init(color: .black.opacity(smoke), location: 1),
         ]
+    }
+}
+
+/// The stem-and-body glass: the stem in the menu bar row is black, over the notch, and the
+/// black melts a little way down into the glass right under it, fading to the sides as well,
+/// so the body is glass from its top edge out to its shoulders.
+private struct StemMelt: View {
+    let stem: CGFloat
+    let row: CGFloat
+    let depth: CGFloat
+
+    var body: some View {
+        let width = stem + 2 * depth
+        let side = depth / max(width, 1)
+        ZStack(alignment: .top) {
+            Color.black.frame(height: row)
+            LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black.opacity(0.55), location: 0.35),
+                                   .init(color: .black.opacity(0), location: 1)],
+                           startPoint: .top, endPoint: .bottom)
+                .frame(width: width, height: depth)
+                .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: side),
+                                             .init(color: .black, location: 1 - side), .init(color: .clear, location: 1)],
+                                     startPoint: .leading, endPoint: .trailing))
+                .offset(y: row)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .allowsHitTesting(false)
     }
 }
 

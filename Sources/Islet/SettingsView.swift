@@ -144,7 +144,7 @@ struct AppearanceSettings: View {
                         }
                     } label: {
                         Text("Glass level")
-                        Text("The strip beside the notch stays black; below it the island melts into glass.")
+                        Text("Only the part over the notch is black, and the island is glass from the bottom of the menu bar. Towards Black, the black melts further down.")
                     }
                     Toggle(isOn: $model.settings.glassOnNotchless) {
                         Text("Glass on displays without a notch")
@@ -628,7 +628,12 @@ struct IslandSketch: View {
     private func openIsland(row: CGFloat) -> some View {
         let size = settings.expandedSize
         let w = size.width * scale, h = size.height * scale
-        let shape = IslandShape(topRadius: 6 * scale, bottomRadius: 30 * scale)
+        // The Glass theme's stem-and-body shape: a notch-wide stem, then the body below the row.
+        let stemmed = theme == .glass
+        let notch = NotchGeometry.metrics(for: Self.screen, adjust: settings.notchAdjust).notch
+        let shape = stemmed
+            ? IslandShape(topRadius: IslandLayout.stemFlare * scale, bottomRadius: 30 * scale, stemWidth: notch.width * scale, stemHeight: row)
+            : IslandShape(topRadius: 6 * scale, bottomRadius: 30 * scale)
         let design: Font.Design = settings.roundedFont ? .rounded : .default
         let art = min(h - row - 10, 64 * scale)
         return ZStack(alignment: .topLeading) {
@@ -672,18 +677,18 @@ struct IslandSketch: View {
         case .graphite:
             shape.fill(Color(white: 0.105)).overlay(shape.stroke(Color.white.opacity(0.1), lineWidth: 1))
         case .glass:
-            // Black over the notch row, melting into a tinted, see-through body; how soon follows the level.
+            // Black in the stem over the notch; the body is a tinted, see-through glass from the
+            // bottom of the menu bar, darker towards the Black end of the level.
             let top = min(0.95, row / max(height, 1))
-            let melt = top + (1 - top) * (1 - settings.glassLevel) * 0.85
-            shape.fill(LinearGradient(stops: [
-                .init(color: .black, location: 0),
-                .init(color: .black, location: top),
-                .init(color: .black.opacity(0.92), location: min(1, max(top, melt - 0.08))),
-                .init(color: .black.opacity(0.42), location: min(1, melt + 0.12)),
-                .init(color: .black.opacity(0.36), location: 1),
-            ], startPoint: .top, endPoint: .bottom))
-            .overlay(shape.fill(LinearGradient(colors: [.white.opacity(0.0), .white.opacity(0.1)], startPoint: .top, endPoint: .bottom)))
-            .overlay(shape.stroke(Color.white.opacity(0.22), lineWidth: 0.75))
+            let smoke = 0.36 + 0.5 * max(0, (0.6 - settings.glassLevel) / 0.6)
+            shape.fill(Color.black.opacity(smoke))
+                .overlay(shape.fill(LinearGradient(stops: [
+                    .init(color: .black, location: 0),
+                    .init(color: .black, location: top),
+                    .init(color: .black.opacity(0), location: min(1, top + 0.01)),
+                ], startPoint: .top, endPoint: .bottom)))
+                .overlay(shape.fill(LinearGradient(colors: [.white.opacity(0.0), .white.opacity(0.1)], startPoint: .top, endPoint: .bottom)))
+                .overlay(shape.stroke(Color.white.opacity(0.22), lineWidth: 0.75))
         }
     }
 

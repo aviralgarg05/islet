@@ -128,7 +128,7 @@ struct PageSwitcher: View {
         return (main, more)
     }
 
-    /// The rest of the pages, then keep awake and Settings.
+    /// The rest of the pages, then keep awake, keep open and Settings.
     private func showMore(_ tabs: [IslandTab]) {
         var items = tabs.map { tab in
             IslandMenu.Item(title: tab.title, symbol: tab.symbol, checked: model.tab == tab) {
@@ -146,6 +146,8 @@ struct PageSwitcher: View {
             awakeItems.append(IslandMenu.Item(title: "Turn off") { model.setKeepAwake(.stop, announce: false) })
         }
         items.append(IslandMenu.Item(title: "Keep awake", symbol: "cup.and.saucer", checked: awake != nil, children: awakeItems))
+        // Also beside the notch in the Black and Graphite themes; the Glass theme's stem has no room.
+        items.append(IslandMenu.Item(title: "Keep open", symbol: "pin", checked: model.pinned) { model.pinned.toggle() })
         items.append(IslandMenu.Item(title: "Settings…", symbol: "gearshape") { AppActions.openSettings() })
         IslandMenu.show(items, model: model)
     }
