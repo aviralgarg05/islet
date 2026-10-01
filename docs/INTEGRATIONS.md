@@ -215,7 +215,7 @@ Apple doesn't let third-party apps read the iPhone's Live Activities (macOS 26+ 
 1. **iPhone notifications.** macOS forwards them to the Mac when iPhone Mirroring or notification forwarding is on, and Islet's notification mirroring picks them up like any other banner.
 2. **iPhone Shortcuts automations → Islet's local-network bridge.**
 
-To set up the bridge, turn on **Accept requests from this network** in *Settings → Advanced → iPhone bridge* and press **Copy** beside the token. This is the bridge's own token, not the one `isletctl token` prints; neither works in place of the other. Then on the iPhone: Shortcuts → Automation → **New** → pick a trigger → **Get Contents of URL**:
+To set up the bridge, turn on **Accept requests from this network** in *Settings → Advanced → iPhone bridge* and press **Copy** beside the token. This is the bridge's own token, not the one `isletctl token` prints; neither works in place of the other. In a terminal, `isletctl token --lan` prints the bridge's token. Then on the iPhone: Shortcuts → Automation → **New** → pick a trigger → **Get Contents of URL**:
 - URL: `http://<your-mac>.local:47832/v1/notify`
 - Method: POST
 - Headers: `Authorization: Bearer <bridge token>`
@@ -233,7 +233,7 @@ To set up the bridge, turn on **Accept requests from this network** in *Settings
 
 The bridge is not encrypted: anyone on the same Wi-Fi can read what a Shortcut sends, token included. So it only accepts notifications, timers, Focus and simple activities, and everything else gets `403`. It can't read your notifications, activities or state, control media or the island, or take part in agent approvals. Activities from the bridge have no links or buttons, use symbols, emoji or app icons only, get ids starting with `lan-`, and are at most `high` priority. If the token may have leaked, press **New token** and paste the new one into your Shortcuts.
 
-The bridge also rejects browser origins, rate-limits each client (30 requests / 10 s), limits bodies to 16 KB and serves 8 connections at once. Bonjour advertises it as "Islet", not by your Mac's name. The full list of routes is in [API.md](API.md#local-network-bridge-iphone-shortcuts).
+The bridge also rejects browser origins, rate-limits each client (30 requests / 10 s), limits bodies to 16 KB and serves 8 connections at once, 2 per client. Bonjour advertises it as "Islet", not by your Mac's name. The full list of routes is in [API.md](API.md#local-network-bridge-iphone-shortcuts).
 
 ---
 

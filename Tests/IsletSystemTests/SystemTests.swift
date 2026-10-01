@@ -29,19 +29,23 @@ actor MemoryBackend: IsletBackend {
     func handleApproval(_ event: ApprovalEvent) async -> ApprovalDecision? { nil }
 }
 
-func startServer(lan: Bool = false, limit: Int? = nil) async throws -> (LocalAPIServer, UInt16) {
+func startServer(lan: Bool = false, limit: Int? = nil,
+                 configure: (LocalAPIServer) -> Void = { _ in }) async throws -> (LocalAPIServer, UInt16) {
     let router = APIRouter(token: "tok", version: "t", backend: MemoryBackend(), scope: lan ? .lan : .local)
     let server = lan ? LocalAPIServer.localNetwork(router: router) : LocalAPIServer(router: router)
     if let limit { server.rateLimiter = RateLimiter(limit: limit, window: 60) }
+    configure(server)
     let port: UInt16 = try await withCheckedThrowingContinuation { cont in
         server.start(port: 0, onAllInterfaces: lan) { cont.resume(with: $0) }
     }
     return (server, port)
 }
 
-func request(_ port: UInt16, _ method: String, _ path: String, token: String? = "tok", body: String? = nil) async throws -> (Int, Data) {
+func request(_ port: UInt16, _ method: String, _ path: String, token: String? = "tok", body: String? = nil,
+             timeout: TimeInterval = 60) async throws -> (Int, Data) {
     var r = URLRequest(url: URL(string: "http://127.0.0.1:\(port)\(path)")!)
     r.httpMethod = method
+    r.timeoutInterval = timeout
     if let token { r.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
     if let body {
         r.httpBody = Data(body.utf8)

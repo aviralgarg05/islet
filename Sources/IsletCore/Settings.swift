@@ -646,6 +646,23 @@ public enum IsletPaths {
 
     /// Discovery file written by the app: `{"port": 47831, "token": "…"}` (mode 0600).
     public static var apiDiscoveryFile: URL { supportDirectory.appendingPathComponent("api.json") }
+
+    /// The iPhone bridge's own token, `{"token": "…"}` (mode 0600), written the first time the
+    /// bridge is turned on and kept when it is turned off.
+    public static var lanTokenFile: URL { supportDirectory.appendingPathComponent("lan.json") }
+}
+
+/// Contents of `lan.json`, shared between the app and `isletctl token --lan`.
+public struct LANTokenFile: Codable, Equatable, Sendable {
+    public var token: String
+
+    public init(token: String) { self.token = token }
+
+    /// The saved token, or nil when the file is missing or unreadable.
+    public static func read(from url: URL = IsletPaths.lanTokenFile) -> String? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return (try? JSONDecoder().decode(LANTokenFile.self, from: data))?.token
+    }
 }
 
 /// Contents of the API discovery file shared between the app and `isletctl`.

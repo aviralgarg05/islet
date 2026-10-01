@@ -301,7 +301,7 @@ Off by default. When enabled (Settings → Advanced → iPhone bridge), a second
 
 Everything else is `403`: the bridge can't read activities or state, remove anything, send agent hooks, or control media, the HUD, keep awake or the island.
 
-The bridge has its own token, shown in Settings → Advanced → iPhone bridge with **Copy** and **New token**, and kept in `~/Library/Application Support/Islet/lan.json` (mode `0600`). The local API's token is refused on the bridge, and the bridge's token is refused on the local API. A missing or wrong token gets `401` as soon as the headers arrive, before the body is read. Bodies are limited to 16 KB (`413`), 8 connections are served at once (`503`), and each client gets 30 requests per 10 seconds (`429`; an IPv6 /64 counts as one client). Browser origins are refused. See [iPhone recipes](INTEGRATIONS.md#iphone).
+The bridge has its own token, shown in Settings → Advanced → iPhone bridge with **Copy** and **New token**, and kept in `~/Library/Application Support/Islet/lan.json` (mode `0600`); `isletctl token --lan` prints it. The local API's token is refused on the bridge, and the bridge's token is refused on the local API. A missing or wrong token gets `401` as soon as the headers arrive, before the body is read. Bodies are limited to 16 KB (`413`). 8 connections are served at once (`503`), at most 2 of them from one client (`429`), and a connection is closed if its headers haven't arrived within 2 seconds. Each client gets 30 requests per 10 seconds (`429`). For both per-client limits, an IPv6 /64 counts as one client. Browser origins are refused. See [iPhone recipes](INTEGRATIONS.md#iphone).
 
 ---
 
@@ -339,9 +339,12 @@ isletctl hook <claude|codex|AGENT> [JSON]   forward an agent hook payload (stdin
 isletctl statusline [-- <command…>]    Claude Code status line: record plan usage, run your own line
 isletctl hook <claude|codex|cursor> --wait N   wait up to N s for an answer in the notch, print it
 isletctl state | health | token
+isletctl token --lan                  the iPhone bridge's token (not the local API's)
 ```
 
 `isletctl hook` never fails the calling agent: it exits 0 within ~1.5 s even when Islet isn't running.
+
+`isletctl token --lan` prints the iPhone bridge's token from `lan.json`, even while Islet isn't running, and says so if the bridge has never been turned on.
 
 `isletctl statusline` is a Claude Code status line command. It reads the JSON Claude passes on stdin and saves the plan limits, model and context use to `~/Library/Application Support/Islet/usage/claude.json` (mode 0600, written only when a figure changes). Then it runs `<command…>` with the same stdin and passes its output and exit code through; if Claude Code stops the status line early, the command is stopped too. A single argument runs with `/bin/sh -c`, which is how Claude stores a command line; several arguments run directly, without a shell. With no command it prints a short line such as `Opus 5.5 · 42% context · 5h 62%`. It never contacts the app or the network, and its own work takes a few milliseconds. See [Usage limits](INTEGRATIONS.md#usage-limits).
 `isletctl timer` reads the same phrases as the API's `in`, with one difference: a bare number is seconds (`isletctl timer 300`), as it always was. Quote phrases with spaces: `isletctl timer "in 20 minutes to check the oven"`.

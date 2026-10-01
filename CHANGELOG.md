@@ -79,7 +79,8 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 - Downloads, the clipboard and plugins stop checking while nothing changes or the screen is locked.
 - A browser video no longer stays "playing" in the island after you close its window, and a video that finished without saying so shows as stopped and then goes.
 - Local builds use the hardened runtime.
-- The iPhone bridge has its own token, separate from the local API's, with Copy and New Token in Settings → Advanced. It only accepts notifications, timers, Focus and simple activities (no links, buttons or image files), refuses a wrong token before reading the body, and limits bodies to 16 KB and connections to 8. Bonjour advertises it as "Islet" rather than the Mac's name.
+- The iPhone bridge has its own token, separate from the local API's, with Copy and New Token in Settings → Advanced. It only accepts notifications, timers, Focus and simple activities (no links, buttons or image files), refuses a wrong token before reading the body, and limits bodies to 16 KB and connections to 8, 2 per client. Connections whose headers take longer than 2 seconds are closed. Bonjour advertises it as "Islet" rather than the Mac's name. `isletctl token --lan` prints its token.
+- A request refused from its headers alone (a wrong token, a refused route, a body that's too large) now gets its answer through to clients still sending a large body, such as URLSession, instead of ending in a timeout or a lost connection.
 - Calendar and Reminders access works in the app bundle: the hardened runtime needed the calendars entitlement, without which macOS refused access and never asked.
 - Hovering opens the island when the pointer is pushed against the top edge of the screen. Settings can switch it to open on click instead.
 
