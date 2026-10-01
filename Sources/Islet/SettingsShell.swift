@@ -36,7 +36,8 @@ final class SettingsNavigation {
 @MainActor
 enum SettingsWindow {
     static let sidebarWidth: CGFloat = 216
-    static let defaultSize = NSSize(width: 780, height: 560)
+    /// Tall enough for every page in the sidebar without scrolling.
+    static let defaultSize = NSSize(width: 780, height: 570)
     /// Wide enough for the sidebar and the widest rows (segmented pickers), tall enough for a
     /// page's first sections. Both columns scroll below that.
     static let minimumSize = NSSize(width: 700, height: 440)
@@ -119,8 +120,8 @@ struct SettingsSidebar: View {
         VStack(spacing: 0) {
             SettingsSearchField(navigation: navigation)
                 .padding(.horizontal, 10)
-                .padding(.top, SettingsWindow.headerHeight)
-                .padding(.bottom, 8)
+                .padding(.top, SettingsWindow.headerHeight - 12)
+                .padding(.bottom, 4)
             ScrollViewReader { proxy in
                 Group {
                     // Snapshots can't draw the system's selection highlight, so they draw their own.
@@ -140,6 +141,8 @@ struct SettingsSidebar: View {
             }
         }
         .listStyle(.sidebar)
+        // Small rows fit all sixteen pages in the window's usual height.
+        .environment(\.sidebarRowSize, .small)
         .scrollContentBackground(.hidden)
         .background(SidebarMaterial(snapshot: snapshotMode).ignoresSafeArea())
     }
@@ -182,7 +185,7 @@ private struct SidebarRow: View {
 /// A page's symbol on a small rounded square of its colour, as in System Settings.
 struct SettingsTile: View {
     let page: SettingsPage
-    var size: CGFloat = 20
+    var size: CGFloat = 18
 
     var body: some View {
         Image(systemName: page.symbol)
@@ -477,6 +480,27 @@ struct SettingsHero<Accessory: View>: View {
 extension SettingsHero where Accessory == EmptyView {
     init(page: SettingsPage, switchTitle: String? = nil, isOn: Binding<Bool>? = nil) {
         self.init(page: page, switchTitle: switchTitle, isOn: isOn) { EmptyView() }
+    }
+}
+
+/// A row with a title, an optional line under it, and a control centred on the right. For
+/// controls taller than a line, which `LabeledContent` would pin to the top.
+struct SettingsRow<Control: View>: View {
+    let title: String
+    var detail: String?
+    @ViewBuilder var control: Control
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                if let detail {
+                    Text(detail).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 8)
+            control
+        }
     }
 }
 

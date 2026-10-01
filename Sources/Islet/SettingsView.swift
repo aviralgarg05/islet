@@ -562,18 +562,12 @@ struct ShortcutSettings: View {
         Form {
             Section { SettingsHero(page: .shortcuts) }
             Section {
-                LabeledContent {
+                SettingsRow(title: "Open or close the island", detail: "Opens it pinned, so it stays open until you press the keys again.") {
                     ShortcutField(text: $model.settings.hotkey, standard: IsletSettings().hotkey)
-                } label: {
-                    Text("Open or close the island")
-                    Text("Opens it pinned, so it stays open until you press the keys again.")
                 }
                 .settingsAnchor("shortcuts.island")
-                LabeledContent {
+                SettingsRow(title: "Open the Ask box", detail: "Ready to type a question. Press the keys again to close it.") {
                     ShortcutField(text: $model.settings.askHotkey, standard: IsletSettings().askHotkey)
-                } label: {
-                    Text("Open the Ask box")
-                    Text("Ready to type a question. Press the keys again to close it.")
                 }
                 .settingsAnchor("shortcuts.ask")
             } footer: {

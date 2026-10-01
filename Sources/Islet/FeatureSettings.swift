@@ -82,7 +82,7 @@ private struct IndicatorStylePicker: View {
     }
 
     var body: some View {
-        LabeledContent("Look") {
+        SettingsRow(title: "Look") {
             HStack(spacing: 10) {
                 ForEach(Self.styles, id: \.0) { style, name in
                     let selected = model.settings.visualiserStyle == style

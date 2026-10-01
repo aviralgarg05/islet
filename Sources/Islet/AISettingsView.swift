@@ -161,7 +161,6 @@ struct AISettingsView: View {
                     .labelsHidden()
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 160)
-                    .disabled(!found)
             }
         } label: {
             Text(kind.title)

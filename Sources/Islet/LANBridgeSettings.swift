@@ -91,17 +91,26 @@ struct CodeBlock: View {
                 }
                 .controlSize(.small)
             }
-            ScrollView([.horizontal, .vertical]) {
-                Text(verbatim: code)
-                    .font(.system(size: 11, design: .monospaced))
-                    .textSelection(.enabled)
-                    .fixedSize()
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            Group {
+                if code.contains("\n") {
+                    // Several lines keep their layout and scroll.
+                    ScrollView([.horizontal, .vertical]) {
+                        text.fixedSize().padding(8).frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: min(maxHeight, CGFloat(code.split(separator: "\n", omittingEmptySubsequences: false).count) * 14 + 22))
+                } else {
+                    // One command wraps, so none of it is out of sight.
+                    text.fixedSize(horizontal: false, vertical: true).padding(8).frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
-            .frame(maxHeight: min(maxHeight, CGFloat(code.split(separator: "\n", omittingEmptySubsequences: false).count) * 14 + 22))
             .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.primary.opacity(0.05)))
         }
         .padding(.vertical, 2)
+    }
+
+    private var text: some View {
+        Text(verbatim: code)
+            .font(.system(size: 11, design: .monospaced))
+            .textSelection(.enabled)
     }
 }
