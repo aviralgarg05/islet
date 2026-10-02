@@ -44,7 +44,9 @@ import Testing
         Case(title: "Calm Down (feat. Selena Gomez) - Rema", artist: "Rema", song: "Calm Down", by: "Rema"),
         // Hindi and Punjabi songs in Latin script, with "| Song" and credits after the bar.
         Case(title: "Tera Naa | Song", artist: "Gurlez Akhtar", song: "Tera Naa", by: "Gurlez Akhtar"),
-        Case(title: "Excuses | AP Dhillon | Gurinder Gill | Intense", artist: "AP Dhillon", song: "Excuses", by: "AP Dhillon"),
+        Case(title: "Excuses (Official Audio) | AP Dhillon | Gurinder Gill | Intense", artist: "AP Dhillon", song: "Excuses",
+             by: "AP Dhillon"),
+        Case(title: "AP Dhillon | Excuses | Official Audio", artist: "AP Dhillon", song: "Excuses", by: "AP Dhillon"),
         // A version after a dash is the same song's words.
         Case(title: "Bohemian Rhapsody - Remastered 2011", artist: "Queen", song: "Bohemian Rhapsody", by: "Queen"),
         // YouTube Music and the other players' web pages report the song itself, with its album.
@@ -108,16 +110,92 @@ import Testing
         #expect(BrowserSong.song(title: title, artist: channel) == nil)
     }
 
-    /// Something else with nothing to clean is left as it is; its length then decides.
-    @Test func otherVideosAreLeftAsTheyAre() throws {
-        let bread = try #require(BrowserSong.song(title: "Making Sourdough at Home", artist: "Joshua Weissman"))
-        #expect(bread == BrowserSong.Song(title: "Making Sourdough at Home", artist: "Joshua Weissman"))
-        let radio = try #require(BrowserSong.song(title: "lofi hip hop radio 📚 beats to relax/study to", artist: "Lofi Girl"))
-        #expect(radio.title == "lofi hip hop radio 📚 beats to relax/study to")
-        // A live stream has no length, so it is never looked up.
-        let stream = NowPlaying(source: .browser, bundleID: "com.google.Chrome", title: radio.title, artist: "Lofi Girl",
-                                isPlaying: true, duration: nil, elapsed: 30, timestamp: Date(timeIntervalSince1970: 0))
+    /// A browser plays the news, lessons and vlogs as often as songs. With browsers on, a video
+    /// that shows no sign of music (no label such as "(Official Video)", no music channel, no
+    /// half of "A - B" naming the channel) is left out, so its title never reaches LRCLIB and it
+    /// gets no lyrics button. The cost: an artist's upload titled only "Song | Artist" is left
+    /// out too, as it reads just like "Budget 2026 | Nirmala Sitharaman | Aaj Tak".
+    @Test(arguments: [
+        ("Breaking News: Earthquake shakes Delhi | Aaj Tak", "Aaj Tak"),
+        ("Budget 2026 | Nirmala Sitharaman | Aaj Tak", "Aaj Tak"),
+        ("How to Center a Div in CSS", "Kevin Powell"),
+        ("Python Lists - Lesson 3", "Corey Schafer"),
+        ("Symptoms of Type 2 Diabetes - What to Look For", "Mayo Clinic"),
+        ("Making Sourdough at Home", "Joshua Weissman"),
+        ("I Tried Living on $1 for a Week", "MrBeast"),
+        ("Apple Event - September 9", "Apple"),
+        ("lofi hip hop radio 📚 beats to relax/study to", "Lofi Girl"),
+        ("Excuses | AP Dhillon | Gurinder Gill | Intense", "AP Dhillon"),
+    ])
+    func videosWithNoSignOfMusicAreLeftOut(title: String, channel: String) {
+        #expect(BrowserSong.song(title: title, artist: channel) == nil)
+        let np = NowPlaying(source: .browser, bundleID: "com.google.Chrome", title: title, artist: channel, isPlaying: true,
+                            duration: 420, elapsed: 30, timestamp: Date(timeIntervalSince1970: 0))
+        #expect(LyricsQuery(np, includeBrowsers: true) == nil)
+        #expect(!LyricsQuery.couldHaveLyrics(np), "no lyrics button either")
+    }
+
+    /// A live stream has no length, so even a song's is never looked up.
+    @Test func aLiveStreamIsNeverLookedUp() throws {
+        let stream = NowPlaying(source: .browser, bundleID: "com.google.Chrome", title: "Adele - Hello (Official Video)",
+                                artist: "AdeleVEVO", isPlaying: true, duration: nil, elapsed: 30,
+                                timestamp: Date(timeIntervalSince1970: 0))
+        #expect(BrowserSong.song(title: stream.title, artist: "AdeleVEVO") != nil)
         #expect(LyricsQuery(stream, includeBrowsers: true) == nil)
+    }
+
+    /// Titles a looser reading got wrong: a version word that starts a song's own title
+    /// ("Demons", "Stereo Hearts", "Live Forever"), a VEVO title with a colon, a singer after a
+    /// label, and a channel's own name ahead of the song.
+    @Test(arguments: [
+        Case(title: "Imagine Dragons - Demons (Official Music Video)", artist: "ImagineDragonsVEVO", song: "Demons",
+             by: "Imagine Dragons"),
+        Case(title: "Oasis - Live Forever (Official HD Remastered Video)", artist: "Oasis", song: "Live Forever", by: "Oasis"),
+        Case(title: "Gym Class Heroes - Stereo Hearts ft. Adam Levine [Official Video]", artist: "Fueled By Ramen",
+             song: "Stereo Hearts", by: "Gym Class Heroes", unsure: true),
+        Case(title: "Ariana Grande - Monopoly (Audio)", artist: "Ariana Grande", song: "Monopoly", by: "Ariana Grande"),
+        Case(title: "Coldplay - Viva La Vida - Live in São Paulo", artist: "Coldplay", song: "Viva La Vida", by: "Coldplay"),
+        Case(title: "Hello: Live at the NRJ Music Awards", artist: "AdeleVEVO", song: "Hello: Live at the NRJ Music Awards",
+             by: "Adele"),
+        Case(title: "Coke Studio | Season 14 | Pasoori | Ali Sethi x Shae Gill", artist: "Coke Studio Pakistan", song: "Pasoori",
+             by: "Coke Studio Pakistan", unsure: true),
+    ])
+    func titlesThatLookLikeVersionsOrChannels(c: Case) throws {
+        let song = try #require(BrowserSong.song(title: c.title, artist: c.artist, album: c.album))
+        #expect(song.title == c.song)
+        #expect(song.artist == c.by)
+        #expect(song.unsure == c.unsure)
+    }
+
+    @Test func aSingerAfterALabelIsKept() throws {
+        let song = try #require(BrowserSong.song(title: "Tera Naa (Official Video) - Gurlez Akhtar", artist: "Speed Records"))
+        #expect(song.unsure)
+        #expect([song.title, song.otherTitle] == ["Gurlez Akhtar", "Tera Naa"], "both halves are searched")
+        // A label after the dash still goes.
+        let label = try #require(BrowserSong.song(title: "Tera Naa (Official Video) - Latest Punjabi Song 2024", artist: "Speed Records"))
+        #expect(label.title == "Tera Naa")
+    }
+
+    @Test func aPartNamingTheChannelIsNotTheSong() {
+        #expect(BrowserSong.namesChannel("Coke Studio", "Coke Studio Pakistan"))
+        #expect(BrowserSong.namesChannel("AP Dhillon", "APDhillon"))
+        #expect(BrowserSong.namesChannel("Season 14", "Coke Studio Pakistan"))
+        #expect(!BrowserSong.namesChannel("Love", "Lovely Music"), "whole words only")
+        #expect(!BrowserSong.namesChannel("Pasoori", "Coke Studio Pakistan"))
+    }
+
+    @Test func versionsAreWholeWords() {
+        #expect(BrowserSong.dropVersion("Bohemian Rhapsody - Remastered 2011") == "Bohemian Rhapsody")
+        #expect(BrowserSong.dropVersion("Here Comes the Sun - 2019 Mix") == "Here Comes the Sun")
+        #expect(BrowserSong.dropVersion("Blinding Lights - Radio Edit") == "Blinding Lights")
+        #expect(BrowserSong.dropVersion("Kesariya - Slowed + Reverb") == "Kesariya")
+        #expect(BrowserSong.dropVersion("Fix You - Live at River Plate") == "Fix You")
+        #expect(BrowserSong.dropVersion("Imagine Dragons - Demons") == "Imagine Dragons - Demons")
+        #expect(BrowserSong.dropVersion("Gym Class Heroes - Stereo Hearts") == "Gym Class Heroes - Stereo Hearts")
+        #expect(BrowserSong.dropVersion("Oasis - Live Forever") == "Oasis - Live Forever")
+        #expect(BrowserSong.dropVersion("Pixies - Up") == "Pixies - Up")
+        // Never down to the artist alone.
+        #expect(BrowserSong.dropVersion("Mono - Mono", artist: "Mono") == "Mono - Mono")
     }
 
     @Test func needsATitleAndAnArtist() {
