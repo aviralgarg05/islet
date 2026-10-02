@@ -107,6 +107,14 @@ public struct OtherAppHint: Equatable, Sendable {
     }
 
     public var button: String { "Open \(app)" }
+
+    /// Whether it still holds: `np`, the player on show, is the one it was said of, a press on it
+    /// still reaches nothing (`route`), and `holder`, the app macOS gives the controls to now, is
+    /// the one it names. Another app taking the controls (a voice message, say) makes it stale.
+    public func holds(onShow np: NowPlaying?, route: MediaRoute?, holder: String?) -> Bool {
+        guard let np, np.bundleID == bundleID, route == MediaRoute.none else { return false }
+        return self.holder == (holder == app ? nil : holder)
+    }
 }
 
 /// Where a command for the player on show goes. The system bridge controls whichever app macOS

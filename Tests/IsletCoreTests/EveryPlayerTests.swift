@@ -243,6 +243,22 @@ import Testing
                                        bridgeRunning: true) == nil)
     }
 
+    /// "Spotify has the controls" goes once it stops being true: another app takes the controls
+    /// (a voice message, say) or nobody has them, or the player on show changes or can be reached.
+    @Test func theHintGoesOnceItStopsHolding() {
+        let hint = OtherAppHint(app: "Google Chrome", bundleID: Self.chromeID, holder: "Spotify")
+        #expect(hint.holds(onShow: Self.chrome(), route: MediaRoute.none, holder: "Spotify"))
+        #expect(!hint.holds(onShow: Self.chrome(), route: MediaRoute.none, holder: "Messages"))
+        #expect(!hint.holds(onShow: Self.chrome(), route: MediaRoute.none, holder: nil))
+        #expect(!hint.holds(onShow: Self.chrome(), route: .bridge, holder: "Google Chrome"))
+        #expect(!hint.holds(onShow: Self.spotify(), route: .player(.spotify), holder: "Spotify"))
+        #expect(!hint.holds(onShow: nil, route: nil, holder: "Spotify"))
+        // Said with nobody holding the controls, it holds while that stays so.
+        let alone = OtherAppHint(app: "Google Chrome", bundleID: Self.chromeID, holder: nil)
+        #expect(alone.holds(onShow: Self.chrome(), route: MediaRoute.none, holder: nil))
+        #expect(!alone.holds(onShow: Self.chrome(), route: MediaRoute.none, holder: "Spotify"))
+    }
+
     // MARK: The rules still hold
 
     /// Rule 8: a bare clip from an app that isn't a player waits its moment even among others.

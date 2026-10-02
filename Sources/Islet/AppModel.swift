@@ -1630,8 +1630,11 @@ final class AppModel {
             setNowPlaying(media.current(now: now), now: now)
             reschedule()
         }
-        // A press that went nowhere says why, instead of doing nothing: macOS hasn't allowed
-        // Islet to control Music or Spotify, or another app has the controls.
+        // A press in the open island that went nowhere says why, instead of doing nothing: macOS
+        // hasn't allowed Islet to control Music or Spotify, or another app has the controls. Only
+        // while the island is open, where it shows: said of a link, a script or a swipe beside the
+        // notch, it would wait there and take the transport's place at the next open.
+        guard expandedScreen != nil else { return sent }
         let hint = np.flatMap { np -> ControlHint? in
             let r = mediaRoute(for: np)
             return PlayerIntegration.hint(
@@ -1643,8 +1646,9 @@ final class AppModel {
         return sent
     }
 
-    /// What the open island says after a press on the player on show went nowhere, until a
-    /// control works, another player is picked, that player gets the controls or the island closes.
+    /// What the open island says after a press there on the player on show went nowhere, until a
+    /// control works, another player is picked, that player gets the controls, another app takes
+    /// them or the island closes.
     private(set) var controlHint: ControlHint?
 
     /// `--snapshot` draws the hint.
@@ -1658,10 +1662,11 @@ final class AppModel {
     }
 
     /// "… has the controls" is said only of the player it was said of, while it still has no way
-    /// to be controlled from here.
+    /// to be controlled from here and the app it names still has the controls.
     private func dropStaleControlHint() {
-        guard case .otherApp(let h)? = controlHint else { return }
-        if nowPlaying?.bundleID != h.bundleID || nowPlaying.map(mediaRoute(for:)) != MediaRoute.none { controlHint = nil }
+        guard case .otherApp(let h)? = controlHint,
+              !h.holds(onShow: nowPlaying, route: nowPlaying.map(mediaRoute(for:)), holder: controlsHolderName) else { return }
+        controlHint = nil
     }
 
     /// The hint's Allow button: Settings → Permissions, at that player's row.
