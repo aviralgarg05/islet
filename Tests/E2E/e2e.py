@@ -20,7 +20,9 @@ import urllib.error
 import urllib.request
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-APP = os.path.join(ROOT, "build", "Islet.app")
+# ISLET_E2E_APP tests an installed copy (for example /Applications/Islet.app): islet:// links go
+# to the copy macOS has registered, so with two copies the URL checks need the registered one.
+APP = os.environ.get("ISLET_E2E_APP") or os.path.join(ROOT, "build", "Islet.app")
 EXE = os.path.join(APP, "Contents", "MacOS", "Islet")
 CTL = os.path.join(APP, "Contents", "MacOS", "isletctl")
 PORT = 47931
@@ -296,13 +298,14 @@ def run_suite(e, app, windows_bin):
     # with something on show, only the media suite's fake player is used.
     p = ctl(e, "media", "seek", "soon", check_rc=False)
     check("media seek refuses words that aren't a place in the track", p.returncode == 1 and "1:30" in p.stderr, p.stderr.strip())
-    if state(e).get("nowPlaying"):
-        skip("media seek with no player", "something is on show; not moving it")
-    else:
-        for pos in ["90s", "0", "1:30"]:
-            p = ctl(e, "media", "seek", pos, check_rc=False)
-            check(f"media seek {pos} with no player is a clean 503", p.returncode == 1 and "503" in p.stderr,
-                  f"exit {p.returncode}: {p.stderr.strip()}")
+    for pos in ["90s", "0", "1:30"]:
+        # Checked before every seek: music the owner starts mid-run must never be moved.
+        if state(e).get("nowPlaying"):
+            skip(f"media seek {pos} with no player", "something is on show; not moving it")
+            continue
+        p = ctl(e, "media", "seek", pos, check_rc=False)
+        check(f"media seek {pos} with no player is a clean 503", p.returncode == 1 and "503" in p.stderr,
+              f"exit {p.returncode}: {p.stderr.strip()}")
 
     print("▸ HUD, island, removal")
     check("hud accepted", ctl(e, "hud", "volume", "0.4").returncode == 0)

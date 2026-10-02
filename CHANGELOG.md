@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## 0.2.0 (2 October 2026)
 
 Islet now shows the Live Activities your iPhone sends to the Mac, lets you answer coding agents' permission requests in the island, runs timers, and asks Apple Intelligence, Claude or ChatGPT. It also stays beside the notch and shrinks to the free space in the menu bar.
 
@@ -169,17 +169,19 @@ Every tool starts off until you turn it on in Settings, on the Tools page or the
 
 ### Measured on an M3 Pro MacBook Pro, macOS 27.0.1
 
-| State | CPU over 10 s | Budget |
+The median of three 10-second runs of `make perf` per state, each measured once the change has settled.
+
+| State | CPU | Budget |
 | --- | --- | --- |
 | Idle | 0.0% | 0.5% |
-| Closed, live countdown | 0.4% | 1.5% |
-| Closed, static progress | 0.4% | 1.5% |
+| Closed, live countdown | 0.3% | 1.5% |
+| Closed, static progress | 0.0% | 1.5% |
 | Closed, spinner | 0.0% | 1.5% |
-| Closed, music playing | 0.4% | 1.5% |
-| Open, Now Playing | 0.7% | 3% |
-| Idle again | 0.3% | 0.5% |
+| Closed, music playing | 0.5% | 1.5% |
+| Open, Now Playing | 0.6% | 3% |
+| Idle again | 0.0% | 0.5% |
 
-Memory: 106 MB resident. End-to-end suite: 62 passed, 1 skipped (the media test, which never runs while something is playing).
+Memory: about 100 MB. Over two minutes of everyday use on the same Mac, Islet averaged 0.06% CPU. End-to-end suite: 66 passed, 1 skipped (the media test, which never runs while something is playing).
 
 ### Known issues
 - Tested on macOS 27 only; mirroring Live Activities on macOS 26 is untested.
