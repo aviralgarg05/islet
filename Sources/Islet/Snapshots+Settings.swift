@@ -239,7 +239,7 @@ enum SettingsSnapshots {
         s.hiddenMediaApps = ["com.apple.TV"]
         // The volume HUD on without replacing macOS's display, so the "shows two" note shows.
         s.hudEnabled = true
-        s.mutedSources = ["live-activity:uber-eats", "github-actions"]
+        s.mutedSources = ["live-activity:uber-eats", "live-activity:doordash", "github-actions", "cli"]
         s.remindersEnabled = true
         s.pluginsEnabled = true
         s.weatherEnabled = true

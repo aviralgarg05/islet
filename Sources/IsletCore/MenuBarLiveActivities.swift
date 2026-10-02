@@ -377,6 +377,11 @@ public enum MutedSources {
         if MenuBarLiveActivities.isMirroredSource(source) {
             let prefix = MenuBarLiveActivities.source + ":"
             guard source.hasPrefix(prefix) else { return "Live Activities" }
+            // The app as the catalogue spells it ("DoorDash", "Domino’s"); the source keeps
+            // only a lower-case slug of it.
+            if let look = LiveActivityCatalog.all.first(where: { MenuBarLiveActivities.source(for: $0.app) == source }) {
+                return look.app.replacingOccurrences(of: "'", with: "\u{2019}") + " (Live Activity)"
+            }
             let slug = source.dropFirst(prefix.count).split(separator: "-").map { $0.prefix(1).uppercased() + $0.dropFirst() }
             return slug.joined(separator: " ") + " (Live Activity)"
         }
@@ -394,5 +399,9 @@ public enum MutedSources {
         "focus": "Focus", "system": "Islet", "agent-usage": "Usage limits", "claude-code": "Claude Code",
         "codex": "Codex", "cursor": "Cursor", "battery": "Battery", "audio": "Sound output", "shelf": "Shelf",
         "shortcuts": "Shortcuts", "preview": "Preview",
+        // What arrives without a name of its own: a notification from an app with no bundle
+        // id, the MCP server coding agents use, `isletctl run` and every other isletctl command.
+        "notifications": "Notifications", "mcp": "Coding agents", "run": "Commands from Terminal",
+        "cli": "Scripts and Terminal",
     ]
 }

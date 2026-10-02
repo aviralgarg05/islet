@@ -257,6 +257,16 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         #expect(name("my_backup-job") == "My backup job (from a script)")
         #expect(name(TimerEngine.source) == "Timers")
         #expect(name(MeetingReminders.source) == "Meeting reminders")
+        // The app's own spelling, not the slug's.
+        #expect(name("live-activity:doordash") == "DoorDash (Live Activity)")
+        #expect(name("live-activity:espn") == "ESPN (Live Activity)")
+        #expect(name("live-activity:domino-s") == "Domino\u{2019}s (Live Activity)")
+        #expect(name("live-activity:some-new-app") == "Some New App (Live Activity)")
+        // What isletctl and a notification without an app send.
+        #expect(name("notifications") == "Notifications")
+        #expect(name("mcp") == "Coding agents")
+        #expect(name("run") == "Commands from Terminal")
+        #expect(name("cli") == "Scripts and Terminal")
     }
 
     @Test func scriptsCantUseAnAppsMirroredSource() throws {
