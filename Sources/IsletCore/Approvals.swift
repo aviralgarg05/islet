@@ -829,6 +829,44 @@ public struct ApprovalIslandHold: Equatable, Sendable {
     }
 }
 
+/// How far the user has got through a card's questions. Kept with the pending card, not in its
+/// view, so hiding the card or the island moving to another display keeps the answers given.
+public struct QuestionProgress: Equatable, Sendable {
+    /// The question on show.
+    public private(set) var index = 0
+    /// The answers so far, by question.
+    public private(set) var answers: [String: String] = [:]
+    /// The options ticked on the question on show (one that takes more than one answer).
+    public private(set) var picked: [String] = []
+
+    public init() {}
+
+    /// The question on show, among `count`.
+    public func current(of count: Int) -> Int { max(0, min(index, count - 1)) }
+
+    /// Ticks an option, or unticks it.
+    public mutating func toggle(_ option: String) {
+        if let i = picked.firstIndex(of: option) { picked.remove(at: i) } else { picked.append(option) }
+    }
+
+    /// The ticked options, in the order the question lists them.
+    public func pickedAnswer(options: [String]) -> String {
+        options.filter(picked.contains).joined(separator: ", ")
+    }
+
+    /// Answers the question on show and moves on to the next. Returns every answer once the
+    /// last of `count` questions has been answered, nil while more are to come.
+    public mutating func answer(_ question: String, with value: String, of count: Int) -> [String: String]? {
+        answers[question] = value
+        picked = []
+        guard index + 1 >= count else {
+            index += 1
+            return nil
+        }
+        return answers
+    }
+}
+
 /// A JSON value that keeps agent payload fragments intact (tool input, permission
 /// suggestions), so they can be shown and echoed back exactly.
 public indirect enum JSONValue: Equatable, Sendable, ExpressibleByStringLiteral {

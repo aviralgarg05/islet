@@ -17,6 +17,9 @@ final class ApprovalController {
     /// Whether the card is shown. It appears a moment after a request arrives, so the terminal
     /// can print its own prompt first and requests that settle at once never flash a card.
     private(set) var presented = false
+    /// How far the user has got through each waiting card's questions, by card. Kept here so a
+    /// card hidden, or redrawn on another display, still has the answers already given.
+    private(set) var questionProgress: [String: QuestionProgress] = [:]
 
     @ObservationIgnored private var waiters: [String: CheckedContinuation<ApprovalDecision?, Never>] = [:]
     @ObservationIgnored private var expiries: [String: DispatchWorkItem] = [:]
@@ -101,6 +104,20 @@ final class ApprovalController {
         finish(entry.id, with: decision)
     }
 
+    /// The answers given so far on a card's questions.
+    func progress(for entry: ApprovalQueue.Entry) -> QuestionProgress {
+        questionProgress[entry.id] ?? QuestionProgress()
+    }
+
+    /// Records a step through a card's questions, for as long as the card waits.
+    @discardableResult
+    func updateProgress<T>(for entry: ApprovalQueue.Entry, _ change: (inout QuestionProgress) -> T) -> T {
+        var p = progress(for: entry)
+        let result = change(&p)
+        if queue.entries.contains(where: { $0.id == entry.id }) { questionProgress[entry.id] = p }
+        return result
+    }
+
     /// "Answer requests in the island" was turned off: every card still waiting goes back to
     /// the terminal now rather than holding the agent up for the rest of its wait, and the
     /// island lets go of the pin the cards held.
@@ -166,6 +183,11 @@ final class ApprovalController {
 
     private func queueChanged() {
         noteFront()
+        // Answers on a card that has gone are no use to anyone.
+        let live = Set(queue.entries.map(\.id))
+        if questionProgress.keys.contains(where: { !live.contains($0) }) {
+            questionProgress = questionProgress.filter { live.contains($0.key) }
+        }
         guard queue.isEmpty else { return }
         showWork?.cancel()
         showWork = nil
@@ -207,6 +229,7 @@ final class ApprovalController {
     /// Snapshot rendering: show these requests as if they had just arrived.
     func showForSnapshot(_ requests: [ApprovalRequest]) {
         queue = ApprovalQueue()
+        questionProgress = [:]
         for (i, r) in requests.enumerated() { _ = queue.enqueue(r, id: "snapshot-\(i)", now: Date()) }
         presented = !requests.isEmpty
     }

@@ -246,9 +246,6 @@ struct QuestionApproval: View {
     let model: AppModel
     let entry: ApprovalQueue.Entry
     let questions: [AgentQuestion]
-    @ViewState private var index = 0
-    @ViewState private var answers: [String: String] = [:]
-    @ViewState private var picked: [String] = []
     /// When the next question replaced the last one: its options sit where the old ones were,
     /// so a double-click must not answer it unseen.
     @ViewState private var steppedAt = Date.distantPast
@@ -259,12 +256,17 @@ struct QuestionApproval: View {
 
     private var justStepped: Bool { Date().timeIntervalSince(steppedAt) < ApprovalController.clickGuard }
 
+    /// The answers so far: kept with the card, so hiding it or moving the island keeps them.
+    private var progress: QuestionProgress { model.approvals.progress(for: entry) }
+
     /// An option: the height of a standard push button, so two rows and the footer fit the
     /// smallest island.
     static let optionHeight: CGFloat = 22
 
     var body: some View {
-        let q = questions[min(index, questions.count - 1)]
+        let progress = self.progress
+        let index = progress.current(of: questions.count)
+        let q = questions[index]
         let rows = stride(from: 0, to: q.options.count, by: 2).map { Array(q.options[$0..<min($0 + 2, q.options.count)]) }
         VStack(alignment: .leading, spacing: Space.xs) {
             HStack(alignment: .firstTextBaseline, spacing: Space.s) {
@@ -287,7 +289,7 @@ struct QuestionApproval: View {
                 VStack(spacing: Space.xs) {
                     ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                         HStack(spacing: Space.xs) {
-                            ForEach(row, id: \.label) { option in optionButton(option, in: q) }
+                            ForEach(row, id: \.label) { option in optionButton(option, in: q, on: progress.picked.contains(option.label)) }
                             if row.count == 1 { Color.clear.frame(maxWidth: .infinity, maxHeight: 1) }
                         }
                     }
@@ -303,22 +305,21 @@ struct QuestionApproval: View {
                         .foregroundStyle(Ink.tertiary)
                         .lineLimit(1)
                     Button(index + 1 < questions.count ? "Next" : "Send") {
-                        answer(q, with: q.options.map(\.label).filter(picked.contains).joined(separator: ", "))
+                        answer(q, with: self.progress.pickedAnswer(options: q.options.map(\.label)))
                     }
                     // One fill: with nothing picked the button itself looks switched off.
                     .buttonStyle(ApprovalButtonStyle(fill: .blue.opacity(0.85)))
-                    .disabled(picked.isEmpty)
+                    .disabled(progress.picked.isEmpty)
                 }
             }
         }
     }
 
-    private func optionButton(_ option: AgentQuestion.Option, in q: AgentQuestion) -> some View {
-        let on = picked.contains(option.label)
-        return Button {
+    private func optionButton(_ option: AgentQuestion.Option, in q: AgentQuestion, on: Bool) -> some View {
+        Button {
             guard !justStepped else { return }
             if q.multiSelect {
-                if let i = picked.firstIndex(of: option.label) { picked.remove(at: i) } else { picked.append(option.label) }
+                model.approvals.updateProgress(for: entry) { $0.toggle(option.label) }
             } else {
                 answer(q, with: option.label)
             }
@@ -351,13 +352,11 @@ struct QuestionApproval: View {
 
     private func answer(_ q: AgentQuestion, with value: String) {
         guard !justStepped else { return }
-        answers[q.question] = value
-        picked = []
-        if index + 1 < questions.count {
-            index += 1
-            steppedAt = Date()
-        } else {
+        let count = questions.count
+        if let answers = model.approvals.updateProgress(for: entry, { $0.answer(q.question, with: value, of: count) }) {
             model.approvals.decide(.answer(answers), for: entry)
+        } else {
+            steppedAt = Date()
         }
     }
 }

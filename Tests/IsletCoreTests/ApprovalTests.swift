@@ -510,6 +510,41 @@ enum HookFixtures {
     }
 }
 
+@Suite struct QuestionProgressTests {
+    @Test func answersAreKeptUntilTheLastOne() {
+        var p = QuestionProgress()
+        #expect(p.current(of: 3) == 0)
+        #expect(p.answer("Which database?", with: "Postgres", of: 3) == nil)
+        #expect(p.answer("Which port?", with: "5432", of: 3) == nil)
+        // Hidden here and shown again: the third question, with the first two answered.
+        let kept = p
+        #expect(kept.current(of: 3) == 2)
+        #expect(kept.answers == ["Which database?": "Postgres", "Which port?": "5432"])
+        let all = p.answer("Run migrations?", with: "Yes", of: 3)
+        #expect(all == ["Which database?": "Postgres", "Which port?": "5432", "Run migrations?": "Yes"])
+    }
+
+    @Test func tickedOptionsFollowTheQuestionsOrder() {
+        var p = QuestionProgress()
+        p.toggle("Tests")
+        p.toggle("Docs")
+        p.toggle("Lint")
+        p.toggle("Docs")
+        #expect(p.picked == ["Tests", "Lint"])
+        #expect(p.pickedAnswer(options: ["Lint", "Docs", "Tests"]) == "Lint, Tests")
+        // Answering moves on with nothing ticked on the next question.
+        _ = p.answer("Which checks?", with: p.pickedAnswer(options: ["Lint", "Docs", "Tests"]), of: 2)
+        #expect(p.picked.isEmpty && p.current(of: 2) == 1)
+    }
+
+    @Test func theQuestionOnShowStaysInRange() {
+        var p = QuestionProgress()
+        _ = p.answer("A?", with: "a", of: 1)
+        #expect(p.current(of: 1) == 0)
+        #expect(QuestionProgress().current(of: 0) == 0)
+    }
+}
+
 @Suite struct RiskRuleTests {
     func reasons(_ command: String, cwd: String? = "/Users/me/proj") -> [String] {
         RiskRules.reasons(command: command, cwd: cwd, home: "/Users/me")
