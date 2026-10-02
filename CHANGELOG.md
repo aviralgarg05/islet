@@ -56,7 +56,7 @@ Every tool starts off until you turn it on in Settings, on the Tools page or the
 - **Quick note**: a scratch pad that saves as you type.
 - **Unit converter**: type "5 ft in cm" or "100f to c" and click the answer to copy it. While it's on, the Ask box answers conversions too.
 - **Emoji**: search by name or the words people use ("lol", "tada") and click one to copy it, or to type it where you were with **Type emoji where you're typing** (needs Accessibility).
-- **Lyrics** (Now Playing): time-synced lyrics from LRCLIB beside the song on Home, for Music and Spotify; click a line to jump there. Only the title, artist, album and length are sent, once per song.
+- **Lyrics** (Now Playing): time-synced lyrics from LRCLIB beside the song on Home, for Music and Spotify and, with **Also for music in a web browser**, songs on YouTube, YouTube Music and other sites; click a line to jump there. Only the title, artist, album and length are sent, once per song.
 - **Shortcuts**: search and run your shortcuts from the island or the Ask box.
 - **Weather**: now and the week ahead from Open-Meteo, with no account, for a city or for where you are. Location is asked for only when you choose "Where I am", and the position is rounded to about a kilometre.
 - **Month calendar** on Today (Calendar & Reminders), with days that have events brighter.
@@ -70,6 +70,7 @@ Every tool starts off until you turn it on in Settings, on the Tools page or the
 
 ### Now Playing and controls
 - The scrubber seeks, and the open island has ±15 seconds, shuffle and repeat, the system volume and an output picker.
+- A quote button on the song shows or hides its lyrics. With lyrics off it says what turning them on sends, and nothing is sent until you click **Show lyrics**.
 - **Switch between players.** With a Chrome video and a Spotify song at once, small app icons beside the title switch between them and the controls follow, so a press on Spotify no longer pauses Chrome's video. The closed island keeps showing whatever plays.
 - When macOS doesn't list Spotify or Music as now playing, Islet controls them directly; without Automation it says **Allow Islet to control Spotify…** instead of doing nothing.
 - Each new song shows for a moment below the notch, for as long as **New activities stay open for** says, and **Show the new song for a moment** turns it off. When the island opens on click, resting the pointer on the notch peeks at what's playing (**Peek at what's playing**).
