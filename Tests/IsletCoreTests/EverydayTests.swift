@@ -492,7 +492,7 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         #expect(throws: ActivityError.self) { try center.apply(expired, now: t0) }
         let cursor = ApprovalRequest(provider: .cursor, hook: .beforeShellExecution, sessionID: "conv-9", toolName: "shell")
         #expect(cursor.statusUpdate(backToTerminal: .jumpFailed).id == "cursor-conv-9")
-        #expect(cursor.statusUpdate(backToTerminal: .jumpFailed).subtitle?.hasPrefix("Couldn't bring the terminal forward") == true)
+        #expect(cursor.statusUpdate(backToTerminal: .jumpFailed).subtitle?.hasPrefix("Couldn’t bring the terminal forward") == true)
     }
 }
 

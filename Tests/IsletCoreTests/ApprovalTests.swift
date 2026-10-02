@@ -71,7 +71,7 @@ enum HookFixtures {
         #expect(r.detail == "Remove node_modules directory")
         #expect(r.isShell)
         #expect(r.canAllowForSession)
-        #expect(r.sessionRuleSummary == "Bash(rm -rf node_modules)")
+        #expect(r.sessionRuleSummary == "\u{201C}rm -rf node_modules\u{201D}")
         #expect(r.risks == ["Deletes files recursively"])
         #expect(r.kind == .tool)
     }
@@ -187,8 +187,8 @@ enum HookFixtures {
         let mcp = try #require(parse("cursor", HookFixtures.cursorMCP))
         #expect(mcp.hook == .beforeMCPExecution)
         #expect(mcp.toolInput["title"] == "Crash on launch")
-        #expect(mcp.action == "Use create_issue")
-        #expect(mcp.subject.contains("\"repo\" : \"me/web\""))
+        #expect(mcp.action == "Use create issue")
+        #expect(mcp.subject == "repo: me/web\ntitle: Crash on launch")
         #expect(parse("cursor", #"{"conversation_id":"c","hook_event_name":"afterShellExecution","command":"ls"}"#) == nil)
     }
 
@@ -232,12 +232,98 @@ enum HookFixtures {
         #expect(write.detail?.hasSuffix("… 100 more characters") == true)
         let mcp = ApprovalRequest(provider: .claude, hook: .permissionRequest, sessionID: "s", toolName: "mcp__github__create_issue",
                                   toolInput: .object(["title": "Bug"]))
-        #expect(mcp.action == "Use github: create_issue")
-        #expect(mcp.subject == "{\n  \"title\" : \"Bug\"\n}")
+        #expect(mcp.action == "Use create issue in github")
+        #expect(mcp.subject == "title: Bug")
         // The subject is never shortened.
         let long = String(repeating: "echo hello && ", count: 200) + "true"
         let bash = ApprovalRequest(provider: .claude, hook: .permissionRequest, sessionID: "s", toolName: "Bash", toolInput: .object(["command": .string(long)]))
         #expect(bash.subject == long)
+    }
+
+    /// An MCP tool's card says what it does and where, and shows its input as plain lines.
+    @Test func mcpCardsReadAsWords() {
+        func tool(_ name: String, _ input: JSONValue = .object([:])) -> ApprovalRequest {
+            ApprovalRequest(provider: .claude, hook: .permissionRequest, sessionID: "s", toolName: name, toolInput: input)
+        }
+        #expect(tool("mcp__claude-in-chrome__tabs_context_mcp").action == "Use tabs context in claude in chrome")
+        // A connector's server is a UUID: the tool alone.
+        #expect(tool("mcp__1a59c906-04da-521d-bda7-7f71b9f9e01c__batch").action == "Use batch")
+        #expect(tool("mcp__github").action == "Use a tool")
+        #expect(tool("TodoWrite").action == "Update the plan")
+        #expect(tool("Skill").action == "Use a skill")
+        #expect(tool("Frobnicate").action == "Use frobnicate")
+        // Nothing to show: said so, never the tool's raw name.
+        #expect(tool("mcp__github__list_repos").subject == "No details")
+        let input: JSONValue = .object([
+            "issue_number": .number(12), "draft": .bool(true), "labels": .array(["bug", "ui"]),
+            "body": .string("Line one\nLine two"), "options": .object(["base": "main", "deep": .object(["x": "y"])]),
+            "note": .null, "long": .string(String(repeating: "a", count: 300)),
+        ])
+        let lines = tool("mcp__github__create_issue", input).subject.components(separatedBy: "\n")
+        #expect(lines.count == 7)
+        #expect(lines.contains("issue number: 12"))
+        #expect(lines.contains("draft: yes"))
+        #expect(lines.contains("labels: bug, ui"))
+        #expect(lines.contains("body: Line one Line two"))
+        #expect(lines.contains("options: base main, deep …"))
+        #expect(lines.contains("note: none"))
+        #expect(lines.contains { $0.hasPrefix("long: ") && $0.count == "long: ".count + ApprovalRequest.valueLimit && $0.hasSuffix("…") })
+        #expect(!lines.joined().contains("{") && !lines.joined().contains("\""))
+        // Short fields first, so a long one can't push them out of the box.
+        let issue = tool("mcp__github__create_issue", .object([
+            "body": .string(String(repeating: "Steps to reproduce. ", count: 6)), "repo": "me/web", "title": "Crash",
+        ])).subject.components(separatedBy: "\n")
+        #expect(issue.map { $0.components(separatedBy: ":")[0] } == ["repo", "title", "body"])
+    }
+
+    /// The card's text can change; the key a later PostToolUse is matched on can't.
+    @Test func callKeyKeepsTheRawInput() {
+        let input: JSONValue = .object(["title": "Bug"])
+        let r = ApprovalRequest(provider: .claude, hook: .permissionRequest, sessionID: "s", toolName: "mcp__github__create_issue", toolInput: input)
+        #expect(r.callKey == "mcp__github__create_issue\n" + input.prettyString)
+        let empty = ApprovalRequest(provider: .claude, hook: .permissionRequest, sessionID: "s", toolName: "mcp__github__list_repos")
+        #expect(empty.callKey == "mcp__github__list_repos\nmcp__github__list_repos")
+        let done = #"{"session_id":"s","hook_event_name":"PostToolUse","tool_name":"mcp__github__create_issue","tool_input":{"title":"Bug"}}"#
+        let settled = ApprovalSettlement.parse(provider: "claude", payload: Data(done.utf8))
+        #expect(settled?.matches(r) == true)
+    }
+
+    @Test func subagentsInWords() {
+        func asked(by agent: String?) -> String? {
+            ApprovalRequest(provider: .claude, hook: .permissionRequest, sessionID: "s", toolName: "Bash", agentType: agent).agentLabel
+        }
+        #expect(asked(by: "general-purpose") == "general purpose")
+        #expect(asked(by: "plugin:code-reviewer") == "code reviewer")
+        #expect(asked(by: "Explore") == "Explore")
+        #expect(asked(by: nil) == nil)
+    }
+
+    /// "Always" says what it allows in words, never as Claude Code's rule syntax.
+    @Test func sessionRulesInWords() {
+        func summary(_ suggestions: [JSONValue]) -> String? {
+            ApprovalRequest(provider: .claude, hook: .permissionRequest, sessionID: "s", toolName: "Bash",
+                            toolInput: .object(["command": "npm test"]), suggestions: suggestions).sessionRuleSummary
+        }
+        func rules(_ pairs: [(String, String?)]) -> JSONValue {
+            .object(["type": "addRules", "behavior": "allow", "rules": .array(pairs.map { tool, content in
+                var o: [String: JSONValue] = ["toolName": .string(tool)]
+                if let content { o["ruleContent"] = .string(content) }
+                return .object(o)
+            })])
+        }
+        #expect(summary([rules([("Bash", "npm test:*")])]) == "commands starting with \u{201C}npm test\u{201D}")
+        #expect(summary([rules([("Bash", "git status")])]) == "\u{201C}git status\u{201D}")
+        #expect(summary([rules([("Edit", nil), ("Read", nil), ("WebSearch", nil)])]) == "editing files, reading files, web searches")
+        #expect(summary([rules([("WebFetch", "domain:example.com")])]) == "web pages on example.com")
+        #expect(summary([rules([("mcp__github__create_issue", nil)])]) == "create issue in github")
+        #expect(summary([.object(["type": "setMode", "mode": "acceptEdits"])]) == "file edits without asking")
+        #expect(summary([.object(["type": "setMode", "mode": "bypassPermissions"])]) == "everything without asking")
+        #expect(summary([.object(["type": "setMode", "mode": "plan"])]) == "plan mode")
+        #expect(summary([.object(["type": "addDirectories", "directories": .array([.string(NSHomeDirectory() + "/other-project")])])])
+            == "files in ~/other-project")
+        #expect(summary([]) == nil)
+        #expect(ApprovalRequest.ruleWords(tool: "Read", content: "//Users/me/notes/**", home: "/Users/me") == "reading files in ~/notes")
+        #expect(ApprovalRequest.folderWords("/etc", home: "/Users/me") == "/etc")
     }
 
     @Test func statusAfterDecision() throws {

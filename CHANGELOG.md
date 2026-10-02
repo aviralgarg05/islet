@@ -36,6 +36,7 @@ Islet now shows the Live Activities your iPhone sends to the Mac, lets you answe
 - Settings → Coding agents connects each agent with one button, showing the change first. If Islet.app moves, the agent's row says so and **Update…** fixes it. **Disconnect…** removes Islet's hooks and nothing else.
 - **MCP.** `isletctl mcp` lets agents show progress, notes and timers in the notch.
 - An agent's status and Codex's last message hide anything that looks like a key or password. Approval cards still show the whole command, so you see what you're allowing.
+- An agent's status reads in words: "Running swift build" without the `cd` into the project before it, and other tools by what they do. Approval cards show a tool's details as plain lines, and **Always** says what it allows ("commands starting with “npm test”").
 - **Usage limits.** Claude Code's and Codex's 5-hour and weekly limits appear on Home, with a short alert beside the notch at 90% and again at 100%. They are read on this Mac: no sign-in is read, and nothing goes over the network.
 - Claude Code shares its limits only with its status line, so Home offers **Show usage** to add Islet's. Nothing is written until you confirm; then only the status line changes, and a backup is kept.
 - **More usage on Home**, each off until you switch it on under Coding agents → Usage limits: OpenRouter spending, Copilot premium requests (with a read-only GitHub key) and the models Ollama has loaded. They are fetched only when the island opens, and keys are kept in the Keychain.

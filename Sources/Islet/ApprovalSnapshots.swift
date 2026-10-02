@@ -31,6 +31,14 @@ extension Snapshots {
         let codex = ApprovalRequest(provider: .codex, hook: .permissionRequest, sessionID: "c1", cwd: "/Users/me/code/api",
                                     toolName: "shell", toolInput: .object(["command": .array(["bash", "-lc", "npm publish --access public"])]),
                                     agentType: "release", terminal: terminal)
+        // An MCP tool from a subagent: what it does in words, its input as plain lines.
+        let mcp = claude("mcp__github__create_issue", .object([
+            "repo": "me/islet", "title": "Approval card shows raw JSON", "labels": .array(["bug", "ui"]),
+            "body": "The card for an MCP tool shows braces and quotes.\nIt should read as plain lines.",
+        ]), suggestions: [.object([
+            "type": "addRules", "behavior": "allow", "destination": "localSettings",
+            "rules": .array([.object(["toolName": "mcp__github__create_issue"])]),
+        ])], agent: "general-purpose")
         let questions = claude("AskUserQuestion", .object([:]), kind: .questions([
             AgentQuestion(question: "Which storage should the shelf use for large files?", header: "Storage", options: [
                 .init(label: "Keep in place", detail: "Store a bookmark to the original file"),
@@ -67,6 +75,7 @@ extension Snapshots {
             ("34-approval-question", [questions]),
             ("35-approval-multiselect", [multi]),
             ("36-approval-plan", [plan]),
+            ("37-approval-mcp", [mcp]),
         ]
         for (name, requests) in cards {
             model.approvals.showForSnapshot(requests)

@@ -7,6 +7,7 @@ struct ApprovalGate<Content: View>: View {
     let model: AppModel
     let metrics: IslandMetrics
     @ViewBuilder var content: Content
+    @Environment(\.islandMotion) private var motion
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -18,7 +19,7 @@ struct ApprovalGate<Content: View>: View {
                 content
             }
         }
-        .animation(.easeOut(duration: 0.18), value: model.approvals.current?.id)
+        .animation(motion == .off ? nil : .easeOut(duration: 0.18), value: model.approvals.current?.id)
     }
 }
 
@@ -62,7 +63,7 @@ struct ApprovalCard: View {
                     .textStyle(.body, emphasized: true)
                     .foregroundStyle(Ink.primary)
                     .lineLimit(1)
-                    .help(request.agentType.map { "\(request.title) (\($0) subagent)" } ?? request.title)
+                    .help(request.agentLabel.map { "\(request.title) (\($0) subagent)" } ?? request.title)
                     .accessibilityLabel(SpokenText.phrase(request.title))
             }
             .accessibilityAddTraits(.isHeader)
@@ -110,7 +111,7 @@ struct ToolApproval: View {
         let risks = r.risks
         VStack(alignment: .leading, spacing: Space.s) {
             HStack(alignment: .firstTextBaseline, spacing: Space.s) {
-                if let agent = r.agentType { Chip(text: agent).help("Asked by the \(agent) subagent") }
+                if let agent = r.agentLabel { Chip(text: agent).help("Asked by the \(agent) subagent") }
                 if let summary = RiskRules.summary(risks) {
                     // One line, so the command keeps its room: the most serious risk, and how
                     // many more; every one in the help.
@@ -139,7 +140,8 @@ struct ToolApproval: View {
                 Self.requestText(r)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .help(r.file != nil ? r.subject : "")
+            // The file's name and where it is, never the whole path with the user's name in it.
+            .help(r.file.map { $0.name + ($0.folder.map { " in " + $0 } ?? "") } ?? "")
             ApprovalFooter(terminal: { decide(.terminal) }) {
                 Button("Deny") { decide(.deny(ApprovalDecision.deniedMessage)) }
                     .buttonStyle(ApprovalButtonStyle(fill: Wash.strong))

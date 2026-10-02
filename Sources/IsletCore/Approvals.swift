@@ -305,13 +305,30 @@ public struct ApprovalRequest: Equatable, Sendable {
         case "Glob", "Grep": return "Search files"
         case "Task", "Agent": return "Start a subagent"
         case "apply_patch": return "Apply a patch"
+        case "TodoWrite", "update_plan": return "Update the plan"
+        case "Skill": return "Use a skill"
+        case "BashOutput": return "Check a command"
+        case "KillShell", "KillBash": return "Stop a command"
+        case "LS": return "List files"
+        case "ToolSearch": return "Look for tools"
         default:
-            if toolName.hasPrefix("mcp__") {
-                let parts = toolName.dropFirst(5).components(separatedBy: "__")
-                if parts.count >= 2 { return "Use \(parts[0]): \(parts.dropFirst().joined(separator: "__"))" }
-            }
-            return "Use \(toolName)"
+            // An MCP tool by what it does, and the server it belongs to when its name means
+            // something: "Use create issue in github", never "mcp__github__create_issue".
+            let words = AgentHooks.toolWords(toolName)
+            guard !words.isEmpty else { return "Use a tool" }
+            let server = AgentHooks.mcpParts(toolName).flatMap { AgentHooks.serverWords($0.server) }
+            return "Use " + words + (server.map { " in " + $0 } ?? "")
         }
+    }
+
+    /// The subagent that asked, in words: "general-purpose" reads "general purpose", and a
+    /// plugin's "review:code-reviewer" reads "code reviewer". Nil when no subagent asked.
+    public var agentLabel: String? {
+        guard let type = agentType else { return nil }
+        let name = type.split(separator: ":").last.map(String.init) ?? type
+        let label = name.replacingOccurrences(of: "-", with: " ").replacingOccurrences(of: "_", with: " ")
+            .trimmingCharacters(in: .whitespaces)
+        return label.isEmpty ? nil : label
     }
 
     /// The command line for shell tools (Codex may send it as an argument array).
@@ -332,20 +349,74 @@ public struct ApprovalRequest: Equatable, Sendable {
         return ["Bash", "Shell", "shell", "local_shell", "exec_command"].contains(toolName) || provider == .codex
     }
 
-    /// The full command, path, URL or input. Shown in full on the card, never shortened.
+    /// The full command, path, URL or input, as the card shows it. A command is never
+    /// shortened. Any other tool's input reads as "name: value" lines, without JSON's braces
+    /// and quotes.
     public var subject: String {
         switch kind {
         case .questions, .plan: return ""
         case .tool: break
         }
+        if let s = namedSubject { return s }
+        switch toolInput {
+        case .object(let o): return o.isEmpty ? "No details" : Self.fieldLines(o)
+        default: return Self.inline(toolInput, nested: false)
+        }
+    }
+
+    /// The tool call as the agent sent it, which a later `PostToolUse` for the same call is
+    /// matched on (`callKey`). It never changes with how the card reads.
+    private var rawSubject: String {
+        guard case .tool = kind else { return "" }
+        if let s = namedSubject { return s }
+        if case .object(let o) = toolInput, o.isEmpty { return toolName }
+        return toolInput.prettyString
+    }
+
+    /// The command, or the one field that says what the call is about (a path, a URL, a query).
+    private var namedSubject: String? {
         if let c = command { return c }
         for key in ["file_path", "notebook_path", "path", "url", "query", "pattern"] {
             if let s = toolInput[key]?.stringValue, !s.isEmpty { return s }
         }
-        if let patch = toolInput["patch"]?.stringValue ?? toolInput["input"]?.stringValue { return patch }
-        if case .object(let o) = toolInput, o.isEmpty { return toolName }
-        return toolInput.prettyString
+        return toolInput["patch"]?.stringValue ?? toolInput["input"]?.stringValue
     }
+
+    /// One line a field: its name in words, then its value ("repo: me/web"). Short fields come
+    /// first, so a long body can't push the repo and title out of the box.
+    static func fieldLines(_ o: [String: JSONValue]) -> String {
+        let lines = o.keys.sorted().map { key in
+            let name = AgentHooks.words(key)
+            return (name.isEmpty ? key : name) + ": " + inline(o[key] ?? .null, nested: false)
+        }
+        let short = lines.filter { $0.count <= shortLine }
+        return (short + lines.filter { $0.count > shortLine }).joined(separator: "\n")
+    }
+
+    /// A field line up to this long fits on one line of the card.
+    static let shortLine = 60
+
+    /// A value on one line, up to `valueLimit` characters: text as it is, a list or an object
+    /// one level down, anything deeper as "…".
+    static func inline(_ value: JSONValue, nested: Bool) -> String {
+        let text: String
+        switch value {
+        case .null: text = "none"
+        case .bool(let b): text = b ? "yes" : "no"
+        case .number(let d): text = d.rounded() == d && abs(d) < 1e15 ? String(Int(d)) : String(d)
+        case .string(let s): text = s.split(whereSeparator: \.isNewline).joined(separator: " ")
+        case .array(let a): text = nested ? "…" : a.map { inline($0, nested: true) }.joined(separator: ", ")
+        case .object(let o):
+            text = nested ? "…" : o.keys.sorted().map { key in
+                let name = AgentHooks.words(key)
+                return (name.isEmpty ? key : name) + " " + inline(o[key] ?? .null, nested: true)
+            }.joined(separator: ", ")
+        }
+        return text.count > valueLimit ? String(text.prefix(valueLimit - 1)) + "…" : text
+    }
+
+    /// The most of one field's value a card shows.
+    static let valueLimit = 200
 
     /// The file a file tool works on, for the card: its name first, and the folder it is in
     /// after it, relative to the project when it is inside it ("Sources/IsletCore") or with ~
@@ -391,25 +462,78 @@ public struct ApprovalRequest: Equatable, Sendable {
         provider == .claude && hook == .permissionRequest && kind == .tool && !suggestions.isEmpty
     }
 
-    /// The rules "Always" would add: "Bash(npm test:*)", "acceptEdits mode".
+    /// What "Always" would allow, in words: "commands starting with “npm test”", "file edits
+    /// without asking", "files in ~/other-project". Never Claude Code's own rule syntax.
     public var sessionRuleSummary: String? {
         let parts = suggestions.flatMap { s -> [String] in
             switch s["type"]?.stringValue {
             case "addRules", "replaceRules":
                 return (s["rules"]?.arrayValue ?? []).compactMap { rule in
-                    guard let tool = rule["toolName"]?.stringValue else { return nil }
-                    return rule["ruleContent"]?.stringValue.map { "\(tool)(\($0))" } ?? tool
+                    rule["toolName"]?.stringValue.map { Self.ruleWords(tool: $0, content: rule["ruleContent"]?.stringValue) }
                 }
-            case "setMode": return s["mode"]?.stringValue.map { ["\($0) mode"] } ?? []
-            case "addDirectories": return (s["directories"]?.arrayValue ?? []).compactMap(\.stringValue)
+            case "setMode": return s["mode"]?.stringValue.map { [Self.modeWords($0)] } ?? []
+            case "addDirectories":
+                return (s["directories"]?.arrayValue ?? []).compactMap(\.stringValue).map { "files in " + Self.folderWords($0) }
             default: return []
             }
         }
-        return parts.isEmpty ? nil : parts.joined(separator: ", ")
+        var seen = Set<String>()
+        let unique = parts.filter { seen.insert($0).inserted }
+        return unique.isEmpty ? nil : unique.joined(separator: ", ")
+    }
+
+    /// A permission rule in words. A command rule's "npm test:*" reads "commands starting with
+    /// “npm test”"; a rule with nothing after the tool, the kind of thing it allows.
+    static func ruleWords(tool: String, content: String?, home: String = NSHomeDirectory()) -> String {
+        let content = content?.trimmingCharacters(in: .whitespaces) ?? ""
+        switch tool {
+        case "Bash", "Shell", "shell", "local_shell", "exec_command":
+            guard !content.isEmpty, content != "*" else { return "every command" }
+            for wildcard in [":*", "*"] where content.hasSuffix(wildcard) {
+                let start = content.dropLast(wildcard.count).trimmingCharacters(in: .whitespaces)
+                return "commands starting with \u{201C}\(start)\u{201D}"
+            }
+            return "\u{201C}\(content)\u{201D}"
+        case "WebFetch":
+            if content.hasPrefix("domain:") { return "web pages on " + content.dropFirst("domain:".count) }
+            return "fetching web pages"
+        case "WebSearch": return "web searches"
+        case "Edit", "MultiEdit", "Write", "NotebookEdit", "Read", "Glob", "Grep":
+            let verb = ["Read": "reading files", "Glob": "searching files", "Grep": "searching files"][tool] ?? "editing files"
+            guard !content.isEmpty else { return verb }
+            return verb + " in " + folderWords(content, home: home)
+        case "Task", "Agent": return "subagents"
+        default:
+            let words = AgentHooks.toolWords(tool)
+            let server = AgentHooks.mcpParts(tool).flatMap { AgentHooks.serverWords($0.server) }
+            if words.isEmpty { return server.map { "tools in " + $0 } ?? "this tool" }
+            return words + (server.map { " in " + $0 } ?? "")
+        }
+    }
+
+    /// One of Claude Code's permission modes in words.
+    static func modeWords(_ mode: String) -> String {
+        switch mode {
+        case "acceptEdits": return "file edits without asking"
+        case "bypassPermissions", "dontAsk": return "everything without asking"
+        case "plan": return "plan mode"
+        case "default": return "asking as usual"
+        default: return AgentHooks.words(mode) + " mode"
+        }
+    }
+
+    /// A folder or path pattern from a rule, with ~ for home and no trailing "/**":
+    /// "//Users/me/other/**" reads "~/other".
+    static func folderWords(_ path: String, home: String = NSHomeDirectory()) -> String {
+        var p = path.trimmingCharacters(in: .whitespaces)
+        if p.hasPrefix("//") { p.removeFirst() }
+        for tail in ["/**", "/*"] where p.hasSuffix(tail) && p.count > tail.count { p.removeLast(tail.count) }
+        if home.count > 1, p == home || p.hasPrefix(home + "/") { p = "~" + p.dropFirst(home.count) }
+        return p
     }
 
     /// Identifies the tool call, so a later `PostToolUse` for it can clear the card.
-    public var callKey: String { Self.callKey(toolName: toolName, subject: kind == .tool ? subject : "") }
+    public var callKey: String { Self.callKey(toolName: toolName, subject: rawSubject) }
 
     static func callKey(toolName: String, subject: String) -> String {
         isInteractiveTool(toolName) ? toolName : toolName + "\n" + subject
@@ -422,7 +546,7 @@ public struct ApprovalRequest: Equatable, Sendable {
                                 priority: .normal, ttl: 0, sneak: false)
         let allowed = decision == .allow || decision == .allowForSession
         spec.subtitle = allowed && kind == .tool
-            ? AgentHooks.describeTool(toolName, input: toolInput.foundationObject as? [String: Any]) : "Thinking…"
+            ? AgentHooks.describeTool(toolName, input: toolInput.foundationObject as? [String: Any], cwd: cwd) : "Thinking…"
         return spec
     }
 
@@ -446,7 +570,7 @@ public struct ApprovalRequest: Equatable, Sendable {
         let subtitle: String
         switch reason {
         case .expired: subtitle = "Answer in the terminal"
-        case .jumpFailed: subtitle = "Couldn't bring the terminal forward. Answer there."
+        case .jumpFailed: subtitle = "Couldn’t bring the terminal forward. Answer there."
         }
         return ActivitySpec(id: statusActivityID, subtitle: subtitle, trailing: "Waiting", state: .waiting,
                             priority: .normal, ttl: 0, sneak: false)
