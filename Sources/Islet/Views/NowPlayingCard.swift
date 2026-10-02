@@ -7,7 +7,8 @@ import SwiftUI
 /// and the transport. The volume row is always there when the island is tall enough; otherwise
 /// the speaker button swaps it with the transport, when the title leaves room for the button
 /// (`NowPlayingTitleRow`). A new song cross-fades the artwork and
-/// pushes the titles in from below (`TrackChange`).
+/// pushes the titles in from below (`TrackChange`). The progress bar and the volume bar start
+/// and end in the same places (`MediaScrubber.edge`).
 struct NowPlayingHero: View {
     let model: AppModel
     let media: NowPlaying
@@ -27,7 +28,7 @@ struct NowPlayingHero: View {
         let shown = MediaArbiter.playerID(media)
         let others = model.players.filter { MediaArbiter.playerID($0) != shown }
         // The title keeps its room: the volume button goes first, then chips past the first.
-        let row = NowPlayingTitleRow.layout(width: Double(size.width - art - Space.m), spacing: Double(2 * Space.m),
+        let row = NowPlayingTitleRow.layout(width: Double(size.width - art - Space.m), spacing: Double(Space.m),
                                             otherPlayers: others.count, volumeRow: roomy)
         let showsSound = row.showsVolume && model.controls.soundRowShown
         VStack(alignment: .leading, spacing: 0) {
@@ -43,15 +44,15 @@ struct NowPlayingHero: View {
                         Text(media.artist ?? media.appName ?? "").textStyle(.body).foregroundStyle(Ink.secondary).lineLimit(1)
                     }
                 }
-                Spacer(minLength: 0)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 // The other players and the volume toggle, close together so the title keeps its room.
                 if !row.isEmpty {
                     HStack(spacing: Space.xs) {
-                        PlayerChips(model: model, others: Array(others.prefix(row.chips)))
+                        PlayerChips(model: model, others: others, chips: row.chips)
                         if row.showsVolume {
-                            IconButton(symbol: showsSound ? "playpause.fill" : "speaker.wave.2.fill",
-                                       help: showsSound ? "Show playback controls" : "Show volume and output",
-                                       size: 24, glyph: 11, ink: Ink.tertiary) {
+                            // The same speaker either way; on, it sits on a wash, as shuffle does.
+                            ModeToggle(symbol: "speaker.wave.2.fill", on: showsSound, tint: nil,
+                                       label: showsSound ? "Show playback controls" : "Show volume and output") {
                                 model.controls.soundRowShown.toggle()
                             }
                         }
@@ -83,20 +84,60 @@ struct NowPlayingHero: View {
 
 /// The other players live now (a video in Chrome beside a song in Spotify), as small app icons
 /// beside the title, as many as `NowPlayingTitleRow` leaves room for. Clicking one shows and
-/// controls that player instead; the closed island keeps showing what plays. Nothing shows while
-/// there is only one player.
+/// controls that player instead; the closed island keeps showing what plays. When there are more
+/// players than chips, the last chip counts the rest ("+3") and offers them in a menu. Nothing
+/// shows while there is only one player.
 struct PlayerChips: View {
     let model: AppModel
     let others: [NowPlaying]
+    /// Chips drawn (`NowPlayingTitleRow.Layout.chips`).
+    let chips: Int
 
     var body: some View {
-        if !others.isEmpty {
+        let own = others.count > chips ? max(0, chips - 1) : chips
+        let rest = Array(others.dropFirst(own))
+        if chips > 0, !others.isEmpty {
             HStack(spacing: Space.xs) {
-                ForEach(Array(others.enumerated()), id: \.offset) { _, np in
+                ForEach(Array(others.prefix(own).enumerated()), id: \.offset) { _, np in
                     PlayerChip(media: np) { model.pickPlayer(np) }
+                }
+                if rest.count > 1 {
+                    PlayerCountChip(count: rest.count) { showMenu(rest) }
                 }
             }
         }
+    }
+
+    private func showMenu(_ players: [NowPlaying]) {
+        Haptics.play(.tap)
+        let items = players.map { np in
+            IslandMenu.Item(title: [np.appName, np.title].compactMap { $0 }.joined(separator: ": ")) { model.pickPlayer(np) }
+        }
+        IslandMenu.show(items, model: model)
+    }
+}
+
+/// Other players folded into one chip: how many, as the closed island counts ("+3").
+struct PlayerCountChip: View {
+    let count: Int
+    let action: () -> Void
+    @ViewState private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text("+\(count)")
+                .textStyle(.caption, emphasized: true, numeric: true)
+                .foregroundStyle(hovering ? Ink.primary : Ink.secondary)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(hovering ? Wash.strong : Wash.regular))
+                .contrastEdge(Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help("\(count) other players")
+        .accessibilityLabel("\(count) other players")
+        .accessibilityHint("Shows a menu to switch to one")
     }
 }
 
@@ -144,6 +185,10 @@ struct MediaScrubber: View {
     @ViewState private var preview: Double?
     @Environment(\.islandMotion) private var motion
 
+    /// The width of each time label ("−88:88"), and of the volume row's buttons under them, so
+    /// the two bars share their edges whatever the times say.
+    static let edge: CGFloat = 36
+
     var body: some View {
         let duration = media.duration ?? 0
         TimelineView(.periodic(from: .now, by: media.isPlaying && preview == nil ? 1 : 3600)) { ctx in
@@ -154,6 +199,8 @@ struct MediaScrubber: View {
                 Text(Format.clock(pos))
                     .foregroundStyle(preview == nil ? Ink.tertiary : Ink.primary)
                     .contentTransition(.numericText())
+                    .lineLimit(1)
+                    .frame(minWidth: Self.edge, alignment: .leading)
                     // The scrubber says where the song is.
                     .accessibilityHidden(true)
                 ScrubBar(value: duration > 0 ? pos / duration : 0, tint: accent) { f in
@@ -180,6 +227,8 @@ struct MediaScrubber: View {
                 Button { model.toggleRemainingTime() } label: {
                     Text(MediaSeek.trailingLabel(position: pos, duration: duration, remaining: remaining))
                         .contentTransition(.numericText())
+                        .lineLimit(1)
+                        .frame(minWidth: Self.edge, alignment: .trailing)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -308,11 +357,12 @@ struct TransportControls: View {
     }
 }
 
-/// Shuffle or repeat: tinted with a soft backing when on.
+/// Shuffle or repeat: tinted with a soft backing when on. Without a tint (the volume row's
+/// toggle) it is white on the strong wash when on.
 struct ModeToggle: View {
     let symbol: String
     let on: Bool
-    let tint: Color
+    let tint: Color?
     let label: String
     var action: () -> Void
 
@@ -323,9 +373,9 @@ struct ModeToggle: View {
         } label: {
             Image(systemName: symbol)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(on ? tint : Ink.tertiary)
+                .foregroundStyle(on ? tint ?? Ink.primary : Ink.tertiary)
                 .frame(width: 24, height: 24)
-                .background(Circle().fill(on ? tint.opacity(0.16) : .clear))
+                .background(Circle().fill(on ? tint?.opacity(0.16) ?? Wash.strong : .clear))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -343,10 +393,11 @@ struct SoundControls: View {
         let c = model.controls
         HStack(spacing: Space.s) {
             Button { model.toggleMute() } label: {
+                // Under the elapsed time, with its glyph at the same edge.
                 Image(systemName: Self.speakerSymbol(volume: c.volume, muted: c.muted))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Ink.secondary)
-                    .frame(width: 24, height: 24)
+                    .frame(width: MediaScrubber.edge, height: 24, alignment: .leading)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -371,6 +422,7 @@ struct SoundControls: View {
                     model.setVolume((c.muted ? 0 : c.volume) + step)
                 }
             OutputPickerButton(model: model)
+                .frame(width: MediaScrubber.edge, alignment: .trailing)
         }
         .onAppear { if !snapshotMode { model.soundControlsAppeared() } }
         .onDisappear { if !snapshotMode { model.soundControlsDisappeared() } }

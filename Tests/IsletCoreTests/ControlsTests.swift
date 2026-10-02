@@ -37,9 +37,9 @@ private func track(elapsed: Double? = 60, duration: Double? = 200, playing: Bool
     }
 
     @Test func trailingLabel() {
-        #expect(MediaSeek.trailingLabel(position: 71, duration: 243, remaining: true) == "-2:52")
+        #expect(MediaSeek.trailingLabel(position: 71, duration: 243, remaining: true) == "\u{2212}2:52")
         #expect(MediaSeek.trailingLabel(position: 71, duration: 243, remaining: false) == "4:03")
-        #expect(MediaSeek.trailingLabel(position: 300, duration: 243, remaining: true) == "-0:00")
+        #expect(MediaSeek.trailingLabel(position: 300, duration: 243, remaining: true) == "\u{2212}0:00")
     }
 }
 
