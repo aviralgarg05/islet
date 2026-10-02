@@ -38,15 +38,22 @@ extension Color {
 /// The user's motion settings as the template views apply them.
 struct TemplateMotion {
     let style: AnimationStyle
+    /// Looping decorations hold still (`IslandLoops.holdStill`).
+    let holdsStill: Bool
 
+    /// - Parameter loopsHeld: the island holds its loops still (`islandReduceMotion`): Islet's
+    ///   Reduce Motion, Animation Off or out-of-date content.
     @MainActor
-    init(_ model: AppModel, systemReduceMotion: Bool) {
+    init(_ model: AppModel, systemReduceMotion: Bool, loopsHeld: Bool = false) {
         // Low Power Mode is left to the layer animations themselves, which slow down for it.
         style = AnimationStyle.effective(model.settings.animationStyle, reduceMotion: systemReduceMotion || model.settings.reduceMotion)
+        holdsStill = loopsHeld || IslandLoops.holdStill(style: model.settings.animationStyle,
+                                                        reduceMotion: systemReduceMotion || model.settings.reduceMotion)
     }
 
-    /// Waveforms and breathing segments: off with Reduce Motion or Motion Off.
-    var perpetual: Bool { style != .off && style != .minimal }
+    /// Waveforms and breathing segments: still with Reduce Motion, Animation Off and on
+    /// out-of-date content, like the island's other loops. Minimal keeps them going.
+    var perpetual: Bool { !holdsStill }
     /// Countdown rings tell the time, so they keep draining with Reduce Motion; Off freezes them.
     var drains: Bool { style != .off }
     /// Value changes: the ETA tracker glides, digits roll. Reduce Motion gets a short fade.
@@ -92,10 +99,11 @@ struct TemplateValueText: View {
     var size: CGFloat? = nil
     var tint: Color?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.islandReduceMotion) private var loopsHeld
     @Environment(\.wingRoom) private var room
 
     var body: some View {
-        let motion = TemplateMotion(model, systemReduceMotion: reduceMotion)
+        let motion = TemplateMotion(model, systemReduceMotion: reduceMotion, loopsHeld: loopsHeld)
         let perSecond = activity.templateRefresh(now: Date())?.interval == 1
         let tint = (self.tint ?? model.tint(for: activity)).readableTextOnBlack
         TemplateClock(activity: activity) { now in
@@ -665,12 +673,13 @@ struct TemplateLeading: View {
     /// In a row, a score keeps to a narrow column instead of taking the width.
     var compact = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.islandReduceMotion) private var loopsHeld
 
     var body: some View {
         let a = activity
         let base = self.tint
         let tint = base.readableOnBlack
-        let motion = TemplateMotion(model, systemReduceMotion: reduceMotion)
+        let motion = TemplateMotion(model, systemReduceMotion: reduceMotion, loopsHeld: loopsHeld)
         switch model.visualTemplate(for: a) {
         case .stages?:
             IconView(icon: a.currentStageSymbol ?? model.icon(for: a), size: size, tint: tint)
@@ -751,6 +760,7 @@ struct TemplateTrailing: View {
     var tint: Color
     var compact = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.islandReduceMotion) private var loopsHeld
 
     /// Text size for the Home glance; nil in a wing, whose class decides.
     private var textSize: CGFloat? { compact ? TextStyle.caption.size : nil }
@@ -759,7 +769,7 @@ struct TemplateTrailing: View {
         let a = activity
         let base = self.tint
         let tint = base.readableOnBlack
-        let motion = TemplateMotion(model, systemReduceMotion: reduceMotion)
+        let motion = TemplateMotion(model, systemReduceMotion: reduceMotion, loopsHeld: loopsHeld)
         switch model.visualTemplate(for: a) {
         case nil:
             ActivityTrailing(activity: a, tint: base, compact: compact, leading: model.leadingSymbol(for: a))
@@ -809,11 +819,12 @@ struct TemplateBubble: View {
     let model: AppModel
     let diameter: CGFloat
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.islandReduceMotion) private var loopsHeld
 
     var body: some View {
         let a = activity
         let tint = model.tint(for: a)
-        let motion = TemplateMotion(model, systemReduceMotion: reduceMotion)
+        let motion = TemplateMotion(model, systemReduceMotion: reduceMotion, loopsHeld: loopsHeld)
         let sizes = BubbleView.Sizes(diameter: diameter)
         let ring = sizes.ring, line = sizes.line
         let glyph = sizes.ringed
@@ -930,11 +941,12 @@ struct TemplateDetail<Fallback: View>: View {
     let model: AppModel
     @ViewBuilder var fallback: Fallback
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.islandReduceMotion) private var loopsHeld
 
     var body: some View {
         let a = activity
         let tint = model.tint(for: a)
-        let motion = TemplateMotion(model, systemReduceMotion: reduceMotion)
+        let motion = TemplateMotion(model, systemReduceMotion: reduceMotion, loopsHeld: loopsHeld)
         switch model.visualTemplate(for: a) {
         case .eta?:
             TemplateClock(activity: a) { now in
@@ -1099,12 +1111,13 @@ struct TemplateRow: View {
     let model: AppModel
     @ViewState private var hovering = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.islandReduceMotion) private var loopsHeld
 
     var body: some View {
         if let t = model.visualTemplate(for: activity), t != .media, t != .agent, hasData(t) {
             let tint = model.tint(for: activity)
             HStack(spacing: Space.m) {
-                card(t, tint: tint, motion: TemplateMotion(model, systemReduceMotion: reduceMotion))
+                card(t, tint: tint, motion: TemplateMotion(model, systemReduceMotion: reduceMotion, loopsHeld: loopsHeld))
                     // One element: its title, then the value the card draws. The × shows only
                     // under the pointer, so VoiceOver has it as an action.
                     .spokenGroup(SpokenText.label(activity, detail: true))

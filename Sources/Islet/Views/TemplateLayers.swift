@@ -78,6 +78,9 @@ final class CountdownRingNSView: NSView {
         drain.toValue = 0
         drain.duration = remaining
         drain.timingFunction = CAMediaTimingFunction(name: .linear)
+        // A 25-minute countdown moves well under a pixel a second: a few frames a second are
+        // plenty, as for the song progress ring.
+        drain.preferredFrameRateRange = Self.slowRate
         arc.add(drain, forKey: "drain")
         if remaining > 10 {
             let turn = CABasicAnimation(keyPath: "strokeColor")
@@ -87,8 +90,16 @@ final class CountdownRingNSView: NSView {
             turn.duration = 0.6
             turn.fillMode = .forwards
             turn.isRemovedOnCompletion = false
+            // A short fade, at the loops' rate rather than the display's.
+            turn.capFrameRate()
             arc.add(turn, forKey: "turn")
         }
+    }
+
+    /// At most 8 frames a second, and one in Low Power Mode.
+    private static var slowRate: CAFrameRateRange {
+        ProcessInfo.processInfo.isLowPowerModeEnabled ? CAFrameRateRange(minimum: 1, maximum: 1, preferred: 1)
+                                                      : CAFrameRateRange(minimum: 1, maximum: 8, preferred: 8)
     }
 }
 
@@ -153,6 +164,7 @@ final class WaveformNSView: NSView {
                 a.repeatCount = .infinity
                 a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 a.timeOffset = Double(i) * 0.11
+                a.capFrameRate()
                 bar.add(a, forKey: "wave")
             } else {
                 bar.removeAnimation(forKey: "wave")
@@ -204,6 +216,7 @@ final class BreathingCapsuleNSView: NSView {
             a.autoreverses = true
             a.repeatCount = .infinity
             a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            a.capFrameRate()
             fill.add(a, forKey: "breathe")
         } else if !animate {
             fill.removeAnimation(forKey: "breathe")
