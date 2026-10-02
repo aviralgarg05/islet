@@ -569,10 +569,25 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var showsAnyHUD: Bool { HUDKind.allCases.contains(where: showsHUD) }
 
     /// The keys that show two displays at once: Islet's HUD and macOS's own, because Islet
-    /// shows the HUD while leaving the keys to macOS. Settings offers "Show only Islet's".
+    /// shows the HUD while leaving the keys to macOS. Settings says so under "Replace the
+    /// system volume and brightness display" (`hudOverlapNote`).
     public var hudOverlap: Set<HUDKind> {
         guard !replaceSystemHUD else { return [] }
         return Set([HUDKind.volume, .brightness].filter(showsHUD))
+    }
+
+    /// The line under "Replace the system volume and brightness display" while it is off and a
+    /// HUD shows twice, naming which.
+    public var hudOverlapNote: String? {
+        let overlap = hudOverlap
+        let which: String
+        switch (overlap.contains(.volume), overlap.contains(.brightness)) {
+        case (true, true): which = "volume and brightness displays"
+        case (true, false): which = "volume display"
+        case (false, true): which = "brightness display"
+        case (false, false): return nil
+        }
+        return "macOS shows its own \(which) too, so each press shows two. Switch this on to show only Islet\u{2019}s."
     }
 
     /// Appearance → "Reset appearance": the theme, colours, sizes, motion and the music's look

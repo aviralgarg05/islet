@@ -50,6 +50,20 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         s.replaceSystemHUD = true
         #expect(s.hudOverlap.isEmpty)
     }
+
+    /// The note under the Replace switch names the display that shows twice.
+    @Test func overlapNoteNamesTheDisplay() {
+        var s = IsletSettings()
+        #expect(s.hudOverlapNote == nil)
+        s.hudEnabled = true
+        #expect(s.hudOverlapNote?.hasPrefix("macOS shows its own volume display too") == true)
+        s.brightnessHUDEnabled = true
+        #expect(s.hudOverlapNote?.contains("volume and brightness displays") == true)
+        s.hudEnabled = false
+        #expect(s.hudOverlapNote?.contains("own brightness display") == true)
+        s.replaceSystemHUD = true
+        #expect(s.hudOverlapNote == nil)
+    }
 }
 
 @Suite struct NotificationPeekTests {

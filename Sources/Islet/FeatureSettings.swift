@@ -273,7 +273,9 @@ struct NotificationsSettings: View {
                     askForAccessibility("Islet needs Accessibility to read banners.")
                 }
                 Toggle(isOn: $model.settings.notificationPeek) {
+                    // Dimmed with its switch, so it doesn't read as a live row with a broken switch.
                     Text("Peek at new notifications")
+                        .foregroundStyle(model.settings.notificationMirroring ? .primary : .tertiary)
                     Text("Also open a little below the notch. macOS shows its own banner as well, so this is off at first.")
                 }
                 .settingsAnchor("notifications.peek")
@@ -295,22 +297,11 @@ struct NotificationsSettings: View {
                     Text("When you change the display's brightness.")
                 }
                 .settingsAnchor("notifications.brightness")
-                if !model.settings.hudOverlap.isEmpty {
-                    AccessRow(text: "macOS shows its own display too, so each press shows two.", button: "Show only Islet's",
-                              symbol: "info.circle", tint: .secondary) {
-                        model.settings.replaceSystemHUD = true
-                    }
-                }
                 Toggle(isOn: $model.settings.outputChangeCard) {
                     Text("Sound output changes")
                     Text("A short card when AirPods or another output connects, with its name.")
                 }
                 .settingsAnchor("notifications.outputCard")
-                Toggle(isOn: $model.settings.keyboardHUDEnabled) {
-                    Text("Keyboard brightness")
-                    Text("When you change the keyboard's light, while Islet replaces the system display.")
-                }
-                .settingsAnchor("notifications.keyboard")
                 Toggle(isOn: $model.settings.microphoneHUDEnabled) {
                     Text("Microphone")
                     Text("When an app or a shortcut mutes or unmutes it through Islet.")
@@ -324,7 +315,7 @@ struct NotificationsSettings: View {
                         Text("Style")
                         Text(model.settings.hudStyle == .compact
                              ? "Beside the notch, in the menu bar."
-                             : "Just below the notch, with the level as a percentage.")
+                             : "Beside the notch, with the level as a percentage.")
                     }
                     .settingsAnchor("notifications.hudStyle")
                     Picker(selection: $model.settings.hudColour) {
@@ -349,6 +340,22 @@ struct NotificationsSettings: View {
                 if model.settings.replaceSystemHUD && !axTrusted {
                     askForAccessibility("Islet needs Accessibility to take over the keys.")
                 }
+                // Under the switch that fixes it, so it needs no button of its own.
+                if let note = model.settings.hudOverlapNote {
+                    Label {
+                        Text(note).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: "info.circle").foregroundStyle(.secondary)
+                    }
+                }
+                // Only Islet's own display shows the keyboard's light, so it follows the switch above.
+                Toggle(isOn: $model.settings.keyboardHUDEnabled) {
+                    Text("Keyboard brightness")
+                        .foregroundStyle(model.settings.replaceSystemHUD ? .primary : .tertiary)
+                    Text("When you change the keyboard\u{2019}s light, while Islet replaces the system display.")
+                }
+                .settingsAnchor("notifications.keyboard")
+                .disabled(!model.settings.replaceSystemHUD)
             } header: {
                 Text("HUDs")
             } footer: {

@@ -389,7 +389,7 @@ public enum SettingsIndex {
         SettingsEntry("notifications.keyboard", .notifications, "Keyboard brightness", section: "HUDs", keywords: ["HUD", "backlight", "keys"]),
         SettingsEntry("notifications.microphone", .notifications, "Microphone", section: "HUDs", keywords: ["HUD", "mic", "mute", "unmute"]),
         SettingsEntry("notifications.hudStyle", .notifications, "HUD style", section: "HUDs",
-                      keywords: ["compact", "detailed", "percentage", "below the notch", "look"]),
+                      keywords: ["compact", "detailed", "percentage", "look"]),
         SettingsEntry("notifications.hudColour", .notifications, "HUD colour", section: "HUDs",
                       keywords: ["HUD", "color", "colourful", "green", "yellow", "accent", "tint", "keyboard"]),
         SettingsEntry("notifications.hudDuration", .notifications, "Stays on screen for", section: "HUDs",
