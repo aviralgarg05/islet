@@ -30,7 +30,17 @@ struct MirrorSettingsSection: View {
         } header: {
             Text("Mirror")
         }
-        .onAppear { if !snapshotMode { access = CameraMirror.access } }
+        // Read again when Islet comes back (from System Settings, say) and when the island's
+        // Mirror page asks, so the row follows a change made while this page shows.
+        .onAppear(perform: refresh)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refresh() }
+        .onChange(of: model.mirror.access) { _, _ in refresh() }
+    }
+
+    private func refresh() {
+        guard !snapshotMode else { return }
+        let now = CameraMirror.access
+        if access != now { access = now }
     }
 }
 

@@ -196,7 +196,7 @@ struct AppearanceSettings: View {
                 SettingsSlider(title: "Wing width", value: size(\.wingWidth) { $0.effectiveWingWidth },
                                range: IsletSettings.wingWidthRange, step: 2, format: SettingsSlider.points)
                     .settingsAnchor("appearance.wing")
-                if s.closedLayout == .auto && !MenuBarInspector.isAvailable {
+                if s.closedLayout == .auto && !model.accessibilityTrusted {
                     AccessRow(text: "Islet needs Accessibility to see the menu bar. Until then it uses narrow wings.",
                               button: "Allow…") { MediaKeyInterceptor.requestAccessibility() }
                 }

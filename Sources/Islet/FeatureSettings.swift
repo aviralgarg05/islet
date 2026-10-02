@@ -259,7 +259,6 @@ struct CalendarAccessRow: View {
 
 struct NotificationsSettings: View {
     @Bindable var model: AppModel
-    @ViewState private var axTrusted = MediaKeyInterceptor.hasAccessibility
 
     var body: some View {
         Form {
@@ -271,7 +270,7 @@ struct NotificationsSettings: View {
                     Text("Banners from your apps, and from your iPhone when macOS shows them, appear in the island. Nothing is kept or sent anywhere.")
                 }
                 .settingsAnchor("notifications.mirror")
-                if model.settings.notificationMirroring && !axTrusted {
+                if model.settings.notificationMirroring && !model.accessibilityTrusted {
                     askForAccessibility("Islet needs Accessibility to read banners.")
                 }
                 Toggle(isOn: $model.settings.notificationPeek) {
@@ -339,7 +338,7 @@ struct NotificationsSettings: View {
                     Text("Shows only Islet’s when you press the keys. Keys Islet can’t act on, such as brightness on another display or volume on a fixed-volume output, still go to macOS.")
                 }
                 .settingsAnchor("notifications.replaceHUD")
-                if model.settings.replaceSystemHUD && !axTrusted {
+                if model.settings.replaceSystemHUD && !model.accessibilityTrusted {
                     askForAccessibility("Islet needs Accessibility to take over the keys.")
                 }
                 // Under the switch that fixes it, so it needs no button of its own.
@@ -407,7 +406,7 @@ struct NotificationsSettings: View {
         AccessRow(text: text, button: "Allow…") {
             MediaKeyInterceptor.requestAccessibility()
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                axTrusted = MediaKeyInterceptor.hasAccessibility
+                model.recheckAccessibility()
                 model.startEventSources()
             }
         }

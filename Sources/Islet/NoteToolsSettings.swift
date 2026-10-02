@@ -10,7 +10,6 @@ import SwiftUI
 
 struct NoteToolsSettingsSections: View {
     @Bindable var model: AppModel
-    @ViewState private var canType = EmojiTyper.canType
     @Environment(\.snapshotMode) private var snapshotMode
 
     var body: some View {
@@ -50,9 +49,10 @@ struct NoteToolsSettingsSections: View {
                 .onChange(of: model.settings.emojiTypes) { _, on in
                     // Switching it on is when macOS asks, never before.
                     guard on, !snapshotMode, !EmojiTyper.canType else { return }
-                    PermissionProbe.request(.accessibility) { _ in canType = EmojiTyper.canType }
+                    PermissionProbe.request(.accessibility) { _ in model.recheckAccessibility() }
                 }
-                if model.settings.emojiTypes && !canType && !snapshotMode {
+                // Typing needs Accessibility (`EmojiTyper.canType`), as the model last read it.
+                if model.settings.emojiTypes && !model.accessibilityTrusted && !snapshotMode {
                     AccessRow(text: "Islet isn't allowed to type for you yet, so emoji are copied instead.", button: "Open System Settings") {
                         NSWorkspace.shared.open(PermissionKind.accessibility.settingsURL)
                     }
@@ -60,9 +60,6 @@ struct NoteToolsSettingsSections: View {
             }
         } header: {
             Text("Converter and emoji")
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            canType = EmojiTyper.canType
         }
     }
 }

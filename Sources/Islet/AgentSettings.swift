@@ -66,6 +66,8 @@ struct CodingAgentsSettings: View {
         }
         .formStyle(.grouped)
         .onAppear(perform: refresh)
+        // Hooks connected or removed by hand while this page shows.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refresh() }
         .onChange(of: model.settings.approvalWait) { _, _ in refresh() }
         .sheet(item: $pending) { p in
             AgentConnectSheet(plan: p.plan) {

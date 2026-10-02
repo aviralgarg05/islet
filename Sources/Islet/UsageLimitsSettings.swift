@@ -45,6 +45,10 @@ struct UsageLimitsSection: View {
             SettingsFooter("Claude Code, Codex and Ollama are read on this Mac. OpenRouter and Copilot are asked with your own key when the island opens, at most every few minutes; no other app's sign-in is ever read. The closed island stays quiet until a Claude or Codex limit reaches 90%.")
         }
         .onAppear(perform: refresh)
+        // The status line may have been changed in Claude Code's own settings while this page
+        // shows: read it again when Islet comes back, and when Home's hint changes.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refresh() }
+        .onChange(of: model.agentUsage.claudeHint) { _, _ in refresh() }
         .sheet(item: $pending) { p in
             StatusLineChangeSheet(change: p, file: claudeSettingsFile) {
                 apply(p)

@@ -125,6 +125,10 @@ final class AppModel {
     private(set) var pulse = 0
     private(set) var isDraggingFile = false
     var apiStatus = "Starting…"
+    /// Whether macOS gives Islet Accessibility, as last read: when it says that changed, when
+    /// Islet comes to the front and after an Allow. Settings shows it from here, so a page left
+    /// open follows a change made in System Settings.
+    var accessibilityTrusted = MediaKeyInterceptor.hasAccessibility
     /// Whether this macOS shows Live Activities in the menu bar (26 and later). Snapshots draw
     /// the page as an older macOS shows it too.
     var liveActivitiesSupported = MenuBarLiveActivityMonitor.isSupported
@@ -1456,6 +1460,12 @@ final class AppModel {
                                               name: { WelcomeBack.name($0, appName: Self.appName(bundleID:)) })
         else { return }
         _ = try? applyLocal(spec)
+    }
+
+    /// Read Accessibility again: an Allow, or a change in System Settings.
+    func recheckAccessibility() {
+        let trusted = MediaKeyInterceptor.hasAccessibility
+        if accessibilityTrusted != trusted { accessibilityTrusted = trusted }
     }
 
     /// The "x" on Home's Claude usage hint: hide it for good.

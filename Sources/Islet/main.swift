@@ -188,7 +188,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// or stop what uses it now, rather than at the next launch. Called when macOS says
     /// Accessibility changed and when Islet comes to the front; never polled.
     private func accessibilityMayHaveChanged() {
-        let trusted = MediaKeyInterceptor.hasAccessibility
+        model.recheckAccessibility()
+        let trusted = model.accessibilityTrusted
         defer { lastTrusted = trusted }
         if SessionWork.restartsOnTrustChange(wasTrusted: lastTrusted, isTrusted: trusted, settings: model.settings) {
             model.startEventSources()

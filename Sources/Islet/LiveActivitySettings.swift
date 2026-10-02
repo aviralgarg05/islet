@@ -7,7 +7,6 @@ import SwiftUI
 /// read them through the local API is in Advanced.
 struct LiveActivitiesSettings: View {
     @Bindable var model: AppModel
-    @ViewState private var axTrusted = MenuBarLiveActivityMonitor.isAvailable
 
     /// Before macOS 26 the menu bar has no Live Activities: the page says so, its switches
     /// stay off and it asks for nothing.
@@ -26,11 +25,11 @@ struct LiveActivitiesSettings: View {
                         Image(systemName: "info.circle").foregroundStyle(.secondary).font(.callout)
                         Text("Needs macOS 26 or later.").font(.callout).foregroundStyle(.secondary)
                     }
-                } else if on && !axTrusted {
+                } else if on && !model.accessibilityTrusted {
                     AccessRow(text: "Islet needs Accessibility to read the menu bar.", button: "Allow…") {
                         MediaKeyInterceptor.requestAccessibility()
                         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                            axTrusted = MenuBarLiveActivityMonitor.isAvailable
+                            model.recheckAccessibility()
                             model.startEventSources()
                         }
                     }
@@ -54,6 +53,5 @@ struct LiveActivitiesSettings: View {
             .disabled(!on)
         }
         .formStyle(.grouped)
-        .onAppear { axTrusted = MenuBarLiveActivityMonitor.isAvailable }
     }
 }

@@ -189,7 +189,7 @@ struct AdvancedSettings: View {
                 Text(AISettingsView.appleStatus).foregroundStyle(.secondary).help(AIAssist.shared.statusText)
             }
             LabeledContent("Accessibility") {
-                Text(MediaKeyInterceptor.hasAccessibility ? "Allowed" : "Not allowed").foregroundStyle(.secondary)
+                Text(model.accessibilityTrusted ? "Allowed" : "Not allowed").foregroundStyle(.secondary)
             }
             // The Ask box only says a tool isn't installed; where Islet looked is here.
             ForEach([AskProviderKind.claudeCode, .codex], id: \.self) { kind in

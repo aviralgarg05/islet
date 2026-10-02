@@ -98,6 +98,16 @@ struct WeatherSettingsSection: View {
         } footer: {
             SettingsFooter("Forecasts come from Open-Meteo, which needs no account. Islet asks for one at most every 30 minutes, and only while the Weather page is open.")
         }
+        // Read again when Islet comes back (from System Settings, say) and when the island's
+        // Weather page finds out, so the row follows a change made while this page shows.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refreshAccess() }
+        .onChange(of: model.tools.weather.status) { _, _ in refreshAccess() }
+    }
+
+    private func refreshAccess() {
+        guard !snapshotMode else { return }
+        let now = LocationProvider.access
+        if locationAccess != now { locationAccess = now }
     }
 }
 
