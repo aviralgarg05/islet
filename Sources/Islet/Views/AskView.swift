@@ -323,7 +323,7 @@ struct AskProviderChip: View {
             label
         } else {
             Menu {
-                Picker("Ask with", selection: Binding(get: { kind }, set: { model.ask.sessionProvider = $0 })) {
+                Picker("Ask with", selection: Binding(get: { kind }, set: { AppActions.chooseAskProvider(model, $0) })) {
                     ForEach(AskProviderKind.allCases) { k in
                         Text(k.title + (model.ask.status(of: k).shortReason.map { " (\($0))" } ?? "")).tag(k)
                     }

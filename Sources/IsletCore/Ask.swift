@@ -107,7 +107,8 @@ public enum AskEffort: String, Codable, CaseIterable, Sendable {
 /// Keychain. Decoding is lenient field by field, and unknown fields (such as a pasted key) are
 /// dropped on the next save.
 public struct AskSettings: Codable, Equatable, Sendable {
-    /// Provider used when the island opens. The chip in the island can change it for a session.
+    /// The provider that answers. The chip in the island changes this same setting; an
+    /// `islet://ask` link can pick another until the island closes, without changing it.
     public var provider: AskProviderKind = .onDevice
     /// Model per provider, keyed by the provider's raw value. Missing entries use the default.
     public var models: [String: String] = [:]

@@ -24,7 +24,7 @@ Open it in any of three ways:
 | Stop an answer | Esc, or the stop button |
 | Hand the keyboard back | Esc, which also closes the island when nothing is streaming, or click in another app |
 | Copy the answer | The copy button next to the field |
-| Change provider for this session | The chip on the left. The default is set in Settings → Ask & AI |
+| Change provider | The chip on the left. It's the same setting as Settings → Ask & AI → Answer with, so a change in either shows in both and is kept |
 | Start a new conversation | The pencil button (shown after an answer when follow-ups are on) |
 
 What to expect:
@@ -56,7 +56,7 @@ islet://ask?q=Explain%20this%20error&provider=claude
 It opens the Ask box like the shortcut does, with the question filled in. **It never sends.** You read the question and press Return.
 
 - `q` (or `text`) is the question, cut to 4,000 characters.
-- `provider` picks the provider for this session: `on-device`, `claude` (or `anthropic`), `chatgpt` (or `openai`), `claude-code` or `codex`. An unknown name makes the link do nothing.
+- `provider` picks the provider until the island closes, without changing the one in Settings: `on-device`, `claude` (or `anthropic`), `chatgpt` (or `openai`), `claude-code` or `codex`. An unknown name makes the link do nothing.
 
 Shortcuts, Raycast or Alfred can open `islet://ask?q=…` to pass in text you typed there.
 

@@ -11,4 +11,13 @@ extension AppActions {
         model.setExpanded(model.expandedScreen ?? model.targetDisplay())
         model.ask.requestKeyboard()
     }
+
+    /// The island's "Ask with" chip. It changes the setting itself (Settings → Ask & AI → Answer
+    /// with), saved and applied like any other, and drops a provider an islet://ask link picked.
+    static func chooseAskProvider(_ model: AppModel, _ kind: AskProviderKind) {
+        model.ask.sessionProvider = nil
+        guard model.settings.ask.provider != kind else { return }
+        model.settings.ask.provider = kind
+        model.settingsEdited()
+    }
 }

@@ -20,7 +20,8 @@ final class AskController {
     }
 
     var draft = ""
-    /// Provider picked from the chip for this session; nil follows Settings.
+    /// An islet://ask link's provider, until the island closes or the conversation starts over;
+    /// nil follows Settings. The chip changes the setting itself (`AppActions.chooseAskProvider`).
     var sessionProvider: AskProviderKind?
     private(set) var phase: Phase = .idle
     private(set) var answer = AskAnswer()
@@ -157,9 +158,10 @@ final class AskController {
         phase = answer.isEmpty ? .idle : .stopped
     }
 
-    /// Forget the conversation.
+    /// Forget the conversation, and a provider a link picked for it.
     func startOver() {
         stop()
+        sessionProvider = nil
         history = []
         answer.reset()
         question = ""
@@ -174,7 +176,8 @@ final class AskController {
         NSPasteboard.general.setString(answer.text, forType: .string)
     }
 
-    /// From `islet://ask`: fill in the field and pick the provider. Never sends.
+    /// From `islet://ask`: fill in the field and pick the provider until the island closes.
+    /// Never sends, and never changes the saved provider.
     func prefill(_ query: String?, provider: AskProviderKind?) {
         if let provider { sessionProvider = provider }
         if let query { draft = query }
@@ -191,10 +194,12 @@ final class AskController {
         if wantsKeyboard { wantsKeyboard = false }
     }
 
-    /// The island closed: stop the request and hand the keyboard back.
+    /// The island closed: stop the request, hand the keyboard back and go back to the provider
+    /// in Settings.
     func islandDidCollapse() {
         stop()
         releaseKeyboard()
+        sessionProvider = nil
     }
 
     // MARK: Snapshots

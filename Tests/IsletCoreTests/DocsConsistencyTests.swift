@@ -24,4 +24,13 @@ import Testing
     @Test func theAskDocsDescribeTheSwitcher() throws {
         #expect(!(try text("docs/AI.md")).contains("**sparkles** button"))
     }
+
+    /// The island's chip changes the saved provider, the one Settings shows; only a link's
+    /// provider lasts just until the island closes.
+    @Test func theAskDocsSayTheChipIsTheSetting() throws {
+        let doc = try text("docs/AI.md")
+        #expect(!doc.contains("Change provider for this session"))
+        #expect(doc.contains("same setting as Settings → Ask & AI → Answer with"))
+        #expect(doc.contains("picks the provider until the island closes"))
+    }
 }

@@ -30,8 +30,9 @@ struct AISettingsView: View {
                     Text("For Claude and ChatGPT. Low answers fastest and costs least.")
                 }
                 .pickerStyle(.segmented)
-                // Only Claude and ChatGPT take an effort.
-                .disabled(!model.settings.ask.provider.takesEffort)
+                // Only Claude and ChatGPT take an effort: the one answering now, which an
+                // islet://ask link can pick until the island closes.
+                .disabled(!model.ask.provider(in: model.settings.ask).takesEffort)
                 .settingsAnchor("ai.effort")
                 Toggle(isOn: $model.settings.ask.followUps) {
                     Text("Keep follow-ups in memory")
@@ -87,8 +88,6 @@ struct AISettingsView: View {
         }
         .formStyle(.grouped)
         .onAppear(perform: refresh)
-        // A new default replaces whatever was picked in the island for this session.
-        .onChange(of: model.settings.ask.provider) { _, _ in model.ask.sessionProvider = nil }
     }
 
     /// Apple Intelligence's state in plain words, here and in Advanced → Diagnostics (whose help has the raw status).

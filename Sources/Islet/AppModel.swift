@@ -781,6 +781,7 @@ final class AppModel {
     /// doesn't parse is kept as config.json.broken.
     func resetSettings() {
         settings = IsletSettings()
+        ask.sessionProvider = nil
         replaceBrokenSettingsFile()
         NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
     }
@@ -824,6 +825,8 @@ final class AppModel {
         // would rewrite a hand-edited file in Islet's own form. This comes before the cancel, so
         // an edit still waiting for its save goes ahead even when the island saved it meanwhile.
         guard settings != committedSettings else { return }
+        // A new provider, however it was picked, replaces one an islet://ask link picked.
+        if settings.ask.provider != committedSettings.ask.provider { ask.sessionProvider = nil }
         Self.pendingSettingsCommit?.cancel()
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
@@ -944,6 +947,7 @@ final class AppModel {
         let next = IsletSettings.merged(base: diskSettings, ours: settings, theirs: fresh)
         diskSettings = fresh
         if next != settings {
+            if next.ask.provider != settings.ask.provider { ask.sessionProvider = nil }
             settings = next
             // The app delegate applies the rest (modules, media sources, clipboard size, hotkey,
             // panels) on this notification.
