@@ -92,7 +92,11 @@ final class AppModel {
     private(set) var shelf = Shelf()
     /// Shelf items that can't be opened now (their disk or share isn't there): shown dimmed.
     private(set) var shelfUnavailable: Set<String> = []
-    private(set) var clipboard = ClipboardHistory()
+    private(set) var clipboard = ClipboardHistory() {
+        // Thumbnails of pictures that have left the history (removed, cleared, or history
+        // turned off) are forgotten with them.
+        didSet { ClipThumbnails.forget(except: clipboard.entries) }
+    }
     private(set) var stats: SystemStats?
     private(set) var plugins: [String: PluginResult] = [:]
     private(set) var micInUse = false
@@ -397,6 +401,8 @@ final class AppModel {
     func stop() {
         releaseKeepAwake()
         tools.focus.stopAll()
+        // A note typed in the last half second before quitting isn't lost.
+        tools.note.saveNow()
         ask.stop()  // Quitting stops a running claude/codex rather than leaving it behind.
         guard server != nil else { return }
         server?.stop()

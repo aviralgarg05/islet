@@ -46,14 +46,14 @@ struct PageSwitcher: View {
                             model.select(tab: tab)
                         }
                     }
-                    if !pages.more.isEmpty {
-                        // A menu of the other pages, whichever one it shows: "More pages, Weather".
-                        segment(symbol: moreSelected ? model.tab.symbol : "ellipsis",
-                                title: moreSelected ? model.tab.title : nil, selected: moreSelected,
-                                spoken: (label: "More pages", value: moreSelected ? model.tab.title : "",
-                                         hint: "Shows the other pages, keep awake, keep open and Settings")) {
-                            showMore(pages.more)
-                        }
+                    // A menu of the other pages, whichever one it shows: "More pages, Weather".
+                    // It stays with no page under it too, for keep awake, keep open, Settings,
+                    // Send feedback and Quit.
+                    segment(symbol: moreSelected ? model.tab.symbol : "ellipsis",
+                            title: moreSelected ? model.tab.title : nil, selected: moreSelected,
+                            spoken: (label: "More pages", value: moreSelected ? model.tab.title : "",
+                                     hint: "Shows the other pages, keep awake, keep open and Settings")) {
+                        showMore(pages.more)
                     }
                 }
                 .padding(Self.inset)
@@ -154,7 +154,7 @@ struct PageSwitcher: View {
                 model.select(tab: tab)
             }
         }
-        items.append(.separator)
+        if !items.isEmpty { items.append(.separator) }
         let awake = model.controls.awake
         var awakeItems = KeepAwake.presets.map { preset in
             IslandMenu.Item(title: preset.title) { model.setKeepAwake(.start(minutes: preset.minutes), announce: false) }

@@ -91,7 +91,7 @@ struct IslandPagesEditor: View {
         } label: {
             Text("Pages in the switcher")
             // `IslandPageLayout.maxInBar` pages fit in the capsule.
-            Text("Drag a page to change its order, or into More. The capsule holds four pages; the rest are in its More menu.")
+            Text("Drag a page to change its order or move it under More, and switch one off to leave it out. The capsule holds four pages.")
         }
         .settingsAnchor("general.pages")
         heading("In the capsule", place: .bar)

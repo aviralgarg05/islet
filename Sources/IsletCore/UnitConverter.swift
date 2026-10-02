@@ -79,8 +79,11 @@ public struct ConverterUnit: Sendable, Hashable, Identifiable {
 public struct ConverterResult: Sendable, Equatable, Identifiable {
     public let unit: ConverterUnit
     public let value: Double
-    /// The value as shown, "152.4".
+    /// The value as shown, "152.4" or "1,609,344".
     public let number: String
+    /// The value as copied, without thousands separators so it pastes into a sum or a form:
+    /// "1609344".
+    public let plainNumber: String
     public var id: String { unit.id }
     /// "152.4 cm".
     public var text: String { UnitConverter.joined(number, unit) }
@@ -281,21 +284,29 @@ public enum UnitConverter {
         let m = Measurement(value: amount, unit: from.foundation)
         let results = targets.map { to -> ConverterResult in
             let v = m.converted(to: to.foundation).value
-            return ConverterResult(unit: to, value: v, number: format(v, locale: locale))
+            return ConverterResult(unit: to, value: v, number: format(v, locale: locale),
+                                   plainNumber: format(v, locale: locale, grouped: false))
         }
         guard results.allSatisfy({ $0.value.isFinite }) else { return nil }
         return Conversion(amount: amount, unit: from, number: format(amount, locale: locale), results: results, asked: asked)
     }
 
     /// Six significant figures, grouped thousands, no trailing zeros: 152.4, 1.60934, 37.7778.
-    public static func format(_ value: Double, locale: Locale = .current) -> String {
+    /// A whole part longer than that is never rounded off: a mile is 1,609,344 mm, not
+    /// 1,609,340.
+    public static func format(_ value: Double, locale: Locale = .current, grouped: Bool = true) -> String {
         let f = NumberFormatter()
         f.locale = locale
         f.numberStyle = .decimal
-        f.usesSignificantDigits = true
-        f.maximumSignificantDigits = 6
-        f.minimumSignificantDigits = 1
+        f.usesGroupingSeparator = grouped
         let clean = abs(value) < 1e-9 ? 0 : value
+        if abs(clean) >= 1e6 {
+            f.maximumFractionDigits = 0
+        } else {
+            f.usesSignificantDigits = true
+            f.maximumSignificantDigits = 6
+            f.minimumSignificantDigits = 1
+        }
         return f.string(from: NSNumber(value: clean)) ?? String(clean)
     }
 

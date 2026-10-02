@@ -71,7 +71,7 @@ public enum ClipKind: String, Codable, Sendable, CaseIterable {
         let s = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !s.isEmpty, s.count <= 2048, !s.contains(where: \.isNewline) else { return .text }
         if ClipLink.parts(s) != nil { return .link }
-        if ClipColour.parse(s) != nil { return .colour }
+        if ClipColour.parse(s) != nil, !ClipColour.isNumberedReference(s) { return .colour }
         return .text
     }
 }
@@ -149,6 +149,17 @@ public enum ClipColour {
             return RGBA(r: r, g: g, b: b, a: alpha)
         }
         return nil
+    }
+
+    /// "#123" or "#4021" copied is far more often an issue or a pull request than a colour, so
+    /// three or four digits with no letter count as a colour only when they are one grey
+    /// ("#000", "#999"). Six or eight digits ("#336699") are a colour.
+    public static func isNumberedReference(_ text: String) -> Bool {
+        let s = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard s.hasPrefix("#") else { return false }
+        let digits = s.dropFirst()
+        guard (3...4).contains(digits.count), digits.allSatisfy({ $0.isASCII && $0.isNumber }) else { return false }
+        return Set(digits).count > 1
     }
 
     /// 0...1 from "128" (out of `scale`) or "50%".

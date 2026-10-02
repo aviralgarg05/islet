@@ -82,6 +82,27 @@ import Testing
         #expect(UnitConverter.format(1.0 / 3.0, locale: gb) == "0.333333")
     }
 
+    @Test func longWholeNumbersAreNotRoundedOff() {
+        #expect(answer("1 mi in mm") == "1,609,344 mm")
+        #expect(answer("1000 mi in m") == "1,609,344 m")
+        #expect(UnitConverter.format(123_456_789.4, locale: gb) == "123,456,789")
+        #expect(UnitConverter.format(999_999.6, locale: gb) == "1,000,000")
+        // Below a million, six significant figures as before.
+        #expect(answer("100 mi in m") == "160,934 m")
+    }
+
+    @Test func theNumberCopiedHasNoThousandsSeparators() throws {
+        let r = try #require(UnitConverter.convert("1 mi in mm", locale: gb)?.results.first)
+        #expect(r.number == "1,609,344")
+        #expect(r.plainNumber == "1609344")
+        let de = try #require(UnitConverter.convert("1.5 l in ml", locale: Locale(identifier: "de_DE"))?.results.first)
+        #expect(de.number == "1.500")
+        #expect(de.plainNumber == "1500")
+        let small = try #require(UnitConverter.convert("5 ft in cm", locale: gb)?.results.first)
+        #expect(small.plainNumber == "152.4")
+        #expect(UnitConverter.format(-1234.5, locale: gb, grouped: false) == "-1234.5")
+    }
+
     @Test func everyUnitHasItsOwnNamesAndAFoundationUnit() {
         var seen: [String: String] = [:]
         for unit in UnitConverter.units {

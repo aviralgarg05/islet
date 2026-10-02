@@ -7,7 +7,8 @@ extension Snapshots {
     /// The note tools and the clipboard and shelf changes: To-dos, Note, Converter and Emoji
     /// (off, on and in use), the Ask box answering a conversion, the Clipboard page with every
     /// kind of clip, a filter and a search, the empty shelf saying how long files stay, and the
-    /// switcher with a page moved into the capsule. Leaves the model as it found it.
+    /// switcher with a page moved into the capsule and with nothing under More. Leaves the model as
+    /// it found it.
     static func renderNoteTools(model: AppModel, now: Date, shoot: (String) -> Void, size: (SizePreset) -> Void) {
         let saved = model.settings
         model.forcedPresentation = .expanded
@@ -129,6 +130,12 @@ extension Snapshots {
         model.settings.islandPages = pages
         model.tab = .todos
         shoot("99g-switcher-custom-order")
+
+        // Every other page left out: the More menu stays, for Settings, Send feedback and Quit.
+        for page in IslandPage.allCases where pages.place(of: page) == .more { pages.setShown(page, false) }
+        model.settings.islandPages = pages
+        model.tab = .home
+        shoot("99i-switcher-nothing-under-more")
 
         model.settings = saved
         model.tools.todos.showDemo([], now: now)

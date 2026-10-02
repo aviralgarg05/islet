@@ -403,7 +403,7 @@ private struct ConverterAnswer: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .help("Copy \(result.number)")
+        .help("Copy \(result.plainNumber)")
         .accessibilityLabel(result.text)
         .accessibilityHint("Copies the number")
     }

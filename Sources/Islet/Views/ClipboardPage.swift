@@ -295,4 +295,12 @@ enum ClipThumbnails {
         cache[entry.id] = image
         return image
     }
+
+    /// Drops the thumbnails of clips no longer in the history.
+    static func forget(except entries: [ClipboardEntry]) {
+        guard !cache.isEmpty else { return }
+        let keep = Set(entries.lazy.filter { $0.image != nil }.map(\.id))
+        guard cache.keys.contains(where: { !keep.contains($0) }) else { return }
+        cache = cache.filter { keep.contains($0.key) }
+    }
 }

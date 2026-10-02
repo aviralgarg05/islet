@@ -76,6 +76,22 @@ import Testing
         #expect(list.items.contains { $0.text == "first" })
     }
 
+    @Test func aFullListOfStarredLinesStillTakesTheNewOne() throws {
+        var list = TodoList()
+        for i in 0..<TodoList.maxItems {
+            let item = list.add("starred \(i)", now: t0)
+            let id = try #require(item).id
+            list.toggleStar(id: id)
+        }
+        // The line just typed stays; the oldest starred one makes room for it.
+        let typed = list.add("new line", now: t0)
+        let added = try #require(typed)
+        #expect(list.items.count == TodoList.maxItems)
+        #expect(list.items.contains { $0.id == added.id })
+        #expect(!list.items.contains { $0.text == "starred 0" })
+        #expect(list.items.contains { $0.text == "starred 1" })
+    }
+
     @Test func savesReadableOnlyByYouAndReadsBack() throws {
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }

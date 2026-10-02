@@ -165,9 +165,10 @@ final class ConverterController {
         UnitConverter.convert(text, imperialVolumes: UnitConverter.usesImperialVolumes())
     }
 
-    /// The answer's number on its own, for pasting into a sum or a form.
+    /// The answer's number on its own, without thousands separators, for pasting into a sum
+    /// or a form.
     func copy(_ result: ConverterResult, model: AppModel) {
-        model.clipboardMonitor.copy(result.number)
+        model.clipboardMonitor.copy(result.plainNumber)
         Haptics.play(.tap)
         copied = result.text
     }

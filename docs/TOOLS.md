@@ -12,7 +12,7 @@ Settings → General → Island pages lists the pages that are on, in the order 
 
 - Drag a page onto another to put it there, or onto **In the capsule** or **Under More**. Each row's "…" menu moves it up, down, or between the two, for the keyboard.
 - A page's switch leaves it out of the switcher without turning its feature off. A page opened another way (a file dropped on the island, a shortcut, the API) still shows while it is open.
-- Home is always in the capsule. With more than four pages there, the last one goes under More.
+- Home is always in the capsule. With more than four pages there, the last one goes under More. The More menu stays even with no page under it, for keep awake, Settings, Send feedback and Quit.
 - A page whose feature is off keeps its place for when it comes back on. **Reset** goes back to Home, Today and Shelf in the capsule.
 
 `config.json`: `"islandPages": {"bar": ["home", "todos", "today", "shelf"], "more": ["clipboard", "weather"], "hidden": ["widgets"]}`. Pages left out of both lists go at the end of the one they come in.
@@ -43,7 +43,7 @@ Type an amount and a unit, and read the answer: `5 ft in cm`, `70 kg to lb`, `10
 - Lengths, weights, temperatures, volumes and speeds, from millimetres to nautical miles and teaspoons to cubic metres. Imperial and US units use their exact definitions, so a tablespoon is 3 teaspoons to the last digit.
 - With no unit to convert to, the usual ones answer (`5 ft` gives metres and centimetres).
 - A plain pint, gallon or fluid ounce is the British one when the Mac's region is the United Kingdom and the US one otherwise; `us gallon` or `uk pint` says which outright.
-- Click an answer, or press Return, to copy its number. Numbers are written the way your region writes them.
+- Click an answer, or press Return, to copy its number, without thousands separators so it pastes into a sum or a form. Numbers are shown the way your region writes them, to six significant figures, and a long whole number in full.
 - While the converter is on, the Ask box answers a conversion as you type it, in place of its hint.
 
 Everything is worked out on the Mac. `config.json`: `"converterEnabled": true`.

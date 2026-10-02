@@ -72,7 +72,7 @@ public struct TodoList: Codable, Equatable, Sendable {
         guard !line.isEmpty else { return nil }
         let item = TodoItem(text: line, createdAt: now)
         items.insert(item, at: 0)
-        trim()
+        trim(keeping: item.id)
         return item
     }
 
@@ -98,10 +98,14 @@ public struct TodoList: Codable, Equatable, Sendable {
     /// "Clear done": everything ticked off goes.
     public mutating func clearDone() { items.removeAll(where: \.isDone) }
 
-    /// Past `maxItems`, the oldest finished lines go first, then the oldest unstarred ones.
-    mutating func trim() {
+    /// Past `maxItems`, the oldest finished lines go first, then the oldest unstarred ones,
+    /// then the oldest. The line just added (`keeping`) always stays: a full list of starred
+    /// lines doesn't swallow it.
+    mutating func trim(keeping kept: String? = nil) {
         while items.count > Self.maxItems {
-            if let i = items.lastIndex(where: \.isDone) ?? items.lastIndex(where: { !$0.starred }) {
+            let others = { (item: TodoItem) in item.id != kept }
+            if let i = items.lastIndex(where: { others($0) && $0.isDone }) ?? items.lastIndex(where: { others($0) && !$0.starred })
+                ?? items.lastIndex(where: others) {
                 items.remove(at: i)
             } else {
                 items.removeLast()
