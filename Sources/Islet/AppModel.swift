@@ -224,6 +224,9 @@ final class AppModel {
     private var settingsWatcher: DispatchSourceFileSystemObject?
     /// config.json, which is never written over while it doesn't parse.
     @ObservationIgnored private var configFile: SettingsFile
+    /// What config.json is known to hold: written, read or (when it was broken at launch) the
+    /// settings started with. Changes made in memory since are kept when the file is read again.
+    @ObservationIgnored private var diskSettings: IsletSettings
     /// Set while config.json doesn't parse: Islet keeps its last good settings and saves
     /// nothing until the file is fixed or replaced (Settings → Advanced).
     private(set) var settingsProblem: FileProblem?
@@ -249,6 +252,7 @@ final class AppModel {
         }
         let settings = start
         configFile = file
+        diskSettings = start
         settingsProblem = file.problem
         settingsOrigin = origin
         self.settings = settings
@@ -743,10 +747,11 @@ final class AppModel {
     // MARK: Settings
 
     /// Writes the settings to config.json, keeping keys this build doesn't know. Writes
-    /// nothing while the file doesn't parse (`settingsProblem`).
+    /// nothing while the file doesn't parse (`settingsProblem`); those changes are kept in
+    /// memory and saved with the file's own once it is fixed (`reloadSettingsFromDisk`).
     func saveSettings() {
         do {
-            try configFile.save(settings)
+            if try configFile.save(settings) != .refused { diskSettings = settings }
         } catch {
             Log.files.error("couldn't save config.json: \(error.localizedDescription, privacy: .public)")
         }
@@ -758,6 +763,7 @@ final class AppModel {
     func replaceBrokenSettingsFile() {
         do {
             try configFile.replace(with: settings)
+            diskSettings = settings
         } catch {
             Log.files.error("couldn't replace config.json: \(error.localizedDescription, privacy: .public)")
         }
@@ -861,11 +867,20 @@ final class AppModel {
         if configFile.holdsOwnWrite() { return }
         let read = configFile.read()
         noteSettingsProblem(configFile.problem)
-        guard case .loaded(let fresh) = read, fresh != settings else { return }
-        settings = fresh
-        // The app delegate applies the rest (modules, media sources, clipboard size, hotkey, panels)
-        // on this notification.
-        NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
+        guard case .loaded(let fresh) = read else { return }
+        // Changes the file never got (saves refused while it didn't parse, or one still waiting
+        // for its save) are kept beside the file's own; where both changed a setting, the file
+        // wins. With nothing unsaved in memory this is just the file.
+        let next = IsletSettings.merged(base: diskSettings, ours: settings, theirs: fresh)
+        diskSettings = fresh
+        if next != settings {
+            settings = next
+            // The app delegate applies the rest (modules, media sources, clipboard size, hotkey,
+            // panels) on this notification.
+            NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
+        }
+        // The file gets the changes it missed.
+        if next != fresh { saveSettings() }
     }
 
     // MARK: Presentation

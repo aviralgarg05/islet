@@ -175,6 +175,49 @@ enum RawJSON: Codable, Equatable, Sendable {
     }
 }
 
+extension IsletSettings {
+    /// What to keep when config.json is read again while the settings in memory hold changes it
+    /// never got (saving was refused while it didn't parse, or a change is still waiting for its
+    /// save). `base` is what the file was last known to hold, `ours` the settings in memory and
+    /// `theirs` the file now. A setting only memory changed keeps that change; every other
+    /// setting, one both sides changed included, is the file's. Groups of settings (such as
+    /// `ask`) are merged setting by setting; a list is one setting.
+    public static func merged(base: IsletSettings, ours: IsletSettings, theirs: IsletSettings) -> IsletSettings {
+        guard ours != base else { return theirs }
+        guard let b = RawJSON.object(base), let o = RawJSON.object(ours), let t = RawJSON.object(theirs),
+              let data = try? JSONEncoder().encode(RawJSON.merged(base: b, ours: o, theirs: t)) else { return theirs }
+        // All three came from the same encoder, so the result reads back exactly; settings taken
+        // from different sides can still clash (two equal ports), which `sanitized` settles.
+        if let s = try? JSONDecoder().decode(IsletSettings.self, from: data) { return s.sanitized() }
+        return decodeLenient(data)
+    }
+}
+
+extension RawJSON {
+    /// `value` as a JSON object, key by key.
+    static func object<Value: Encodable>(_ value: Value) -> [String: RawJSON]? {
+        guard let data = try? JSONEncoder().encode(value) else { return nil }
+        return try? JSONDecoder().decode([String: RawJSON].self, from: data)
+    }
+
+    /// A three-way merge of JSON objects (`IsletSettings.merged`). A missing key is a value too:
+    /// a setting with nothing set, such as no weather place.
+    static func merged(base: [String: RawJSON], ours: [String: RawJSON], theirs: [String: RawJSON]) -> [String: RawJSON] {
+        var result: [String: RawJSON] = [:]
+        for key in Set(base.keys).union(ours.keys).union(theirs.keys) {
+            let b = base[key], o = ours[key], t = theirs[key]
+            if case .object(let bo)? = b, case .object(let oo)? = o, case .object(let to)? = t {
+                result[key] = .object(merged(base: bo, ours: oo, theirs: to))
+            } else if o != b, t == b {
+                result[key] = o
+            } else {
+                result[key] = t
+            }
+        }
+        return result
+    }
+}
+
 /// `config.json` kept safe. A file that doesn't parse is never overwritten: Islet keeps the
 /// last good settings, and `save` refuses until the file parses again or the user replaces it
 /// (`replace(with:)`, which keeps a copy as `config.json.broken`). Keys this build doesn't
