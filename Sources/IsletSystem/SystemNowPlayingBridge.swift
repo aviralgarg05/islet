@@ -18,8 +18,8 @@ public final class SystemNowPlayingBridge {
     private var stdout: FileHandle?
     private var startedAt = Date.distantPast
     private var buffer = Data()
-    /// Artwork by the hash the helper gives it, for the players in its last report.
-    private var artwork: [Int: Data] = [:]
+    /// The artwork the helper sent, for the players in its last report.
+    private var artwork = BridgeArtwork()
     private var restarts = HelperRestarts()
     private var stopped = false
 
@@ -207,30 +207,24 @@ public final class SystemNowPlayingBridge {
 
     /// A `players` line (every player macOS lists) or a `nowPlaying` line (the current player
     /// alone, from a helper on a macOS that can't list them) as a report. Artwork the helper sent
-    /// before comes from `artwork`, by hash, which is left holding what this report uses. Nil
-    /// for any other line. Pure, for tests.
-    public static func report(from o: [String: Any], artwork: inout [Int: Data]) -> BridgeReport? {
-        let entries: [[String: Any]]
+    /// before comes from `artwork` (`BridgeArtwork`), which is left holding what this report uses.
+    /// Nil for any other line. Pure, for tests.
+    public static func report(from o: [String: Any], artwork: inout BridgeArtwork) -> BridgeReport? {
+        let lines: [[String: Any]]
         switch o["type"] as? String {
-        case "players": entries = (o["players"] as? [Any] ?? []).compactMap { $0 as? [String: Any] }
-        case "nowPlaying": entries = [o.merging(["current": true]) { _, new in new }]
+        case "players": lines = (o["players"] as? [Any] ?? []).compactMap { $0 as? [String: Any] }
+        case "nowPlaying": lines = [o.merging(["current": true]) { _, new in new }]
         default: return nil
         }
-        var players: [NowPlaying] = []
+        var entries: [BridgeArtwork.Entry] = []
         var current: String?
-        var used: [Int: Data] = [:]
-        for e in entries {
-            let (parsed, hash, bytes) = parse(e)
-            guard var np = parsed else { continue }
-            if let hash, let art = bytes ?? artwork[hash] {
-                used[hash] = art
-                np.artworkData = art
-            }
-            if e["current"] as? Bool == true { current = MediaArbiter.playerID(np) }
-            players.append(np)
+        for line in lines {
+            let (parsed, hash, bytes) = parse(line)
+            guard let np = parsed else { continue }
+            if line["current"] as? Bool == true { current = MediaArbiter.playerID(np) }
+            entries.append(BridgeArtwork.Entry(player: np, hash: hash, bytes: bytes))
         }
-        artwork = used
-        return BridgeReport(players: players, current: current)
+        return BridgeReport(players: artwork.resolve(entries), current: current)
     }
 
     /// Parse one player from a helper line. Pure, for tests. Returns the snapshot, the artwork

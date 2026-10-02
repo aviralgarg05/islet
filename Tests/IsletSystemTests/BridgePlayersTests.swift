@@ -26,7 +26,7 @@ private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
     ]
 
     @Test func everyPlayerAndTheOneWithTheControls() throws {
-        var art: [Int: Data] = [:]
+        var art = BridgeArtwork()
         let report = try #require(SystemNowPlayingBridge.report(from: Self.line([Self.chrome, Self.spotify, Self.probe]), artwork: &art))
         #expect(report.players.map(MediaArbiter.playerID) == ["com.google.Chrome", "com.spotify.client", "dev.islet.probe-player"])
         #expect(report.current == "com.google.Chrome")
@@ -42,7 +42,7 @@ private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
     }
 
     @Test func noPlayerWithTheControls() throws {
-        var art: [Int: Data] = [:]
+        var art = BridgeArtwork()
         var paused = Self.chrome
         paused["current"] = nil
         let report = try #require(SystemNowPlayingBridge.report(from: Self.line([paused, Self.spotify]), artwork: &art))
@@ -56,7 +56,7 @@ private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
     /// Numbers JSON can't hold come through as missing whichever player sends them, and a player
     /// with nothing loaded is left out rather than ending the report.
     @Test func strangeNumbersAndMissingFields() throws {
-        var art: [Int: Data] = [:]
+        var art = BridgeArtwork()
         let odd: [String: Any] = [
             "title": "Odd", "duration": Double.infinity, "elapsed": Double.nan, "rate": -Double.infinity,
             "timestamp": Double.nan, "bundleID": "com.apple.Safari", "shuffleMode": Double.nan, "repeatMode": 1e300,
@@ -85,7 +85,7 @@ private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
     }
 
     @Test func artworkIsSentOnlyWhenAPlayersArtChanges() throws {
-        var art: [Int: Data] = [:]
+        var art = BridgeArtwork()
         func with(_ base: [String: Any], hash: Int, bytes: [UInt8]? = nil) -> [String: Any] {
             var p = base
             p["artworkHash"] = hash
@@ -103,18 +103,25 @@ private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
         // Spotify's changes: new bytes for it only.
         r = try #require(SystemNowPlayingBridge.report(from: Self.line([with(Self.chrome, hash: 1), with(Self.spotify, hash: 3, bytes: [3])]), artwork: &art))
         #expect(r.players.map(\.artworkData) == [Data([1]), Data([3])])
-        #expect(Set(art.keys) == [1, 3])
-        // A player without artwork has none, and Chrome's is kept only while some player uses it.
+        #expect(Set(art.byHash.keys) == [1, 3])
+        // A report that leaves Chrome's artwork out keeps it for the same video: Chrome names its
+        // artwork a moment before it sends the picture.
         r = try #require(SystemNowPlayingBridge.report(from: Self.line([Self.chrome, with(Self.spotify, hash: 3)]), artwork: &art))
+        #expect(r.players[0].artworkData == Data([1]))
+        #expect(Set(art.byHash.keys) == [1, 3])
+        // Another video without artwork has none, and a picture goes with the player that had it.
+        var next = Self.chrome
+        next["title"] = "Next"
+        r = try #require(SystemNowPlayingBridge.report(from: Self.line([next, with(Self.spotify, hash: 3)]), artwork: &art))
         #expect(r.players[0].artworkData == nil)
-        #expect(Set(art.keys) == [3])
+        #expect(Set(art.byHash.keys) == [3])
         r = try #require(SystemNowPlayingBridge.report(from: Self.line([with(Self.chrome, hash: 1)]), artwork: &art))
         #expect(r.players[0].artworkData == nil)
     }
 
     /// A helper on a macOS that can't list players sends the current one alone, as before.
     @Test func theSinglePlayerLineStillWorks() throws {
-        var art: [Int: Data] = [:]
+        var art = BridgeArtwork()
         var single = Self.spotify
         single["type"] = "nowPlaying"
         single["artworkHash"] = 9
@@ -126,11 +133,11 @@ private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
         let empty = try #require(SystemNowPlayingBridge.report(from: ["type": "nowPlaying", "empty": true], artwork: &art))
         #expect(empty.players.isEmpty)
         #expect(empty.current == nil)
-        #expect(art.isEmpty)
+        #expect(art.byHash.isEmpty)
     }
 
     @Test func otherLinesAreNotReports() {
-        var art: [Int: Data] = [:]
+        var art = BridgeArtwork()
         for type in ["ready", "ack", "error", "unknown"] {
             #expect(SystemNowPlayingBridge.report(from: ["type": type, "title": "T"], artwork: &art) == nil)
         }
@@ -149,12 +156,12 @@ private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
         "timestamp":1790964160,"title":"Probe Song"}]}
         """
         let obj = try #require(try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
-        var art: [Int: Data] = [:]
+        var art = BridgeArtwork()
         let r = try #require(SystemNowPlayingBridge.report(from: obj, artwork: &art))
         #expect(r.current == "com.spotify.client")
         #expect(r.players.map(\.isPlaying) == [false, true, false])
         #expect(r.players[0].artworkData == Data([1, 2]))
-        #expect(art.keys.contains(123_006_014))
+        #expect(art.byHash.keys.contains(123_006_014))
         #expect(r.players[1].duration == nil)
         #expect(r.players[1].elapsed == 0)
         #expect(r.players[2].duration == 200)
