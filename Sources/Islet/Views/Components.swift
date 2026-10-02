@@ -116,8 +116,9 @@ struct IconView: View {
         switch icon {
         case .symbol(let name):
             // A new symbol (one stage giving way to the next) morphs into place.
-            Image(systemName: NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil ? name : "questionmark.circle")
-                .font(.system(size: size * 0.9, weight: .semibold))
+            let known = NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil ? name : "questionmark.circle"
+            Image(systemName: known)
+                .font(.system(size: Self.pointSize(known, size: size), weight: .semibold))
                 .foregroundStyle(tint)
                 .contentTransition(motion.symbolSwap)
                 .animation(motion.inPlace, value: name)
@@ -134,6 +135,22 @@ struct IconView: View {
                 .frame(width: size, height: size)
                 .clipShape(RoundedRectangle(cornerRadius: size * 0.22))
         }
+    }
+
+    @MainActor private static var widths: [String: CGFloat] = [:]
+
+    /// The symbol's point size: 90% of `size`, less for a wide symbol ("video.fill") so it
+    /// stays inside its square instead of crowding what sits beside it.
+    @MainActor static func pointSize(_ name: String, size: CGFloat) -> CGFloat {
+        let base = size * 0.9
+        let key = "\(name)@\(base)"
+        let width = widths[key] ?? {
+            let config = NSImage.SymbolConfiguration(pointSize: base, weight: .semibold)
+            let w = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(config)?.size.width ?? 0
+            widths[key] = w
+            return w
+        }()
+        return width > size ? base * size / width : base
     }
 }
 
@@ -330,9 +347,13 @@ struct SpinnerArc: View {
 
     var body: some View {
         if snapshotMode {
+            // A still can't spin, and a lone arc reads as a ring filled to a share. So the arc
+            // trails off behind its head the way a turning one does.
             Circle()
-                .trim(from: 0, to: 0.28)
-                .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .trim(from: 0, to: 0.7)
+                .stroke(AngularGradient(colors: [tint.opacity(0), tint], center: .center,
+                                        startAngle: .degrees(0), endAngle: .degrees(252)),
+                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
         } else {
             LayerSpinner(color: NSColor(tint), lineWidth: lineWidth)
