@@ -363,6 +363,15 @@ public enum SessionWork {
         return PermissionKind.accessibility.uses(settings, osMajor: osMajor).contains(where: \.isOn)
     }
 
+    /// Accessibility was taken away or given back: the key tap made before is dead either way
+    /// (macOS stops passing it keys), so it is made again, or left down without the permission.
+    /// Otherwise a missing tap is only started when it can be.
+    /// - Parameter wasTrusted: what Islet knew before, nil before the first look.
+    public static func rebuildsKeyTap(wasTrusted: Bool?, isTrusted: Bool) -> Bool {
+        guard let was = wasTrusted else { return false }
+        return was != isTrusted
+    }
+
     /// Whether the menu bar and banner readers, the key tap and the pointer watchers run. After
     /// fast user switching this session is in the background and none of them do; back in front,
     /// they start again as the settings say.

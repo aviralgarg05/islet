@@ -190,12 +190,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func accessibilityMayHaveChanged() {
         model.recheckAccessibility()
         let trusted = model.accessibilityTrusted
+        let rebuildTap = SessionWork.rebuildsKeyTap(wasTrusted: lastTrusted, isTrusted: trusted)
         defer { lastTrusted = trusted }
         if SessionWork.restartsOnTrustChange(wasTrusted: lastTrusted, isTrusted: trusted, settings: model.settings) {
             model.startEventSources()
             scheduleMenuBarMeasure(after: 0.1)
         }
-        retryKeyTap()
+        if rebuildTap {
+            // The tap made before is dead either way: made again with the permission, left down
+            // without it (so the brightness HUD shows from the monitor). No prompt: the switch
+            // was already on.
+            keys.stop()
+            setUpHUD()
+        } else {
+            retryKeyTap()
+        }
     }
 
     /// Displays settle in several steps after plugging, waking or changing arrangement.

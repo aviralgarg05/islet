@@ -134,8 +134,9 @@ public final class MediaKeyInterceptor {
 
     public static var hasAccessibility: Bool { AXIsProcessTrusted() }
 
-    /// Whether the keys are being intercepted (false without Accessibility).
-    public var isRunning: Bool { tap != nil }
+    /// Whether the keys are being intercepted: a tap that macOS keeps enabled (false without
+    /// Accessibility, or once macOS has turned the tap off).
+    public var isRunning: Bool { tap.map { CGEvent.tapIsEnabled(tap: $0) } ?? false }
 
     public static func requestAccessibility() {
         let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
@@ -158,6 +159,8 @@ public final class MediaKeyInterceptor {
 
     @discardableResult
     public func start() -> Bool {
+        // A tap macOS turned off for good (Accessibility taken away and given back) is made again.
+        if let tap, !CGEvent.tapIsEnabled(tap: tap) { stop() }
         guard tap == nil, Self.hasAccessibility else { return tap != nil }
         let mask = CGEventMask(1 << 14) // NX_SYSDEFINED
         let refcon = Unmanaged.passUnretained(self).toOpaque()

@@ -598,6 +598,17 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         #expect(!SessionWork.restartsOnTrustChange(wasTrusted: nil, isTrusted: true, settings: s))
         #expect(SessionWork.runs(sessionActive: true) && !SessionWork.runs(sessionActive: false))
     }
+
+    /// Accessibility turned off and on again in System Settings: the key tap made before is
+    /// dead, so it is made afresh rather than kept because it still exists.
+    @Test func theKeyTapIsMadeAgainWhenAccessibilityChanges() {
+        #expect(SessionWork.rebuildsKeyTap(wasTrusted: true, isTrusted: false))
+        #expect(SessionWork.rebuildsKeyTap(wasTrusted: false, isTrusted: true))
+        // No change, or nothing known before (at launch): only a missing tap is started.
+        #expect(!SessionWork.rebuildsKeyTap(wasTrusted: true, isTrusted: true))
+        #expect(!SessionWork.rebuildsKeyTap(wasTrusted: false, isTrusted: false))
+        #expect(!SessionWork.rebuildsKeyTap(wasTrusted: nil, isTrusted: true))
+    }
 }
 
 @Suite struct DisplayPolicyTests {
