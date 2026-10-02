@@ -73,4 +73,15 @@ public enum FullscreenCoverage {
     /// After an app comes to the front or the Space changes, when to look again: the switch
     /// animates for a moment, and a game may take a second or two to go full screen.
     public static let followUpLooks: [TimeInterval] = [0.6, 2]
+
+    /// After a window of the app in front moves, resizes, appears or takes the focus (a video
+    /// or a game going full screen without changing Space, and back): when to look, counted
+    /// from the last change, so a window being dragged is looked at once it stops.
+    public static let windowChangeLooks: [TimeInterval] = [0.25, 1]
+
+    /// Whether the app in front has its windows followed: only with Accessibility, and never
+    /// Islet itself (asking its own main thread would wait on itself).
+    public static func followsWindows(of pid: Int32, trusted: Bool, ownPID: Int32) -> Bool {
+        trusted && pid > 0 && pid != ownPID
+    }
 }

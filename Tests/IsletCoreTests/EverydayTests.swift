@@ -564,6 +564,20 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         #expect(FullscreenCoverage.coveringApps(windows: notched, displays: [builtIn], menuLevel: menuLevel, menuBarAutoHides: false) == [1: 10])
         #expect(FullscreenCoverage.followUpLooks == [0.6, 2])
     }
+
+    /// A window that fills a display while its app stays in front (a video in Firefox, mpv or a
+    /// game going full screen in place) is looked at once it settles: soon enough that the
+    /// island is gone within about half a second.
+    @Test func windowsOfTheAppInFrontAreFollowedWithAccessibility() {
+        #expect(FullscreenCoverage.windowChangeLooks.first.map { $0 <= 0.3 } == true)
+        #expect(FullscreenCoverage.windowChangeLooks == FullscreenCoverage.windowChangeLooks.sorted())
+        #expect(FullscreenCoverage.followsWindows(of: 812, trusted: true, ownPID: 400))
+        // Without Accessibility there is nothing to follow them with (and no polling instead).
+        #expect(!FullscreenCoverage.followsWindows(of: 812, trusted: false, ownPID: 400))
+        // Islet in front (Settings): its own windows never cover a display.
+        #expect(!FullscreenCoverage.followsWindows(of: 400, trusted: true, ownPID: 400))
+        #expect(!FullscreenCoverage.followsWindows(of: 0, trusted: true, ownPID: 400))
+    }
 }
 
 @Suite struct SessionWorkTests {
