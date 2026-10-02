@@ -16,8 +16,14 @@ public enum Browsers {
         "com.microsoft.edgemac.Canary": "Edge Canary",
         "com.brave.Browser": "Brave", "com.brave.Browser.beta": "Brave Beta", "com.brave.Browser.nightly": "Brave Nightly",
         "com.vivaldi.Vivaldi": "Vivaldi", "com.operasoftware.Opera": "Opera", "com.operasoftware.OperaGX": "Opera GX",
+        "com.operasoftware.OperaNext": "Opera Beta", "com.operasoftware.OperaDeveloper": "Opera Developer",
+        "com.operasoftware.OperaAir": "Opera Air",
         "app.zen-browser.zen": "Zen", "com.kagi.kagimacOS": "Orion", "ai.perplexity.comet": "Comet", "com.openai.atlas": "Atlas",
-        "com.duckduckgo.macos.browser": "DuckDuckGo",
+        "com.duckduckgo.macos.browser": "DuckDuckGo", "com.duckduckgo.mobile.ios": "DuckDuckGo",
+        "net.imput.helium": "Helium", "com.sigmaos.sigmaos.macos": "SigmaOS",
+        "net.waterfox.waterfox": "Waterfox", "io.gitlab.librewolf-community.librewolf": "LibreWolf",
+        "org.torproject.torbrowser": "Tor Browser", "net.mullvad.mullvadbrowser": "Mullvad Browser",
+        "ru.yandex.desktop.yandex-browser": "Yandex Browser",
     ]
 
     public static var bundleIDs: Set<String> { Set(names.keys) }

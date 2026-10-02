@@ -321,6 +321,13 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         #expect(Browsers.browser(for: "com.google.Chrome.beta.helper")?.name == "Chrome Beta")
         #expect(Browsers.browser(for: "com.google.Chrome.helper.renderer")?.name == "Chrome")
         #expect(Browsers.browser(for: "com.spotify.client") == nil)
+        // Opera's other editions have no dot after "Opera", so Opera's own id doesn't cover them.
+        #expect(Browsers.browser(for: "com.operasoftware.OperaNext")?.name == "Opera Beta")
+        #expect(Browsers.browser(for: "com.operasoftware.OperaGX")?.name == "Opera GX")
+        #expect(Browsers.browser(for: "net.imput.helium")?.name == "Helium")
+        #expect(Browsers.browser(for: "net.imput.helium.helper")?.name == "Helium")
+        // DuckDuckGo from the App Store has another id than the one from its website.
+        #expect(Browsers.browser(for: "com.duckduckgo.mobile.ios")?.name == "DuckDuckGo")
         // A call held in Dia is a browser call, and so is one in Safari's GPU process.
         #expect(CallDetector.classify("company.thebrowser.dia.helper")?.app == CallDetector.App(name: "Dia", isBrowser: true))
         #expect(CallDetector.classify("com.apple.WebKit.GPU")?.app.name == "Safari")
