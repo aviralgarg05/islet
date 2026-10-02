@@ -179,7 +179,11 @@ extension Snapshots {
                     .offset(x: -crop.lowerBound)
                     .frame(width: crop.upperBound - crop.lowerBound, height: strip.height, alignment: .topLeading)
                     .clipped()
-                let renderer = ImageRenderer(content: island.environment(\.colorScheme, .dark).environment(\.snapshotMode, true))
+                // Views that read the display's scale draw at the sheet's, as they do at the
+                // window's. (The goo's soft rim on the sheets is the renderer's: it draws Canvas
+                // filters at a lower scale than a window does.)
+                let renderer = ImageRenderer(content: island.environment(\.colorScheme, .dark).environment(\.snapshotMode, true)
+                    .environment(\.displayScale, zoom * 2))
                 renderer.scale = zoom * 2
                 guard let image = renderer.nsImage else { continue }
                 let size = CGSize(width: (crop.upperBound - crop.lowerBound) * zoom, height: strip.height * zoom)

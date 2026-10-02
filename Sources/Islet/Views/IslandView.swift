@@ -563,6 +563,14 @@ struct IslandView: View {
             guard let frame else { return model.urgentGlow(for: p).map { [($0, p, 1)] } ?? [] }
             let delay = move.opening ? IslandMotion.contentDelay : IslandMotion.contentDelayClosing
             var list: [(Color, IslandPresentation, Double)] = []
+            // The same glow on both sides (the waiting agent's, from the closed island to its
+            // peek): the live island cross-fades one into the other as the shell moves, so it
+            // never goes out between them.
+            if let old = model.urgentGlow(for: frame.from), let new = model.urgentGlow(for: p), old == new,
+               model.focusedActivity(for: frame.from)?.id == model.focusedActivity(for: p)?.id {
+                let k = min(1, max(0, IslandMotion.shellProgress(at: frame.t, opening: move.opening, pace: Motion.pace)))
+                return [(old, frame.from, 1 - k), (new, p, k)]
+            }
             if let old = model.urgentGlow(for: frame.from) { list.append((old, frame.from, IslandMotion.contentLeft(at: frame.t))) }
             if let new = model.urgentGlow(for: p) { list.append((new, p, IslandMotion.contentReveal(at: frame.t, delay: delay))) }
             return list
@@ -666,7 +674,10 @@ struct IslandView: View {
         let stale = model.focusedActivity(for: p)?.isStale(at: Date()) ?? false
         if let frame, let fromG,
            IslandLayout.contentKey(frame.from, detailedHUD: detailed) != IslandLayout.contentKey(p, detailedHUD: detailed) {
-            dressed(content(frame.from, geometry: fromG, counted: 0, row: nil), geometry: fromG, stale: false)
+            // The outgoing content with its own count, as the live island draws it while it fades.
+            let fromCounted = model.fittedBubbles(for: frame.from, placement: model.placement(for: display, metrics: metrics),
+                                                  metrics: metrics, display: display).counted
+            dressed(content(frame.from, geometry: fromG, counted: fromCounted, row: nil), geometry: fromG, stale: false)
                 .opacity(IslandMotion.contentLeft(at: frame.t))
             dressed(content(p, geometry: g, counted: counted, row: nil), geometry: g, stale: stale)
                 .modifier(ContentReveal(progress: IslandMotion.contentReveal(
