@@ -4,7 +4,7 @@ import IsletSystem
 import SwiftUI
 
 /// Settings → Coding agents: connecting Claude Code, Codex and Cursor, answering their
-/// requests in the notch, and their plan limits. The hook commands themselves are in Advanced.
+/// requests in the island, and their plan limits. The hook commands themselves are in Advanced.
 struct CodingAgentsSettings: View {
     @Bindable var model: AppModel
     @ViewState private var connections: [CodingAgent: AgentConnection] = [:]
@@ -36,7 +36,7 @@ struct CodingAgentsSettings: View {
             }
             Section {
                 Toggle(isOn: $model.settings.approvalsEnabled) {
-                    Text("Answer requests in the notch")
+                    Text("Answer requests in the island")
                     Text("Permission requests, questions and plans appear as a card. Risky commands need a second click.")
                 }
                 .settingsAnchor("agents.approvals")

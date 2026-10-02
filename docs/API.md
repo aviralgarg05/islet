@@ -336,7 +336,7 @@ isletctl media <play|pause|playpause|next|previous|forward|rewind|shuffle|repeat
 isletctl media seek <90s|2m>           jump to a position in the track
 isletctl awake [15m|1h|2h|on|off|status]   keep the Mac awake (default: until turned off; up to 24h)
 isletctl focus <name> [on|off]
-isletctl open | close                  (or press ⌃⌥I; change it in Settings → Shortcuts)
+isletctl open | close                  (or press ⌃⌥I; change it in Settings → Keyboard shortcuts)
 isletctl hook <claude|codex|AGENT> [JSON]   forward an agent hook payload (stdin or last argument)
 isletctl statusline [-- <command…>]    Claude Code status line: record plan usage, run your own line
 isletctl hook <claude|codex|cursor> --wait N   wait up to N s for an answer in the notch, print it

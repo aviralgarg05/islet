@@ -13,7 +13,7 @@ public enum SettingsPage: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .general: return "General"
         case .appearance: return "Appearance"
-        case .shortcuts: return "Shortcuts"
+        case .shortcuts: return "Keyboard shortcuts"
         case .nowPlaying: return "Now Playing"
         case .liveActivities: return "Live Activities"
         case .calendar: return "Calendar & Reminders"
@@ -45,7 +45,7 @@ public enum SettingsPage: String, CaseIterable, Sendable, Identifiable {
         case .shelf: return "Keep files handy, share them, and find what you copied."
         case .downloads: return "Browser downloads with their progress, then Open and Show when they finish."
         case .ai: return "Ask a question from anywhere, answered on this Mac or by Claude or ChatGPT."
-        case .agents: return "See what your coding agents are doing and answer their questions in the notch."
+        case .agents: return "See what your coding agents are doing and answer their questions in the island."
         case .tools: return "To-dos, a note, a converter, emoji, shortcuts, weather, a camera mirror, a teleprompter, stocks and sales, each a page under More. All start off."
         case .apps: return "Give an app a colour or a priority, hide the island for it, or mute its notifications."
         case .permissions: return "What Islet may use, and what uses it. None is needed to run."
@@ -428,7 +428,7 @@ public enum SettingsIndex {
         SettingsEntry("agents.cursor", .agents, "Connect Cursor", section: "Connections", keywords: ["set up"]),
         SettingsEntry("agents.disconnect", .agents, "Disconnect or update an agent", section: "Connections",
                       keywords: ["remove hooks", "needs an update", "moved"], anchor: "agents.claudeCode"),
-        SettingsEntry("agents.approvals", .agents, "Answer requests in the notch", section: "Approvals",
+        SettingsEntry("agents.approvals", .agents, "Answer requests in the island", section: "Approvals",
                       keywords: ["approve", "permission", "allow", "deny", "questions", "plans"]),
         SettingsEntry("agents.wait", .agents, "Hand back to the terminal after", section: "Approvals", keywords: ["timeout", "wait"]),
         SettingsEntry("agents.claudeUsage", .agents, "Claude Code limits", section: "Usage limits", keywords: ["usage", "plan", "5-hour", "weekly"]),
