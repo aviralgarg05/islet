@@ -914,13 +914,14 @@ struct AppRulesSettings: View {
                 } else {
                     Section {
                         ForEach($model.settings.appRules) { $rule in
+                            let id = rule.bundleID
                             // Mute in the island and the row's switch are one mute: either turns it on,
                             // and the switch turns both off.
-                            AppRuleRow(rule: $rule, mutedFromIsland: model.settings.mutedSources.contains(rule.bundleID),
-                                       unmute: { model.unmute(source: rule.bundleID) }) {
-                                model.settings.appRules.removeAll { $0.bundleID == rule.bundleID }
+                            AppRuleRow(rule: $rule, mutedFromIsland: model.settings.mutedSources.contains(id),
+                                       unmute: { model.unmute(source: id) }, setTint: { setTint($0, for: id) }) {
+                                model.settings.appRules.removeAll { $0.bundleID == id }
                             }
-                            .id(rule.bundleID)
+                            .id(id)
                         }
                     }
                 }
@@ -948,6 +949,14 @@ struct AppRulesSettings: View {
     private var addMenu: some View {
         AddAppMenu(existing: Set(model.settings.appRules.map(\.bundleID)), add: add)
             .settingsAnchor("apps.add")
+    }
+
+    /// A colour from the colour panel, which stays open: it goes to the app it was opened for,
+    /// found by its id each time, so removing another app (or Reset) never moves it to the
+    /// wrong row, and a removed app's colour goes nowhere.
+    private func setTint(_ hex: String, for id: String) {
+        guard let i = model.settings.appRules.firstIndex(where: { $0.bundleID == id }) else { return }
+        model.settings.appRules[i].tint = hex
     }
 
     private func add(_ bundleID: String) {
@@ -999,6 +1008,9 @@ struct AppRuleRow: View {
     /// Muted with Mute in the island's menu, which counts as the row's mute too.
     var mutedFromIsland = false
     var unmute: () -> Void = {}
+    /// Where the colour panel's colours go (`AppRulesSettings.setTint`), rather than through
+    /// `rule`, whose place in the list can change while the panel is open.
+    let setTint: (String) -> Void
     var onDelete: () -> Void
 
     static let tints = ["blue", "indigo", "purple", "pink", "red", "orange", "yellow", "green", "teal", "gray"]
@@ -1084,7 +1096,7 @@ struct AppRuleRow: View {
     }
 
     private func pickColour() {
-        ColourPanelRelay.pick(starting: customTint) { rule.tint = $0 }
+        ColourPanelRelay.pick(starting: customTint, onChange: setTint)
     }
 
     private static let priorityWidth: CGFloat = 150
