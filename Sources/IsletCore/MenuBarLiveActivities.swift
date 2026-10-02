@@ -257,9 +257,13 @@ public enum MenuBarLiveActivities {
     }
 
     /// The part of the detail that fits the compact wing: a trailing number, time or score.
+    /// Nothing for a two-sided score ("IND 245/3 · AUS 198"): one side alone would make that
+    /// team the story, so the peek and Home show the whole score instead.
     static func shortTrailing(_ detail: String?) -> String? {
         guard let detail else { return nil }
-        let last = detail.components(separatedBy: " · ").last ?? detail
+        let parts = detail.components(separatedBy: " · ")
+        if parts.filter({ $0.contains(where: \.isNumber) }).count >= 2 { return nil }
+        let last = parts.last ?? detail
         return last.count <= 8 ? last : nil
     }
 

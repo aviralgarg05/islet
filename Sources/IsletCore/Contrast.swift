@@ -11,6 +11,13 @@ extension RGBA {
     /// WCAG contrast ratio against black.
     public var contrastOnBlack: Double { (luminance + 0.05) / 0.05 }
 
+    /// The contrast small text needs (WCAG AA), above the 3:1 that glyphs, rings and bars get.
+    public static let textContrast = 4.5
+
+    /// This colour, lifted if need be to read as small text on black (`textContrast`): a value
+    /// in a wing, where a dark brand colour that passes for a glyph would look dim.
+    public func readableTextOnBlack() -> RGBA { readableOnBlack(minContrast: Self.textContrast) }
+
     /// This colour, or a lighter one of the same hue with at least `minContrast` against black.
     /// Near-greys (no usable hue) become white.
     public func readableOnBlack(minContrast: Double = 3) -> RGBA {

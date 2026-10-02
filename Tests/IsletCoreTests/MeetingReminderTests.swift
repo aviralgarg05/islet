@@ -250,6 +250,8 @@ import Testing
         #expect(spec.title == "Standup")
         #expect(spec.subtitle == "At 10:00 · Zoom")
         #expect(spec.trailing == "9 min")
+        // A narrow wing says "9m"; once the meeting starts the short form is cleared.
+        #expect(spec.compactShort == "9m")
         #expect(spec.state == .info && spec.priority == .high && spec.sneak == true)
         #expect(spec.actions == [ActivityAction(title: "Join", url: Self.zoom)])
         // No link to open on a click: the click opens the island on the meeting.
@@ -259,6 +261,7 @@ import Testing
         let now = try #require(MeetingReminders().live([item], now: at(1), options: options).first)
         let urgent = MeetingReminders.activity(for: now, now: at(1), icon: .symbol("video.fill"), sneak: false) { _ in "10:30" }
         #expect(urgent.state == .waiting && urgent.trailing == "Now" && urgent.subtitle == "Now · until 10:30")
+        #expect(urgent.compactShort == "")
         // High, not critical: a full screen app or an app rule still hides it.
         #expect(urgent.priority == .high)
 

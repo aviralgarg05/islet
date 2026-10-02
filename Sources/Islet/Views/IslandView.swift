@@ -912,8 +912,7 @@ struct MoreCount: View {
     var body: some View {
         if count > 0 {
             Text("+\(count)")
-                .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                .monospacedDigit()
+                .textStyle(.caption, emphasized: true, numeric: true)
                 .foregroundStyle(Color.islandSecondary)
                 .fixedSize()
                 .contentTransition(motion.numberSwap(value: Double(count)))
@@ -998,9 +997,16 @@ struct Wings<Leading: View, Trailing: View>: View {
     @ViewBuilder var leading: Leading
     @ViewBuilder var trailing: Trailing
 
-    /// Space between the island's edge and the wing's content. Narrow wings (a crowded menu
-    /// bar) give the content more of their width.
-    static func inset(for wing: CGFloat) -> CGFloat { wing < 46 ? max(5, (wing * 0.18).rounded()) : 11 }
+    /// Space between the island's edge and the wing's content: clear of the rounded bottom
+    /// corner even in an icon-only wing, a little more in a roomy one.
+    static func inset(for wing: CGFloat) -> CGFloat { wing < 46 ? Space.s : 11 }
+
+    /// The room a wing leaves its content, from the inset to the notch's edge.
+    static func room(for wing: CGFloat) -> CGFloat { max(0, wing - inset(for: wing)) }
+
+    /// The leading glyph's size: 15 points where it fits, smaller in an icon-only wing so it,
+    /// and a timer's ring round it, stay inside the room.
+    static func glyph(for wing: CGFloat) -> CGFloat { max(8, min(15, room(for: wing) - Space.xs)) }
 
     var body: some View {
         let inset = Self.inset(for: wing)
@@ -1008,11 +1014,12 @@ struct Wings<Leading: View, Trailing: View>: View {
             leading
                 .padding(.leading, inset)
                 .frame(width: wing, height: metrics.notch.height, alignment: .leading)
+                .environment(\.wingRoom, Self.room(for: wing))
             Spacer(minLength: 0)
             trailing
                 .padding(.trailing, inset)
                 .frame(width: wing, height: metrics.notch.height, alignment: .trailing)
-                .environment(\.wingRoom, wing - inset)
+                .environment(\.wingRoom, Self.room(for: wing))
         }
         .frame(width: metrics.notch.width + 2 * wing, height: metrics.notch.height)
     }
@@ -1167,16 +1174,16 @@ struct IslandRow: View {
         switch p {
         case .compact(.nowPlaying(let np)), .songPeek(let np):
             // A new song swaps the artwork; the equaliser beside it keeps running.
-            HStack(spacing: 4) {
-                ClosedArtwork(media: np, model: model, size: ClosedArtwork.size(metrics))
-                MoreCount(count: Self.bodyKey(p) == nil ? counted : 0)
+            counting(Self.bodyKey(p) == nil ? counted : 0) {
+                ClosedArtwork(media: np, model: model,
+                              size: min(ClosedArtwork.size(metrics), Wings<EmptyView, EmptyView>.room(for: geometry.wing) - Space.xs))
             }
         case .compact(.activity(let a, _)), .sneak(let a):
-            HStack(spacing: 4) {
-                TemplateLeading(activity: a, model: model, tint: model.tint(for: a))
-                // With bubbles off, or no room for them in the menu bar row, count the other
-                // activities here instead.
-                MoreCount(count: activityCount(p))
+            // With bubbles off, or no room for them in the menu bar row, count the other
+            // activities here instead.
+            counting(activityCount(p)) {
+                TemplateLeading(activity: a, model: model, tint: model.tint(for: a),
+                                size: Wings<EmptyView, EmptyView>.glyph(for: geometry.wing))
             }
         case .compact(.battery(let ev)):
             Image(systemName: BatteryGlyph.symbol(ev.state))
@@ -1192,6 +1199,20 @@ struct IslandRow: View {
                 .animation(motion.inPlace, value: hud.symbol)
         default:
             EmptyView()
+        }
+    }
+
+    /// The leading glyph with the count of other activities beside it ("+2") when both fit
+    /// before the notch, else the glyph alone: nothing goes under the notch, where it can't be
+    /// seen. VoiceOver says the count either way.
+    private func counting<Lead: View>(_ count: Int, @ViewBuilder lead: () -> Lead) -> some View {
+        let lead = lead()
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: Space.xs) {
+                lead
+                MoreCount(count: count)
+            }
+            lead
         }
     }
 
@@ -1214,15 +1235,11 @@ struct IslandRow: View {
         case .compact(.activity(let a, _)), .sneak(let a):
             TemplateTrailing(activity: a, model: model, tint: model.tint(for: a))
         case .compact(.battery(let ev)):
-            Text("\(ev.state.level)%")
-                .textStyle(.body, emphasized: true, numeric: true)
-                .foregroundStyle(BatteryGlyph.tint(ev))
-                .monospacedDigit()
-                // Icon-only wings are too narrow for "100%" at full size; never wrap it.
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .contentTransition(motion.numberSwap(value: Double(ev.state.level)))
-                .animation(motion.inPlace, value: ev.state.level)
+            // Icon-only wings may have no room for "100%": the number alone beside the battery
+            // glyph, never a shrunken one.
+            WingValue(plan: WingPlan(full: "\(ev.state.level)%", short: "\(ev.state.level)", glyph: nil),
+                      tint: BatteryGlyph.tint(ev), transition: motion.numberSwap(value: Double(ev.state.level)),
+                      animation: motion.inPlace)
         case .hud(let hud):
             LevelBar(value: hud.muted ? 0 : hud.value, tint: model.hudTint(hud.kind), height: 4)
                 .frame(width: max(22, geometry.wing - 20))
@@ -1327,42 +1344,20 @@ struct ActivityTrailing: View {
     let tint: Color
     /// Slightly smaller type for sneak peeks.
     var compact = false
+    /// The symbol beside the notch, which the value's glyph never repeats.
+    var leading: String? = nil
     @Environment(\.wingRoom) private var room
     @Environment(\.islandMotion) private var motion
 
-    private var size: CGFloat { compact ? TextStyle.caption.size : TextStyle.body.size }
-
     var body: some View {
-        if room < NarrowValue.wordRoom, activity.endsAt == nil, activity.startedAt == nil,
-           let text = activity.trailingText(now: Date()), activity.trailing != nil || activity.progress == nil,
-           let glyph = NarrowValue.glyph(for: text, state: activity.state) {
-            Image(systemName: glyph)
-                .font(.system(size: min(size, room * 0.6), weight: .semibold))
-                .foregroundStyle(tint)
-                .contentTransition(motion.symbolSwap)
-                .animation(motion.inPlace, value: glyph)
-                .spokenValue(SpokenText.value(activity, now: Date()))
-        } else if activity.endsAt != nil || activity.startedAt != nil {
+        if activity.endsAt != nil || activity.startedAt != nil {
             TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                Text(activity.trailingText(now: ctx.date) ?? "")
-                    .font(.system(size: size, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(tint)
-                    .lineLimit(1)
-                    .minimumScaleFactor(room < NarrowValue.wordRoom ? 0.5 : 0.7)
-                    .contentTransition(.numericText(countsDown: activity.endsAt != nil))
+                value(now: ctx.date, transition: .numericText(countsDown: activity.endsAt != nil), animation: nil)
                     .spokenValue(SpokenText.value(activity, now: ctx.date))
             }
-        } else if let text = activity.trailingText(now: Date()), activity.trailing != nil || activity.progress == nil {
-            Text(text)
-                .font(.system(size: size, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(tint)
-                .lineLimit(1)
-                .minimumScaleFactor(room < NarrowValue.wordRoom ? 0.5 : 0.75)
-                // A changed value rolls to the new one rather than popping.
-                .contentTransition(motion.numberSwap())
-                .animation(motion.inPlace, value: text)
+        } else if activity.trailing != nil || activity.progress == nil, activity.trailingText(now: Date()) != nil {
+            // A changed value rolls to the new one rather than popping.
+            value(now: Date(), transition: motion.numberSwap(), animation: motion.inPlace)
                 .spokenValue(SpokenText.value(activity, now: Date()))
         } else if activity.progress != nil {
             ProgressRing(progress: activity.clampedProgress, tint: tint, size: compact ? 13 : 15, lineWidth: 2.2)
@@ -1370,6 +1365,13 @@ struct ActivityTrailing: View {
         } else {
             EmptyView()
         }
+    }
+
+    private func value(now: Date, transition: ContentTransition, animation: Animation?) -> some View {
+        let plan = activity.wingPlan(text: activity.trailingText(now: now) ?? "", narrow: room < NarrowValue.wordRoom,
+                                     leading: leading, now: now)
+        return WingValue(plan: plan, size: compact ? TextStyle.caption.size : nil, tint: tint, transition: transition,
+                         animation: animation)
     }
 }
 
