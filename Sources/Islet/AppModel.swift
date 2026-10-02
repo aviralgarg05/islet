@@ -855,8 +855,9 @@ final class AppModel {
     /// and Settings → Advanced says which line. A deleted file changes nothing either; the next
     /// save writes it again.
     private func reloadSettingsFromDisk() {
-        // Our own save coming back: the settings in memory are the same or newer (a change made
-        // since, still waiting for its save), so there is nothing to load and nothing to undo.
+        // Our own save coming back, or a second event for an edit already read: the settings in
+        // memory are the same or newer (a change made since, still waiting for its save), so
+        // there is nothing to load and nothing to undo.
         if configFile.holdsOwnWrite() { return }
         let read = configFile.read()
         noteSettingsProblem(configFile.problem)

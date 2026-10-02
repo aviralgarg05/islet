@@ -69,6 +69,79 @@ private func scratchFolder(_ name: String) throws -> URL {
         #expect(!file.holdsOwnWrite())
     }
 
+    /// An edit by hand is loaded; putting the file back to what Islet last wrote (undo, or
+    /// `git checkout`) is an edit too, and must be loaded rather than taken for Islet's own save.
+    @Test func revertingToOurLastWriteIsReadAgain() throws {
+        let dir = try scratchFolder("config")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("config.json")
+        var file = SettingsFile(url: url)
+        var a = IsletSettings()
+        a.theme = .glass
+        #expect(try file.save(a) == .saved)
+        let ours = try Data(contentsOf: url)
+
+        var b = a
+        b.theme = .graphite
+        try b.save(to: url)
+        #expect(file.read().value?.theme == .graphite)
+
+        try ours.write(to: url)
+        #expect(!file.holdsOwnWrite())
+        #expect(file.read().value == a)
+    }
+
+    /// A typo shows the problem; undoing it back to Islet's own bytes must clear it again.
+    @Test func undoingATypoBackToOurBytesClearsTheProblem() throws {
+        let dir = try scratchFolder("config")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("config.json")
+        var file = SettingsFile(url: url)
+        var a = IsletSettings()
+        a.outline = true
+        #expect(try file.save(a) == .saved)
+        let ours = try Data(contentsOf: url)
+
+        try Data("{ \"outline\": tru }".utf8).write(to: url)
+        #expect(file.read().problem != nil)
+        #expect(file.problem != nil)
+        #expect(try file.save(a) == .refused)
+
+        try ours.write(to: url)
+        #expect(!file.holdsOwnWrite())
+        #expect(file.read().value == a)
+        #expect(file.problem == nil)
+    }
+
+    /// One save by an editor can reach Islet twice (the folder and the file are both watched).
+    /// The second event must not read the file again: that would undo a change made in between.
+    @Test func aSecondEventForTheSameEditIsHeld() throws {
+        let dir = try scratchFolder("config")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("config.json")
+        var file = SettingsFile(url: url)
+        #expect(try file.save(IsletSettings()) == .saved)
+        var b = IsletSettings()
+        b.hoverToOpen = false
+        try b.save(to: url)
+        #expect(!file.holdsOwnWrite())
+        #expect(file.read().value == b)
+        #expect(file.holdsOwnWrite())
+    }
+
+    /// Opening the file at launch counts as reading it: its own watcher event isn't read twice.
+    @Test func openingTheFileIsInStepWithIt() throws {
+        let dir = try scratchFolder("config")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("config.json")
+        var s = IsletSettings()
+        s.outline = true
+        try s.save(to: url)
+        var file = SettingsFile(url: url)
+        #expect(file.open().settings == s)
+        #expect(file.holdsOwnWrite())
+    }
+
     @Test func fixingTheFileClearsTheProblem() throws {
         let dir = try scratchFolder("config")
         defer { try? FileManager.default.removeItem(at: dir) }

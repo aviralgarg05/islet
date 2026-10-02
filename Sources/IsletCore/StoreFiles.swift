@@ -191,8 +191,9 @@ public struct SettingsFile: Sendable {
     public private(set) var problem: FileProblem?
     /// What `lastGood` holds, once known, so an unchanged file isn't copied again.
     private var lastGoodData: Data?
-    /// The bytes this process last wrote (or found already there when saving), so the echo of its
-    /// own write can be told from someone else's edit (`holdsOwnWrite`).
+    /// The bytes the settings in memory were last in step with: written, found already there when
+    /// saving, or read. The echo of a save, or a second event for an edit already read, can then be
+    /// told from a new edit (`holdsOwnWrite`). Nil while the file is missing or doesn't parse.
     private var lastWritten: Data?
 
     public init(url: URL, lastGood: URL? = nil) {
@@ -254,12 +255,15 @@ public struct SettingsFile: Sendable {
         switch Self.parse(url) {
         case .missing:
             problem = nil
+            lastWritten = nil
             return .missing
         case .unreadable(let p):
             problem = p
+            lastWritten = nil
             return .unreadable(p)
         case .loaded(let (data, _)):
             problem = nil
+            lastWritten = data
             keepLastGood(data)
             return .loaded(IsletSettings.decodeLenient(data))
         }
@@ -274,6 +278,7 @@ public struct SettingsFile: Sendable {
         switch Self.parse(url) {
         case .unreadable(let p):
             problem = p
+            lastWritten = nil
             return .refused
         case .missing:
             break
@@ -296,9 +301,11 @@ public struct SettingsFile: Sendable {
         return .saved
     }
 
-    /// Whether the file holds exactly what this process last wrote: the file watcher seeing its
-    /// own save. Settings in memory may already be newer than that save (a slider still moving,
-    /// a change waiting for its save), so reloading it would undo them.
+    /// Whether the file holds exactly the bytes the settings in memory were last in step with
+    /// (written or read): the file watcher seeing its own save, or a second event for an edit
+    /// already read. Settings in memory may already be newer than that (a slider still moving, a
+    /// change waiting for its save), so reading it again would undo them. A file put back to
+    /// those bytes after another edit, or after a typo, no longer matches and is read.
     public func holdsOwnWrite() -> Bool {
         guard let lastWritten, let data = try? Data(contentsOf: url) else { return false }
         return data == lastWritten
