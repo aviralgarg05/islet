@@ -9,14 +9,24 @@ struct LiveActivitiesSettings: View {
     @Bindable var model: AppModel
     @ViewState private var axTrusted = MenuBarLiveActivityMonitor.isAvailable
 
-    private var on: Bool { model.settings.mirrorMenuBarActivities }
+    /// Before macOS 26 the menu bar has no Live Activities: the page says so, its switches
+    /// stay off and it asks for nothing.
+    private var supported: Bool { model.liveActivitiesSupported }
+    private var on: Bool { supported && model.settings.mirrorMenuBarActivities }
 
     var body: some View {
         Form {
             Section {
-                SettingsHero(page: .liveActivities, switchTitle: "Show Live Activities", isOn: $model.settings.mirrorMenuBarActivities)
+                SettingsHero(page: .liveActivities, switchTitle: "Show Live Activities",
+                             isOn: supported ? $model.settings.mirrorMenuBarActivities : .constant(false))
+                    .disabled(!supported)
                     .settingsAnchor("live.enabled")
-                if on && !axTrusted {
+                if !supported {
+                    HStack(spacing: 10) {
+                        Image(systemName: "info.circle").foregroundStyle(.secondary).font(.callout)
+                        Text("Needs macOS 26 or later.").font(.callout).foregroundStyle(.secondary)
+                    }
+                } else if on && !axTrusted {
                     AccessRow(text: "Islet needs Accessibility to read the menu bar.", button: "Allow…") {
                         MediaKeyInterceptor.requestAccessibility()
                         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {

@@ -198,6 +198,13 @@ enum SettingsSnapshots {
                                                 origin: .defaults)
             shoot("advanced-config-error-defaults", in: extra, dark: false)
             model.setSettingsProblemForSnapshot(nil)
+            // Live Activities on a macOS before 26: the page says why its switch is off.
+            window.setContentSize(SettingsWindow.defaultSize)
+            let liveActivitiesSupported = model.liveActivitiesSupported
+            model.liveActivitiesSupported = false
+            navigation.open(.liveActivities)
+            shoot("live-activities-before-macos-26", in: extra, dark: false)
+            model.liveActivitiesSupported = liveActivitiesSupported
             // Islet.app moved since Claude Code was connected: it runs from a new place, and the
             // isletctl the hooks call is gone. Needs an update, and a dot.
             window.setContentSize(SettingsWindow.defaultSize)

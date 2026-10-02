@@ -49,6 +49,11 @@ public final class MenuBarLiveActivityMonitor {
 
     public static var isAvailable: Bool { AXIsProcessTrusted() }
 
+    /// Whether this macOS shows Live Activities in the menu bar at all (macOS 26 and later).
+    public static var isSupported: Bool {
+        MenuBarLiveActivities.isSupported(osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion)
+    }
+
     /// Whether macOS is set to show iPhone Live Activities on this Mac (Control Center's setting).
     public static var iPhoneActivitiesEnabled: Bool? {
         CFPreferencesCopyAppValue("RemoteLiveActivitiesEnabled" as CFString, "com.apple.controlcenter" as CFString) as? Bool

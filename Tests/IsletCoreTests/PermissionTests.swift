@@ -157,13 +157,28 @@ import Testing
         #expect(!PermissionPrompt.shouldAsk(wasOn: false, isOn: false))
     }
 
+    /// Live Activities reach the menu bar from macOS 26 on: before that, showing them is no
+    /// reason to grant Accessibility, and Islet doesn't look for them.
+    @Test func liveActivitiesNeedMacOS26() {
+        #expect(!MenuBarLiveActivities.isSupported(osMajor: 14))
+        #expect(!MenuBarLiveActivities.isSupported(osMajor: 15))
+        #expect(MenuBarLiveActivities.isSupported(osMajor: 26))
+        #expect(MenuBarLiveActivities.isSupported(osMajor: 27))
+        let s = IsletSettings()
+        #expect(s.mirrorMenuBarActivities)
+        let old = PermissionKind.accessibility.uses(s, osMajor: 15).map(\.feature)
+        #expect(!old.contains("Show Live Activities"))
+        #expect(old.count == 4)
+        #expect(PermissionKind.accessibility.uses(s, osMajor: 26).map(\.feature).contains("Show Live Activities"))
+    }
+
     @Test func usesFollowTheSettings() {
         var s = IsletSettings()
         s.replaceSystemHUD = false
         s.notificationMirroring = true
         s.mirrorMenuBarActivities = false
         s.closedLayout = .wings
-        #expect(PermissionKind.accessibility.uses(s).map(\.isOn) == [false, true, false, false, false])
+        #expect(PermissionKind.accessibility.uses(s, osMajor: 26).map(\.isOn) == [false, true, false, false, false])
         // Typing emoji needs it only while the emoji page is on too.
         s.emojiTypes = true
         #expect(PermissionKind.accessibility.uses(s).last?.isOn == false)

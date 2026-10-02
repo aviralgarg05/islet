@@ -18,15 +18,16 @@ struct PermissionsSettings: View {
     @ViewState private var askedForDownloads = false
     @Environment(\.snapshotMode) private var snapshotMode
 
+    private var osMajor: Int { ProcessInfo.processInfo.operatingSystemVersion.majorVersion }
+
     var body: some View {
         Form {
             Section { SettingsHero(page: .permissions) }
             Section {
                 ForEach(PermissionKind.allCases) { kind in
-                    PermissionRow(kind: kind, uses: kind.uses(model.settings), status: status(of: kind), label: label(for: kind),
-                                  hint: hint(for: kind),
-                                  note: kind.note(osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
-                                                  status: status(of: kind))) { act(on: kind) }
+                    PermissionRow(kind: kind, uses: kind.uses(model.settings, osMajor: osMajor), status: status(of: kind),
+                                  label: label(for: kind), hint: hint(for: kind),
+                                  note: kind.note(osMajor: osMajor, status: status(of: kind))) { act(on: kind) }
                         .settingsAnchor("permissions.\(kind.rawValue)")
                 }
             } footer: {

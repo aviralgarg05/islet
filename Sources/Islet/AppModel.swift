@@ -116,6 +116,9 @@ final class AppModel {
     private(set) var pulse = 0
     private(set) var isDraggingFile = false
     var apiStatus = "Starting…"
+    /// Whether this macOS shows Live Activities in the menu bar (26 and later). Snapshots draw
+    /// the page as an older macOS shows it too.
+    var liveActivitiesSupported = MenuBarLiveActivityMonitor.isSupported
     var pinned = false
     /// Snapshot rendering pins the presentation instead of deriving it.
     var forcedPresentation: IslandPresentation?
@@ -350,7 +353,7 @@ final class AppModel {
         if settings.unlockSplash { unlock.start() } else { unlock.stop() }
         let onlyHiddenChanged = lastMirrorOnlyHidden != settings.mirrorOnlyHiddenActivities
         lastMirrorOnlyHidden = settings.mirrorOnlyHiddenActivities
-        if settings.mirrorMenuBarActivities && inFront && MenuBarLiveActivityMonitor.isAvailable {
+        if settings.mirrorMenuBarActivities && inFront && liveActivitiesSupported && MenuBarLiveActivityMonitor.isAvailable {
             menuBarActivities.onChange = { [weak self] list in self?.syncMenuBarActivities(list) }
             menuBarActivities.knownApp = { $0.count <= 24 && LiveActivityCatalog.look(for: $0) != nil }
             menuBarActivities.onStructureChange = { NotificationCenter.default.post(name: .isletMenuBarChanged, object: nil) }

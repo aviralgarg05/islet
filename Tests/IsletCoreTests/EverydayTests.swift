@@ -571,9 +571,11 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         // Nothing uses Accessibility: nothing to restart.
         #expect(!SessionWork.restartsOnTrustChange(wasTrusted: false, isTrusted: true, settings: s))
         s.mirrorMenuBarActivities = true
-        #expect(SessionWork.restartsOnTrustChange(wasTrusted: false, isTrusted: true, settings: s))
+        #expect(SessionWork.restartsOnTrustChange(wasTrusted: false, isTrusted: true, settings: s, osMajor: 26))
+        // Before macOS 26 the menu bar has no Live Activities, so the switch uses nothing.
+        #expect(!SessionWork.restartsOnTrustChange(wasTrusted: false, isTrusted: true, settings: s, osMajor: 15))
         // Taken away: what used it stops.
-        #expect(SessionWork.restartsOnTrustChange(wasTrusted: true, isTrusted: false, settings: s))
+        #expect(SessionWork.restartsOnTrustChange(wasTrusted: true, isTrusted: false, settings: s, osMajor: 26))
         // No change, or nothing known before: nothing to do.
         #expect(!SessionWork.restartsOnTrustChange(wasTrusted: true, isTrusted: true, settings: s))
         #expect(!SessionWork.restartsOnTrustChange(wasTrusted: nil, isTrusted: true, settings: s))
@@ -786,6 +788,8 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         // Full screen is confirmed through Accessibility too (`FullscreenDetector`).
         #expect(on26.contains("whether a window is in full screen"))
         #expect(!on26.contains("—"))
+        #expect(on26.contains("the text of Live Activities and banners"))
+        #expect(try #require(PermissionKind.accessibility.note(osMajor: 15)).contains("the text of banners"))
     }
 }
 

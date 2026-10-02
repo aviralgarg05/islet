@@ -112,6 +112,12 @@ public enum MenuBarLiveActivities {
     /// (`source(for:)`), so muting one app's activity leaves the others.
     public static let source = "live-activity"
 
+    /// macOS puts Live Activities in the menu bar from macOS 26 on; before that there is
+    /// nothing to mirror, so the switch and the Accessibility it would need don't apply.
+    public static let minimumOSMajor = 26
+
+    public static func isSupported(osMajor: Int) -> Bool { osMajor >= minimumOSMajor }
+
     /// The source of one app's mirrored activities: "live-activity:uber".
     public static func source(for appName: String) -> String {
         let slug = appName.lowercased().unicodeScalars

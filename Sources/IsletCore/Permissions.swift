@@ -26,7 +26,9 @@ public enum PermissionKind: String, CaseIterable, Sendable, Identifiable {
         guard self == .accessibility else { return nil }
         var lines: [String] = []
         if osMajor >= 27 { lines.append("Called Device Control and Data Access in System Settings.") }
-        lines.append("Islet doesn't read what you type. It reads where menu bar items are, whether a window is in full screen, the text of Live Activities and banners, and, only with Replace the system volume and brightness display on, those keys. With Type emoji where you're typing on, it types the emoji you pick, and nothing else.")
+        // Before macOS 26 there are no Live Activities in the menu bar to read.
+        let texts = MenuBarLiveActivities.isSupported(osMajor: osMajor) ? "the text of Live Activities and banners" : "the text of banners"
+        lines.append("Islet doesn't read what you type. It reads where menu bar items are, whether a window is in full screen, \(texts), and, only with Replace the system volume and brightness display on, those keys. With Type emoji where you're typing on, it types the emoji you pick, and nothing else.")
         if status == .denied {
             lines.append("Already on in System Settings? Remove Islet with the minus button and add it again.")
         }
@@ -58,13 +60,18 @@ public enum PermissionKind: String, CaseIterable, Sendable, Identifiable {
     }
 
     /// The features that use this permission, and whether each is switched on.
-    public func uses(_ s: IsletSettings) -> [PermissionUse] {
+    /// - Parameter osMajor: before macOS 26 there are no Live Activities in the menu bar, so
+    ///   showing them isn't a use.
+    public func uses(_ s: IsletSettings,
+                     osMajor: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion) -> [PermissionUse] {
         switch self {
         case .accessibility:
+            let liveActivities = MenuBarLiveActivities.isSupported(osMajor: osMajor)
+                ? [PermissionUse("Show Live Activities", on: s.mirrorMenuBarActivities)] : []
             return [
                 PermissionUse("Replace the system volume and brightness display", on: s.replaceSystemHUD),
                 PermissionUse("Mirror notifications from every app", on: s.notificationMirroring),
-                PermissionUse("Show Live Activities", on: s.mirrorMenuBarActivities),
+            ] + liveActivities + [
                 PermissionUse("Fit the closed island between menu bar icons", on: s.closedLayout == .auto),
                 PermissionUse("Type emoji where you're typing", on: s.emojiEnabled && s.emojiTypes),
             ]
@@ -350,9 +357,10 @@ public enum SessionWork {
     /// Accessibility was granted or taken away: whether to start (or stop) what uses it now,
     /// rather than at the next launch. Nothing changes for a grant nobody uses.
     /// - Parameter wasTrusted: what Islet knew before, nil before the first look.
-    public static func restartsOnTrustChange(wasTrusted: Bool?, isTrusted: Bool, settings: IsletSettings) -> Bool {
+    public static func restartsOnTrustChange(wasTrusted: Bool?, isTrusted: Bool, settings: IsletSettings,
+                                             osMajor: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion) -> Bool {
         guard let was = wasTrusted, was != isTrusted else { return false }
-        return PermissionKind.accessibility.uses(settings).contains(where: \.isOn)
+        return PermissionKind.accessibility.uses(settings, osMajor: osMajor).contains(where: \.isOn)
     }
 
     /// Whether the menu bar and banner readers, the key tap and the pointer watchers run. After
