@@ -143,6 +143,19 @@ static NSMutableDictionary *Describe(NSDictionary *info) {
     return out;
 }
 
+// The artwork's hash, over every byte. NSData's own hash reads only the first 80, which two
+// thumbnails from the same encoder share, so the next video would keep the last one's picture.
+// FNV-1a with the length, kept to 63 bits so the app reads it as an Int.
+static NSNumber *ArtworkHash(NSData *art) {
+    const uint8_t *bytes = art.bytes;
+    uint64_t h = 14695981039346656037ULL;
+    for (NSUInteger i = 0; i < art.length; i++) {
+        h ^= bytes[i];
+        h *= 1099511628211ULL;
+    }
+    return @((h ^ art.length) & 0x7FFFFFFFFFFFFFFFULL);
+}
+
 // Adds the player's app, and its artwork when it changed since it was last sent under `key`.
 // Records what was sent in `sent`.
 static void AddClientAndArtwork(NSMutableDictionary *out, id client, NSDictionary *info, NSString *key,
@@ -163,7 +176,7 @@ static void AddClientAndArtwork(NSMutableDictionary *out, id client, NSDictionar
         }
         return;
     }
-    NSNumber *h = @((art.hash ^ art.length) & 0x7FFFFFFFFFFFFFFFULL);
+    NSNumber *h = ArtworkHash(art);
     out[@"artworkHash"] = h;
     if (![last[@"hash"] isEqual:h]) out[@"artwork"] = [art base64EncodedStringWithOptions:0];
     sent[key] = artID ? @{@"hash": h, @"id": artID} : @{@"hash": h};
