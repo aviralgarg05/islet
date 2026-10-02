@@ -281,7 +281,9 @@ public struct BridgeReport: Equatable, Sendable {
 ///    when the system bridge reports them (`setting(for:)`).
 /// 6. A player picked in the island (`pick(player:at:)`) is shown in the open island and
 ///    controlled instead, while it is offered, until another player starts playing after the
-///    pick or the picked one goes. The closed island keeps showing what plays (`closedIsland`).
+///    pick or the picked one goes. A pick of a player that isn't playing lapses `pausedTimeout`
+///    after the later of the pick and that player's last change, however long ago it paused when
+///    picked. The closed island keeps showing what plays (`closedIsland`).
 /// 7. Apps the user hid (`hidden`, Settings → Now Playing → Ignore apps) never show.
 /// 8. An app Islet doesn't know as a player, reporting nothing but a title (a voice note, a
 ///    sound in a chat app, a muted preview), shows only once it has played for `settle`
@@ -614,12 +616,14 @@ public struct MediaArbiter: Sendable {
             // Showing as stopped changes nothing stored, so only a moment still ahead counts.
             if let end = s.endsAt, end.addingTimeInterval(endedGrace) > now { dates.append(end.addingTimeInterval(endedGrace)) }
         }
+        // A pick of a player that isn't playing lapses; `expire` drops it, so this can't repeat.
+        if let lapse = heldPick(now: now)?.lapses { dates.append(max(now, lapse)) }
         return dates.min()
     }
 
     /// Forget paused players that have timed out, and ones stuck past their end. Players the
-    /// bridge lists stay offered, and only stop showing by themselves (rule 4). Returns whether
-    /// anything shown changed.
+    /// bridge lists stay offered, and only stop showing by themselves (rule 4). A pick that has
+    /// lapsed goes (rule 6). Returns whether anything shown changed.
     @discardableResult
     public mutating func expire(now: Date) -> Bool {
         let dead = snapshots.filter { forgetAt($0.value).map { $0 <= now } == true }.keys
@@ -632,13 +636,18 @@ public struct MediaArbiter: Sendable {
             ranOut = true
         }
         dropPickIfGone()
-        return !dead.isEmpty || ranOut
+        var pickLapsed = false
+        if let lapse = heldPick(now: now)?.lapses, lapse <= now {
+            pick = nil
+            pickLapsed = true
+        }
+        return !dead.isEmpty || ranOut || pickLapsed
     }
 
-    /// What the open island shows and its controls reach: the picked player while it is offered
-    /// (however long it has been paused), otherwise the best of all (rules 1 to 3).
+    /// What the open island shows and its controls reach: the picked player while the pick holds
+    /// (rule 6: shown at once, however long ago it paused), otherwise the best of all (rules 1 to 3).
     public func current(now: Date) -> NowPlaying? {
-        if let picked = picked(in: listedSnapshots(now: now)) { return picked }
+        if let held = heldPick(now: now), held.lapses.map({ now < $0 }) ?? true { return held.shown }
         return best(liveSnapshots(now: now))
     }
 
@@ -647,13 +656,15 @@ public struct MediaArbiter: Sendable {
     /// video picked while a song plays leaves the song beside the notch, rather than the video
     /// showing there paused and then going after "Hide paused music after".
     public func closedIsland(now: Date) -> NowPlaying? {
-        if let picked = picked(in: listedSnapshots(now: now)), picked.isPlaying { return picked }
+        if let held = heldPick(now: now), held.shown.isPlaying { return held.shown }
         return best(liveSnapshots(now: now))
     }
 
-    private func picked(in listed: [NowPlaying]) -> NowPlaying? {
-        guard let pick, let group = Self.grouped(listed)[pick.player] else { return nil }
-        return best(group)
+    /// The picked player as shown, while it is offered, and when the pick lapses (rule 6): never
+    /// while it plays, otherwise `pausedTimeout` after the later of the pick and its last change.
+    func heldPick(now: Date) -> (shown: NowPlaying, lapses: Date?)? {
+        guard let pick, let group = Self.grouped(listedSnapshots(now: now))[pick.player], let shown = best(group) else { return nil }
+        return (shown, shown.isPlaying ? nil : max(pick.at, changed(shown)).addingTimeInterval(pausedTimeout))
     }
 
     /// Snapshots still counting at `now`, from sources that are on, each past its end shown as stopped.

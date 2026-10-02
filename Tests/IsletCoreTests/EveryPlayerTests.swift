@@ -75,6 +75,42 @@ import Testing
         #expect(m.current(now: t0.addingTimeInterval(31))?.bundleID == Self.chromeID)
     }
 
+    /// A look at Spotify, paused an hour ago, doesn't keep it on show for good: the pick lapses
+    /// `pausedTimeout` after the later of the pick and Spotify's last change, on time, and the
+    /// open island goes back to what it would show. A picked player that plays never lapses.
+    @Test func aPickOfAPlayerThatIsNotPlayingLapses() {
+        var m = MediaArbiter(pausedTimeout: 60)
+        m.updateFromBridge(Self.report([Self.chrome(), Self.spotify()], current: Self.chromeID))
+        // Spotify ran out long ago, as the app's timer noted then.
+        m.expire(now: t0)
+        let picked = t0.addingTimeInterval(2)
+        m.pick(player: Self.spotifyID, at: picked)
+        #expect(m.current(now: picked)?.bundleID == Self.spotifyID)
+        #expect(m.nextDeadline(now: picked) == picked.addingTimeInterval(60))
+        // The Chrome tab closes; the pick holds until it lapses.
+        m.updateFromBridge(Self.report([Self.spotify()], current: Self.spotifyID))
+        #expect(m.current(now: picked.addingTimeInterval(59))?.bundleID == Self.spotifyID)
+        let early = m.expire(now: picked.addingTimeInterval(59))
+        #expect(!early)
+        // Read at the moment, before the timer fires: it has lapsed already.
+        #expect(m.current(now: picked.addingTimeInterval(60)) == nil)
+        let due = m.expire(now: picked.addingTimeInterval(60))
+        #expect(due)
+        #expect(m.pick == nil)
+        #expect(m.nextDeadline(now: picked.addingTimeInterval(61)) == nil)
+        // Still offered: picked again, it shows again at once.
+        #expect(Self.ids(m.available(now: picked.addingTimeInterval(61))) == [Self.spotifyID])
+        m.pick(player: Self.spotifyID, at: picked.addingTimeInterval(61))
+        #expect(m.current(now: picked.addingTimeInterval(61))?.bundleID == Self.spotifyID)
+        // Played: no lapse while it plays. Paused again, it counts from the pause.
+        m.updateFromBridge(Self.report([Self.spotify(true, at: picked.addingTimeInterval(100))], current: Self.spotifyID))
+        let playing = m.heldPick(now: picked.addingTimeInterval(101))
+        #expect(playing?.shown.isPlaying == true)
+        #expect(playing?.lapses == nil)
+        m.updateFromBridge(Self.report([Self.spotify(false, at: picked.addingTimeInterval(150))], current: Self.spotifyID))
+        #expect(m.heldPick(now: picked.addingTimeInterval(151))?.lapses == picked.addingTimeInterval(210))
+    }
+
     @Test func theCurrentPlayerChanges() {
         var m = MediaArbiter()
         m.updateFromBridge(Self.report([Self.chrome(), Self.spotify()], current: Self.chromeID))
