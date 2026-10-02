@@ -205,6 +205,17 @@ private func writtenKeys(_ s: IsletSettings) throws -> Set<String> {
         #expect(IsletSettings.portProblem(47832, other: 47832) != nil)
     }
 
+    /// Reset, or an edit of config.json, while the port field has the keyboard: the field shows
+    /// the new port unless something else was typed, so leaving it doesn't write the old one back.
+    @Test func aPortFieldFollowsChangesMadeElsewhere() {
+        #expect(IsletSettings.portFieldFollows(typed: "50000", focused: false, previous: 50000))
+        #expect(IsletSettings.portFieldFollows(typed: "50000", focused: true, previous: 50000))
+        #expect(IsletSettings.portFieldFollows(typed: " 50000 ", focused: true, previous: 50000))
+        // Something typed and not yet saved stays, to be saved or refused on Return.
+        #expect(!IsletSettings.portFieldFollows(typed: "5000", focused: true, previous: 50000))
+        #expect(IsletSettings.portFieldFollows(typed: "5000", focused: false, previous: 50000))
+    }
+
     @Test func sanitizeKeepsThePortsApart() {
         let d = IsletSettings()
         var s = IsletSettings()

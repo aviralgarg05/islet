@@ -357,7 +357,13 @@ struct PortField: View {
             text = String(port)
             problem = nil
         }
-        .onChange(of: port) { _, value in if !focused { text = String(value) } }
+        // Reset or config.json moved the port: show it, unless something else is being typed, so
+        // leaving the field finds nothing new to save rather than writing the old port back.
+        .onChange(of: port) { old, value in
+            guard IsletSettings.portFieldFollows(typed: text, focused: focused, previous: old) else { return }
+            text = String(value)
+            problem = nil
+        }
     }
 
     private func commit() {

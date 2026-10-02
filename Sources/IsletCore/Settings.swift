@@ -781,6 +781,13 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         return port == other ? "The local API and the iPhone bridge need different ports." : nil
     }
 
+    /// Whether a port field shows a port that changed elsewhere (Reset, config.json): always
+    /// unless it has the keyboard and something other than the old port was typed into it.
+    /// A field that follows has nothing of its own to save when it loses the keyboard.
+    public static func portFieldFollows(typed: String, focused: Bool, previous: Int) -> Bool {
+        !focused || typed.trimmingCharacters(in: .whitespaces) == String(previous)
+    }
+
     /// The settings in the file, or the defaults when it is missing or doesn't parse. The app
     /// uses `SettingsFile` instead, which tells those apart and never overwrites a broken file.
     public static func load(from url: URL) -> IsletSettings {
