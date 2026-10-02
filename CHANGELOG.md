@@ -135,6 +135,11 @@ Every tool starts off until you turn it on in Settings: on the Tools page, or on
 - Appearance and Now Playing open with a live drawing of the closed island and a play/pause button, so the indicator and the pause can be judged without music playing.
 - A shortcut field can record a combination that is already one of Islet's shortcuts; they pause while it listens, and come back if you switch to another app or close Settings.
 - Buttons use sentence case. The Ask box says plainly when Claude Code or Codex isn't installed; where Islet looked is in Advanced → Diagnostics.
+- Permissions puts each permission's status and button on its title line, in a column, with what uses it below at full width; calendars and reminders say what the Calendar page says, and Automation offers **Open Music** (or Spotify) when the app has to be open to check.
+- Ask & AI names models as people say them ("Claude Opus 5.5"), checks for new ones from the model menu, records the Ask shortcut as Keyboard shortcuts does, and greys out Effort for answers that don't use it. The shortcuts page is now called **Keyboard shortcuts**.
+- The System page (CPU and memory) starts off and is switched on Tools, with the other pages. **Swipe sideways over music** is one choice: Off, Next or previous song, or Skip 10 seconds.
+- The GIF look is called **Sticker**, and its sliders stop where the sticker stops moving in the menu bar row. Now Playing lists Music, Spotify and browsers first; what scripts send is switched in Advanced → Local API.
+- Hook snippets in Advanced wrap at spaces, so a path never splits, and scroll with a fade when they are long. The offer to move Islet to Applications is two sentences under Islet's icon.
 
 ### Safer and lighter
 - A crash when the Now Playing helper stopped, and a core spinning at 100% after it did, are fixed.
