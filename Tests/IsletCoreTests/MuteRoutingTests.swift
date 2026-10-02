@@ -54,6 +54,46 @@ import Testing
         #expect(MutedSources.canMute("com.tinyspeck.slackmacgap"))
     }
 
+    /// Each of Islet's own features is listed as muted on its own page, so a page never reads
+    /// as on while nothing from it can show.
+    @Test func ownSourcesHaveAPage() {
+        let withoutPage: Set<String> = ["preview", "cli", "run", "notifications", KeepAwake.source, "focus"]
+        for source in MutedSources.builtIn.keys where !withoutPage.contains(source) {
+            #expect(MutedSources.page(for: source) != nil, "\(source)")
+        }
+        for source in withoutPage { #expect(MutedSources.page(for: source) == nil, "\(source)") }
+        #expect(MutedSources.page(for: TimerEngine.source) == .timers)
+        #expect(MutedSources.page(for: Stopwatch.source) == .timers)
+        #expect(MutedSources.page(for: MeetingReminders.source) == .calendar)
+        #expect(MutedSources.page(for: "battery") == .notifications)
+        #expect(MutedSources.page(for: "agent-usage") == .agents)
+        #expect(MutedSources.page(for: "live-activity:uber") == .liveActivities)
+        #expect(MutedSources.page(for: MenuBarLiveActivities.source) == .liveActivities)
+    }
+
+    /// Apps and scripts stay under Apps.
+    @Test func appsAndScriptsHaveNoFeaturePage() {
+        #expect(MutedSources.page(for: "com.tinyspeck.slackmacgap") == nil)
+        #expect(MutedSources.page(for: "github-actions") == nil)
+        #expect(MutedSources.page(for: "plugin:weather") == nil)
+    }
+
+    @Test func pagesListTheirOwn() {
+        let muted = ["timer", "live-activity:uber-eats", "com.apple.mail", "calendar", "stopwatch"]
+        #expect(MutedSources.listed(on: .timers, muted) == ["timer", "stopwatch"])
+        #expect(MutedSources.listed(on: .liveActivities, muted) == ["live-activity:uber-eats"])
+        #expect(MutedSources.listed(on: .downloads, muted).isEmpty)
+    }
+
+    /// An app with a row on the Apps page shows its mute in the row's switch, so Muted below
+    /// doesn't list it a second time; everything else stays there.
+    @Test func appsListsWhatHasNoRow() {
+        let muted = ["com.apple.mail", "timer", "github-actions"]
+        let rules = [AppRule(bundleID: "com.apple.mail"), AppRule(bundleID: "us.zoom.xos")]
+        #expect(MutedSources.listedUnderApps(muted, appRules: rules) == ["timer", "github-actions"])
+        #expect(MutedSources.listedUnderApps(muted, appRules: []) == muted)
+    }
+
     @Test func onlyBatterySaysWhatStillShows() {
         #expect(MutedSources.stillShows("battery") != nil)
         #expect(MutedSources.stillShows("audio") == nil)

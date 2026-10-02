@@ -17,6 +17,7 @@ struct TimersSettings: View {
     var body: some View {
         Form {
             Section { SettingsHero(page: .timers) }
+            MutedFromIslandSection(model: model, page: .timers)
             Section {
                 Picker("Sound when a timer ends", selection: $model.settings.timerSound) {
                     ForEach(sounds, id: \.self) { name in

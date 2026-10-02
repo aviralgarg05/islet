@@ -16,6 +16,7 @@ struct CodingAgentsSettings: View {
     var body: some View {
         Form {
             Section { SettingsHero(page: .agents) }
+            MutedFromIslandSection(model: model, page: .agents)
             Section {
                 // Agents reach Islet through the same door as scripts: with it shut, a connected
                 // agent's updates and requests go nowhere.

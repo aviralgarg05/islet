@@ -345,6 +345,9 @@ final class AppModel {
                 self?.updateCalls()
             }
             micUsage.start()
+            // An app muted or unmuted since: its call pill goes or comes back now, not at the
+            // next change to who uses the microphone.
+            updateCalls()
         } else {
             micUsage.stop()
             lastMicUsers = []
@@ -1383,8 +1386,8 @@ final class AppModel {
     private func updateCalls() {
         guard settings.callDetection else { return }
         var started = false
-        // Muting an app on the Apps page silences its calls too.
-        let muted = Set(settings.appRules.filter { $0.muteNotifications == true }.map(\.bundleID))
+        // Muting an app on the Apps page, or from the island, silences its calls too.
+        let muted = Set(settings.appRules.filter { $0.muteNotifications == true }.map(\.bundleID)).union(settings.mutedSources)
         for change in calls.update(micUsers: lastMicUsers, cameraOn: cameraInUse, now: Date(), muted: muted) {
             switch change {
             case .started(let spec):

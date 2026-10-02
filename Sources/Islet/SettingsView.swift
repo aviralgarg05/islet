@@ -888,18 +888,20 @@ struct AppRulesSettings: View {
     @ViewState private var added: String?
 
     var body: some View {
+        // An app with a row shows its mute in its own switch, not again under Muted.
+        let muted = MutedSources.listedUnderApps(model.settings.mutedSources, appRules: model.settings.appRules)
         ScrollViewReader { proxy in
             Form {
                 Section {
                     SettingsHero(page: .apps) { addMenu }
                 } footer: {
                     // With muted sources below, an empty card would say the page has nothing on it.
-                    if model.settings.appRules.isEmpty && !model.settings.mutedSources.isEmpty {
+                    if model.settings.appRules.isEmpty && !muted.isEmpty {
                         SettingsFooter("No app rules yet. Use Add app to give one a colour or a priority.")
                     }
                 }
                 if model.settings.appRules.isEmpty {
-                    if model.settings.mutedSources.isEmpty {
+                    if muted.isEmpty {
                         Section {
                             ContentUnavailableView {
                                 Label("No apps yet", systemImage: SettingsPage.apps.symbol)
@@ -912,7 +914,10 @@ struct AppRulesSettings: View {
                 } else {
                     Section {
                         ForEach($model.settings.appRules) { $rule in
-                            AppRuleRow(rule: $rule) {
+                            // Mute in the island and the row's switch are one mute: either turns it on,
+                            // and the switch turns both off.
+                            AppRuleRow(rule: $rule, mutedFromIsland: model.settings.mutedSources.contains(rule.bundleID),
+                                       unmute: { model.unmute(source: rule.bundleID) }) {
                                 model.settings.appRules.removeAll { $0.bundleID == rule.bundleID }
                             }
                             .id(rule.bundleID)
@@ -920,13 +925,13 @@ struct AppRulesSettings: View {
                     }
                 }
                 // What "Mute" in the island's right-click menu silenced, so it can be heard again.
-                if !model.settings.mutedSources.isEmpty {
+                if !muted.isEmpty {
                     Section("Muted") {
                         Text("Muted from the island’s right-click menu. Unmute one to see its activities again.")
                             .font(.callout).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .settingsAnchor("apps.muted")
-                        ForEach(model.settings.mutedSources, id: \.self) { source in
+                        ForEach(muted, id: \.self) { source in
                             MutedSourceRow(model: model, source: source)
                         }
                     }
@@ -952,6 +957,24 @@ struct AppRulesSettings: View {
     }
 }
 
+/// What a feature's page has muted from the island, each with its Unmute, so the page never
+/// reads as on while nothing from it can show. Nothing at all while none is muted.
+struct MutedFromIslandSection: View {
+    let model: AppModel
+    let page: SettingsPage
+
+    var body: some View {
+        let muted = MutedSources.listed(on: page, model.settings.mutedSources)
+        if !muted.isEmpty {
+            Section("Muted from the island") {
+                ForEach(muted, id: \.self) { source in
+                    MutedSourceRow(model: model, source: source)
+                }
+            }
+        }
+    }
+}
+
 /// One source muted from the island, with what still shows from it and its Unmute.
 struct MutedSourceRow: View {
     let model: AppModel
@@ -973,6 +996,9 @@ struct MutedSourceRow: View {
 
 struct AppRuleRow: View {
     @Binding var rule: AppRule
+    /// Muted with Mute in the island's menu, which counts as the row's mute too.
+    var mutedFromIsland = false
+    var unmute: () -> Void = {}
     var onDelete: () -> Void
 
     static let tints = ["blue", "indigo", "purple", "pink", "red", "orange", "yellow", "green", "teal", "gray"]
@@ -1069,7 +1095,10 @@ struct AppRuleRow: View {
             .fixedSize()
         Toggle("Keep the island in full screen", isOn: Binding(get: { rule.showInFullscreen ?? false }, set: { rule.showInFullscreen = $0 ? true : nil }))
             .fixedSize()
-        Toggle("Mute notifications and calls", isOn: Binding(get: { rule.muteNotifications ?? false }, set: { rule.muteNotifications = $0 ? true : nil }))
+        Toggle("Mute notifications and calls", isOn: Binding(get: { rule.muteNotifications == true || mutedFromIsland }, set: { on in
+            rule.muteNotifications = on ? true : nil
+            if !on && mutedFromIsland { unmute() }
+        }))
             .fixedSize()
     }
 

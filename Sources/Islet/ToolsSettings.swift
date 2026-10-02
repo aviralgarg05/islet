@@ -17,6 +17,7 @@ struct ToolsSettings: View {
     var body: some View {
         Form {
             Section { SettingsHero(page: .tools) }
+            MutedFromIslandSection(model: model, page: .tools)
             NoteToolsSettingsSections(model: model)
             Section {
                 Toggle(isOn: $model.settings.shortcutsEnabled) {

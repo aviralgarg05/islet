@@ -157,6 +157,7 @@ struct CalendarSettings: View {
                 }
                 .settingsAnchor("calendar.access")
             }
+            MutedFromIslandSection(model: model, page: .calendar)
             if model.calendarAccess.events.canRead {
                 Section("Calendars shown") {
                     ForEach(calendars, id: \.id) { c in
@@ -263,6 +264,7 @@ struct NotificationsSettings: View {
     var body: some View {
         Form {
             Section { SettingsHero(page: .notifications) }
+            MutedFromIslandSection(model: model, page: .notifications)
             Section("Notifications") {
                 Toggle(isOn: $model.settings.notificationMirroring) {
                     Text("Mirror notifications from every app")
@@ -421,6 +423,7 @@ struct ShelfSettings: View {
     var body: some View {
         Form {
             Section { SettingsHero(page: .shelf) }
+            MutedFromIslandSection(model: model, page: .shelf)
             Section("Shelf") {
                 Toggle(isOn: $model.settings.shelfEnabled) {
                     Text("File shelf and AirDrop")
@@ -465,6 +468,7 @@ struct DownloadsSettings: View {
             } footer: {
                 SettingsFooter("Islet watches your Downloads folder. macOS asks once before it can.")
             }
+            MutedFromIslandSection(model: model, page: .downloads)
         }
         .formStyle(.grouped)
     }

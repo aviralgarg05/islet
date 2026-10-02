@@ -426,6 +426,35 @@ public enum MutedSources {
     /// because they were asked for, so muting them would do nothing.
     public static func canMute(_ source: String) -> Bool { source != "preview" }
 
+    /// The Settings page of the feature that sends `source`, where it is listed as muted with its
+    /// Unmute. Nil for apps, scripts and Islet's sources without a page of their own: those are
+    /// listed under Apps only.
+    public static func page(for source: String) -> SettingsPage? {
+        if MenuBarLiveActivities.isMirroredSource(source) { return .liveActivities }
+        switch source {
+        case TimerEngine.source, Stopwatch.source: return .timers
+        case MeetingReminders.source, "reminders": return .calendar
+        case "battery", "audio", "system": return .notifications
+        case "downloads": return .downloads
+        case "claude-code", "codex", "cursor", "agent-usage", "mcp": return .agents
+        case "shelf": return .shelf
+        case "shortcuts": return .tools
+        default: return nil
+        }
+    }
+
+    /// The muted sources a feature's page lists (`page(for:)`).
+    public static func listed(on page: SettingsPage, _ muted: [String]) -> [String] {
+        muted.filter { Self.page(for: $0) == page }
+    }
+
+    /// The muted sources Settings → Apps lists under Muted: every one except an app that has a
+    /// row there, whose "Mute notifications and calls" shows it instead.
+    public static func listedUnderApps(_ muted: [String], appRules: [AppRule]) -> [String] {
+        let rows = Set(appRules.map(\.bundleID))
+        return muted.filter { !rows.contains($0) }
+    }
+
     /// What still shows from a muted source, said beside it in Settings.
     public static func stillShows(_ source: String) -> String? {
         source == "battery" ? "A battery about to run out still warns you." : nil
