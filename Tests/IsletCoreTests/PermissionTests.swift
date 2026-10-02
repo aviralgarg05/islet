@@ -16,8 +16,33 @@ import Testing
         #expect(PermissionStatus.unknown.action == .request)
         #expect(PermissionStatus.denied.action == .openSettings)
         #expect(PermissionStatus.granted.action == .openSettings)
-        #expect(PermissionStatus.appNotRunning.action == .openSettings)
+        #expect(PermissionStatus.appNotRunning.action == .openApp)
         #expect(PermissionStatus.appNotInstalled.action == PermissionAction.none)
+    }
+
+    /// Automation can only be checked while the app is open, so the row offers to open it
+    /// rather than sending people to System Settings, where there is nothing to switch yet.
+    @Test func aClosedAppIsOpenedToCheck() {
+        #expect(PermissionKind.automationMusic.statusLabel(.appNotRunning) == "Music isn\u{2019}t open")
+        #expect(PermissionKind.automationMusic.buttonTitle(.appNotRunning) == "Open Music")
+        #expect(PermissionKind.automationSpotify.buttonTitle(.appNotRunning) == "Open Spotify")
+        #expect(PermissionKind.automationSpotify.buttonTitle(.appNotInstalled) == nil)
+    }
+
+    /// The same words as the Calendar page: a refusal says where the switch is.
+    @Test func statusLabelsMatchTheCalendarPage() {
+        #expect(PermissionKind.camera.statusLabel(.granted) == CalendarAccessAdvice.advice(.fullAccess, kind: .calendars).status)
+        #expect(PermissionKind.location.statusLabel(.denied) == CalendarAccessAdvice.advice(.denied, kind: .calendars).status)
+        #expect(PermissionKind.camera.statusLabel(.notDetermined) == CalendarAccessAdvice.advice(.notDetermined, kind: .calendars).status)
+        #expect(PermissionKind.calendars.statusLabel(.writeOnly) == CalendarAccessAdvice.advice(.writeOnly, kind: .calendars).status)
+        #expect(PermissionKind.camera.buttonTitle(.denied) == "Open System Settings")
+        #expect(PermissionKind.camera.buttonTitle(.notDetermined) == "Allow\u{2026}")
+        for kind in PermissionKind.allCases {
+            for status in [PermissionStatus.granted, .denied, .notDetermined, .appNotRunning, .appNotInstalled, .unknown, .writeOnly, .restricted] {
+                let words = kind.statusLabel(status) + (kind.buttonTitle(status) ?? "")
+                #expect(!words.contains("'") && !words.contains("\u{2014}"), "\(kind) \(status): \(words)")
+            }
+        }
     }
 
     @Test func settingsLinksOpenPrivacyPanes() {

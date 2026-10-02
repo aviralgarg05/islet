@@ -127,18 +127,57 @@ public enum PermissionStatus: Equatable, Sendable {
     }
 
     /// What the row's button does: ask macOS (it shows its own prompt) or open System Settings.
-    /// macOS only prompts once, so after a refusal the switch is in System Settings.
+    /// macOS only prompts once, so after a refusal the switch is in System Settings. Automation
+    /// can only be checked while the other app is open, so then the button opens that app.
     public var action: PermissionAction {
         switch self {
         case .notDetermined, .unknown: return .request
-        case .granted, .denied, .appNotRunning, .writeOnly, .restricted: return .openSettings
+        case .granted, .denied, .writeOnly, .restricted: return .openSettings
+        case .appNotRunning: return .openApp
         case .appNotInstalled: return .none
         }
     }
 }
 
 public enum PermissionAction: Equatable, Sendable {
-    case request, openSettings, none
+    case request, openSettings, openApp, none
+}
+
+extension PermissionKind {
+    /// The app an Automation permission is about, by name ("Music").
+    public var appName: String? {
+        switch self {
+        case .automationMusic: return "Music"
+        case .automationSpotify: return "Spotify"
+        default: return nil
+        }
+    }
+
+    /// The row's status in Settings → Permissions, in a few words. (Calendars and reminders say
+    /// what `CalendarAccessAdvice` says, as the Calendar page does.)
+    public func statusLabel(_ status: PermissionStatus?) -> String {
+        switch status {
+        case nil: return "Checking\u{2026}"
+        case .granted: return "Allowed"
+        case .denied: return "Turned off in System Settings"
+        case .notDetermined: return "Not allowed yet"
+        case .appNotRunning: return "\(appName ?? "The app") isn\u{2019}t open"
+        case .appNotInstalled: return "Not installed"
+        case .unknown: return "Asked on first use"
+        case .writeOnly: return "Islet can only add events"
+        case .restricted: return "Turned off by this Mac\u{2019}s restrictions"
+        }
+    }
+
+    /// The row's button, if it has one: "Allow…", "Open System Settings" or "Open Music".
+    public func buttonTitle(_ status: PermissionStatus) -> String? {
+        switch status.action {
+        case .request: return "Allow\u{2026}"
+        case .openSettings: return "Open System Settings"
+        case .openApp: return appName.map { "Open \($0)" }
+        case .none: return nil
+        }
+    }
 }
 
 /// Whether Islet may send Apple Events to one app, and when to ask macOS about it again.

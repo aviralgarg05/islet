@@ -23,7 +23,8 @@ struct PermissionsSettings: View {
             Section { SettingsHero(page: .permissions) }
             Section {
                 ForEach(PermissionKind.allCases) { kind in
-                    PermissionRow(kind: kind, uses: kind.uses(model.settings), status: status(of: kind), hint: hint(for: kind),
+                    PermissionRow(kind: kind, uses: kind.uses(model.settings), status: status(of: kind), label: label(for: kind),
+                                  hint: hint(for: kind),
                                   note: kind.note(osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
                                                   status: status(of: kind))) { act(on: kind) }
                         .settingsAnchor("permissions.\(kind.rawValue)")
@@ -72,6 +73,11 @@ struct PermissionsSettings: View {
         }
     }
 
+    /// The status in a few words; for calendars and reminders, what the Calendar page says.
+    private func label(for kind: PermissionKind) -> String {
+        Self.isCalendar(kind) ? model.calendarAdvice(kind).status : kind.statusLabel(status(of: kind))
+    }
+
     /// For calendars and reminders that aren't allowed: what to switch in System Settings.
     private func hint(for kind: PermissionKind) -> String? {
         guard Self.isCalendar(kind) else { return nil }
@@ -99,9 +105,19 @@ struct PermissionsSettings: View {
             NSWorkspace.shared.open(kind.settingsURL)
         case .request:
             request(kind)
+        case .openApp:
+            openApp(for: kind)
         case .none:
             break
         }
+    }
+
+    /// Automation can only be checked while the app is open: open it. The app comes to the
+    /// front, and the row checks again when Islet does.
+    private func openApp(for kind: PermissionKind) {
+        guard let bundleID = kind.automationTarget,
+              let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return }
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
     }
 
     private func request(_ kind: PermissionKind) {
@@ -137,38 +153,56 @@ private struct PermissionRow: View {
     let kind: PermissionKind
     let uses: [PermissionUse]
     let status: PermissionStatus?
+    /// The status in a few words (`PermissionKind.statusLabel`, or the Calendar page's words).
+    let label: String
     /// One line on what to switch in System Settings.
     var hint: String?
     /// What the permission lets Islet do, in plain words (`PermissionKind.note`).
     var note: String?
     let action: () -> Void
 
+    /// Wide enough for "Open System Settings", so every row's status ends at the same place.
+    private static let buttonColumn: CGFloat = 164
+    /// The text under the title starts where the title does.
+    private static let inset: CGFloat = 32
+
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            icon.frame(width: 22, height: 22)
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .center, spacing: 10) {
+                icon.frame(width: 22, height: 22)
+                Text(kind.title).layoutPriority(1)
+                Spacer(minLength: 8)
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Circle().fill(color).frame(width: 7, height: 7)
+                        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
+                    Text(label).font(.callout).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.trailing)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Group {
+                    if let status, let title = kind.buttonTitle(status) {
+                        Button(title, action: action)
+                    }
+                }
+                .frame(width: Self.buttonColumn, alignment: .leading)
+            }
             VStack(alignment: .leading, spacing: 3) {
-                Text(kind.title)
                 ForEach(uses, id: \.feature) { use in
                     Text(use.isOn ? use.feature : "\(use.feature) (off)")
                         .font(.caption)
                         .foregroundStyle(use.isOn ? .secondary : .tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if let hint {
                     Text(hint).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                 }
                 if let note {
-                    Text(note).font(.caption).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
+                    // Secondary, not the tertiary of a feature that is off: it explains, it isn't an item.
+                    Text(note).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 4)
                 }
             }
-            Spacer(minLength: 8)
-            HStack(spacing: 5) {
-                Circle().fill(color).frame(width: 7, height: 7)
-                Text(label).font(.caption).foregroundStyle(.secondary)
-            }
-            .padding(.top, 2)
-            if let status, let title = buttonTitle(status) {
-                Button(title, action: action).controlSize(.small)
-            }
+            .padding(.leading, Self.inset)
         }
         .padding(.vertical, 2)
     }
@@ -193,33 +227,11 @@ private struct PermissionRow: View {
         }
     }
 
-    private var label: String {
-        switch status {
-        case nil: return "Checking…"
-        case .granted: return "Allowed"
-        case .denied: return "Not allowed"
-        case .notDetermined: return "Not allowed yet"
-        case .appNotRunning: return "Open \(kind == .automationMusic ? "Music" : "Spotify") to check"
-        case .appNotInstalled: return "Not installed"
-        case .unknown: return "Asked on first use"
-        case .writeOnly: return "Can only add events"
-        case .restricted: return "Turned off by this Mac's restrictions"
-        }
-    }
-
     private var color: Color {
         switch status {
         case .granted: return .green
         case .denied, .writeOnly, .restricted: return .orange
         default: return Color.secondary.opacity(0.5)
-        }
-    }
-
-    private func buttonTitle(_ status: PermissionStatus) -> String? {
-        switch status.action {
-        case .request: return "Allow…"
-        case .openSettings: return "Open System Settings"
-        case .none: return nil
         }
     }
 }
