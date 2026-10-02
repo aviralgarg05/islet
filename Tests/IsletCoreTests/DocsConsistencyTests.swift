@@ -16,7 +16,7 @@ import Testing
         let readme = try text("README.md")
         #expect(readme.contains("\(count) apps have their own look"), "README.md")
         let changelog = try text("CHANGELOG.md")
-        #expect(changelog.contains("A catalogue of \(count) apps that use Live Activities"), "CHANGELOG.md")
+        #expect(changelog.contains("\(count) apps get their own icon, colour and layout"), "CHANGELOG.md")
         let architecture = try text("docs/ARCHITECTURE.md")
         #expect(architecture.contains("`LiveActivityCatalog` holds \(count) apps"), "docs/ARCHITECTURE.md")
     }
