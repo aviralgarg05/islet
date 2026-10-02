@@ -164,6 +164,7 @@ Every tool starts off until you turn it on in Settings, on the Tools page or the
 - `GET /v1/state` and `isletctl state` include calendar access and how many events are left today, never their titles. Scripts can't read, change or remove meeting reminders.
 - A request refused from its headers alone now gets its answer back while the client is still sending a large body.
 - `isletctl media seek` no longer crashes, and takes 90s, 2m, 1:30 or 0 for the start.
+- `isletctl hud microphone 0 --muted` and `islet://hud?kind=microphone&value=0&muted=1` show the microphone muted, and `isletctl help` lists `--wait` under `hook`.
 - Hook snippets in Advanced wrap at spaces. Local builds use the hardened runtime, with the entitlements macOS needs for calendars, the camera, location and Automation. Islet also builds with the macOS 26 SDK.
 
 ### Measured on an M3 Pro MacBook Pro, macOS 27.0.1

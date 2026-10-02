@@ -319,7 +319,7 @@ ln -sf /Applications/Islet.app/Contents/MacOS/isletctl /opt/homebrew/bin/isletct
 isletctl notify <title> [--subtitle S] [--icon ICON] [--tint COLOR] [--ttl SECONDS]
 isletctl set <id> [--title T] [--subtitle S] [--progress P] [--state STATE] [--trailing TEXT]
                   [--icon ICON] [--tint COLOR] [--priority P] [--ttl S] [--steps N --step K]
-                  [--url URL] [--relevance 0-100] [--stale-in SECONDS] [--sneak true|false]
+                  [--url URL] [--relevance 0-100] [--stale-in SECONDS] [--sneak true|false] [--source NAME]
                   [--ends-in SECONDS] [--started-ago SECONDS] [--action "Title=URL"]
                   [--template NAME] [--json FILE|-]   (a full activity from a file or stdin; flags win)
 isletctl rm <id>                      remove an activity
@@ -331,15 +331,15 @@ isletctl timer pause|resume|stop|restart|snooze [ID]   no ID: the ringing or new
 isletctl timer add [ID] <1m>
 isletctl pomodoro [start|stop|toggle] (toggle when left out)
 isletctl run [--title T] -- <command…>   mirror a command in the notch; exit code passes through
-isletctl hud <volume|brightness|keyboardBrightness> <0-1>
+isletctl hud <volume|brightness|keyboardBrightness|microphone> <0-1> [--muted]
 isletctl media <play|pause|playpause|next|previous|forward|rewind|shuffle|repeat>
 isletctl media seek <90s|2m|1:30|0>   jump to a place in the track (0: the start)
 isletctl awake [15m|1h|2h|on|off|status]   keep the Mac awake (default: until turned off; up to 24h)
 isletctl focus <name> [on|off]
 isletctl open | close                  (or press ⌃⌥I; change it in Settings → Keyboard shortcuts)
 isletctl hook <claude|codex|AGENT> [JSON]   forward an agent hook payload (stdin or last argument)
-isletctl statusline [-- <command…>]    Claude Code status line: record plan usage, run your own line
 isletctl hook <claude|codex|cursor> --wait N   wait up to N s for an answer in the notch, print it
+isletctl statusline [-- <command…>]    Claude Code status line: record plan usage, run your own line
 isletctl state | health | token
 isletctl token --lan                  the iPhone bridge's token (not the local API's)
 isletctl debug menubar [--watch]      what Islet sees in the menu bar (see LIVE-ACTIVITIES.md)
@@ -371,6 +371,7 @@ islet://timer?action=pause&id=timer-1     (pause, resume, add, stop, restart, sn
 islet://timer?action=add&in=1m
 islet://pomodoro?action=start             (start, stop, toggle)
 islet://hud?kind=volume&value=0.5
+islet://hud?kind=microphone&value=0&muted=1   (muted: the microphone HUD's muted look)
 islet://media/playpause     (play, pause, next, previous, forward, rewind, shuffle, repeat)
 islet://awake?for=1h        (15m, 2h, 1h30m or a number of minutes; islet://awake alone = until turned off)
 islet://awake/off

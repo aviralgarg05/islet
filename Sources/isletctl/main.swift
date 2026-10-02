@@ -10,6 +10,7 @@ USAGE
                     [--trailing TEXT] [--icon ICON] [--tint COLOR] [--priority P] [--ttl SECONDS]
                     [--steps N --step K] [--url URL] [--relevance 0-100] [--stale-in SECONDS]
                     [--ends-in SECONDS] [--started-ago SECONDS] [--action "Title=URL"]
+                    [--sneak true|false] [--source NAME]
                     [--template NAME] [--json FILE|-]   (a full activity; flags win)
   isletctl rm <id>                     remove an activity
   isletctl clear --source NAME         remove all activities from a source
@@ -21,15 +22,15 @@ USAGE
   isletctl timer add [ID] <1m>         add time to a timer
   isletctl pomodoro start|stop|toggle  25 min focus, 5 min break, long break every 4th
   isletctl run [--title T] -- <command…>   show a command's progress and result in the notch
-  isletctl hud <volume|brightness|keyboardBrightness> <0-1>
+  isletctl hud <volume|brightness|keyboardBrightness|microphone> <0-1> [--muted]
   isletctl media <play|pause|playpause|next|previous|forward|rewind|shuffle|repeat>
   isletctl media seek <90s|2m|1:30|0>  jump to a place in the track (0: the start)
   isletctl awake [15m|1h|2h|on|off|status]   keep the Mac awake (default: until turned off)
   isletctl focus <name> [on|off]       show a Focus change (for Shortcuts automations)
   isletctl open | close                expand or collapse the island
   isletctl hook <claude|codex|AGENT> [JSON]   forward an agent hook payload (stdin or last arg)
-  isletctl statusline [-- <command…>]  Claude Code status line: record plan usage, run your own line
                [--wait SECONDS]              for approvals: wait for an answer in the notch, print it
+  isletctl statusline [-- <command…>]  Claude Code status line: record plan usage, run your own line
   isletctl state | health | token
   isletctl token --lan                 the iPhone bridge's token (not the local API's)
   isletctl debug menubar [--watch]      what Islet sees in the menu bar (--watch: print each change)
@@ -98,7 +99,7 @@ struct Client {
 /// Parses `--flag value` pairs and positional arguments.
 struct Args {
     /// Flags that take no value.
-    static let switches: Set<String> = ["watch", "lan"]
+    static let switches: Set<String> = ["watch", "lan", "muted"]
 
     var positional: [String] = []
     var flags: [String: String] = [:]
@@ -314,8 +315,10 @@ func run(_ argv: [String]) async throws -> Int32 {
         return 0
 
     case "hud":
-        guard a.positional.count == 2, let v = Double(a.positional[1]) else { throw CLIError("usage: isletctl hud <kind> <0-1>") }
-        let body: [String: Any] = ["kind": a.positional[0], "value": v]
+        guard a.positional.count == 2, let v = Double(a.positional[1]) else {
+            throw CLIError("usage: isletctl hud <volume|brightness|keyboardBrightness|microphone> <0-1> [--muted]")
+        }
+        let body: [String: Any] = ["kind": a.positional[0], "value": v, "muted": a.flags["muted"] != nil]
         try expectOK(try await Client.discover().send("POST", "/v1/hud", json: try JSONSerialization.data(withJSONObject: body)))
         return 0
 

@@ -200,7 +200,7 @@ enum AppActions {
             case .dismiss(let id): model.remove(activityID: id)
             case .timer(let seconds, let title): try model.timers.perform(.start(seconds: seconds, title: title, id: nil))
             case .timerCommand(let command): try model.timers.perform(command)
-            case .hud(let kind, let value): Task { await model.showHUD(kind: kind, value: value, muted: false, label: nil) }
+            case .hud(let kind, let value, let muted): Task { await model.showHUD(kind: kind, value: value, muted: muted, label: nil) }
             case .media(let cmd): model.send(cmd)
             case .focus(let name, let on): try model.applyLocal(FocusPill.activity(name: name, on: on))
             case .open: model.setExpanded(model.targetDisplay())

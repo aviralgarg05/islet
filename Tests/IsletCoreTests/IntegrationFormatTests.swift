@@ -286,6 +286,13 @@ import Testing
         #expect(try parse("islet://timer?seconds=90") == .timer(seconds: 90, title: nil))
         #expect(throws: URLCommand.ParseError.self) { try parse("islet://timer?seconds=-1") }
         #expect(try parse("islet://hud?kind=volume&value=1.5") == .hud(.volume, 1))
+        // The microphone HUD's muted look, as apps and shortcuts that mute it send it.
+        #expect(try parse("islet://hud?kind=microphone&value=0&muted=1") == .hud(.microphone, 0, muted: true))
+        #expect(try parse("islet://hud?kind=microphone&value=0&muted=true") == .hud(.microphone, 0, muted: true))
+        #expect(try parse("islet://hud?kind=microphone&value=0&muted") == .hud(.microphone, 0, muted: true))
+        #expect(try parse("islet://hud?kind=microphone&value=0.8&muted=0") == .hud(.microphone, 0.8, muted: false))
+        #expect(try parse("islet://hud?kind=microphone&value=0.8") == .hud(.microphone, 0.8, muted: false))
+        #expect(throws: URLCommand.ParseError.invalid("muted", "maybe")) { try parse("islet://hud?kind=microphone&value=0&muted=maybe") }
         #expect(try parse("islet://media/next") == .media(.next))
         #expect(try parse("islet://media/playpause") == .media(.togglePlayPause))
         #expect(try parse("islet://media?command=previous") == .media(.previous))

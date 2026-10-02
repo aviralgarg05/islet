@@ -12,6 +12,7 @@ import Foundation
 ///     islet://timer?action=pause&id=timer-1   (pause, resume, add, stop, restart, snooze)
 ///     islet://pomodoro?action=start   (start, stop, toggle)
 ///     islet://hud?kind=volume&value=0.5
+///     islet://hud?kind=microphone&value=0&muted=1
 ///     islet://media/playpause   (also play, pause, next, previous, forward, rewind, shuffle, repeat)
 ///     islet://awake?for=1h      (also 15m, on, off; islet://awake/off)
 ///     islet://focus?name=Work&state=on   (from a Shortcuts Focus automation)
@@ -28,7 +29,7 @@ public enum URLCommand: Equatable, Sendable {
     case timer(seconds: Double, title: String?)
     /// Pause, resume, extend, stop, restart or snooze a timer, or start and stop the Pomodoro.
     case timerCommand(TimerCommand)
-    case hud(HUDKind, Double)
+    case hud(HUDKind, Double, muted: Bool = false)
     case media(PlaybackCommand)
     case focus(name: String, on: Bool)
     case awake(KeepAwakeChange)
@@ -97,6 +98,16 @@ public enum URLCommand: Equatable, Sendable {
             return v
         }
 
+        /// A yes/no parameter: present on its own (`&muted`), 1, true, yes or on.
+        func flag(_ key: String) throws -> Bool {
+            guard let raw = q[key]?.lowercased() else { return false }
+            switch raw {
+            case "", "1", "true", "yes", "on": return true
+            case "0", "false", "no", "off": return false
+            default: throw ParseError.invalid(key, raw)
+            }
+        }
+
         switch host {
         case "notify":
             guard let title = q["title"], !title.isEmpty else { throw ParseError.missing("title") }
@@ -160,7 +171,7 @@ public enum URLCommand: Equatable, Sendable {
             guard let k = q["kind"] else { throw ParseError.missing("kind") }
             guard let kind = HUDKind(rawValue: k) else { throw ParseError.invalid("kind", k) }
             guard let v = try double("value") else { throw ParseError.missing("value") }
-            return .hud(kind, min(1, max(0, v)))
+            return .hud(kind, min(1, max(0, v)), muted: try flag("muted"))
         case "media":
             let name = path.first ?? q["command"]?.lowercased() ?? ""
             switch name {

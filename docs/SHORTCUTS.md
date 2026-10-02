@@ -2,7 +2,7 @@
 
 Islet doesn't have Siri commands of its own yet. You can still use Siri with it: build a shortcut in the Shortcuts app, give it a name, and say "Hey Siri, *name*". Siri on the Mac runs any shortcut by its name, and the shortcut talks to Islet through the `islet://` URL scheme or `isletctl`.
 
-This page has step-by-step recipes for timers, the Pomodoro, and asking Apple Intelligence a question with the answer shown in the notch.
+This page has step-by-step recipes for timers, the Pomodoro, the microphone's mute display, and asking Apple Intelligence a question with the answer shown in the notch.
 
 ---
 
@@ -80,6 +80,18 @@ To aim at one timer, add `&id=` with its id (`timer-1`), its number (`1`) or its
 2. Add **Open URLs** with `islet://pomodoro?action=toggle`.
 
 "Hey Siri, Pomodoro" starts 25 minutes of focus, and saying it again stops it. When the focus ends, Islet moves on to a 5-minute break and then the next round; every fourth break is 15 minutes. Those are the defaults: change them in Settings → Timers. For separate start and stop shortcuts, use `action=start` and `action=stop`.
+
+---
+
+## Show the microphone muted
+
+Islet doesn't mute the microphone itself, but a shortcut that does can show it beside the notch.
+
+1. New shortcut, named **Mute Microphone**.
+2. Add **Run Shell Script** with `osascript -e 'set volume input volume 0'`.
+3. Add **Open URLs** with `islet://hud?kind=microphone&value=0&muted=1`.
+
+For the opposite shortcut, set the input volume back (`set volume input volume 75`) and open `islet://hud?kind=microphone&value=0.75`. In **Run Shell Script** the same is `/Applications/Islet.app/Contents/MacOS/isletctl hud microphone 0 --muted`. The display follows the **Microphone** switch in Islet's Settings → Notifications & Levels.
 
 ---
 
