@@ -104,7 +104,7 @@ public enum SpokenText {
         case .gauge:
             if let p = a.clampedProgress { return [percent(p), time(a, now: now)].compactMap { $0 }.joined(separator: ", ") }
         case .agent:
-            if a.state != .waiting, let phase = a.phase, !phase.isEmpty { return phrase(phase) }
+            if a.state != .waiting, let phase = a.phase, !phase.isEmpty { return phrase(ActivityPhase.title(phase)) }
         case .workout:
             if a.endsAt == nil, a.startedAt == nil, let m = a.metrics?.first { return m.text }
         default:

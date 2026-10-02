@@ -71,6 +71,22 @@ public enum ActivityTemplate: String, Codable, Sendable, CaseIterable {
 public enum ActivityPhase {
     public static let eta: Set<String> = ["pickup", "enroute", "arrived", "delivered"]
     public static let flight: Set<String> = ["predeparture", "boarding", "airborne", "landed"]
+
+    /// A phase as a row shows it: the known ones, stored as keys ("enroute"), in words ("On the
+    /// way"); any other text as it was sent.
+    public static func title(_ phase: String) -> String {
+        switch phase {
+        case "pickup": return "Picking up"
+        case "enroute": return "On the way"
+        case "arrived": return "Arrived"
+        case "delivered": return "Delivered"
+        case "predeparture": return "Before departure"
+        case "boarding": return "Boarding"
+        case "airborne": return "In the air"
+        case "landed": return "Landed"
+        default: return phase
+        }
+    }
 }
 
 /// A side in a `score` activity.

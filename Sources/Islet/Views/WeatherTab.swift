@@ -132,11 +132,11 @@ struct WeatherReportView: View {
     }
 
     /// "London · feels like 13°", or the day's high and low when it feels as it is, or
-    /// "London · As of 09:12" when the report is old.
+    /// "London · as of 09:12" when the report is old.
     private var detail: String {
         var parts: [String] = []
         if let place { parts.append(place) }
-        if let updated = report.updatedText(now: now) {
+        if let updated = report.updatedText(now: now, afterPlace: place != nil) {
             parts.append(updated)
         } else if let feels = report.current.feelsLike, unit.format(feels) != unit.format(report.current.temperature) {
             parts.append("feels like \(unit.format(feels))")

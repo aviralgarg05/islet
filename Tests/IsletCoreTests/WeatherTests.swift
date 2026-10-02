@@ -155,6 +155,9 @@ import Testing
         #expect(r.updatedText(now: fetched.addingTimeInterval(60 * 60), calendar: c, locale: gb) == "As of 09:12")
         #expect(r.updatedText(now: fetched.addingTimeInterval(86_400), calendar: c, locale: gb) == "As of yesterday")
         #expect(r.updatedText(now: fetched.addingTimeInterval(3 * 86_400), calendar: c, locale: gb) == "As of Thu")
+        // After the place, mid-line, as "feels like" reads: "London · as of 09:12".
+        #expect(r.updatedText(now: fetched.addingTimeInterval(60 * 60), afterPlace: true, calendar: c, locale: gb) == "as of 09:12")
+        #expect(r.updatedText(now: fetched.addingTimeInterval(59 * 60), afterPlace: true, calendar: c, locale: gb) == nil)
         // In a word, to follow the place when the line is short.
         #expect(r.age(now: fetched.addingTimeInterval(59 * 60), calendar: c, locale: gb) == nil)
         #expect(r.age(now: fetched.addingTimeInterval(86_400), calendar: c, locale: gb) == "yesterday")

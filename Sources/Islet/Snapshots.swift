@@ -102,6 +102,13 @@ enum Snapshots {
             model.tab = tab
             shoot(name)
         }
+        // The Widgets page before any script has run: plain words and two buttons.
+        let widgets = model.plugins.values.sorted { $0.name < $1.name }
+        model.setPlugins([])
+        model.forcedPresentation = .expanded
+        model.tab = .widgets
+        shoot("12b-expanded-widgets-empty")
+        model.setPlugins(widgets)
         renderIncreasedContrast(model: model, waiting: waiting, metrics: metrics, shoot: shoot)
 
         // The states above use the narrow wings of an unmeasured menu bar. The same closed states

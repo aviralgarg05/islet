@@ -196,9 +196,10 @@ public struct WeatherReport: Codable, Equatable, Sendable {
     }
 
     /// When a stale report is from, short enough for the line under the sky: "As of 09:12"
-    /// today, "As of yesterday", or "As of Mon" before that. Nil while it is fresh.
-    public func updatedText(now: Date, calendar: Calendar = .current, locale: Locale = .current) -> String? {
-        age(now: now, calendar: calendar, locale: locale).map { "As of " + $0 }
+    /// today, "As of yesterday", or "As of Mon" before that. After the place on the same line
+    /// it goes on in lower case, as "feels like" does: "London · as of 09:12". Nil while it is fresh.
+    public func updatedText(now: Date, afterPlace: Bool = false, calendar: Calendar = .current, locale: Locale = .current) -> String? {
+        age(now: now, calendar: calendar, locale: locale).map { (afterPlace ? "as of " : "As of ") + $0 }
     }
 
     /// The same, in a word, to follow the place when the line is short: "09:12", "yesterday",

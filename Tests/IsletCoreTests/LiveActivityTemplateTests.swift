@@ -135,6 +135,18 @@ import Testing
         #expect(try c.apply(s, now: t0).phase == "Waiting for the driver")
     }
 
+    /// A row with no subtitle shows the phase: the stored key in words, never "enroute".
+    @Test func phasesReadAsWords() {
+        #expect(ActivityPhase.title("enroute") == "On the way")
+        #expect(ActivityPhase.title("predeparture") == "Before departure")
+        #expect(ActivityPhase.title("airborne") == "In the air")
+        #expect(ActivityPhase.title("Waiting for the driver") == "Waiting for the driver")
+        for key in ActivityPhase.eta.union(ActivityPhase.flight) {
+            #expect(ActivityPhase.title(key) != key)
+            #expect(ActivityPhase.title(key).first?.isUppercase == true)
+        }
+    }
+
     @Test func updateKeepsOmittedFieldsAndMergesObjects() throws {
         var c = ActivityCenter()
         var s = ActivitySpec(id: "f", title: "UA 123")

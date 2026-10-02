@@ -627,7 +627,7 @@ struct ActivityGlance: View {
             if a.state == .running, a.clampedProgress != nil, a.subtitle == nil {
                 ActivityProgress(activity: a, tint: tint, height: 3).padding(.top, Space.xs)
             } else {
-                Text(a.subtitle ?? a.phase ?? Self.stateText(a.state))
+                Text(a.subtitle ?? a.phase.map(ActivityPhase.title) ?? Self.stateText(a.state))
             }
         }
         .modifier(WholeGlanceSpeech(label: button ? nil : label))
@@ -1013,11 +1013,12 @@ struct FileTile: View {
             Button("Remove from shelf") { model.removeFromShelf(item.id) }
         }
         // A double-click and the pointer don't reach VoiceOver: opening is the tile's own action.
-        .spokenButton(item.name, value: available ? nil : "on a disk that isn't connected", hint: "Opens it") { ShelfService.open(url) }
+        .spokenButton(item.name, value: available ? nil : "on a disk that isn’t connected", hint: "Opens it") { ShelfService.open(url) }
         .accessibilityAction(named: "Show in Finder") { ShelfService.reveal([url]) }
         .accessibilityAction(named: "AirDrop") { ShelfService.airDrop([url]) }
         .accessibilityAction(named: "Remove from shelf") { model.removeFromShelf(item.id) }
-        .help(available ? item.path : item.path + "\nOn a disk that isn't connected")
+        // ~ for the home folder: the user's name has no place in a tooltip.
+        .help((item.path as NSString).abbreviatingWithTildeInPath + (available ? "" : "\nOn a disk that isn\u{2019}t connected"))
     }
 }
 
@@ -1061,10 +1062,10 @@ struct WidgetsTab: View {
     var body: some View {
         let results = model.plugins.values.sorted { $0.name < $1.name }
         if results.isEmpty {
-            EmptyHint(symbol: "square.grid.2x2", text: "Script widgets: drop an executable into the plugins folder. xbar and SwiftBar plugins work as they are.",
-                      detail: "~/.config/islet/plugins/cpu.10s.sh") {
-                Button("Open plugins folder") { AppActions.openPluginsFolder(model) }.buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
-                Button("Install examples") { AppActions.installExamplePlugins(model) }.buttonStyle(CapsuleButtonStyle())
+            // Plain words here; the folder, the file names and xbar are on Settings > Advanced.
+            EmptyHint(symbol: "square.grid.2x2", text: "Small widgets made from your own scripts. Add the examples to see how they look.") {
+                Button("Add examples") { AppActions.installExamplePlugins(model) }.buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
+                Button("Open plugins folder") { AppActions.openPluginsFolder(model) }.buttonStyle(CapsuleButtonStyle())
             }
         } else {
             // Up to three side by side, split by hairlines; more scroll.
