@@ -266,6 +266,27 @@ func request(_ port: UInt16, _ method: String, _ path: String, token: String? = 
         #expect(ShelfService(storeURL: store).shelf.items.isEmpty)
     }
 
+    /// Demo content stays in memory: nothing is written to shelf.json, now or later.
+    @MainActor @Test func aShelfThatDoesNotSaveLeavesTheFileAlone() async throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("demo.txt")
+        try "hi".write(to: file, atomically: true, encoding: .utf8)
+        let store = dir.appendingPathComponent("shelf.json")
+        let shelf = ShelfService(storeURL: store)
+        shelf.savesToDisk = false
+        var changes = 0
+        shelf.onChange = { _ in changes += 1 }
+        shelf.add(urls: [file])
+        #expect(shelf.shelf.items.count == 1)
+        #expect(changes == 1)
+        // The bookmark is made in the background and saved after it; that save stays in memory too.
+        for _ in 0..<50 where shelf.shelf.items.first?.bookmark == nil { try await Task.sleep(nanoseconds: 20_000_000) }
+        #expect(!FileManager.default.fileExists(atPath: store.path))
+        shelf.removeAll()
+        #expect(!FileManager.default.fileExists(atPath: store.path))
+    }
+
     /// A share that doesn't answer: launch isn't held up, and its files are dimmed, not dropped.
     @MainActor @Test func aSlowShareNeitherBlocksNorLosesFiles() async throws {
         let dir = tempDir()

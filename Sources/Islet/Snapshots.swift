@@ -54,11 +54,11 @@ enum Snapshots {
 
         model.setPlugins([
             PluginResult(path: "/p/uptime.1m.sh", name: "uptime", interval: 60,
-                         output: ScriptPlugins.parse("⏱ Up 3 days | sfimage=clock\n---\nActivity Monitor | shell=/usr/bin/open"), lastRun: now),
+                         output: ScriptPlugins.parse("Up 3 days | sfimage=clock\n---\nActivity Monitor | shell=/usr/bin/open"), lastRun: now),
             PluginResult(path: "/p/github.5m.sh", name: "github", interval: 300,
                          output: ScriptPlugins.parse("3 PRs need review | sfimage=arrow.triangle.pull color=#3FB950\n---\nFix login flow | href=https://example.com\nBump deps | href=https://example.com"), lastRun: now),
             PluginResult(path: "/p/disk.10m.sh", name: "disk", interval: 600,
-                         output: ScriptPlugins.parse("Disk: 212 GB free | sfimage=internaldrive"), lastRun: now),
+                         output: ScriptPlugins.parse("212 GB free | sfimage=internaldrive"), lastRun: now),
         ])
 
         // A new song, shown for a moment after the track changes.
@@ -130,7 +130,7 @@ enum Snapshots {
         shoot("17-sneak-failure-glow")
 
         // Agent plan with segmented steps, and a mirrored notification.
-        let plan = activity(ActivitySpec(id: "plan", source: "claude-code", title: "Claude · islet", subtitle: "Step 3 of 5 · Writing tests",
+        let plan = activity(ActivitySpec(id: "plan", source: "claude-code", title: "Claude · islet", subtitle: "Writing tests",
                                          state: .running, steps: 5, step: 3))
         model.forcedPresentation = .sneak(plan)
         shoot("20-sneak-steps")
@@ -158,6 +158,8 @@ enum Snapshots {
         model.settings.sizePreset = .large
         metrics = metricsFor(model.settings)
         shoot("19-expanded-large")
+        // Every later shot has the default look.
+        model.settings.theme = IsletSettings().theme
         model.settings.sizePreset = .compact
         metrics = metricsFor(model.settings)
         renderTimers(model: model, now: now, shoot: shoot) { model.settings.sizePreset = $0; metrics = metricsFor(model.settings) }

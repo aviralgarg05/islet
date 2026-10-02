@@ -16,6 +16,8 @@ public final class ShelfService {
     /// answer within `volumeTimeout`.
     public private(set) var unavailable: Set<String> = []
     public var onAvailability: ((Set<String>) -> Void)?
+    /// False keeps the shelf in memory only: demo content is never written to shelf.json.
+    public var savesToDisk = true
     private let storeURL: URL
     /// False when an unreadable shelf.json couldn't be moved aside: then it is left alone.
     private let canSave: Bool
@@ -153,7 +155,7 @@ public final class ShelfService {
     }
 
     private func save() {
-        if canSave {
+        if canSave, savesToDisk {
             try? FileManager.default.createDirectory(at: storeURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             if let data = try? JSONEncoder().encode(shelf) { try? data.write(to: storeURL, options: .atomic) }
         }
