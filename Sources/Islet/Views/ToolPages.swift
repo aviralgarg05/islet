@@ -169,6 +169,7 @@ struct TeleprompterTab: View {
                     .frame(width: Self.controls, height: size.height)
             }
             .onChange(of: t.playback, initial: true) { _, playback in follow(playback) }
+            .onChange(of: lines.pitch, initial: true) { _, pitch in t.linePitch = Double(pitch) }
         }
     }
 
@@ -178,7 +179,7 @@ struct TeleprompterTab: View {
             .frame(width: width, alignment: .topLeading)
             .fixedSize(horizontal: false, vertical: true)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { h in
-                t.layout(textHeight: Double(h), viewport: Double(size.height), linePitch: Double(pitch))
+                t.layout(textHeight: Double(h), viewport: Double(size.height))
             }
             // Paused, it rests on a whole line where the playback says; playing, `shown`
             // carries the animation.

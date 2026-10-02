@@ -17,8 +17,9 @@ final class TeleprompterController {
     /// The script's height as laid out, and the page's, measured by the page.
     private(set) var textHeight: Double = 0
     private(set) var viewport: Double = 0
-    /// From one line of the script to the next, as the page sets it.
-    private(set) var linePitch: Double = 0
+    /// From one line of the script to the next, as the page sets it. Pausing and playing
+    /// settle the position on a whole line of it.
+    @ObservationIgnored var linePitch: Double = 0
 
     @ObservationIgnored private(set) var settings = TeleprompterSettings()
     /// Where the script is kept; nil in snapshots, which read and write nothing.
@@ -63,8 +64,7 @@ final class TeleprompterController {
         reconfigure()
     }
 
-    func layout(textHeight: Double, viewport: Double, linePitch: Double) {
-        self.linePitch = linePitch
+    func layout(textHeight: Double, viewport: Double) {
         guard abs(textHeight - self.textHeight) > 0.5 || abs(viewport - self.viewport) > 0.5 else { return }
         self.textHeight = textHeight
         self.viewport = viewport
