@@ -628,7 +628,8 @@ import Testing
         #expect(sym("Review pull request #42") == "arrow.triangle.pull")
         #expect(sym("Downloading", "ubuntu.iso") == "arrow.down.circle.fill")
         #expect(sym("Something", nil, "claude-code") == nil)  // "claude-code" is one token
-        #expect(sym("Claude · islet") == "sparkles")
+        #expect(sym("Claude · islet") == "sparkle")
+        #expect(sym("Copilot", "Writing tests") == "sparkles")
         #expect(sym("Quarterly numbers") == nil)
     }
 

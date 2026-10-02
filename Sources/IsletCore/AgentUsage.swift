@@ -247,13 +247,15 @@ public struct UsageAlert: Equatable, Sendable {
         return threshold >= 100 ? "\(name) reached" : "\(name) at \(Int(window.usedPercent.rounded(.down)))%"
     }
 
-    /// A normal live activity: it sneaks in once, then leaves on its own.
+    /// A normal live activity: it sneaks in once, then leaves on its own. The wing says how
+    /// much is used ("90%"); the mark keeps the provider's own colour until the limit is reached.
     public func activity(now: Date, calendar: Calendar = .current, locale: Locale = .current) -> ActivitySpec {
         let reached = threshold >= 100
         return ActivitySpec(
             id: "usage-\(provider.rawValue)-\(window.id)", source: "agent-usage", title: title,
             subtitle: window.resetsAt.map { "Resets \(UsageFormat.clockTime($0, now: now, calendar: calendar, locale: locale))" },
-            icon: .symbol(provider.symbol), state: .warning, tint: reached ? "red" : "orange",
+            icon: .symbol(provider.symbol), trailing: "\(Int(min(100, window.usedPercent).rounded(.down)))%",
+            state: .warning, tint: reached ? "red" : provider.tint,
             priority: reached ? .high : .normal, ttl: reached ? 120 : 60, sneak: true
         )
     }

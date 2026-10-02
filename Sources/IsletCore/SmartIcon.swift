@@ -12,7 +12,9 @@ public enum SmartIcon {
     /// Ordered rules: the first rule with a matching keyword wins, so specific rules come first.
     static let rules: [(keywords: [String], symbol: String, tint: String)] = [
         (["pull request", "merge request", "pr", "merge", "rebase", "commit", "push", "git", "branch"], "arrow.triangle.pull", "purple"),
-        (["claude", "codex", "gpt", "chatgpt", "llm", "agent", "copilot", "gemini", "cursor", "ai", "prompt"], "sparkles", "#D97757"),
+        // Claude has one mark everywhere (its hooks, its usage alerts): the single sparkle.
+        (["claude"], "sparkle", "#D97757"),
+        (["codex", "gpt", "chatgpt", "llm", "agent", "copilot", "gemini", "cursor", "ai", "prompt"], "sparkles", "#D97757"),
         (["epoch", "training", "finetune", "fine-tune", "inference", "model", "gpu"], "brain", "pink"),
         (["test", "pytest", "jest", "spec", "xctest", "vitest", "lint", "typecheck"], "testtube.2", "teal"),
         (["build", "compile", "compiling", "xcodebuild", "cargo", "gradle", "make", "cmake", "bundle", "webpack", "vite"], "hammer.fill", "orange"),
