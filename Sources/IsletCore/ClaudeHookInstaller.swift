@@ -55,13 +55,16 @@ public enum ClaudeHookInstaller {
         case notJSON
         case unexpectedShape(String)
 
-        public var description: String { description(file: "settings.json") }
+        public var description: String { description(agent: "The agent") }
 
-        /// The same sentence about another agent's file ("hooks.json").
-        public func description(file: String) -> String {
+        /// What went wrong, in Settings' words for the agent named ("Codex"). Which key was in
+        /// the way stays in the case, for the log; the page sends the user to Advanced instead.
+        public func description(agent: String) -> String {
             switch self {
-            case .notJSON: return "\(file) isn't valid JSON, so it was left alone."
-            case .unexpectedShape(let key): return "“\(key)” in \(file) isn't in the expected shape, so it was left alone."
+            case .notJSON:
+                return "\(agent)\u{2019}s settings file couldn\u{2019}t be read, so Islet left it alone. You can set it up by hand in Advanced."
+            case .unexpectedShape:
+                return "\(agent)\u{2019}s settings are laid out in a way Islet doesn\u{2019}t change, so Islet left them alone. You can set it up by hand in Advanced."
             }
         }
     }

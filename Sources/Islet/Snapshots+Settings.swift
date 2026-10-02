@@ -236,6 +236,22 @@ enum SettingsSnapshots {
             shoot("advanced-bridge-api-off", in: extra, dark: false)
             model.settings = sampleSettings
             RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+            // What Connect and Show usage… ask before changing an agent's settings, folded and open.
+            if let plan = try? AgentHookSetup.plan(.codex, home: home, executable: AppActions.cliPath, wait: 300) {
+                for open in [false, true] {
+                    shootSheet(open ? "sheet-connect-codex-open" : "sheet-connect-codex", in: extra,
+                               AgentConnectSheet(plan: plan, showsChange: open, onConfirm: {}, onCancel: {}))
+                }
+            }
+            if let edit = try? ClaudeStatusLineSetup.install(into: Data("{\"statusLine\": {\"type\": \"command\", \"command\": \"~/bin/prompt\"}}".utf8),
+                                                            cli: AppActions.cliPath) {
+                let change = PendingStatusLineEdit(install: true, edit: edit)
+                let file = home.appendingPathComponent(".claude/settings.json")
+                for open in [false, true] {
+                    shootSheet(open ? "sheet-status-line-open" : "sheet-status-line", in: extra,
+                               StatusLineChangeSheet(change: change, file: file, showsChange: open, onConfirm: {}, onCancel: {}))
+                }
+            }
             window.setContentSize(SettingsWindow.minimumSize)
             for (i, page) in SettingsPage.allCases.enumerated() {
                 navigation.open(page)
@@ -297,6 +313,21 @@ enum SettingsSnapshots {
             try? AgentHookSetup.apply(plan)
         }
         try? FileManager.default.createDirectory(at: home.appendingPathComponent(".codex/sessions"), withIntermediateDirectories: true)
+    }
+
+    /// A sheet's content on its own, at the size it asks for, on the window background.
+    private static func shootSheet<Content: View>(_ name: String, in folder: URL, _ content: Content) {
+        let host = NSHostingView(rootView: content.background(Color(nsColor: .windowBackgroundColor)).environment(\.snapshotMode, true))
+        let sheet = OffscreenWindow(contentRect: NSRect(origin: .zero, size: host.fittingSize), styleMask: [.borderless],
+                                    backing: .buffered, defer: false)
+        sheet.contentView = host
+        sheet.setFrameOrigin(NSPoint(x: -20000, y: -20000))
+        sheet.appearance = NSAppearance(named: .aqua)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+        sheet.setContentSize(host.fittingSize)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        capture(host, to: folder.appendingPathComponent("\(name)-light.png"))
+        sheet.orderOut(nil)
     }
 
     private static func capture(_ window: NSWindow, appearance: NSAppearance.Name, to url: URL) {

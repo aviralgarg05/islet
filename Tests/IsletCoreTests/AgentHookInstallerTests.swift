@@ -162,7 +162,18 @@ import Testing
         #expect(AgentConnection.decide(.cursor, installed: true, plan: .success(longer)) == .needsUpdate)
 
         let broken = AgentConnection.decide(.codex, installed: true, plan: .failure(ClaudeHookInstaller.InstallError.notJSON))
-        #expect(broken == .problem("hooks.json isn't valid JSON, so it was left alone."))
+        #expect(broken == .problem("Codex\u{2019}s settings file couldn\u{2019}t be read, so Islet left it alone. You can set it up by hand in Advanced."))
+        // Never a file's name, its format or a system error's codes.
+        let shape = AgentConnection.decide(.claudeCode, installed: true, plan: .failure(ClaudeHookInstaller.InstallError.unexpectedShape("hooks.PreToolUse")))
+        #expect(shape == .problem("Claude Code\u{2019}s settings are laid out in a way Islet doesn\u{2019}t change, so Islet left them alone. You can set it up by hand in Advanced."))
+        let toml = AgentConnection.decide(.codex, installed: true, plan: .failure(CodexConfigEditor.EditError.unexpectedShape("features")))
+        let disk = AgentConnection.problemText(for: CocoaError(.fileWriteNoPermission, userInfo: [NSFilePathErrorKey: "/Users/someone/.cursor/hooks.json"]), agent: .cursor)
+        #expect(disk == "Islet couldn\u{2019}t change Cursor\u{2019}s settings. Check that you can edit them, then try again.")
+        for case .problem(let text) in [broken, shape, toml, .problem(disk)] {
+            for jargon in ["JSON", ".json", ".toml", "hooks", "[features]", "PreToolUse", "Error Domain", "Code="] {
+                #expect(!text.contains(jargon), "\(text)")
+            }
+        }
         #expect(broken.label == "Can't connect")
     }
 

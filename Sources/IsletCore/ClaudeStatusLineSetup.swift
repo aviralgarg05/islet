@@ -21,9 +21,9 @@ public enum ClaudeStatusLineSetup {
 
         public var description: String {
             switch self {
-            case .invalidJSON: return "settings.json isn't valid JSON, so Islet left it alone."
+            case .invalidJSON: return "Claude Code\u{2019}s settings file couldn\u{2019}t be read, so Islet left it alone."
             case .unsupported(let why): return why
-            case .changedOnDisk: return "settings.json changed since it was read. Try again."
+            case .changedOnDisk: return "Claude Code\u{2019}s settings changed while Islet was looking. Try again."
             }
         }
     }
@@ -245,13 +245,13 @@ private struct Document {
         let first = bytes[m.valueStart]
         if first == UInt8(ascii: "n") { return .absent(replacing: m) }
         guard first == UInt8(ascii: "{"), let inner = try? Walker(bytes: bytes).object(at: m.valueStart) else {
-            return .unsupported("statusLine in settings.json isn't an object, so Islet can't wrap it.")
+            return .unsupported("Claude Code\u{2019}s status line is set up in a way Islet doesn\u{2019}t change, so Islet left it alone.")
         }
         if let type = inner.members.last(where: { $0.key == "type" }), string(type) != "command" {
-            return .unsupported("statusLine in settings.json isn't a command, so Islet can't wrap it.")
+            return .unsupported("Claude Code\u{2019}s status line isn\u{2019}t a command Islet can run beside its own, so Islet left it alone.")
         }
         guard let cmd = inner.members.last(where: { $0.key == "command" }), let text = string(cmd) else {
-            return .unsupported("statusLine in settings.json has no command to wrap.")
+            return .unsupported("Claude Code\u{2019}s status line has nothing set to run, so Islet left it alone.")
         }
         return .command(text, range: cmd.valueStart..<cmd.valueEnd)
     }

@@ -116,8 +116,15 @@ struct UsageLimitsSection: View {
                 : try ClaudeStatusLineSetup.remove(from: current)
             if edit.changesFile { pending = PendingStatusLineEdit(install: install, edit: edit) } else { refresh() }
         } catch {
-            message = String(describing: error)
+            message = Self.message(for: error)
         }
+    }
+
+    /// Islet's own reasons as they are; anything else (permissions, a full disk) in plain words,
+    /// never the system's error dump with its codes and paths.
+    static func message(for error: Error) -> String {
+        (error as? ClaudeStatusLineSetup.SetupError)?.description
+            ?? "Islet couldn\u{2019}t change Claude Code\u{2019}s settings. Check that you can edit them, then try again."
     }
 
     private func apply(_ p: PendingStatusLineEdit) {
@@ -126,7 +133,7 @@ struct UsageLimitsSection: View {
             try ClaudeStatusLineSetup.apply(p.edit, to: claudeSettingsFile)
             message = nil
         } catch {
-            message = String(describing: error)
+            message = Self.message(for: error)
         }
         refresh()
     }
@@ -138,20 +145,38 @@ struct PendingStatusLineEdit: Identifiable {
     var edit: ClaudeStatusLineSetup.Edit
 }
 
-/// Shows exactly what changes in `settings.json` before anything is written.
+/// Says what changes in Claude Code's settings before anything is written; the exact command
+/// before and after is folded away for whoever wants to check it.
 struct StatusLineChangeSheet: View {
     let change: PendingStatusLineEdit
     let file: URL
     var onConfirm: () -> Void
     var onCancel: () -> Void
+    @ViewState private var showsChange: Bool
+
+    init(change: PendingStatusLineEdit, file: URL, showsChange: Bool = false,
+         onConfirm: @escaping () -> Void, onCancel: @escaping () -> Void) {
+        self.change = change
+        self.file = file
+        self.onConfirm = onConfirm
+        self.onCancel = onCancel
+        _showsChange = ViewState(initialValue: showsChange)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(change.install ? "Add Islet's status line to Claude Code" : "Remove Islet's status line").font(.headline)
-            Text("Islet will change only the statusLine setting in \((file.path as NSString).abbreviatingWithTildeInPath). The rest of the file stays as it is, and the current file is kept as settings.json.bak.")
+            Text(change.install ? "Add Islet\u{2019}s status line to Claude Code" : "Remove Islet\u{2019}s status line").font(.headline)
+            Text("Islet changes only Claude Code\u{2019}s status line. The rest of its settings stay as they are, and a backup copy is kept.")
                 .font(.callout).fixedSize(horizontal: false, vertical: true)
-            commandBox("Now", change.edit.before)
-            commandBox("After", change.edit.after)
+            DisclosureGroup("Show the exact change", isExpanded: $showsChange) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text((file.path as NSString).abbreviatingWithTildeInPath).font(.caption.bold()).foregroundStyle(.secondary)
+                    commandBox("Now", change.edit.before)
+                    commandBox("After", change.edit.after)
+                }
+                .padding(.top, 4)
+            }
+            .font(.callout)
             if change.install, change.edit.before != nil {
                 Text("Your status line keeps working: Islet runs it with the same input and shows its output.")
                     .font(.caption).foregroundStyle(.secondary)

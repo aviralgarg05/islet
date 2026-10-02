@@ -127,7 +127,7 @@ struct CodingAgentsSettings: View {
                 notes[plan.agent] = "Disconnected. \(plan.agent.title) no longer tells Islet what it's doing."
             case .connect:
                 notes[plan.agent] = plan.agent == .codex
-                    ? "Connected. In Codex, type /hooks once to trust Islet's hooks."
+                    ? "Connected. In Codex, type /hooks once and trust Islet\u{2019}s."
                     : "Connected. New \(plan.agent.title) sessions use it."
             }
         } catch {
@@ -136,13 +136,9 @@ struct CodingAgentsSettings: View {
         refresh()
     }
 
-    /// The installers' own errors read as sentences; anything else (permissions, disk) as the system says it.
+    /// The installers' own errors, and anything else (permissions, disk), as plain sentences.
     static func message(for error: Error, agent: CodingAgent) -> String {
-        if let e = error as? ClaudeHookInstaller.InstallError {
-            return e.description(file: agent.files(home: IsletPaths.home)[0].lastPathComponent)
-        }
-        if let e = error as? CodexConfigEditor.EditError { return e.description }
-        return error.localizedDescription
+        AgentConnection.problemText(for: error, agent: agent)
     }
 
     static func label(_ seconds: Double) -> String {
@@ -162,12 +158,12 @@ private struct PendingConnection: Identifiable {
 /// or disconnect it.
 private struct AgentConnectionRow: View {
     let agent: CodingAgent
-    /// Islet isn't accepting requests from apps, so even a connected agent can't reach it.
-    let unreachable: Bool
     let connection: AgentConnection?
     let note: String?
     /// Its hooks call an isletctl that isn't there any more.
     let moved: Bool
+    /// Islet isn't accepting requests from apps, so even a connected agent can't reach it.
+    let unreachable: Bool
     let connect: () -> Void
     let disconnect: () -> Void
 
@@ -206,11 +202,11 @@ private struct AgentConnectionRow: View {
     private func detail(_ c: AgentConnection) -> String {
         switch c {
         case .problem(let why): return why
-        case .connected where unreachable: return "Connected, but can\u{2019}t reach Islet"
         case .needsUpdate:
             return moved ? "Islet has moved since it was connected, so \(agent.title) can't reach it. Update it to fix this."
                 : "Connected to an older setup. Update it so it keeps working as you set below."
         case .notFound: return "Not found on this Mac yet. You can still connect it."
+        case .connected where unreachable: return "Connected, but can\u{2019}t reach Islet"
         default: return c.label
         }
     }
@@ -258,14 +254,32 @@ struct StatusDot: View {
     }
 }
 
-/// What connecting changes, file by file, before anything is written.
-private struct AgentConnectSheet: View {
+/// What connecting changes, in plain words, before anything is written. The exact lines,
+/// file by file, are folded away for whoever wants to check them.
+struct AgentConnectSheet: View {
     let plan: AgentHookPlan
     var onConfirm: () -> Void
     var onCancel: () -> Void
+    @ViewState private var showsChange: Bool
+
+    init(plan: AgentHookPlan, showsChange: Bool = false, onConfirm: @escaping () -> Void, onCancel: @escaping () -> Void) {
+        self.plan = plan
+        self.onConfirm = onConfirm
+        self.onCancel = onCancel
+        _showsChange = ViewState(initialValue: showsChange)
+    }
 
     private var disconnecting: Bool { plan.kind == .disconnect }
     private var verb: String { disconnecting ? "Disconnect" : plan.wasConnected ? "Update" : "Connect" }
+
+    private var summary: String {
+        let agent = plan.agent.title
+        let kept = " Your own settings stay as they are, and a backup copy is kept."
+        if disconnecting { return "Islet takes its lines out of \(agent)\u{2019}s settings, so \(agent) stops telling Islet what it\u{2019}s doing." + kept }
+        let what = "so it can tell Islet what it\u{2019}s doing and you can answer its requests in the island."
+        if plan.wasConnected { return "Islet brings its lines in \(agent)\u{2019}s settings up to date, " + what + kept }
+        return "Islet adds a few lines to \(agent)\u{2019}s settings " + what + kept
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -273,24 +287,28 @@ private struct AgentConnectSheet: View {
                 AgentMark(agent: plan.agent)
                 Text("\(verb) \(plan.agent.title)?").font(.headline)
             }
-            Text(disconnecting
-                 ? "Islet takes its own hooks out of \(plan.agent.title)'s settings. Your own settings and hooks stay as they are, and the file is copied to a .bak file first."
-                 : "Islet adds its hooks to \(plan.agent.title)'s settings. Your own settings and hooks stay as they are, and each file is copied to a .bak file first.")
+            Text(summary)
                 .font(.callout).fixedSize(horizontal: false, vertical: true)
-            ForEach(plan.changedFiles, id: \.url) { file in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text((file.url.path as NSString).abbreviatingWithTildeInPath).font(.caption.bold()).foregroundStyle(.secondary)
-                    Text(file.changes.joined(separator: "\n"))
-                        .font(.system(size: 11, design: .monospaced))
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.06)))
+            DisclosureGroup("Show the exact change", isExpanded: $showsChange) {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(plan.changedFiles, id: \.url) { file in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text((file.url.path as NSString).abbreviatingWithTildeInPath).font(.caption.bold()).foregroundStyle(.secondary)
+                            Text(file.changes.joined(separator: "\n"))
+                                .font(.system(size: 11, design: .monospaced))
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(8)
+                                .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.06)))
+                        }
+                    }
                 }
+                .padding(.top, 4)
             }
+            .font(.callout)
             if plan.agent == .codex && !disconnecting {
-                Text("Codex asks once before it runs new hooks: type /hooks in Codex and trust Islet's.")
+                Text("Codex checks with you once: type /hooks in Codex and trust Islet\u{2019}s.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             HStack {

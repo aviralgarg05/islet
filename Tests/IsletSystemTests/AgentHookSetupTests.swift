@@ -41,7 +41,7 @@ import Testing
         let broken = Data("{ \"hooks\": ".utf8)
         try broken.write(to: cursor.appendingPathComponent("hooks.json"))
         #expect(AgentHookSetup.connection(.cursor, home: home, executable: "isletctl", wait: 300)
-                == .problem("hooks.json isn't valid JSON, so it was left alone."))
+                == .problem("Cursor\u{2019}s settings file couldn\u{2019}t be read, so Islet left it alone. You can set it up by hand in Advanced."))
         #expect(throws: ClaudeHookInstaller.InstallError.notJSON) {
             try AgentHookSetup.plan(.cursor, home: home, executable: "isletctl", wait: 300)
         }

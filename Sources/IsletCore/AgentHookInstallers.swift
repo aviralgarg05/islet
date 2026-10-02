@@ -164,8 +164,9 @@ public enum CodexConfigEditor {
 
         public var description: String {
             switch self {
-            case .unexpectedShape(let key):
-                return "“\(key)” in config.toml isn't in a form Islet changes, so it was left alone. Set hooks = true under [features] yourself."
+            case .unexpectedShape:
+                // Where it is ("features" in config.toml) stays in the case; Advanced shows the line to add.
+                return "Codex\u{2019}s settings are laid out in a way Islet doesn\u{2019}t change, so Islet left them alone. You can set it up by hand in Advanced."
             }
         }
     }
@@ -372,17 +373,21 @@ public enum AgentConnection: Equatable, Sendable {
     public static func decide(_ agent: CodingAgent, installed: Bool, plan: Result<AgentHookPlan, Error>) -> AgentConnection {
         switch plan {
         case .failure(let error):
-            if let e = error as? ClaudeHookInstaller.InstallError {
-                return .problem(e.description(file: agent.files(home: URL(fileURLWithPath: "/"))[0].lastPathComponent))
-            }
-            if let e = error as? CodexConfigEditor.EditError { return .problem(e.description) }
-            return .problem(error.localizedDescription)
+            return .problem(problemText(for: error, agent: agent))
         case .success(let p):
             if p.isUpToDate { return .connected }
             // Some of Islet's hooks are there: it was connected, and is out of date.
             if p.wasConnected { return .needsUpdate }
             return installed ? .notConnected : .notFound
         }
+    }
+
+    /// Why connecting or disconnecting didn't work, in plain words: never a file's name, its
+    /// format or a system error's codes.
+    public static func problemText(for error: Error, agent: CodingAgent) -> String {
+        if let e = error as? ClaudeHookInstaller.InstallError { return e.description(agent: agent.title) }
+        if let e = error as? CodexConfigEditor.EditError { return e.description }
+        return "Islet couldn\u{2019}t change \(agent.title)\u{2019}s settings. Check that you can edit them, then try again."
     }
 
     public var label: String {
