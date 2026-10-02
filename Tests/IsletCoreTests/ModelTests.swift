@@ -481,10 +481,15 @@ import Testing
         #expect(Format.relative(to: now.addingTimeInterval(-600), now: now, calendar: cal) == "10 min ago")
     }
 
+    /// Words, as the rest of the island counts time, never a clock that reads like a time of day.
     @Test func battery() {
-        #expect(Format.batteryTime(minutes: 65) == "1:05")
+        #expect(Format.batteryTime(minutes: 48) == "48 min")
+        #expect(Format.batteryTime(minutes: 65) == "1 h 5 min")
+        #expect(Format.batteryTime(minutes: 120) == "2 h")
+        #expect(Format.batteryTime(minutes: 130) == "2 h 10 min")
         #expect(Format.batteryTime(minutes: nil) == nil)
         #expect(Format.batteryTime(minutes: -1) == nil)
+        #expect(Format.batteryTime(minutes: 24 * 60) == nil)
     }
 
     @Test func bytes() {

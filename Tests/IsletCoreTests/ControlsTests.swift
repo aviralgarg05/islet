@@ -444,12 +444,12 @@ private func track(elapsed: Double? = 60, duration: Double? = 200, playing: Bool
 
     @Test func detailLine() {
         var charging = BatteryState(level: 76, isCharging: true, isPluggedIn: true, minutesRemaining: 48, adapterWatts: 96)
-        #expect(charging.detail == "full in 0:48 · 96 W")
+        #expect(charging.detail == "full in 48 min · 96 W")
         charging.minutesRemaining = nil
         #expect(charging.detail == "96 W")
         #expect(BatteryState(level: 80, isCharging: false, isPluggedIn: true, adapterWatts: 67).detail == "On hold · 67 W")
         #expect(BatteryState(level: 100, isCharging: false, isPluggedIn: true).detail == "Charged")
-        #expect(BatteryState(level: 40, isCharging: false, isPluggedIn: false, minutesRemaining: 125, adapterWatts: 96).detail == "2:05 left")
+        #expect(BatteryState(level: 40, isCharging: false, isPluggedIn: false, minutesRemaining: 125, adapterWatts: 96).detail == "2 h 5 min left")
         #expect(BatteryState(level: 40, isCharging: false, isPluggedIn: false).detail == nil)
     }
 

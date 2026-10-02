@@ -91,10 +91,13 @@ public enum Format {
         return m == 0 ? "in \(h) h" : "in \(h) h \(m) min"
     }
 
-    /// "1:05 left" style battery estimate; nil when unknown.
+    /// A battery estimate in words, as the rest of the island counts time: "48 min" under an
+    /// hour, "1 h 5 min" (or "2 h") above. Nil when unknown.
     public static func batteryTime(minutes: Int?) -> String? {
         guard let minutes, minutes > 0, minutes < 24 * 60 else { return nil }
-        return String(format: "%d:%02d", minutes / 60, minutes % 60)
+        let h = minutes / 60, m = minutes % 60
+        if h == 0 { return "\(m) min" }
+        return m == 0 ? "\(h) h" : "\(h) h \(m) min"
     }
 
     /// Human readable byte count ("1.2 GB").
