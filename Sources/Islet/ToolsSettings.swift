@@ -111,6 +111,8 @@ private struct CitySearch: View {
         LabeledContent("City") {
             HStack(spacing: 8) {
                 TextField("City", text: $text, prompt: Text("Search for a city"))
+                    // A form right-aligns its fields; text you type starts at the left.
+                    .multilineTextAlignment(.leading)
                     .labelsHidden()
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 200)
@@ -227,7 +229,8 @@ struct FocusSoundSettingsSection: View {
                 ForEach(FocusSound.allCases, id: \.self) { Text($0.title).tag($0) }
             } label: {
                 Text("Play during focus")
-                Text(Self.detail(sound))
+                // "None" needs no line: "Quiet during focus" would only say it again.
+                if let detail = Self.detail(sound) { Text(detail) }
             }
             .settingsAnchor("timers.focusSound")
             .onChange(of: sound) { _, s in preview.changed(to: s, volume: model.settings.focusSoundVolume) }
@@ -250,9 +253,9 @@ struct FocusSoundSettingsSection: View {
         }
     }
 
-    static func detail(_ sound: FocusSound) -> String {
+    static func detail(_ sound: FocusSound) -> String? {
         switch sound {
-        case .off: return "Quiet during focus."
+        case .off: return nil
         case .brownNoise: return "A deep, soft rumble."
         case .pinkNoise: return "Steady, like rain on a window."
         case .waves: return "Rolls in and out, like the sea."

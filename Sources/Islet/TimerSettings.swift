@@ -40,6 +40,7 @@ struct TimersSettings: View {
                 LabeledContent("Long break after") {
                     HStack(spacing: 6) {
                         Text(model.settings.pomodoro.longBreakEvery == 1 ? "every round" : "every \(model.settings.pomodoro.longBreakEvery) rounds")
+                            .foregroundStyle(.primary)
                             .monospacedDigit()
                         Stepper("Long break after", value: $model.settings.pomodoro.longBreakEvery, in: 1...12).labelsHidden()
                     }
@@ -55,7 +56,8 @@ struct TimersSettings: View {
     private func minutes(_ title: String, _ value: Binding<Double>, _ range: ClosedRange<Double>, step: Double) -> some View {
         LabeledContent(title) {
             HStack(spacing: 6) {
-                Text("\(Int(value.wrappedValue)) min").monospacedDigit()
+                // Primary, as a picker's value is: grey would read as switched off.
+                Text("\(Int(value.wrappedValue)) min").monospacedDigit().foregroundStyle(.primary)
                 Stepper(title, value: value, in: range, step: step).labelsHidden()
             }
         }

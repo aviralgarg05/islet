@@ -375,7 +375,9 @@ struct PluginFolderRow: View {
         LabeledContent("Folder") {
             HStack {
                 Text((AppActions.pluginsFolder(model).path as NSString).abbreviatingWithTildeInPath)
-                    .lineLimit(1).truncationMode(.middle).foregroundStyle(.secondary)
+                    // A path, set as the settings file's Location is.
+                    .font(.system(.callout, design: .monospaced)).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
                     .textSelection(.enabled)
                 Button("Choose…", action: choose)
                 if model.settings.pluginDirectory != nil {

@@ -37,12 +37,18 @@ struct MirrorSettingsSection: View {
 struct TeleprompterSettingsSection: View {
     @Bindable var model: AppModel
 
+    /// Six lines of the script, with the editor's padding.
+    static let editorHeight: CGFloat = {
+        let line = NSLayoutManager().defaultLineHeight(for: .systemFont(ofSize: NSFont.systemFontSize))
+        return (line * 6).rounded(.up) + 12
+    }()
+
     var body: some View {
         let t = model.teleprompter
         let pace = model.settings.teleprompter.wordsPerMinute
         Section {
             Toggle(isOn: $model.settings.teleprompter.enabled) {
-                Text("Teleprompter")
+                Text("Show the teleprompter")
                 Text("A script that moves up just under the camera, so you read it while looking into the lens.")
             }
             .settingsAnchor("tools.teleprompter")
@@ -54,7 +60,8 @@ struct TeleprompterSettingsSection: View {
                         .scrollContentBackground(.hidden)
                         .padding(6)
                         .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.05)))
-                        .frame(height: 120)
+                        // Whole lines, so the last one isn't cut through.
+                        .frame(height: Self.editorHeight)
                         .accessibilityLabel("Script")
                     Text(t.words == 0 ? "Type or paste what you'll say."
                          : "\(t.words) words. \(Teleprompter.durationLabel(words: t.words, wordsPerMinute: pace)) at this speed.")
@@ -94,7 +101,7 @@ struct StocksSettingsSection: View {
     var body: some View {
         Section {
             Toggle(isOn: $model.settings.stocks.enabled) {
-                Text("Stocks")
+                Text("Show stocks")
                 Text("A watchlist with each price, the day's change and a line for the day.")
             }
             .settingsAnchor("tools.stocks")
@@ -108,6 +115,7 @@ struct StocksSettingsSection: View {
                     }
                     HStack(spacing: 8) {
                         TextField("", text: $draft, prompt: Text("Add a symbol, such as AAPL or ^GSPC"))
+                            .multilineTextAlignment(.leading)
                             .textFieldStyle(.roundedBorder)
                             .frame(maxWidth: 260)
                             .onSubmit(add)
@@ -250,6 +258,7 @@ private struct SalesStoreRow: View {
             if connecting && !connected {
                 if store == .shopify {
                     TextField("", text: $shop, prompt: Text("Store address, such as example.myshopify.com"))
+                        .multilineTextAlignment(.leading)
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: 320)
                 }
