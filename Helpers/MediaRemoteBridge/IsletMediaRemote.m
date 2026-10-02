@@ -23,6 +23,7 @@
 
 #import <Foundation/Foundation.h>
 #import <dlfcn.h>
+#import <math.h>
 #import <stdio.h>
 
 typedef void (*MRGetInfoFn)(dispatch_queue_t, void (^)(NSDictionary *));
@@ -51,14 +52,29 @@ static NSString *MRConst(const char *name, NSString *fallback) {
     return (p && *p) ? (__bridge NSString *)*p : fallback;
 }
 
+// Players report what they like: a live stream or a browser video of unknown length gives an
+// infinite duration. JSON has no infinity, and writing one raises an exception that ends the
+// helper, and with it Now Playing for every app. A line that still can't be written is dropped.
 static void Emit(NSDictionary *obj) {
-    NSData *d = [NSJSONSerialization dataWithJSONObject:obj options:0 error:nil];
+    if (![NSJSONSerialization isValidJSONObject:obj]) return;
+    NSData *d = nil;
+    @try {
+        d = [NSJSONSerialization dataWithJSONObject:obj options:0 error:nil];
+    } @catch (NSException *e) {
+        return;
+    }
     if (!d) return;
     @synchronized([NSFileHandle class]) {
         fwrite(d.bytes, 1, d.length, stdout);
         fputc('\n', stdout);
         fflush(stdout);
     }
+}
+
+// A number JSON can hold: not infinite, not NaN. Anything else reads as missing.
+static NSNumber *Finite(id value) {
+    if (![value isKindOfClass:NSNumber.class]) return nil;
+    return isfinite([value doubleValue]) ? value : nil;
 }
 
 static id Call(id obj, NSString *selName) {
@@ -92,14 +108,16 @@ static void FetchAndEmit(void) {
                 NSData *art = info[MRConst("kMRMediaRemoteNowPlayingInfoArtworkData", @"kMRMediaRemoteNowPlayingInfoArtworkData")];
                 if ([artist isKindOfClass:NSString.class] && artist.length) out[@"artist"] = artist;
                 if ([album isKindOfClass:NSString.class] && album.length) out[@"album"] = album;
-                if ([duration isKindOfClass:NSNumber.class]) out[@"duration"] = duration;
-                if ([elapsed isKindOfClass:NSNumber.class]) out[@"elapsed"] = elapsed;
-                if ([rate isKindOfClass:NSNumber.class]) out[@"rate"] = rate;
+                // No duration means a live stream: the island shows it without a progress bar.
+                if (Finite(duration)) out[@"duration"] = duration;
+                if (Finite(elapsed)) out[@"elapsed"] = elapsed;
+                if (Finite(rate)) out[@"rate"] = rate;
                 NSNumber *shuffle = info[MRConst("kMRMediaRemoteNowPlayingInfoShuffleMode", @"kMRMediaRemoteNowPlayingInfoShuffleMode")];
                 NSNumber *repeat = info[MRConst("kMRMediaRemoteNowPlayingInfoRepeatMode", @"kMRMediaRemoteNowPlayingInfoRepeatMode")];
-                if ([shuffle isKindOfClass:NSNumber.class]) out[@"shuffleMode"] = shuffle;
-                if ([repeat isKindOfClass:NSNumber.class]) out[@"repeatMode"] = repeat;
-                out[@"timestamp"] = @([stamp isKindOfClass:NSDate.class] ? stamp.timeIntervalSince1970 : NSDate.date.timeIntervalSince1970);
+                if (Finite(shuffle)) out[@"shuffleMode"] = shuffle;
+                if (Finite(repeat)) out[@"repeatMode"] = repeat;
+                NSTimeInterval at = [stamp isKindOfClass:NSDate.class] ? stamp.timeIntervalSince1970 : NAN;
+                out[@"timestamp"] = @(isfinite(at) ? at : NSDate.date.timeIntervalSince1970);
                 out[@"playing"] = @(playing);
 
                 // Browser tabs report a WebKit/Chromium helper; prefer the parent app.

@@ -216,14 +216,16 @@ public final class SystemNowPlayingBridge {
         guard let title = o["title"] as? String, !title.isEmpty else { return (nil, nil, nil) }
         let bundle = o["bundleID"] as? String
         let source: MediaSourceKind = bundle.flatMap(Browsers.browser(for:)) != nil ? .browser : .system
-        let rate = (o["rate"] as? Double) ?? 1
+        // The helper drops numbers JSON can't hold; a live stream has no duration at all.
+        func finite(_ key: String) -> Double? { (o[key] as? Double).flatMap { $0.isFinite ? $0 : nil } }
+        let rate = finite("rate") ?? 1
         let playing = (o["playing"] as? Bool) ?? (rate > 0)
         let np = NowPlaying(
             source: source, bundleID: bundle, appName: o["appName"] as? String, title: title,
             artist: o["artist"] as? String, album: o["album"] as? String, isPlaying: playing,
-            duration: (o["duration"] as? Double).flatMap { $0 > 0 ? $0 : nil },
-            elapsed: o["elapsed"] as? Double, playbackRate: rate > 0 ? rate : 1,
-            timestamp: (o["timestamp"] as? Double).map(Date.init(timeIntervalSince1970:)) ?? Date(),
+            duration: finite("duration").flatMap { $0 > 0 ? $0 : nil },
+            elapsed: finite("elapsed"), playbackRate: rate > 0 ? rate : 1,
+            timestamp: finite("timestamp").map(Date.init(timeIntervalSince1970:)) ?? Date(),
             shuffle: MediaModes.shuffle(mediaRemote: o["shuffleMode"] as? Int),
             repeatMode: MediaModes.repeatMode(mediaRemote: o["repeatMode"] as? Int)
         )

@@ -172,6 +172,24 @@ func request(_ port: UInt16, _ method: String, _ path: String, token: String? = 
         #expect(spotify?.isPlaying == false)
     }
 
+    /// A live stream or a browser video of unknown length: Chrome reports an infinite duration.
+    /// It still plays, without a progress bar, and no other number goes strange.
+    @Test func aLiveStreamWithNoEndStillPlays() {
+        let (np, _, _) = SystemNowPlayingBridge.parse([
+            "type": "nowPlaying", "title": "T", "duration": Double.infinity, "elapsed": Double.nan,
+            "rate": Double.infinity, "timestamp": 1_800_000_000.0, "playing": true, "bundleID": "com.google.Chrome",
+        ])
+        #expect(np?.source == .browser)
+        #expect(np?.isPlaying == true)
+        #expect(np?.duration == nil)
+        #expect(np?.elapsed == nil)
+        #expect(np?.playbackRate == 1)
+        // What the helper sends now: the duration left out.
+        let (live, _, _) = SystemNowPlayingBridge.parse(["title": "T", "elapsed": 0.0, "rate": 1.0, "playing": true, "bundleID": "com.google.Chrome"])
+        #expect(live?.duration == nil)
+        #expect(live?.isPlaying == true)
+    }
+
     @Test func fullscreenCoverage() {
         let display = CGRect(x: 0, y: 0, width: 1512, height: 982)
         #expect(FullscreenDetector.covers(window: display, display: display))
