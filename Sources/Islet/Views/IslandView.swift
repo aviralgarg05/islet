@@ -897,6 +897,8 @@ struct IslandView: View {
             } else {
                 let hud = p.isHUD
                 IslandRow(presentation: p, metrics: metrics, geometry: g, model: model, counted: counted, frame: row)
+                    // The whole shell takes the click, a peek's body and its sides included.
+                    .frame(width: g.size.width, height: g.size.height, alignment: .top)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         if hud { return }
@@ -1162,15 +1164,22 @@ struct IslandRow: View {
     @Environment(\.islandMotion) private var motion
 
     var body: some View {
+        let row = metrics.notch.width + 2 * geometry.wing
+        // The row beside the notch keeps its width from the closed island to a peek, and the
+        // peek's body hangs from it, lined up under the wing's glyph. Hung from the shell's
+        // frame instead, whose width springs out as the peek drops, the text slid sideways
+        // while it faded in.
         VStack(spacing: 0) {
             Wings(metrics: metrics, wing: geometry.wing) {
                 leadingSlot
             } trailing: {
                 trailingSlot
             }
-            .frame(maxWidth: .infinity)
             bodySlot
+                .padding(.horizontal, Wings<EmptyView, EmptyView>.inset(for: geometry.wing))
         }
+        .frame(width: row)
+        .frame(maxWidth: .infinity, alignment: .top)
     }
 
     // MARK: Swaps
@@ -1408,11 +1417,10 @@ struct IslandRow: View {
                     outerSpace: Wings<EmptyView, EmptyView>.inset(for: geometry.wing) / 2)
     }
 
-    /// The peek's text, lined up under the wing's glyph so the peek reads as one column.
+    /// The peek's text, lined up under the wing's glyph so the peek reads as one column (the
+    /// row it hangs from sets its margins).
     @ViewBuilder
     private func peekBody(_ p: IslandPresentation) -> some View {
-        let row = metrics.notch.width + 2 * geometry.wing
-        let lead = max(Space.m, (geometry.size.width - row) / 2 + Wings<EmptyView, EmptyView>.inset(for: geometry.wing))
         switch p {
         case .sneak(let a):
             let tint = model.tint(for: a)
@@ -1421,7 +1429,6 @@ struct IslandRow: View {
                 TemplateDetail(activity: a, model: model) { details(a, tint: tint) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, lead)
             .padding(.top, Space.hair)
         case .songPeek(let np):
             TrackText(media: np) {
@@ -1433,7 +1440,6 @@ struct IslandRow: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, lead)
             .padding(.top, Space.hair)
         default:
             EmptyView()
