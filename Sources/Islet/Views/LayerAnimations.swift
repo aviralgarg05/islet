@@ -34,7 +34,8 @@ struct EqualizerView: NSViewRepresentable {
 }
 
 /// Holds the drawing for the chosen look and swaps it when the look changes. It hears about
-/// Low Power Mode from the system (no checking), and holds the loops still while it is on.
+/// Low Power Mode from the system (no checking) and starts the loop again at that mode's
+/// frame rate.
 final class PlayingIndicatorNSView: NSView {
     private var style: VisualiserStyle
     private var drawing: IndicatorLayerView
@@ -97,7 +98,7 @@ final class PlayingIndicatorNSView: NSView {
         }
         self.reduceMotion = reduceMotion
         last = (color, playing)
-        drawing.update(color: color, playing: playing, still: reduceMotion || lowPower)
+        drawing.update(color: color, playing: playing, still: reduceMotion)
     }
 
     /// Posted on whichever thread changed the power state.
@@ -111,7 +112,10 @@ final class PlayingIndicatorNSView: NSView {
         let now = ProcessInfo.processInfo.isLowPowerModeEnabled
         guard now != lowPower else { return }
         lowPower = now
-        if let last { drawing.update(color: last.color, playing: last.playing, still: reduceMotion || lowPower) }
+        // The loop picks up the new frame rate when it starts again.
+        guard let last, last.playing, !reduceMotion else { return }
+        drawing.update(color: last.color, playing: last.playing, still: true)
+        drawing.update(color: last.color, playing: last.playing, still: false)
     }
 }
 
@@ -869,12 +873,12 @@ private struct VinylLayer: NSViewRepresentable {
 
     func updateNSView(_ view: VinylHostView, context: Context) {
         view.vinyl.setArtwork(image)
-        view.vinyl.update(color: color, playing: playing, still: context.environment.reduceMotionAnywhere || view.lowPower)
+        view.vinyl.update(color: color, playing: playing, still: context.environment.reduceMotionAnywhere)
         view.lastState = (color, playing, context.environment.reduceMotionAnywhere)
     }
 }
 
-/// Holds the record and follows Low Power Mode, as the indicator does.
+/// Holds the record and follows Low Power Mode's frame rate, as the indicator does.
 final class VinylHostView: NSView {
     let vinyl = VinylNSView()
     private(set) var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
@@ -901,8 +905,10 @@ final class VinylHostView: NSView {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
-                if let s = self.lastState {
-                    self.vinyl.update(color: s.color, playing: s.playing, still: s.reduceMotion || self.lowPower)
+                // Start the turn again at the new frame rate.
+                if let s = self.lastState, s.playing, !s.reduceMotion {
+                    self.vinyl.update(color: s.color, playing: s.playing, still: true)
+                    self.vinyl.update(color: s.color, playing: s.playing, still: false)
                 }
             }
         }

@@ -428,8 +428,8 @@ final class AppModel {
     @ObservationIgnored var sessionActive = true
     @ObservationIgnored private var volumeFilter = VolumeChangeFilter()
 
-    /// Low Power Mode: the island's loops hold still (`IslandLoops`). Follows the system's
-    /// notification; never polled.
+    /// Low Power Mode: the island's loops run at a lower frame rate (`IslandLoops.frameRate`).
+    /// Follows the system's notification; never polled.
     private(set) var lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
 
     /// The system bridge said it can't deliver (it may still be running), so the players fetch

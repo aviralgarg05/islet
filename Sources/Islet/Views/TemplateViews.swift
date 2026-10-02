@@ -42,8 +42,7 @@ struct TemplateMotion {
     @MainActor
     init(_ model: AppModel, systemReduceMotion: Bool) {
         // Low Power Mode is left to the layer animations themselves, which slow down for it.
-        style = AnimationStyle.effective(model.settings.animationStyle, reduceMotion: systemReduceMotion || model.settings.reduceMotion,
-                                         lowPower: false)
+        style = AnimationStyle.effective(model.settings.animationStyle, reduceMotion: systemReduceMotion || model.settings.reduceMotion)
     }
 
     /// Waveforms and breathing segments: off with Reduce Motion or Motion Off.

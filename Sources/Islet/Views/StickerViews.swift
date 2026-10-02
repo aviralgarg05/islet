@@ -180,8 +180,8 @@ final class StickerNSView: NSView {
         apply()
     }
 
-    /// No loop: Reduce Motion, Low Power Mode, or a picture with one frame.
-    private var still: Bool { reduceMotion || lowPower || !(animation?.isAnimated ?? false) }
+    /// No loop: Reduce Motion, or a picture with one frame. Low Power Mode plays at a lower rate.
+    private var still: Bool { reduceMotion || !(animation?.isAnimated ?? false) }
 
     private func apply() {
         guard let a = animation, !a.frames.isEmpty else { return }
@@ -191,8 +191,7 @@ final class StickerNSView: NSView {
         appliedState = state
         let fromOpacity = sprite.presentation()?.opacity ?? sprite.opacity
         let opacity = StickerPlayback.opacity(mode, paused: PausedLook.indicatorOpacity)
-        let plan = StickerPlayback.plan(mode: mode, animated: a.isAnimated, reduceMotion: reduceMotion, lowPower: lowPower,
-                                        current: currentFrame(a))
+        let plan = StickerPlayback.plan(mode: mode, animated: a.isAnimated, reduceMotion: reduceMotion, current: currentFrame(a))
         switch plan {
         case .loop(let from):
             frozen = min(from, a.frames.count - 1)

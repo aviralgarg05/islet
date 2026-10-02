@@ -163,6 +163,10 @@ public enum AgentHooks {
             spec.subtitle = "Compacting context…"
             spec.sneak = false
         case "Notification":
+            // Only a question waits for you. Claude Code's reminder a minute after a turn ends
+            // at the prompt isn't one: Stop already said "Your turn", and turning the reminder
+            // into Waiting brought a finished session back to the notch with a peek.
+            guard claudeNotificationNeedsYou(o) else { return .ignore }
             spec.state = .waiting
             spec.subtitle = truncate(o["message"] as? String ?? "Needs your attention", 70)
             spec.progress = 0
@@ -187,6 +191,20 @@ public enum AgentHooks {
         }
         if spec.state != .waiting && spec.state != .success { spec.trailing = "" }
         return .upsert(spec)
+    }
+
+    /// Whether a Claude Code `Notification` asks for something: a permission prompt or an MCP
+    /// server's question does; the idle reminder (`idle_prompt`) and a sign-in note
+    /// (`auth_success`) don't. Older versions send no `notification_type`, so their idle
+    /// reminder is known by its words. A kind Claude Code adds later counts as asking.
+    static func claudeNotificationNeedsYou(_ o: [String: Any]) -> Bool {
+        switch o["notification_type"] as? String {
+        case "idle_prompt", "auth_success": return false
+        case .some: return true
+        case nil:
+            let message = (o["message"] as? String ?? "").lowercased()
+            return !message.contains("waiting for your input")
+        }
     }
 
     /// Codex's hooks (`~/.codex/hooks.json`, what Connect writes) are shaped like Claude Code's

@@ -96,7 +96,7 @@ struct NowPlayingSettings: View {
             } footer: {
                 HStack(spacing: 0) {
                     SettingsFooter(model.settings.visualiserStyle == .gif
-                                   ? "The sticker plays with the music and stops, dimmed, when you pause. It stays still with Reduce Motion or Low Power Mode."
+                                   ? "The sticker plays with the music and stops, dimmed, when you pause. It stays still with Reduce Motion."
                                    : "The indicator settles and dims when you pause, and springs back when you play.")
                     SettingsLink(text: "Accent colour", page: .appearance, anchor: "appearance.accent").fixedSize()
                 }

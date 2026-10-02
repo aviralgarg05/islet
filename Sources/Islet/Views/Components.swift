@@ -566,9 +566,11 @@ extension EnvironmentValues {
 }
 
 extension CAAnimation {
-    /// Looping decorations don't need the display's full 120 Hz.
+    /// Looping decorations don't need the display's full 120 Hz, and in Low Power Mode they
+    /// run at half their usual rate rather than stopping.
     func capFrameRate() {
-        preferredFrameRateRange = CAFrameRateRange(minimum: 10, maximum: 30, preferred: 30)
+        let rate = IslandLoops.frameRate(lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled)
+        preferredFrameRateRange = CAFrameRateRange(minimum: min(10, rate), maximum: rate, preferred: rate)
     }
 }
 

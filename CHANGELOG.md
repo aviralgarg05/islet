@@ -39,6 +39,7 @@ Islet now shows the Live Activities your iPhone sends to the Mac, lets you answe
 - **Usage limits.** Claude Code's and Codex's 5-hour and weekly limits appear on Home, with a short alert beside the notch at 90% and again at 100%. They are read on this Mac: no sign-in is read, and nothing goes over the network.
 - Claude Code shares its limits only with its status line, so Home offers **Show usage** to add Islet's. Nothing is written until you confirm; then only the status line changes, and a backup is kept.
 - **More usage on Home**, each off until you switch it on under Coding agents → Usage limits: OpenRouter spending, Copilot premium requests (with a read-only GitHub key) and the models Ollama has loaded. They are fetched only when the island opens, and keys are kept in the Keychain.
+- A Claude Code session that has finished stays Done: the reminder Claude Code sends a minute later, while it waits at the prompt, no longer brings it back to the notch as Waiting.
 
 ### Ask
 - An Ask box answered by Apple Intelligence on the Mac, by Claude or ChatGPT with your own API key (kept in the Keychain), or by the Claude Code and Codex command-line tools with the login you already have. ⌃⌥A opens it from anywhere.
@@ -94,7 +95,7 @@ Every tool starts off until you turn it on in Settings, on the Tools page or the
 ### Look
 - A calmer open island: the pages move into a small glass switcher under it (Home, Today, Shelf and More), with a timer button and Ask on either side, and Home shows one main thing large. **Pages in the switcher** (General) turns pages on or off and orders them, and the pin moves to the switcher's menu as **Keep open**.
 - Glass is now the default theme. Only a notch-wide black stem sits in the menu bar row, so the menu bar stays in view, and the island below is Liquid Glass (a blur before macOS 26). **Glass level** sets how far the black reaches down. Black and Graphite keep the full-width row.
-- The island moves like liquid: bubbles bud off its side, the shell springs open before its content fades in, and changed values morph. Minimal, Reduce Motion and Low Power Mode use short fades, Off doesn't animate, and **Animation speed** makes moves Relaxed, Normal or Quick.
+- The island moves like liquid: bubbles bud off its side, the shell springs open before its content fades in, and changed values morph. Minimal and Reduce Motion use short fades, Off doesn't animate, Low Power Mode keeps the motion at a lower frame rate, and **Animation speed** makes moves Relaxed, Normal or Quick.
 - The closed island widens a little under the pointer before it opens, and a peek no longer flashes square corners.
 - New in Appearance: **Subtle outline** for dark wallpapers (always on with Increase Contrast), **Glass on displays without a notch**, **Artwork corners**, **Fit to the notch** (adjusts the notch's width by up to 20 points and its height by up to 4 to match the hardware) and **Reset appearance…**.
 - Graphite keeps the menu bar row black, so the notch doesn't show as a dark bite, and a player without artwork shows its own icon.
@@ -147,7 +148,7 @@ Every tool starts off until you turn it on in Settings, on the Tools page or the
 - `islet://` links can't replace Islet's own activities or open anything but https. Script widgets are off until you turn them on, run only files you own and get a short list of variables instead of Islet's whole environment. Meeting links must be on the real host to get a Join button.
 - Hooks no longer send a tool's output, so a long one can't make the request fail, and `isletctl` ignores system proxies.
 - On macOS 27, measuring the menu bar reads one system window, and only while the island shows. Notification Center and shelf files on network shares are read in the background, so a slow share can't hold up the island.
-- Downloads, clipboard history and script widgets stop checking while nothing changes or the screen is locked, and looping animations hold still in Low Power Mode.
+- Downloads, clipboard history and script widgets stop checking while nothing changes or the screen is locked. In Low Power Mode, looping animations such as the playing indicator keep going at half their usual frame rate instead of stopping, so the indicator never looks stuck.
 - Background errors go to the system log under Islet's name, never with what you typed or copied.
 
 ### For developers

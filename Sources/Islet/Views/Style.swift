@@ -50,11 +50,11 @@ enum Haptics {
 
 extension AnimationStyle {
     /// The style the island actually uses: Off stays off; Reduce Motion (the system's or
-    /// Islet's) and Low Power Mode get plain short fades.
-    static func effective(_ setting: AnimationStyle, reduceMotion: Bool,
-                          lowPower: Bool = ProcessInfo.processInfo.isLowPowerModeEnabled) -> AnimationStyle {
+    /// Islet's) gets plain short fades. Low Power Mode keeps the style: a spring that runs once
+    /// costs next to nothing, and its loops slow down instead (`IslandLoops.frameRate`).
+    static func effective(_ setting: AnimationStyle, reduceMotion: Bool) -> AnimationStyle {
         if setting == .off { return .off }
-        return reduceMotion || lowPower ? .minimal : setting
+        return reduceMotion ? .minimal : setting
     }
 
     /// Every duration below is scaled by "Animation speed" (`Motion.pace`).
@@ -254,6 +254,11 @@ private struct GlassBody: View {
                                                 : .opacity.animation(.linear(duration: Self.glassOut * Motion.pace))))
                 if let stem {
                     shape.fill(Color.black.opacity(GlassMelt.smoke(level: level)))
+                    // The whole menu bar row is black, not just the stem: at rest the shape is only
+                    // the stem there, but while it morphs from a closed island or a peek its
+                    // shoulders haven't formed, and glass beside the notch would frame the stem
+                    // as a black box.
+                    Color.black.frame(height: row).frame(maxHeight: .infinity, alignment: .top).clipShape(shape)
                     StemMelt(stem: stem, row: row, depth: GlassMelt.depth(body: height - row, level: level))
                         .clipShape(shape)
                 } else {

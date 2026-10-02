@@ -439,9 +439,14 @@ public struct EaseCurve: Equatable, Sendable {
 
 /// Whether the island's looping decorations (the playing indicator, spinners, the urgent glow,
 /// the glass sheen) hold still. They stop for Reduce Motion (the system's or Islet's), with the
-/// animation style Off, in Low Power Mode, and on content that is out of date.
+/// animation style Off, and on content that is out of date. Low Power Mode doesn't stop them:
+/// they run at a lower frame rate instead (`CAAnimation.capFrameRate`), since a still playing
+/// indicator reads as broken and these loops cost the app nothing (Core Animation draws them).
 public enum IslandLoops {
-    public static func holdStill(reduceMotion: Bool, animationOff: Bool, lowPower: Bool, stale: Bool = false) -> Bool {
-        reduceMotion || animationOff || lowPower || stale
+    public static func holdStill(reduceMotion: Bool, animationOff: Bool, stale: Bool = false) -> Bool {
+        reduceMotion || animationOff || stale
     }
+
+    /// Frames a second for a looping decoration: half as many in Low Power Mode.
+    public static func frameRate(lowPower: Bool) -> Float { lowPower ? 15 : 30 }
 }
