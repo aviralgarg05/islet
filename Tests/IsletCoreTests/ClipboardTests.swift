@@ -250,6 +250,18 @@ struct SplitMix {
         #expect(many?.subtitle == "5 from c · 2 from a · 2 from b")
     }
 
+    /// The first launch says how to open the island, with the shortcut actually set.
+    @Test func firstRunSaysHowToOpenTheIsland() {
+        let hint = FirstRunHint.activity(hotkey: "ctrl+option+i", hoverToOpen: true, notched: true)
+        #expect(hint.id == "welcome" && hint.title == "Islet is ready")
+        #expect(hint.subtitle == "Rest the pointer on the notch, or press ⌃⌥I")
+        #expect(hint.sneak == true && hint.ttl == 6 && hint.source == "system")
+        #expect(FirstRunHint.activity(hotkey: "cmd+shift+space", hoverToOpen: false, notched: true).subtitle
+                == "Click the notch, or press ⇧⌘Space")
+        // No shortcut set, and a display without a notch.
+        #expect(FirstRunHint.activity(hotkey: "", hoverToOpen: true, notched: false).subtitle == "Rest the pointer on the island")
+    }
+
     /// The summary names senders as people know them, never by an internal source id.
     @Test func welcomeBackNamesSendersInWords() {
         let apps = ["com.apple.mail": "Mail"]

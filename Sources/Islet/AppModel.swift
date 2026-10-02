@@ -291,7 +291,10 @@ final class AppModel {
         tools.stopwatch.start()
         loadMeetings()
         startEventSources()
+        // No config.json yet: Islet's first run on this Mac (watching the file writes one).
+        let firstRun = !FileManager.default.fileExists(atPath: IsletPaths.configFile.path)
         watchSettingsFile()
+        if firstRun { showFirstRunHint() }
         // Once per launch: hooks left pointing at an isletctl that moved fail silently.
         checkAgentHooks()
         // Back from System Settings, calendar access may have changed; it starts at once.
@@ -1305,6 +1308,18 @@ final class AppModel {
             _ = try? applyLocal(spec)
         case .vanished(let id):
             remove(activityID: id)
+        }
+    }
+
+    /// Once, a moment after the first launch, when the island is on screen: how to open it.
+    private func showFirstRunHint() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let notched = NSScreen.screens.contains { $0.safeAreaInsets.top > 0 }
+                _ = try? self.commit(FirstRunHint.activity(hotkey: self.settings.hotkey, hoverToOpen: self.settings.hoverToOpen,
+                                                           notched: notched))
+            }
         }
     }
 

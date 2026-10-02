@@ -117,6 +117,7 @@ Every tool starts off until you turn it on in Settings, on the Tools page or the
 - **Welcome back** names who sent what as you know them ("3 from Claude Code · 2 from Downloads"), never by Islet's internal names.
 
 ### Using the island
+- The first time Islet runs, one short peek says how to open it: rest the pointer on the notch, or press ⌃⌥I.
 - With the island open, only what is drawn takes clicks; a click just outside reaches the window underneath.
 - Pushing the pointer against the top of the screen over the notch now opens the island, as resting on the notch does.
 - A peek under the pointer no longer opens the island or takes a click meant for what was there, and closing the island with the pointer on the notch no longer reopens it.

@@ -146,6 +146,9 @@ enum Snapshots {
         let notif = MirroredNotification(appName: "Messages", bundleID: "com.apple.MobileSMS", title: "Alice", body: "Running 5 min late, order me a flat white?")
         model.forcedPresentation = .sneak(activity(notif.activity(rule: nil)))
         shoot("21-sneak-notification")
+        // The first launch's one peek: how to open the island.
+        model.forcedPresentation = .sneak(activity(FirstRunHint.activity(hotkey: settings.hotkey, hoverToOpen: true, notched: true)))
+        shoot("21c-sneak-first-run")
         renderAsk(model: model, shoot: shoot) { model.settings.sizePreset = $0; metrics = metricsFor(model.settings) }
 
         // Themes and sizes.

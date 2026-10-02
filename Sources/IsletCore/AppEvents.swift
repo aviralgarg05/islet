@@ -459,6 +459,28 @@ public enum WelcomeBack {
     }
 }
 
+// MARK: - First run
+
+/// The one peek a new user gets, the first time Islet runs on a Mac: with nothing playing, the
+/// island hides in the notch and the menu bar icon can be behind it, so it says how to open it.
+public enum FirstRunHint {
+    public static let id = "welcome"
+
+    /// - Parameters:
+    ///   - hotkey: the open shortcut as config.json writes it; left out when there is none.
+    ///   - hoverToOpen: resting the pointer opens the island; otherwise a click does.
+    ///   - notched: the island is in a notch; otherwise it floats at the top of the screen.
+    public static func activity(hotkey: String, hoverToOpen: Bool, notched: Bool) -> ActivitySpec {
+        let place = notched ? "the notch" : "the island"
+        let gesture = hoverToOpen ? "Rest the pointer on \(place)" : "Click \(place)"
+        let subtitle = Hotkey.parse(hotkey).map { "\(gesture), or press \($0.label)" } ?? gesture
+        return ActivitySpec(
+            id: id, source: "system", title: "Islet is ready", subtitle: subtitle,
+            icon: .symbol("sparkles"), state: .info, tint: "white", priority: .normal, ttl: 6, sneak: true
+        )
+    }
+}
+
 // MARK: - Focus
 
 public enum FocusPill {
