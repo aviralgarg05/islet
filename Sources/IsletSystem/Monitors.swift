@@ -3,6 +3,7 @@ import CoreAudio
 import CoreMediaIO
 import Darwin
 import Foundation
+import ImageIO
 import IsletCore
 
 // MARK: - Clipboard
@@ -11,9 +12,10 @@ import IsletCore
 /// `changeCount` (a cheap integer read) with a tolerant timer, only while enabled, and not
 /// while the screen is locked or the displays sleep (nothing can be copied then).
 public final class ClipboardMonitor {
-    /// `sourceURL` is the page or extension a Chromium browser says the copy came from
-    /// (`ClipboardHistory.sourceURLType`), for the decision only.
-    public var onCopy: ((_ text: String, _ types: [String], _ sourceBundleID: String?, _ sourceURL: String?) -> Void)?
+    /// What was copied: files, text, or a picture on its own. `sourceURL` is the page or
+    /// extension a Chromium browser says the copy came from (`ClipboardHistory.sourceURLType`),
+    /// for the decision only.
+    public var onCopy: ((_ content: ClipboardContent, _ types: [String], _ sourceBundleID: String?, _ sourceURL: String?) -> Void)?
     private var timer: Timer?
     private var lastChange = NSPasteboard.general.changeCount
     private var interval: TimeInterval = 1
@@ -77,14 +79,70 @@ public final class ClipboardMonitor {
         guard pb.changeCount != lastChange else { return }
         lastChange = pb.changeCount
         let types = (pb.types ?? []).map(\.rawValue)
-        guard let text = pb.string(forType: .string) else { return }
+        // Marked secret or throwaway (nspasteboard.org): nothing in it is read at all.
+        guard !types.contains(where: ClipboardHistory.ignoredTypes.contains) else { return }
         // The copying app, when it says so (nspasteboard.org); otherwise the frontmost app, which
         // is wrong for copies from menu bar extras.
         let source = pb.string(forType: NSPasteboard.PasteboardType("org.nspasteboard.source"))
             ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         let page = types.contains(ClipboardHistory.sourceURLType)
             ? pb.string(forType: NSPasteboard.PasteboardType(ClipboardHistory.sourceURLType)) : nil
-        onCopy?(text, types, source, page)
+        // Files copied in Finder carry their names as text too: they are kept as files.
+        if types.contains(NSPasteboard.PasteboardType.fileURL.rawValue),
+           let urls = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty {
+            onCopy?(.files(urls.map(\.path)), types, source, page)
+        } else if let text = pb.string(forType: .string) {
+            onCopy?(.text(text), types, source, page)
+        } else {
+            readImage(pb, types: types) { [weak self] image in self?.onCopy?(.image(image), types, source, page) }
+        }
+    }
+
+    /// A picture copied on its own (a screenshot, an image from a web page): PNG as it is, or a
+    /// TIFF, made into a PNG in the background when it is too big to keep as it came.
+    private func readImage(_ pb: NSPasteboard, types: [String], then deliver: @escaping (ClipImage) -> Void) {
+        let limit = ClipboardHistory.maxImageBytes
+        if types.contains(NSPasteboard.PasteboardType.png.rawValue), let data = pb.data(forType: .png), data.count <= limit,
+           let size = Self.pixelSize(data) {
+            deliver(ClipImage(data: data, type: NSPasteboard.PasteboardType.png.rawValue, width: size.width, height: size.height))
+            return
+        }
+        guard types.contains(NSPasteboard.PasteboardType.tiff.rawValue), let data = pb.data(forType: .tiff) else { return }
+        if data.count <= limit, let size = Self.pixelSize(data) {
+            deliver(ClipImage(data: data, type: NSPasteboard.PasteboardType.tiff.rawValue, width: size.width, height: size.height))
+            return
+        }
+        DispatchQueue.global(qos: .utility).async {
+            guard let png = NSBitmapImageRep(data: data)?.representation(using: .png, properties: [:]), png.count <= limit,
+                  let size = Self.pixelSize(png) else { return }
+            let image = ClipImage(data: png, type: NSPasteboard.PasteboardType.png.rawValue, width: size.width, height: size.height)
+            DispatchQueue.main.async { deliver(image) }
+        }
+    }
+
+    /// Width and height in pixels, read from the header without drawing the picture.
+    static func pixelSize(_ data: Data) -> (width: Int, height: Int)? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let w = props[kCGImagePropertyPixelWidth] as? Int, let h = props[kCGImagePropertyPixelHeight] as? Int,
+              w > 0, h > 0 else { return nil }
+        return (w, h)
+    }
+
+    /// Put a clip back on the pasteboard as it was copied: its files, its picture or its text.
+    /// Our own monitor doesn't record it again.
+    public func copy(_ entry: ClipboardEntry) {
+        let pb = NSPasteboard.general
+        if entry.kind == .files, !entry.paths.isEmpty {
+            pb.clearContents()
+            pb.writeObjects(entry.paths.map { URL(fileURLWithPath: $0) as NSURL })
+        } else if entry.kind == .image, let image = entry.image {
+            pb.clearContents()
+            pb.setData(image.data, forType: NSPasteboard.PasteboardType(image.type))
+        } else {
+            Self.write(entry.text, secret: false)
+        }
+        lastChange = pb.changeCount
     }
 
     /// Put text on the pasteboard without our own monitor recording it.

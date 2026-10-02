@@ -85,6 +85,7 @@ struct GeneralSettings: View {
                     Text("CPU and memory on the System page, measured only while it's open.")
                 }
                 .settingsAnchor("general.stats")
+                IslandPagesEditor(model: model)
             }
         }
         .formStyle(.grouped)
@@ -1056,6 +1057,7 @@ struct AboutSettings: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 20)
             }
+            Section { FeedbackRow() }
             // The status item can end up behind the notch or in the menu bar's overflow, so
             // Islet can also be quit from here, the island's right-click menu and its More menu.
             Section {

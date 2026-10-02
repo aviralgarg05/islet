@@ -138,7 +138,13 @@ import Testing
         s.notificationMirroring = true
         s.mirrorMenuBarActivities = false
         s.closedLayout = .wings
-        #expect(PermissionKind.accessibility.uses(s).map(\.isOn) == [false, true, false, false])
+        #expect(PermissionKind.accessibility.uses(s).map(\.isOn) == [false, true, false, false, false])
+        // Typing emoji needs it only while the emoji page is on too.
+        s.emojiTypes = true
+        #expect(PermissionKind.accessibility.uses(s).last?.isOn == false)
+        s.emojiEnabled = true
+        #expect(PermissionKind.accessibility.uses(s).last?.isOn == true)
+        s.emojiTypes = false
         s.downloadsEnabled = true
         #expect(PermissionKind.downloadsFolder.uses(s).map(\.isOn) == [true])
         #expect(PermissionKind.automationMusic.uses(s).map(\.isOn) == [true])

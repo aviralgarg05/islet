@@ -227,6 +227,7 @@ enum Snapshots {
         model.forcedPresentation = .compact(.activity(usageAlert, others: 0))
         shoot("25-compact-usage-alert")
         renderMoreTools(model: model, now: now, shoot: shoot) { model.settings.sizePreset = $0; metrics = metricsFor(model.settings) }
+        renderNoteTools(model: model, now: now, shoot: shoot) { model.settings.sizePreset = $0; metrics = metricsFor(model.settings) }
         TemplateSnapshots.render(to: dir, model: model)
         renderApprovals(model: model, shoot: shoot)
         renderWings(to: dir)

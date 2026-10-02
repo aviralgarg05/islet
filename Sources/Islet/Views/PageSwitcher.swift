@@ -3,7 +3,8 @@ import IsletCore
 import SwiftUI
 
 /// The switcher that floats under the open island: a glass capsule with Home, Today and Shelf
-/// and a "more" menu for the rest, whose highlight slides to the selected page. Beside it, two
+/// (or up to four pages chosen in Settings) and a "more" menu for the rest, whose highlight
+/// slides to the selected page. Beside it, two
 /// discs for the things you start rather than visit: a timer on the left and Ask on the right.
 ///
 /// It sits over the desktop, not on the island, so it is the one place the island uses Liquid
@@ -36,11 +37,11 @@ struct PageSwitcher: View {
     var body: some View {
         let pages = Self.pages(model)
         let moreSelected = pages.more.contains(model.tab)
-        let showsMore = !pages.more.isEmpty
         // The highlight fits the longest name it may hold: the capsule's pages and the page
         // the "more" segment shows now.
         let highlight = Self.highlightWidth(for: pages.main.map(\.title) + (moreSelected ? [model.tab.title] : []))
-        let segments = pages.main.count + (showsMore ? 1 : 0)
+        // The capsule's pages and More, which is always there.
+        let segments = pages.main.count + 1
         let capsule = highlight + CGFloat(max(0, segments - 1)) * Self.segmentWidth
         let anySelected = moreSelected || pages.main.contains(model.tab) && !model.timers.isEntering
         // With none of its pages selected, the segments share the capsule's width.
@@ -65,15 +66,15 @@ struct PageSwitcher: View {
                             model.select(tab: tab)
                         }
                     }
-                    if showsMore {
-                        // A menu of the other pages, whichever one it shows: "More pages, Weather".
-                        segment(symbol: moreSelected ? model.tab.symbol : "ellipsis",
-                                title: moreSelected ? model.tab.title : nil, selected: moreSelected,
-                                width: moreSelected ? selectedWidth : otherWidth,
-                                spoken: (label: "More pages", value: moreSelected ? model.tab.title : "",
-                                         hint: "Shows the other pages, keep awake, keep open and Settings")) {
-                            showMore(pages.more)
-                        }
+                    // A menu of the other pages, whichever one it shows: "More pages, Weather".
+                    // It stays with no page under it too, for keep awake, keep open, Settings,
+                    // Send feedback and Quit.
+                    segment(symbol: moreSelected ? model.tab.symbol : "ellipsis",
+                            title: moreSelected ? model.tab.title : nil, selected: moreSelected,
+                            width: moreSelected ? selectedWidth : otherWidth,
+                            spoken: (label: "More pages", value: moreSelected ? model.tab.title : "",
+                                     hint: "Shows the other pages, keep awake, keep open and Settings")) {
+                        showMore(pages.more)
                     }
                 }
                 .frame(width: capsule)
@@ -165,8 +166,9 @@ struct PageSwitcher: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    /// Pages whose feature is on, split between the capsule and the "more" menu
-    /// (`IslandPage.switcher`). Clipboard is listed only while clipboard history is on.
+    /// Pages whose feature is on, split between the capsule and the "more" menu in the order
+    /// set in Settings → General (`IslandPage.switcher`). Clipboard is listed only while
+    /// clipboard history is on.
     static func pages(_ model: AppModel) -> (main: [IslandTab], more: [IslandTab]) {
         let split = IslandPage.switcher(model.settings, current: IslandPage(rawValue: model.tab.rawValue))
         func tabs(_ pages: [IslandPage]) -> [IslandTab] { pages.compactMap { IslandTab(rawValue: $0.rawValue) } }
@@ -181,7 +183,7 @@ struct PageSwitcher: View {
                 model.select(tab: tab)
             }
         }
-        items.append(.separator)
+        if !items.isEmpty { items.append(.separator) }
         let awake = model.controls.awake
         var awakeItems = KeepAwake.presets.map { preset in
             IslandMenu.Item(title: preset.title) { model.setKeepAwake(.start(minutes: preset.minutes), announce: false) }
@@ -194,6 +196,11 @@ struct PageSwitcher: View {
         // Also beside the notch in the Black and Graphite themes; the Glass theme's stem has no room.
         items.append(IslandMenu.Item(title: "Keep open", symbol: "pin", checked: model.pinned) { model.pinned.toggle() })
         items.append(IslandMenu.Item(title: "Settings…", symbol: "gearshape") { AppActions.openSettings() })
+        // Opens the issue form in the browser; nothing is sent from here.
+        items.append(IslandMenu.Item(title: "Send feedback", symbol: "bubble.left",
+                                     children: Feedback.Kind.allCases.map { kind in
+                                         IslandMenu.Item(title: kind.title) { AppActions.sendFeedback(kind) }
+                                     }))
         items.append(.separator)
         items.append(IslandMenu.Item(title: "Quit Islet", symbol: "power") { NSApp.terminate(nil) })
         IslandMenu.show(items, model: model)

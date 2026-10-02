@@ -14,6 +14,12 @@ final class Tools {
     let month = MonthCalendarController()
     let stopwatch: StopwatchController
     let focus: FocusSoundController
+    /// To-dos, the quick note, the converter and emoji (NoteTools.swift).
+    let todos = TodoController()
+    let note = NoteController()
+    let converter = ConverterController()
+    let emoji = EmojiController()
+    let clipboardPage = ClipboardPage()
 
     init(model: AppModel) {
         lyrics = LyricsController(model: model)
@@ -34,6 +40,7 @@ extension AppModel {
         tools.weather.settingsChanged()
         tools.focus.update()
         if tab == .shortcuts && !s.shortcutsEnabled || tab == .weather && !s.weatherEnabled { select(tab: .home) }
+        applyNoteTools()
     }
 
     /// Turns a tool on or off from the island (its page's "Turn on").

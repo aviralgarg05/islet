@@ -1,10 +1,63 @@
 # Tools
 
-Four pages you turn on when you want them: a camera mirror, a teleprompter, a stocks watchlist and today's sales. Each starts off. Turn one on in Settings → Tools and it appears in the page switcher's More menu (the "…" under the open island). Nothing about them shows in the closed island, and turning one off stops whatever it was doing.
+Pages you turn on when you want them: to-dos, a quick note, a unit converter, emoji, a camera mirror, a teleprompter, a stocks watchlist and today's sales. Each starts off. Turn one on in Settings → Tools and it appears in the page switcher's More menu (the "…" under the open island). Nothing about them shows in the closed island, and turning one off stops whatever it was doing.
 
 Home can also show usage for more AI tools beside Claude Code and Codex: see [Usage limits](INTEGRATIONS.md#usage-limits).
 
 The same Tools page also turns on a Shortcuts page and a Weather page. Lyrics, the month calendar, the stopwatch and focus sounds are switched on from the Settings page of the feature they belong to (Now Playing, Calendar & Reminders, Timers).
+
+## Arranging the pages
+
+Settings → General → Island pages lists the pages that are on, in the order the switcher shows them: up to four in the capsule under the island, the rest in its More menu.
+
+- Drag a page onto another to put it there, or onto **In the capsule** or **Under More**. Each row's "…" menu moves it up, down, or between the two, for the keyboard.
+- A page's switch leaves it out of the switcher without turning its feature off. A page opened another way (a file dropped on the island, a shortcut, the API) still shows while it is open.
+- Home is always in the capsule. With more than four pages there, the last one goes under More. The More menu stays even with no page under it, for keep awake, Settings, Send feedback and Quit.
+- A page whose feature is off keeps its place for when it comes back on. **Reset** goes back to Home, Today and Shelf in the capsule.
+
+`config.json`: `"islandPages": {"bar": ["home", "todos", "today", "shelf"], "more": ["clipboard", "weather"], "hidden": ["widgets"]}`. Pages left out of both lists go at the end of the one they come in.
+
+## To-dos
+
+Add a line, star what matters, tick it off.
+
+- Type in **Add a to-do** and press Return. What is left to do comes first, starred lines at the top, then the newest; what is done goes to the end, struck through, until **Clear done**.
+- Hover a line for its star and ×; the right-click menu ticks it off, stars it, copies it or removes it.
+- The list is kept in `todos.json` in Islet's support folder, readable only by you (up to 200 lines). A file that can't be read is set aside as `todos.json.corrupt`, never written over.
+
+`config.json`: `"todosEnabled": true`.
+
+## Quick note
+
+A scratch pad that keeps its text.
+
+- Click the page and type. The note is saved half a second after you stop typing, and when the page or the island closes, in `note.txt` in Islet's support folder (readable only by you, up to 100,000 characters). An empty note removes the file.
+- Before you click into it, the right-click menu copies or clears the note; while you type, it is the usual cut, copy and paste. Under the pointer it shows how many words it has.
+
+`config.json`: `"noteEnabled": true`.
+
+## Unit converter
+
+Type an amount and a unit, and read the answer: `5 ft in cm`, `70 kg to lb`, `100 °F in °C`, `2 cups = ml`, `60 mph in km/h`.
+
+- Lengths, weights, temperatures, volumes and speeds, from millimetres to nautical miles and teaspoons to cubic metres. Imperial and US units use their exact definitions, so a tablespoon is 3 teaspoons to the last digit.
+- With no unit to convert to, the usual ones answer (`5 ft` gives metres and centimetres).
+- A plain pint, gallon or fluid ounce is the British one when the Mac's region is the United Kingdom and the US one otherwise; `us gallon` or `uk pint` says which outright.
+- Click an answer, or press Return, to copy its number, without thousands separators so it pastes into a sum or a form. Numbers are shown the way your region writes them, to six significant figures, and a long whole number in full.
+- While the converter is on, the Ask box answers a conversion as you type it, in place of its hint.
+
+Everything is worked out on the Mac. `config.json`: `"converterEnabled": true`.
+
+## Emoji
+
+Find any emoji by name or by the words people use for it ("lol", "tada", "thumbs up", "flag japan"), and click it to copy it.
+
+- With nothing typed, the ones you used lately come first, then the everyday ones, then the rest, faces first and flags last.
+- Every emoji macOS can name is there, from the system's own Unicode tables, with the flag of every region and the commonest sequences (people at work, families, the rainbow flag). Nothing is downloaded.
+- **Type emoji where you're typing** (off by default) types the emoji into the app you were typing in instead of copying it. It needs Accessibility, which macOS asks for when you switch it on; without it the emoji is copied. Islet sends that one character, only when you click an emoji, and reads nothing.
+- The emoji you used lately are kept in `emoji.json` in Islet's support folder (at most 24).
+
+`config.json`: `"emojiEnabled": true, "emojiTypes": false`.
 
 ## Camera mirror
 

@@ -10,6 +10,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
     case mirror, teleprompter, stocks, sales
     /// Tools: listed under More once turned on in Settings, and not before.
     case shortcuts, weather
+    case todos, note, converter, emoji
     case ask
     var id: String { rawValue }
 
@@ -27,6 +28,10 @@ enum IslandTab: String, CaseIterable, Identifiable {
         case .sales: return "banknote"
         case .shortcuts: return "square.stack.3d.up.fill"
         case .weather: return "cloud.sun.fill"
+        case .todos: return "checklist"
+        case .note: return "note.text"
+        case .converter: return "arrow.left.arrow.right"
+        case .emoji: return "face.smiling"
         case .ask: return "sparkles"
         }
     }
@@ -45,6 +50,10 @@ enum IslandTab: String, CaseIterable, Identifiable {
         case .sales: return "Sales"
         case .shortcuts: return "Shortcuts"
         case .weather: return "Weather"
+        case .todos: return "To-dos"
+        case .note: return "Note"
+        case .converter: return "Converter"
+        case .emoji: return "Emoji"
         case .ask: return "Ask"
         }
     }
@@ -83,7 +92,11 @@ final class AppModel {
     private(set) var shelf = Shelf()
     /// Shelf items that can't be opened now (their disk or share isn't there): shown dimmed.
     private(set) var shelfUnavailable: Set<String> = []
-    private(set) var clipboard = ClipboardHistory()
+    private(set) var clipboard = ClipboardHistory() {
+        // Thumbnails of pictures that have left the history (removed, cleared, or history
+        // turned off) are forgotten with them.
+        didSet { ClipThumbnails.forget(except: clipboard.entries) }
+    }
     private(set) var stats: SystemStats?
     private(set) var plugins: [String: PluginResult] = [:]
     private(set) var micInUse = false
@@ -254,7 +267,11 @@ final class AppModel {
         Haptics.mode = settings.hapticsMode
         media.disabled = Set(settings.disabledMediaSources)
         media.hidden = Set(settings.hiddenMediaApps)
-        shelfService.onChange = { [weak self] s in self?.shelf = s }
+        shelfService.onChange = { [weak self] s in
+            self?.shelf = s
+            // A file added (or gone) changes when the next one is due off the shelf.
+            self?.reschedule()
+        }
         shelfService.onAvailability = { [weak self] ids in self?.shelfUnavailable = ids }
         shelfUnavailable = shelfService.unavailable
 
@@ -384,6 +401,8 @@ final class AppModel {
     func stop() {
         releaseKeepAwake()
         tools.focus.stopAll()
+        // A note typed in the last half second before quitting isn't lost.
+        tools.note.saveNow()
         ask.stop()  // Quitting stops a running claude/codex rather than leaving it behind.
         guard server != nil else { return }
         server?.stop()
@@ -662,8 +681,8 @@ final class AppModel {
     }
 
     private func startClipboard() {
-        clipboardMonitor.onCopy = { [weak self] text, types, bundle, page in
-            self?.clipboard.add(text, types: types, sourceBundleID: bundle, sourceURL: page, now: Date())
+        clipboardMonitor.onCopy = { [weak self] content, types, bundle, page in
+            self?.clipboard.add(content, types: types, sourceBundleID: bundle, sourceURL: page, now: Date())
         }
         clipboardMonitor.start()
     }
@@ -1483,15 +1502,20 @@ final class AppModel {
     func removeFromShelf(_ id: String) { shelfService.remove(id: id) }
     func clearShelf() { shelfService.removeAll() }
 
+    /// Puts a clip back on the pasteboard as it was copied (text, files or the picture), and
+    /// moves it to the top.
     func copyClip(_ entry: ClipboardEntry) {
-        clipboardMonitor.copy(entry.text)
-        clipboard.add(entry.text, types: [], sourceBundleID: entry.sourceBundleID, now: Date())
+        clipboardMonitor.copy(entry)
+        clipboard.touch(id: entry.id, now: Date())
     }
 
     func togglePinClip(_ id: String) { clipboard.togglePin(id: id) }
     func removeClip(_ id: String) { clipboard.remove(id: id) }
     /// "Clear unpinned" on the Clipboard page.
     func clearClipboard() { clipboard.clear() }
+
+    /// `--snapshot`: clipboard history as given.
+    func setClipboardForSnapshot(_ history: ClipboardHistory) { clipboard = history }
 
     func runPlugin(_ path: String) { pluginRunner?.runNow(path: path) }
 

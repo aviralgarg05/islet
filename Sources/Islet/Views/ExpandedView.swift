@@ -34,7 +34,7 @@ struct ExpandedView: View {
         case .today: TodayTab(model: model)
         case .shelf: ShelfTab(model: model, dropTargeted: dropTargeted)
         case .widgets: WidgetsTab(model: model)
-        case .clipboard: ClipboardTab(model: model)
+        case .clipboard: ClipboardTab(model: model, size: size)
         case .stats: StatsTab(model: model)
         case .mirror: MirrorTab(model: model, size: size)
         case .teleprompter: TeleprompterTab(model: model, size: size)
@@ -42,6 +42,10 @@ struct ExpandedView: View {
         case .sales: SalesTab(model: model, size: size)
         case .shortcuts: ShortcutsTab(model: model)
         case .weather: WeatherTab(model: model)
+        case .todos: TodosTab(model: model, size: size)
+        case .note: NoteTab(model: model)
+        case .converter: ConverterTab(model: model)
+        case .emoji: EmojiTab(model: model, size: size)
         case .ask: AskView(model: model)
         }
     }
@@ -887,7 +891,8 @@ struct ShelfTab: View {
                     .foregroundStyle(dropTargeted ? Ink.primary : Ink.tertiary)
                 VStack(spacing: Space.hair) {
                     Text("Drop files here to keep them handy").textStyle(.body, emphasized: true).foregroundStyle(Ink.primary)
-                    Text("Drag them out again, or AirDrop them in one click.").textStyle(.caption).foregroundStyle(Ink.tertiary)
+                    Text(Self.detail(keepFor: model.settings.shelfKeepFor)).textStyle(.caption).foregroundStyle(Ink.tertiary)
+                        .multilineTextAlignment(.center)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -916,6 +921,12 @@ struct ShelfTab: View {
             }
             .overlay(zone.strokeBorder(Ink.secondary.opacity(dropTargeted ? 1 : 0), lineWidth: 1))
         }
+    }
+
+    /// Under the drop zone: what can be done with files here, and how long they stay.
+    static func detail(keepFor: TimeInterval) -> String {
+        guard let time = Shelf.keepPhrase(keepFor) else { return "Drag them out again, or AirDrop them in one click." }
+        return "Drag them out again or AirDrop them. They stay for \(time)."
     }
 }
 
@@ -951,6 +962,21 @@ struct FileTile: View {
                 .buttonStyle(.plain)
                 .help("Remove from shelf")
                 .accessibilityLabel("Remove from shelf")
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            // AirDrop just this one, without opening a menu.
+            if hovering && available {
+                Button { ShelfService.airDrop([url]) } label: {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 16, height: 16)
+                        .background(Circle().fill(Color.blue))
+                }
+                .buttonStyle(.plain)
+                .help("AirDrop \(item.name)")
+                .accessibilityLabel("AirDrop \(item.name)")
             }
         }
         .onHover { hovering = $0 }
@@ -1107,87 +1133,7 @@ struct PluginLineView: View {
     }
 }
 
-// MARK: - Clipboard
-
-struct ClipboardTab: View {
-    let model: AppModel
-
-    var body: some View {
-        if !model.settings.clipboardEnabled {
-            EmptyHint(symbol: "doc.on.clipboard",
-                      text: "Clipboard history is off. It stays on this Mac, skips passwords from password managers, and holds \(model.settings.clipboardLimit) items.") {
-                Button("Turn on") { AppActions.setClipboard(model, enabled: true) }.buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
-            }
-        } else if model.clipboard.entries.isEmpty {
-            EmptyHint(symbol: "doc.on.clipboard", text: "Copy some text and it shows up here.")
-        } else {
-            let clearable = model.clipboard.hasUnpinned
-            AdaptiveScroll(scrolls: model.clipboard.entries.count + (clearable ? 1 : 0) > 4) {
-                VStack(spacing: 0) {
-                    ForEach(model.clipboard.entries) { e in ClipRow(entry: e, model: model) }
-                    // Quiet, after the last item; pinned items stay.
-                    if clearable {
-                        HStack {
-                            Spacer(minLength: 0)
-                            Button("Clear unpinned") { model.clearClipboard() }
-                                .buttonStyle(.plain)
-                                .textStyle(.caption)
-                                .foregroundStyle(Ink.tertiary)
-                                .help("Remove everything you haven't pinned")
-                        }
-                        .padding(.horizontal, Space.s)
-                        .frame(height: 24)
-                    }
-                }
-            }
-            .padding(.horizontal, -Space.s)
-        }
-    }
-}
-
-struct ClipRow: View {
-    let entry: ClipboardEntry
-    let model: AppModel
-    @ViewState private var hovering = false
-
-    var body: some View {
-        HStack(spacing: Space.s) {
-            Group {
-                if let b = entry.sourceBundleID { AppIconView(bundleID: b, size: 16) } else { Color.clear }
-            }
-            .frame(width: 16, height: 16)
-            Text(entry.text.replacingOccurrences(of: "\n", with: " ⏎ "))
-                .textStyle(.body)
-                .foregroundStyle(Ink.primary)
-                .lineLimit(1)
-            Spacer(minLength: 0)
-            if hovering || entry.pinned {
-                Button { model.togglePinClip(entry.id) } label: {
-                    Image(systemName: entry.pinned ? "pin.fill" : "pin").font(.system(size: 10, weight: .semibold))
-                }
-                .buttonStyle(.plain).foregroundStyle(Ink.tertiary)
-                .help(entry.pinned ? "Unpin" : "Pin")
-            }
-            if hovering {
-                Button { model.removeClip(entry.id) } label: { Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)) }
-                    .buttonStyle(.plain).foregroundStyle(Ink.tertiary)
-                    .help("Remove")
-            }
-        }
-        .padding(.horizontal, Space.s)
-        .frame(height: 28)
-        .background(RoundedRectangle(cornerRadius: Radius.s, style: .continuous).fill(hovering ? Wash.subtle : .clear))
-        .contentShape(Rectangle())
-        .onHover { hovering = $0 }
-        .onTapGesture { model.copyClip(entry) }
-        // The pin and × show only under the pointer, so VoiceOver has them as actions.
-        .spokenButton(entry.text.replacingOccurrences(of: "\n", with: " "), value: entry.pinned ? "pinned" : nil,
-                      hint: "Copies it") { model.copyClip(entry) }
-        .accessibilityAction(named: entry.pinned ? "Unpin" : "Pin") { model.togglePinClip(entry.id) }
-        .accessibilityAction(named: "Remove") { model.removeClip(entry.id) }
-        .help("Click to copy")
-    }
-}
+// The Clipboard page is in ClipboardPage.swift.
 
 // MARK: - Stats
 

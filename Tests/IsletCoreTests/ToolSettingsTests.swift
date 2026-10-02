@@ -23,8 +23,13 @@ import Testing
         s.sales.enabled = true
         s.shortcutsEnabled = true
         s.weatherEnabled = true
+        s.todosEnabled = true
+        s.noteEnabled = true
+        s.converterEnabled = true
+        s.emojiEnabled = true
         let pages = IslandPage.switcher(s, current: nil)
         #expect(pages.main == [.home, .today, .shelf])
+        #expect(pages.more.contains(.todos) && pages.more.contains(.emoji))
         #expect(Array(pages.more.suffix(4)) == [.mirror, .teleprompter, .stocks, .sales])
         #expect(IslandPage.allCases.allSatisfy { $0.isAvailable(s) || $0 == .widgets || $0 == .clipboard })
     }
