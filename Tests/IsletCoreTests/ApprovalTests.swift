@@ -469,6 +469,47 @@ enum HookFixtures {
     }
 }
 
+@Suite struct ApprovalIslandHoldTests {
+    @Test func aCardThatOpenedTheIslandClosesItAgain() {
+        var hold = ApprovalIslandHold()
+        hold.hold(islandWasOpen: false, pinned: false)
+        #expect(hold.isHolding)
+        #expect(hold.release(islandOpen: true) == .close)
+        #expect(!hold.isHolding)
+        #expect(hold.release(islandOpen: true) == .nothing)
+    }
+
+    @Test func anIslandAlreadyOpenGetsItsOwnPinBack() {
+        var hold = ApprovalIslandHold()
+        hold.hold(islandWasOpen: true, pinned: true)
+        // A second card doesn't overwrite what the first noted (the island is pinned by then).
+        hold.hold(islandWasOpen: true, pinned: false)
+        #expect(hold.release(islandOpen: true) == .pin(true))
+        var hovered = ApprovalIslandHold()
+        hovered.hold(islandWasOpen: true, pinned: false)
+        #expect(hovered.release(islandOpen: true) == .pin(false))
+    }
+
+    @Test func closingTheIslandAnotherWayEndsTheHold() {
+        // Opened with the shortcut (pinned), a card arrives, the shortcut closes it, then the
+        // agent is answered in the terminal: a closed island must not be pinned.
+        var shortcut = ApprovalIslandHold()
+        shortcut.hold(islandWasOpen: true, pinned: true)
+        shortcut.islandClosed()
+        #expect(shortcut.release(islandOpen: false) == .nothing)
+        // The card opened it, a swipe closed it, a hover opened it again: the answer leaves
+        // the island the pointer is on open.
+        var swiped = ApprovalIslandHold()
+        swiped.hold(islandWasOpen: false, pinned: false)
+        swiped.islandClosed()
+        #expect(swiped.release(islandOpen: true) == .nothing)
+        // A closed island is never pinned, even if nothing said it closed.
+        var unannounced = ApprovalIslandHold()
+        unannounced.hold(islandWasOpen: true, pinned: true)
+        #expect(unannounced.release(islandOpen: false) == .nothing)
+    }
+}
+
 @Suite struct RiskRuleTests {
     func reasons(_ command: String, cwd: String? = "/Users/me/proj") -> [String] {
         RiskRules.reasons(command: command, cwd: cwd, home: "/Users/me")

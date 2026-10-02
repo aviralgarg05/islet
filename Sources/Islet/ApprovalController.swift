@@ -21,8 +21,8 @@ final class ApprovalController {
     @ObservationIgnored private var waiters: [String: CheckedContinuation<ApprovalDecision?, Never>] = [:]
     @ObservationIgnored private var expiries: [String: DispatchWorkItem] = [:]
     @ObservationIgnored private var showWork: DispatchWorkItem?
-    /// Island state to put back when the last card goes; set while cards hold the island open.
-    @ObservationIgnored private var restore: (wasOpen: Bool, pinned: Bool)?
+    /// Island state to put back when the last card goes, while cards hold the island open.
+    @ObservationIgnored private var hold = ApprovalIslandHold()
     /// The card on top and when it got there. Clicks just after a card appears are ignored, so
     /// the second click of a double-click can't answer the next card before it has been seen.
     @ObservationIgnored private var front: (id: String?, since: Date) = (nil, .distantPast)
@@ -146,14 +146,14 @@ final class ApprovalController {
                 for id in queue.entries.map(\.id) { finish(id, with: nil) }
                 return
             }
-            if restore == nil { restore = (false, model.pinned) }
+            hold.hold(islandWasOpen: false, pinned: model.pinned)
             model.pinned = true
             model.expandedScreen = display
             // The island opens under whatever the pointer is doing: guard against a stray click.
             front.since = Date()
             NotificationCenter.default.post(name: .isletLayoutChanged, object: nil)
         } else {
-            if restore == nil { restore = (true, model.pinned) }
+            hold.hold(islandWasOpen: true, pinned: model.pinned)
             model.pinned = true
         }
     }
@@ -170,16 +170,21 @@ final class ApprovalController {
         showWork?.cancel()
         showWork = nil
         presented = false
-        if let r = restore {
-            restore = nil
-            if r.wasOpen { model.pinned = r.pinned } else { model.setExpanded(nil) }
+        switch hold.release(islandOpen: model.expandedScreen != nil) {
+        case .nothing: break
+        case .close: model.setExpanded(nil)
+        case .pin(let pinned): model.pinned = pinned
         }
     }
+
+    /// The island closed (the shortcut, a swipe, the menu, Esc, the API or Hide): the cards no
+    /// longer hold it, so the last one going later changes nothing.
+    func islandDidCollapse() { hold.islandClosed() }
 
     /// Puts the card away. It's still pending and comes back when the island opens.
     func hide() {
         Haptics.play(.tap)
-        restore = nil
+        hold.islandClosed()
         model.setExpanded(nil)
     }
 

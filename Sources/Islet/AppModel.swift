@@ -994,6 +994,7 @@ final class AppModel {
             if tab == .mirror { tab = .home }
             pinned = false
             ask.islandDidCollapse()
+            approvals.islandDidCollapse()
             controlHint = nil
         }
     }

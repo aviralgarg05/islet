@@ -787,6 +787,48 @@ public struct ApprovalQueue: Sendable {
     static func handOffKey(_ r: ApprovalRequest) -> String { sessionPrefix(r.provider, r.sessionID) + r.callKey }
 }
 
+/// What the island goes back to once the last card has gone. Cards hold the island open (pinned)
+/// while they wait: when none is left, an island a card opened closes again, and one that was
+/// already open gets back the pin it had. Closing the island any other way (the shortcut, a
+/// swipe, Hide) ends the hold, so a later answer neither pins a closed island nor closes one
+/// opened since.
+public struct ApprovalIslandHold: Equatable, Sendable {
+    /// What to do to the island once the last card has gone.
+    public enum Restore: Equatable, Sendable {
+        /// Leave it as it is.
+        case nothing
+        /// A card opened it: close it.
+        case close
+        /// It was open before the cards: give it back this pin.
+        case pin(Bool)
+    }
+
+    private var wasOpen = false
+    private var pinned = false
+    public private(set) var isHolding = false
+
+    public init() {}
+
+    /// A card is on show and holds the island. Only the first card notes how the island was.
+    public mutating func hold(islandWasOpen: Bool, pinned: Bool) {
+        guard !isHolding else { return }
+        isHolding = true
+        wasOpen = islandWasOpen
+        self.pinned = pinned
+    }
+
+    /// The island closed, by whatever means: there is nothing left to put back.
+    public mutating func islandClosed() { isHolding = false }
+
+    /// The last card has gone.
+    public mutating func release(islandOpen: Bool) -> Restore {
+        guard isHolding else { return .nothing }
+        isHolding = false
+        guard islandOpen else { return .nothing }
+        return wasOpen ? .pin(pinned) : .close
+    }
+}
+
 /// A JSON value that keeps agent payload fragments intact (tool input, permission
 /// suggestions), so they can be shown and echoed back exactly.
 public indirect enum JSONValue: Equatable, Sendable, ExpressibleByStringLiteral {
