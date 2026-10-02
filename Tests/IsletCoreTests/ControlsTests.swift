@@ -72,6 +72,19 @@ private func track(elapsed: Double? = 60, duration: Double? = 200, playing: Bool
     }
 }
 
+/// A jump on a video without a length.
+@Suite struct PlayerCommandTests {
+    /// Chrome says 0 for a live stream's position again every quarter of a minute: a jump worked
+    /// out from it would take the stream back to its start, so it is left to the player.
+    @Test func aJumpWithoutALengthIsLeftToThePlayer() {
+        #expect(MediaSeek.target(for: track(elapsed: 0, duration: nil), from: 12, by: 15) == nil)
+        #expect(MediaSeek.target(for: track(elapsed: 0, duration: nil), from: 12, by: -15) == nil)
+        #expect(MediaSeek.target(for: track(), from: 60, by: 15) == 75)
+        #expect(MediaSeek.target(for: track(), from: 190, by: 15) == 199)
+        #expect(MediaSeek.target(for: track(elapsed: nil), from: nil, by: 15) == nil)
+    }
+}
+
 @Suite struct SeekGraceTests {
     @Test func holdsTheRequestedPositionUntilThePlayerCatchesUp() {
         let np = track(elapsed: 60, at: t0)   // stale: still reports 60 s after we seek to 150

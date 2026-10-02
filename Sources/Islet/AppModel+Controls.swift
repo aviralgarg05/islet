@@ -32,7 +32,7 @@ extension AppModel {
     @discardableResult
     func skip(by delta: Double, on player: NowPlaying? = nil) -> Bool {
         guard let np = player ?? nowPlaying,
-              let target = MediaSeek.target(from: displayPosition(np, now: Date()), by: delta, duration: np.duration) else { return false }
+              let target = MediaSeek.target(for: np, from: displayPosition(np, now: Date()), by: delta) else { return false }
         return seek(to: target, on: np)
     }
 
