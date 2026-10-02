@@ -129,6 +129,18 @@ extension Snapshots {
         size(.standard)
         shoot("79f-expanded-other-app-hint-standard")
         size(.compact)
+        // The live video on show while Spotify, paused, has the controls: "Open Google Chrome" is
+        // long, and the words beside it keep their room. Then with nobody holding the controls.
+        model.loadPlayersForSnapshot([], bridge: BridgeReport(players: [stream, pausedSong], current: "com.spotify.client"), now: now)
+        model.forcedPresentation = .expanded
+        model.tab = .home
+        model.setControlHintForSnapshot(.otherApp(OtherAppHint(app: "Google Chrome", bundleID: "com.google.Chrome", holder: "Spotify")))
+        shoot("79g-expanded-other-app-hint-long-name")
+        size(.standard)
+        shoot("79h-expanded-other-app-hint-long-name-standard")
+        size(.compact)
+        model.setControlHintForSnapshot(.otherApp(OtherAppHint(app: "Google Chrome", bundleID: "com.google.Chrome", holder: nil)))
+        shoot("79i-expanded-other-app-hint-no-holder")
         model.setControlHintForSnapshot(nil)
         model.loadPlayersForSnapshot([], bridge: nil, now: now, song: song)
         model.forcedPresentation = .expanded

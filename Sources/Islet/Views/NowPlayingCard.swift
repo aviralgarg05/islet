@@ -341,33 +341,86 @@ struct ControlPermissionHint: View {
 
 /// In place of the transport after a press went nowhere because macOS gives the controls to
 /// another app (a command would reach that one instead): who has them, and a button that brings
-/// this player's app forward, to control it there.
+/// this player's app forward, to control it there. The words come first: where "Open Google
+/// Chrome" would leave them too little room, the button says Open beside the app's icon.
 struct OtherAppHintView: View {
     let hint: OtherAppHint
     let open: () -> Void
 
     var body: some View {
-        HStack(spacing: Space.s) {
-            // A long name ("Google Chrome has the controls") takes a second line rather than
-            // being cut short beside the button.
-            Text(hint.message)
-                .textStyle(.caption)
-                .foregroundStyle(Ink.secondary)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-            Button(action: open) {
-                HStack(spacing: Space.xs) {
-                    Image(systemName: "arrow.up.forward.app").font(.system(size: 10, weight: .semibold))
-                    Text(hint.button).lineLimit(1)
-                }
-            }
-            .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
-            .help("Brings \(hint.app) to the front, to control it there")
-            .accessibilityHint("Brings \(hint.app) to the front, to control it there")
-            .layoutPriority(1)
+        ViewThatFits(in: .horizontal) {
+            row(compact: false)
+            row(compact: true)
         }
         .accessibilityElement(children: .contain)
         .frame(maxWidth: .infinity)
+    }
+
+    private func row(compact: Bool) -> some View {
+        HintRow(spacing: Space.s) {
+            // A long name ("Google Chrome has the controls") takes a second line.
+            Text(hint.message)
+                .textStyle(.caption)
+                .foregroundStyle(Ink.secondary)
+            Button(action: open) {
+                HStack(spacing: Space.xs) {
+                    if compact {
+                        AppIconView(bundleID: hint.bundleID, size: 14)
+                        Text("Open")
+                    } else {
+                        Image(systemName: "arrow.up.forward.app").font(.system(size: 10, weight: .semibold))
+                        Text(hint.button)
+                    }
+                }
+                .lineLimit(1)
+            }
+            .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
+            .help("Brings \(hint.app) to the front, to control it there")
+            .accessibilityLabel(hint.button)
+            .accessibilityHint("Brings \(hint.app) to the front, to control it there")
+        }
+    }
+}
+
+/// The hint's words and its button: the button at its own width, the words in the room left
+/// beside it, on up to two lines. Its ideal width is the least that keeps every word whole on two
+/// lines, so `ViewThatFits` takes the long button only where the words still fit beside it.
+private struct HintRow: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard subviews.count == 2 else { return .zero }
+        let button = subviews[1].sizeThatFits(.unspecified)
+        let room = proposal.width.map { max(0, $0 - spacing - button.width) } ?? Self.twoLineWidth(of: subviews[0])
+        let words = subviews[0].sizeThatFits(Self.proposal(for: subviews[0], width: room))
+        return CGSize(width: proposal.width == nil ? room + spacing + button.width : words.width + spacing + button.width,
+                      height: max(button.height, words.height))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 2 else { return }
+        let button = subviews[1].sizeThatFits(.unspecified)
+        let words = Self.proposal(for: subviews[0], width: max(0, bounds.width - spacing - button.width))
+        let used = subviews[0].sizeThatFits(words)
+        subviews[0].place(at: CGPoint(x: bounds.minX, y: bounds.midY), anchor: .leading, proposal: words)
+        subviews[1].place(at: CGPoint(x: bounds.minX + used.width + spacing, y: bounds.midY), anchor: .leading,
+                          proposal: ProposedViewSize(button))
+    }
+
+    /// The words at `width`, no taller than two lines (a third is cut short).
+    private static func proposal(for words: LayoutSubview, width: CGFloat) -> ProposedViewSize {
+        ProposedViewSize(width: width, height: words.sizeThatFits(.unspecified).height * 2.5)
+    }
+
+    /// The least width at which the words take two lines at most, every word whole.
+    private static func twoLineWidth(of words: LayoutSubview) -> CGFloat {
+        let line = words.sizeThatFits(.unspecified)
+        var (low, high) = (CGFloat(0), line.width.rounded(.up))
+        while high - low > 1 {
+            let mid = ((low + high) / 2).rounded()
+            if words.sizeThatFits(ProposedViewSize(width: mid, height: nil)).height < line.height * 2.5 { high = mid } else { low = mid }
+        }
+        return high
     }
 }
 
