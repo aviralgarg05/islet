@@ -694,7 +694,7 @@ final class FocusSoundController {
     func update() {
         let s = model.settings
         let actions = director.update(sound: s.focusSound, focusing: model.timers.engine.isFocusing,
-                                      musicPlaying: model.nowPlaying?.isPlaying == true)
+                                      musicPlaying: model.nowPlaying?.isPlaying == true, playing: model.playingPlayers)
         perform(actions)
         if director.noise == nil {
             volume = nil
@@ -705,7 +705,7 @@ final class FocusSoundController {
     }
 
     func stopAll() {
-        perform(director.stopAll(musicPlaying: model.nowPlaying?.isPlaying == true))
+        perform(director.stopAll(playing: model.playingPlayers))
     }
 
     private func perform(_ actions: [FocusSoundDirector.Action]) {
@@ -713,8 +713,9 @@ final class FocusSoundController {
             switch action {
             case .startNoise(let sound): player.play(sound, volume: model.settings.focusSoundVolume)
             case .stopNoise: player.stop()
-            case .playMusic: model.send(.play)
-            case .pauseMusic: model.send(.pause)
+            // The break pauses only the player this press reached, if any.
+            case .playMusic: director.playReached(model.playMusic())
+            case .pauseMusic(let started): model.pauseMusic(player: started)
             }
         }
     }

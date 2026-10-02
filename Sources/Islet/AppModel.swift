@@ -1676,6 +1676,20 @@ final class AppModel {
         AppActions.openSettings(.permissions, at: "permissions.\(kind.rawValue)")
     }
 
+    /// Focus sounds' "Your music": play the music a command reaches now (`commandTarget`).
+    /// Returns the player the press reached (`MediaArbiter.playerID`), or nil when it went nowhere.
+    func playMusic() -> String? {
+        guard let target = commandTarget(now: Date()), send(.play, to: target) else { return nil }
+        return MediaArbiter.playerID(target)
+    }
+
+    /// Focus sounds: pause `player` (`MediaArbiter.playerID`), the one a focus round started, if
+    /// it is still offered and playing. Nothing otherwise.
+    func pauseMusic(player: String) {
+        guard let np = players.first(where: { MediaArbiter.playerID($0) == player && $0.isPlaying }) else { return }
+        send(.pause, to: np)
+    }
+
     /// The player a command with no target goes to: the one on show or, with nothing on show,
     /// the one macOS gives the controls to while Islet offers it (Spotify paused an hour ago).
     /// Never one Islet keeps out of the island, and with no player at all nothing, rather than
@@ -1717,6 +1731,9 @@ final class AppModel {
         _ = tick
         return settings.mediaEnabled ? media.available(now: Date()) : []
     }
+
+    /// The players offered that play now (`MediaArbiter.playerID`).
+    var playingPlayers: Set<String> { Set(players.filter(\.isPlaying).map(MediaArbiter.playerID)) }
 
     /// A player chip: show and control that player. The closed island keeps showing what plays,
     /// and follows the pick once it plays.

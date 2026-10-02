@@ -75,37 +75,67 @@ import Testing
         #expect(d.update(sound: .off, focusing: true, musicPlaying: false) == [.stopNoise])
     }
 
+    static let spotify = "com.spotify.client"
+    static let chrome = "com.google.Chrome"
+
     @Test func musicPlaysForFocusAndPausesForTheBreak() {
         var d = FocusSoundDirector()
         #expect(d.update(sound: .music, focusing: true, musicPlaying: false) == [.playMusic])
+        d.playReached(Self.spotify)
         #expect(d.startedMusic)
-        #expect(d.update(sound: .music, focusing: true, musicPlaying: true).isEmpty)
-        #expect(d.update(sound: .music, focusing: false, musicPlaying: true) == [.pauseMusic])
+        #expect(d.update(sound: .music, focusing: true, musicPlaying: true, playing: [Self.spotify]).isEmpty)
+        #expect(d.update(sound: .music, focusing: false, musicPlaying: true, playing: [Self.spotify]) == [.pauseMusic(player: Self.spotify)])
         #expect(d.update(sound: .music, focusing: true, musicPlaying: false) == [.playMusic], "the next round plays again")
     }
 
     @Test func musicThatWasAlreadyPlayingIsLeftAlone() {
         var d = FocusSoundDirector()
-        #expect(d.update(sound: .music, focusing: true, musicPlaying: true).isEmpty)
+        #expect(d.update(sound: .music, focusing: true, musicPlaying: true, playing: [Self.spotify]).isEmpty)
         #expect(!d.startedMusic)
-        #expect(d.update(sound: .music, focusing: false, musicPlaying: true).isEmpty, "not Islet's to pause")
+        #expect(d.update(sound: .music, focusing: false, musicPlaying: true, playing: [Self.spotify]).isEmpty, "not Islet's to pause")
     }
 
     @Test func musicTheUserPausedStaysPaused() {
         var d = FocusSoundDirector()
         _ = d.update(sound: .music, focusing: true, musicPlaying: false)
+        d.playReached(Self.spotify)
         // Paused by hand during focus: still focusing, so no new play.
         #expect(d.update(sound: .music, focusing: true, musicPlaying: false).isEmpty)
         #expect(d.update(sound: .music, focusing: false, musicPlaying: false).isEmpty)
     }
 
+    /// The break pauses only the player Islet's press reached: Spotify, playing on, and not a
+    /// video in Chrome started during the round. A press that went nowhere (a Safari tab without
+    /// the controls) leaves nothing to pause, whatever plays when the round ends.
+    @Test func theBreakPausesOnlyThePlayerIsletStarted() {
+        var d = FocusSoundDirector()
+        _ = d.update(sound: .music, focusing: true, musicPlaying: false)
+        d.playReached(Self.spotify)
+        // The video now plays on show, and Spotify plays on behind it.
+        #expect(d.update(sound: .music, focusing: false, musicPlaying: true, playing: [Self.chrome, Self.spotify])
+                == [.pauseMusic(player: Self.spotify)])
+        // Spotify paused by hand, the video playing: nothing of Islet's plays.
+        _ = d.update(sound: .music, focusing: true, musicPlaying: false)
+        d.playReached(Self.spotify)
+        #expect(d.update(sound: .music, focusing: false, musicPlaying: true, playing: [Self.chrome]).isEmpty)
+        // The press went nowhere.
+        #expect(d.update(sound: .music, focusing: true, musicPlaying: false) == [.playMusic])
+        d.playReached(nil)
+        #expect(!d.startedMusic)
+        #expect(d.update(sound: .music, focusing: false, musicPlaying: true, playing: [Self.spotify]).isEmpty)
+        // Told outside a round, it starts nothing.
+        d.playReached(Self.spotify)
+        #expect(!d.startedMusic)
+    }
+
     @Test func stopAllStopsWhatIsletStarted() {
         var d = FocusSoundDirector()
         _ = d.update(sound: .brownNoise, focusing: true, musicPlaying: false)
-        #expect(d.stopAll(musicPlaying: false) == [.stopNoise])
+        #expect(d.stopAll(playing: []) == [.stopNoise])
         var m = FocusSoundDirector()
         _ = m.update(sound: .music, focusing: true, musicPlaying: false)
-        #expect(m.stopAll(musicPlaying: true) == [.pauseMusic])
+        m.playReached(Self.spotify)
+        #expect(m.stopAll(playing: [Self.spotify]) == [.pauseMusic(player: Self.spotify)])
     }
 
     @Test func focusingMeansARunningFocusRound() throws {

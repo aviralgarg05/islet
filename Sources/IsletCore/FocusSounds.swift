@@ -92,26 +92,35 @@ public struct NoiseGenerator: Sendable {
 }
 
 /// Decides what the focus sound does as the Pomodoro moves between focus and breaks. It only
-/// pauses music it started itself, so music that was already playing is left alone.
+/// pauses music it started itself, so music that was already playing is left alone, and only the
+/// player its press reached: a video started during the round plays on.
 public struct FocusSoundDirector: Equatable, Sendable {
     public enum Action: Equatable, Sendable {
         case startNoise(FocusSound)
         case stopNoise
+        /// Press play on the user's music. The app says which player that reached (`playReached`).
         case playMusic
-        case pauseMusic
+        /// Pause the player Islet started (`MediaArbiter.playerID`).
+        case pauseMusic(player: String)
     }
 
     /// The generated sound playing now.
     public private(set) var noise: FocusSound?
-    /// Islet pressed play on the user's music for this focus round.
-    public private(set) var startedMusic = false
+    /// The player Islet pressed play on for this focus round (`MediaArbiter.playerID`), once the
+    /// press reached it.
+    public private(set) var startedPlayer: String?
     /// A focus round with "Your music" is under way.
     private var musicRound = false
 
     public init() {}
 
+    /// Islet pressed play on the user's music for this focus round, and the press reached a player.
+    public var startedMusic: Bool { startedPlayer != nil }
+
     /// What to do now. `focusing`: a Pomodoro focus round is running (not paused, not a break).
-    public mutating func update(sound: FocusSound, focusing: Bool, musicPlaying: Bool) -> [Action] {
+    /// `musicPlaying`: the music on show plays. `playing`: the players playing now
+    /// (`MediaArbiter.playerID`), so the break pauses the one Islet started only while it plays.
+    public mutating func update(sound: FocusSound, focusing: Bool, musicPlaying: Bool, playing: Set<String> = []) -> [Action] {
         var actions: [Action] = []
         let wantNoise: FocusSound? = focusing && sound.isGenerated ? sound : nil
         if wantNoise != noise {
@@ -123,22 +132,27 @@ public struct FocusSoundDirector: Equatable, Sendable {
         if wantMusic && !musicRound {
             // Focus has just begun: play, unless it already is.
             musicRound = true
-            if !musicPlaying {
-                actions.append(.playMusic)
-                startedMusic = true
-            }
+            if !musicPlaying { actions.append(.playMusic) }
         } else if !wantMusic && musicRound {
-            // A break, a pause or the end: pause the music only if Islet started it.
+            // A break, a pause or the end: pause the music only if Islet started it, and only that
+            // player, while it still plays.
             musicRound = false
-            if startedMusic && musicPlaying { actions.append(.pauseMusic) }
-            startedMusic = false
+            if let started = startedPlayer, playing.contains(started) { actions.append(.pauseMusic(player: started)) }
+            startedPlayer = nil
         }
         return actions
     }
 
+    /// The press `.playMusic` asked for reached `player` (`MediaArbiter.playerID`), or went
+    /// nowhere (nil), and then nothing is Islet's to pause at the break.
+    public mutating func playReached(_ player: String?) {
+        guard musicRound else { return }
+        startedPlayer = player
+    }
+
     /// Everything stops (the feature was switched off, or Islet is quitting).
-    public mutating func stopAll(musicPlaying: Bool) -> [Action] {
-        update(sound: .off, focusing: false, musicPlaying: musicPlaying)
+    public mutating func stopAll(playing: Set<String>) -> [Action] {
+        update(sound: .off, focusing: false, musicPlaying: false, playing: playing)
     }
 }
 
