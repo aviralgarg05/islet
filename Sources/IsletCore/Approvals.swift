@@ -131,6 +131,39 @@ public struct TerminalContext: Equatable, Sendable {
 }
 
 /// A request for a decision, parsed from an agent's hook payload.
+/// A file named on an approval card: "RiskRules.swift" in "Sources/IsletCore".
+public struct ApprovalFile: Equatable, Sendable {
+    public var name: String
+    /// Where it is: inside the project, relative to it; elsewhere, the full folder with ~ for
+    /// home. Nil for a file at the project's top.
+    public var folder: String?
+
+    public init(name: String, folder: String?) {
+        self.name = name
+        self.folder = folder
+    }
+
+    /// Nil for an empty path or one that ends in a slash.
+    public init?(path: String, cwd: String?, home: String = NSHomeDirectory()) {
+        let trimmed = path.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, !trimmed.hasSuffix("/") else { return nil }
+        let cut = trimmed.lastIndex(of: "/")
+        name = cut.map { String(trimmed[trimmed.index(after: $0)...]) } ?? trimmed
+        let parent = cut.map { $0 == trimmed.startIndex ? "/" : String(trimmed[..<$0]) }
+        guard let parent else { folder = nil; return }
+        let project = cwd.map { $0.hasSuffix("/") && $0.count > 1 ? String($0.dropLast()) : $0 }
+        if let project, !project.isEmpty, parent == project {
+            folder = nil
+        } else if let project, !project.isEmpty, parent.hasPrefix(project == "/" ? "/" : project + "/") {
+            folder = String(parent.dropFirst(project == "/" ? 1 : project.count + 1))
+        } else if !home.isEmpty, parent == home || parent.hasPrefix(home + "/") {
+            folder = "~" + parent.dropFirst(home.count)
+        } else {
+            folder = parent
+        }
+    }
+}
+
 public struct ApprovalRequest: Equatable, Sendable {
     /// The hook that asked; it decides the shape of the answer.
     public enum Hook: String, Equatable, Sendable {
@@ -312,6 +345,16 @@ public struct ApprovalRequest: Equatable, Sendable {
         if let patch = toolInput["patch"]?.stringValue ?? toolInput["input"]?.stringValue { return patch }
         if case .object(let o) = toolInput, o.isEmpty { return toolName }
         return toolInput.prettyString
+    }
+
+    /// The file a file tool works on, for the card: its name first, and the folder it is in
+    /// after it, relative to the project when it is inside it ("Sources/IsletCore") or with ~
+    /// for the home folder otherwise. No folder for a file at the project's top. Nil for
+    /// anything but a file tool. The full path stays in `subject`.
+    public var file: ApprovalFile? {
+        guard case .tool = kind, ["Edit", "MultiEdit", "Write", "Read", "NotebookEdit"].contains(toolName),
+              let path = toolInput["file_path"]?.stringValue ?? toolInput["notebook_path"]?.stringValue else { return nil }
+        return ApprovalFile(path: path, cwd: cwd)
     }
 
     /// Supporting text under the subject: the command's description, or the change an edit makes.

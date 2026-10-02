@@ -45,7 +45,9 @@ struct ApprovalCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(.horizontal, ExpandedLayout.inset)
             .padding(.top, Space.xs)
-            .padding(.bottom, Space.m)
+            // The pages' own bottom inset: every card's footer sits on the same line, as far
+            // from the shell's edge as the controls along the bottom of any page.
+            .padding(.bottom, ExpandedLayout.bottom)
         }
         .frame(width: metrics.expanded.width, height: metrics.expanded.height, alignment: .top)
     }
@@ -100,6 +102,8 @@ struct ApprovalCard: View {
 struct ToolApproval: View {
     let model: AppModel
     let entry: ApprovalQueue.Entry
+    /// The risky Allow has had its first click.
+    @ViewState private var armed = false
 
     var body: some View {
         let r = entry.request
@@ -107,38 +111,36 @@ struct ToolApproval: View {
         VStack(alignment: .leading, spacing: Space.s) {
             HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                 if let agent = r.agentType { Chip(text: agent).help("Asked by the \(agent) subagent") }
-                if risks.isEmpty {
+                if let summary = RiskRules.summary(risks) {
+                    // One line, so the command keeps its room: the most serious risk, and how
+                    // many more; every one in the help.
+                    Label(summary, systemImage: "exclamationmark.triangle.fill")
+                        .textStyle(.caption, emphasized: true)
+                        .foregroundStyle(Color.orange)
+                        .lineLimit(1)
+                        .help(risks.joined(separator: "\n"))
+                        .accessibilityLabel("Risky: " + risks.joined(separator: ", "))
+                    Spacer(minLength: Space.s)
+                    // Says what the risky Allow asks for, where the risk is named.
+                    Text(armed ? "Click again to allow" : "Click twice to allow")
+                        .textStyle(.caption)
+                        .foregroundStyle(Ink.tertiary)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .accessibilityHidden(true)
+                } else {
                     Text(r.action)
                         .textStyle(.body, emphasized: true)
                         .foregroundStyle(Ink.secondary)
                         .lineLimit(1)
-                } else {
-                    Label(risks.joined(separator: " · "), systemImage: "exclamationmark.triangle.fill")
-                        .textStyle(.caption, emphasized: true)
-                        .foregroundStyle(Color.orange)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .help(risks.joined(separator: "\n"))
-                        .accessibilityLabel("Risky: " + risks.joined(separator: ", "))
                 }
             }
-            ScrollBox(risky: !risks.isEmpty) {
-                VStack(alignment: .leading, spacing: Space.xs) {
-                    Text(r.subject)
-                        .font(.system(size: TextStyle.caption.size, weight: .medium, design: .monospaced))
-                        .foregroundStyle(Ink.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let detail = r.detail, !detail.isEmpty {
-                        Text(detail)
-                            .font(.system(size: TextStyle.caption.size, design: .monospaced))
-                            .foregroundStyle(Ink.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
+            ScrollBox(risky: !risks.isEmpty, lineFont: Self.subjectFont) {
+                Self.requestText(r)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            HStack(spacing: Space.s) {
-                TerminalButton { decide(.terminal) }
-                Spacer(minLength: 0)
+            .help(r.file != nil ? r.subject : "")
+            ApprovalFooter(terminal: { decide(.terminal) }) {
                 Button("Deny") { decide(.deny(ApprovalDecision.deniedMessage)) }
                     .buttonStyle(ApprovalButtonStyle(fill: Wash.strong))
                 if risks.isEmpty {
@@ -150,19 +152,42 @@ struct ToolApproval: View {
                     Button("Allow") { decide(.allow) }
                         .buttonStyle(ApprovalButtonStyle(fill: .green.opacity(0.8)))
                 } else {
-                    HoldToAllowButton { decide(.allow) }
+                    HoldToAllowButton(armed: $armed) { decide(.allow) }
                 }
             }
         }
     }
 
+    static var subjectFont: Font { .system(size: TextStyle.caption.size, weight: .medium, design: .monospaced) }
+    static var detailFont: Font { .system(size: TextStyle.caption.size, design: .monospaced) }
+
+    /// The request as one run of lines: the command, path or input, or for a file tool the
+    /// file's name and its folder after it, then the description or the change in grey. One
+    /// text, so every line is the same height and the box can stop between two of them.
+    static func requestText(_ r: ApprovalRequest) -> Text {
+        var text: Text
+        if let file = r.file {
+            text = Text(file.name).font(subjectFont).foregroundStyle(Ink.primary)
+            if let folder = file.folder {
+                text = text + Text("  " + folder).font(detailFont).foregroundStyle(Ink.secondary)
+            }
+        } else {
+            text = Text(r.subject).font(subjectFont).foregroundStyle(Ink.primary)
+        }
+        if let detail = r.detail, !detail.isEmpty {
+            text = text + Text("\n" + detail).font(detailFont).foregroundStyle(Ink.secondary)
+        }
+        return text
+    }
+
     private func decide(_ d: ApprovalDecision) { model.approvals.decide(d, for: entry) }
 }
 
-/// Allow for risky calls: click once to arm, again to confirm, or press and hold.
+/// Allow for risky calls: click once to arm, again to confirm, or press and hold. A full
+/// orange at rest would read as safe to click; a faint one reads as switched off.
 struct HoldToAllowButton: View {
+    @Binding var armed: Bool
     var action: () -> Void
-    @ViewState private var armed = false
     @ViewState private var pressedAt: Date?
     @ViewState private var fill: CGFloat = 0
     /// A double-click landing as the card appears must not arm it either.
@@ -178,7 +203,7 @@ struct HoldToAllowButton: View {
             .frame(height: ApprovalButtonStyle.height)
             .background {
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.orange.opacity(armed ? 0.65 : 0.4))
+                    Capsule().fill(Color.orange.opacity(armed ? 0.85 : 0.6))
                     GeometryReader { g in Rectangle().fill(Color.orange).frame(width: g.size.width * fill) }
                 }
                 .clipShape(Capsule())
@@ -225,8 +250,16 @@ struct QuestionApproval: View {
     /// When the next question replaced the last one: its options sit where the old ones were,
     /// so a double-click must not answer it unseen.
     @ViewState private var steppedAt = Date.distantPast
+    /// The options' height and the room they have: past it, they scroll rather than push the
+    /// footer off its line.
+    @ViewState private var optionsHeight: CGFloat = 0
+    @ViewState private var optionsRoom: CGFloat = .infinity
 
     private var justStepped: Bool { Date().timeIntervalSince(steppedAt) < ApprovalController.clickGuard }
+
+    /// An option: the height of a standard push button, so two rows and the footer fit the
+    /// smallest island.
+    static let optionHeight: CGFloat = 22
 
     var body: some View {
         let q = questions[min(index, questions.count - 1)]
@@ -248,7 +281,7 @@ struct QuestionApproval: View {
                         .fixedSize()
                 }
             }
-            AdaptiveScroll(scrolls: rows.count > 2) {
+            AdaptiveScroll(scrolls: rows.count > 2 || optionsHeight > optionsRoom + 0.5) {
                 VStack(spacing: Space.xs) {
                     ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                         HStack(spacing: Space.xs) {
@@ -257,19 +290,21 @@ struct QuestionApproval: View {
                         }
                     }
                 }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { optionsHeight = $0 }
             }
-            Spacer(minLength: 0)
-            HStack(spacing: Space.s) {
-                TerminalButton { model.approvals.decide(.terminal, for: entry) }
-                Spacer(minLength: 0)
+            .frame(maxHeight: .infinity, alignment: .top)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { optionsRoom = $0 }
+            ApprovalFooter(terminal: { model.approvals.decide(.terminal, for: entry) }) {
                 if q.multiSelect {
-                    Text("Choose any")
+                    Text("Choose one or more")
                         .textStyle(.caption)
                         .foregroundStyle(Ink.tertiary)
+                        .lineLimit(1)
                     Button(index + 1 < questions.count ? "Next" : "Send") {
                         answer(q, with: q.options.map(\.label).filter(picked.contains).joined(separator: ", "))
                     }
-                    .buttonStyle(ApprovalButtonStyle(fill: .blue.opacity(picked.isEmpty ? 0.35 : 0.85)))
+                    // One fill: with nothing picked the button itself looks switched off.
+                    .buttonStyle(ApprovalButtonStyle(fill: .blue.opacity(0.85)))
                     .disabled(picked.isEmpty)
                 }
             }
@@ -300,7 +335,7 @@ struct QuestionApproval: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, Space.m)
-            .frame(maxWidth: .infinity, minHeight: ApprovalButtonStyle.height)
+            .frame(maxWidth: .infinity, minHeight: Self.optionHeight)
             .background(RoundedRectangle(cornerRadius: Radius.s, style: .continuous).fill(on ? Color.blue.opacity(0.3) : Wash.regular))
             .contrastEdge(RoundedRectangle(cornerRadius: Radius.s, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: Radius.s, style: .continuous))
@@ -336,10 +371,9 @@ struct PlanApproval: View {
         VStack(alignment: .leading, spacing: Space.s) {
             ScrollBox {
                 PlanText(blocks: PlanMarkdown.blocks(plan))
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            HStack(spacing: Space.s) {
-                TerminalButton { model.approvals.decide(.terminal, for: entry) }
-                Spacer(minLength: 0)
+            ApprovalFooter(terminal: { model.approvals.decide(.terminal, for: entry) }) {
                 Button("Keep planning") { model.approvals.decide(.deny(ApprovalDecision.keepPlanningMessage), for: entry) }
                     .buttonStyle(ApprovalButtonStyle(fill: Wash.strong))
                 Button("Approve") { model.approvals.decide(.allow, for: entry) }
@@ -390,70 +424,127 @@ struct PlanText: View {
 
 // MARK: - Pieces
 
-/// A framed box for long text: scrolls, and says so when there's more below.
+/// A framed box for long text. It is as tall as its text, up to the room it has; past that it
+/// scrolls, stops between two lines (with `lineFont`), fades its last line out so a cut line
+/// reads as going on, and, when it is tall enough to spare a strip, says "More below" under
+/// the text, never over it.
 struct ScrollBox<Content: View>: View {
     var risky = false
+    /// The font of text set in lines of one size, so the box can stop between two of them.
+    var lineFont: Font? = nil
     @ViewBuilder var content: Content
     @Environment(\.snapshotMode) private var snapshotMode
     @ViewState private var contentHeight: CGFloat = 0
-    @ViewState private var visibleHeight: CGFloat = 0
+    @ViewState private var room: CGFloat = 0
+    @ViewState private var line: CGFloat = 0
 
     var body: some View {
+        let fit = TextBoxFit(content: contentHeight, room: room, line: lineFont == nil ? 0 : line,
+                             pad: TextBoxFit.pad, strip: TextBoxFit.strip)
+        Color.clear
+            .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { room = $0 }
+            .overlay(alignment: .top) { box(fit) }
+            .background(alignment: .topLeading) {
+                if let lineFont {
+                    Text("Ag").font(lineFont).fixedSize().hidden()
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { line = $0 }
+                        .accessibilityHidden(true)
+                }
+            }
+    }
+
+    private func box(_ fit: TextBoxFit) -> some View {
         let shape = RoundedRectangle(cornerRadius: Radius.s, style: .continuous)
-        let overflows = contentHeight > visibleHeight + 2
+        // Over the last part of a line that is cut: the bottom padding for lines of one size,
+        // a little more for a mix of them.
+        let fade: CGFloat = fit.overflows ? (lineFont == nil ? Space.l : TextBoxFit.pad) : 0
         let inner = content
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Space.m)
-            .padding(.top, Space.s)
-            // Room below the last line for the "More" badge, so scrolling to the end shows
-            // every character instead of leaving the tail of a command under the badge.
-            .padding(.bottom, overflows ? 28 : Space.s)
+            .padding(.top, TextBoxFit.pad)
+            // Scrolled to the end, the last line clears the fade.
+            .padding(.bottom, max(TextBoxFit.pad, fade))
             .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
-        Group {
-            if snapshotMode {
-                inner
-            } else {
-                ScrollView(.vertical, showsIndicators: true) { inner }
+        return VStack(spacing: 0) {
+            Group {
+                if fit.overflows && !snapshotMode {
+                    ScrollView(.vertical, showsIndicators: true) { inner }
+                } else {
+                    inner
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: fit.text, alignment: .top)
+            .clipped()
+            .mask {
+                VStack(spacing: 0) {
+                    Color.black
+                    // Quickly at first, so the top of a cut line shows only as a hint of more.
+                    LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black.opacity(0.35), location: 0.35),
+                                           .init(color: .black.opacity(0), location: 0.85)],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: fade)
+                }
+            }
+            if fit.hint {
+                HStack {
+                    Spacer(minLength: 0)
+                    Label("More below", systemImage: "arrow.down")
+                        .textStyle(.caption, emphasized: true)
+                        .foregroundStyle(Ink.secondary)
+                        .padding(.horizontal, Space.s)
+                        .frame(height: 16)
+                        .background(Capsule().fill(Wash.regular))
+                }
+                .padding(.horizontal, Space.s)
+                .frame(height: TextBoxFit.strip)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { visibleHeight = $0 }
-        .clipShape(shape)
+        .frame(maxWidth: .infinity)
         .background(shape.fill(Wash.subtle))
+        .clipShape(shape)
         // Orange round a risky command, always; Increase Contrast edges the others.
         .contrastEdge(shape, normal: .clear)
         .overlay(shape.strokeBorder(risky ? Color.orange.opacity(0.75) : .clear, lineWidth: 1))
-        .overlay(alignment: .bottomTrailing) {
-            if overflows {
-                Label("More", systemImage: "arrow.down")
-                    .textStyle(.caption, emphasized: true)
-                    .foregroundStyle(.black)
-                    .padding(.horizontal, Space.s)
-                    .frame(height: 20)
-                    .background(Capsule().fill(Color.white.opacity(0.85)))
-                    .padding(Space.xs)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
-        }
     }
 }
 
-/// "Terminal": leave the answer to the agent's own prompt, and bring that terminal forward.
+/// Every card's last line: the way back to the terminal on the left, the decisions on the
+/// right, one button high, so footers sit on the same line from card to card.
+struct ApprovalFooter<Trailing: View>: View {
+    var terminal: () -> Void
+    @ViewBuilder var trailing: Trailing
+
+    var body: some View {
+        HStack(spacing: Space.s) {
+            TerminalButton(action: terminal)
+            Spacer(minLength: 0)
+            trailing
+        }
+        .frame(height: ApprovalButtonStyle.height)
+    }
+}
+
+/// Leave the answer to the agent's own prompt, and bring that terminal forward.
 struct TerminalButton: View {
     var action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Label("Terminal", systemImage: "terminal")
+            Label("Answer in the terminal", systemImage: "terminal")
         }
         .buttonStyle(ApprovalButtonStyle(fill: .clear, foreground: Ink.secondary))
-        .help("Answer in the terminal instead")
+        .help("Answer at the agent\u{2019}s own prompt, and bring its terminal forward")
     }
 }
 
 /// The decisions: the island's capsule, one text size up, since they are the point of the card.
+/// Switched off, it is a plain wash with quiet text, never a dimmed colour.
 struct ApprovalButtonStyle: ButtonStyle {
     var fill: Color
     var foreground: Color = .white
@@ -461,13 +552,24 @@ struct ApprovalButtonStyle: ButtonStyle {
     static let height: CGFloat = 24
 
     func makeBody(configuration: Configuration) -> some View {
+        ApprovalButtonBody(configuration: configuration, fill: fill, foreground: foreground)
+    }
+}
+
+private struct ApprovalButtonBody: View {
+    let configuration: ButtonStyleConfiguration
+    let fill: Color
+    let foreground: Color
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
         configuration.label
             .textStyle(.body, emphasized: true)
             .lineLimit(1)
-            .foregroundStyle(foreground)
+            .foregroundStyle(isEnabled ? foreground : Ink.tertiary)
             .padding(.horizontal, Space.m)
-            .frame(height: Self.height)
-            .background(Capsule().fill(fill.opacity(configuration.isPressed ? 0.7 : 1)))
+            .frame(height: ApprovalButtonStyle.height)
+            .background(Capsule().fill(isEnabled ? fill.opacity(configuration.isPressed ? 0.7 : 1) : Wash.regular))
             .contrastEdge(Capsule())
             .contentShape(Capsule())
             .scaleEffect(configuration.isPressed ? Motion.pressScale : 1)

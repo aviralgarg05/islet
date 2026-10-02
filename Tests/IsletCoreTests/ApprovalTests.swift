@@ -192,12 +192,41 @@ enum HookFixtures {
         #expect(parse("cursor", #"{"conversation_id":"c","hook_event_name":"afterShellExecution","command":"ls"}"#) == nil)
     }
 
+    @Test func fileNameAndFolder() {
+        let home = "/Users/me"
+        #expect(ApprovalFile(path: "/Users/me/code/islet/Sources/IsletCore/RiskRules.swift", cwd: "/Users/me/code/islet", home: home)
+            == ApprovalFile(name: "RiskRules.swift", folder: "Sources/IsletCore"))
+        #expect(ApprovalFile(path: "/Users/me/code/islet/README.md", cwd: "/Users/me/code/islet/", home: home)
+            == ApprovalFile(name: "README.md", folder: nil))
+        // Outside the project: the whole folder, with ~ for home.
+        #expect(ApprovalFile(path: "/Users/me/.zshrc", cwd: "/Users/me/code/islet", home: home) == ApprovalFile(name: ".zshrc", folder: "~"))
+        #expect(ApprovalFile(path: "/Users/me/code/isletx/a.swift", cwd: "/Users/me/code/islet", home: home)
+            == ApprovalFile(name: "a.swift", folder: "~/code/isletx"))
+        #expect(ApprovalFile(path: "/etc/hosts", cwd: nil, home: home) == ApprovalFile(name: "hosts", folder: "/etc"))
+        #expect(ApprovalFile(path: "/hosts", cwd: "/Users/me", home: home) == ApprovalFile(name: "hosts", folder: "/"))
+        #expect(ApprovalFile(path: "notes.txt", cwd: "/p", home: home) == ApprovalFile(name: "notes.txt", folder: nil))
+        #expect(ApprovalFile(path: "", cwd: "/p", home: home) == nil)
+        #expect(ApprovalFile(path: "/p/dir/", cwd: "/p", home: home) == nil)
+        let bash = ApprovalRequest(provider: .claude, hook: .permissionRequest, sessionID: "s", cwd: "/p", toolName: "Bash",
+                                   toolInput: .object(["command": "cat /p/a.swift"]))
+        #expect(bash.file == nil)
+    }
+
+    @Test func riskSummaryFitsOneLine() {
+        #expect(RiskRules.summary([]) == nil)
+        #expect(RiskRules.summary(["Publishes a package"]) == "Publishes a package")
+        #expect(RiskRules.summary(["Deletes files recursively", "Deletes files outside the project folder", "Force-pushes"])
+            == "Deletes files recursively and 2 more")
+    }
+
     @Test func displayForFileTools() throws {
         let edit = ApprovalRequest(provider: .claude, hook: .permissionRequest, sessionID: "s", cwd: "/p", toolName: "Edit",
                                    toolInput: .object(["file_path": "/p/a.swift", "old_string": "let a = 1", "new_string": "let a = 2\nlet b = 3"]))
         #expect(edit.action == "Edit a file")
         #expect(edit.subject == "/p/a.swift")
         #expect(edit.detail == "- let a = 1\n+ let a = 2\n+ let b = 3")
+        // The card names the file first; the folder follows, relative to the project.
+        #expect(edit.file == ApprovalFile(name: "a.swift", folder: nil))
         let write = ApprovalRequest(provider: .claude, hook: .permissionRequest, sessionID: "s", toolName: "Write",
                                     toolInput: .object(["file_path": "/p/big.txt", "content": .string(String(repeating: "x", count: 4100))]))
         #expect(write.detail?.hasSuffix("… 100 more characters") == true)
@@ -682,5 +711,41 @@ enum HookFixtures {
         for path in ["/v1/approvals", "/v1/approvals/1", "/v1/hooks/claude/decision"] {
             #expect(await rt.handle(request(path, body: #"{"decision":"allow"}"#)).status >= 400)
         }
+    }
+}
+
+@Suite struct TextBoxFitTests {
+    @Test func textThatFitsMakesTheBoxJustAsTall() {
+        let fit = TextBoxFit(content: 55, room: 74, line: 13)
+        #expect(fit.text == 55 && !fit.overflows && !fit.hint)
+    }
+
+    @Test func aCutFallsBetweenTwoLines() {
+        // Two whole lines and the top of the third, in a box with 44 points of room.
+        let small = TextBoxFit(content: 59, room: 44, line: 13)
+        #expect(small.overflows && !small.hint)
+        // 8 above, two lines of 13, and 8 for the top of the next line.
+        #expect(small.text == CGFloat(42))
+        // With room for three lines beside it, "More below" gets its strip.
+        let tall = TextBoxFit(content: 300, room: 120, line: 13)
+        #expect(tall.hint)
+        #expect(tall.text == CGFloat(8 + 6 * 13 + 8))
+        #expect(tall.text + TextBoxFit.strip <= 120)
+        // Text of mixed sizes uses all the room.
+        let plan = TextBoxFit(content: 300, room: 96, line: 0)
+        #expect(plan.hint && plan.text == 96 - TextBoxFit.strip)
+        // Too small for even a line: whatever room there is.
+        #expect(TextBoxFit(content: 59, room: 20, line: 13).text == 20)
+        // A point short of two whole lines and both padding: both lines, with less padding.
+        let edit = TextBoxFit(content: 86, room: 43, line: 14)
+        #expect(edit.overflows && edit.text == CGFloat(43))
+    }
+
+    @Test func onlyPaddingCutStillFits() {
+        // Two lines whose bottom padding is a point short of the room: no fade, no scrolling.
+        let command = TextBoxFit(content: 44, room: 43, line: 14)
+        #expect(!command.overflows && command.text == CGFloat(43))
+        // More than the padding cut is a real overflow.
+        #expect(TextBoxFit(content: 50, room: 43, line: 14).overflows)
     }
 }

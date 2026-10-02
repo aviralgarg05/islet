@@ -27,6 +27,13 @@ public enum RiskRules {
         return unique(out)
     }
 
+    /// One line for the card: the most serious reason, and how many more there are
+    /// ("Deletes files recursively and 2 more"). The whole list goes in the card's help.
+    public static func summary(_ reasons: [String]) -> String? {
+        guard let first = reasons.first else { return nil }
+        return reasons.count == 1 ? first : "\(first) and \(reasons.count - 1) more"
+    }
+
     static func unique(_ reasons: [String]) -> [String] {
         var seen = Set<String>()
         return reasons.filter { seen.insert($0).inserted }
