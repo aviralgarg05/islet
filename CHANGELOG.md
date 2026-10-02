@@ -4,6 +4,8 @@
 
 ### Fixes
 - Music and videos playing in a browser show on the island again. A live stream, or a video whose length the browser doesn’t know, used to stop Now Playing for every app until the Mac slept and woke.
+- The app icons beside the song now offer every player macOS lists, such as Spotify paused a while ago beside a video playing in Chrome. For a player macOS hasn’t given the controls to, a press says which app has them and offers to open the player, instead of doing nothing.
+- A video’s artwork from Chrome no longer blinks off and on while it plays.
 - Settings changed from the island (time left, a Pomodoro length, a tool's **Turn on**, Lyrics, Mute, turning on the calendar) are saved and applied at once, and Settings shows them straight away.
 - A change made just after Islet saved something else, such as a slider still moving in Settings, is no longer undone a moment later.
 - Switching to a busy app no longer makes the island hitch while Islet starts following that app's windows for full screen.
