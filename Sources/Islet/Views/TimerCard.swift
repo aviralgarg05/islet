@@ -297,7 +297,7 @@ struct TimerComposer: View {
         var items = PomodoroPreset.all.map { preset in
             IslandMenu.Item(title: preset.title, checked: preset == current) {
                 model.settings.pomodoro = preset.applied(to: model.settings.pomodoro)
-                model.saveSettings()
+                model.saveAndApplySettings()
                 model.timers.togglePomodoro()
                 close()
             }

@@ -74,8 +74,7 @@ enum AppActions {
 
     static func setClipboard(_ model: AppModel, enabled: Bool) {
         model.settings.clipboardEnabled = enabled
-        model.saveSettings()
-        NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
+        model.saveAndApplySettings()
     }
 
     /// Show a sample activity so appearance changes can be judged live.

@@ -46,8 +46,7 @@ extension AppModel {
     /// Turns a tool on or off from the island (its page's "Turn on").
     func setTool(_ key: WritableKeyPath<IsletSettings, Bool>, _ on: Bool) {
         settings[keyPath: key] = on
-        saveSettings()
-        NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
+        saveAndApplySettings()
     }
 }
 
@@ -168,8 +167,7 @@ final class LyricsController {
     func accept(_ np: NowPlaying) {
         model.settings.lyricsEnabled = true
         if LyricsQuery.origin(of: np) == .browser { model.settings.lyricsIncludeBrowsers = true }
-        model.saveSettings()
-        NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
+        model.saveAndApplySettings()
         offerTrack = nil
         hiddenTrack = nil
         askedTrack = np.trackKey

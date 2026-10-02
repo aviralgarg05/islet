@@ -53,7 +53,7 @@ extension AppModel {
 
     func toggleRemainingTime() {
         settings.mediaShowsRemainingTime.toggle()
-        saveSettings()
+        saveAndApplySettings()
     }
 
     // MARK: Volume and output

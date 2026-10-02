@@ -580,7 +580,7 @@ final class AppModel {
 
     private func switchOnCalendarFeature(_ kind: PermissionKind) {
         if kind == .reminders { settings.remindersEnabled = true } else { settings.calendarEnabled = true }
-        saveSettings()
+        saveAndApplySettings()
         recheckCalendarAccess(force: true)
     }
 
@@ -791,6 +791,13 @@ final class AppModel {
         noteSettingsProblem(configFile.problem)
         // Saving makes the config folder again when it was deleted: watch the new one.
         if watchingSettings, FileIdentity(path: IsletPaths.configDirectory.path) != settingsFolder { rearmSettingsWatchers() }
+    }
+
+    /// A change made outside the Settings window (the island's own controls): saved, and applied
+    /// as an edit in Settings is. Settings shows it at once, since it reads the model.
+    func saveAndApplySettings() {
+        saveSettings()
+        NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
     }
 
     /// Settings → Advanced, while config.json doesn't parse: keep a copy of it as
@@ -1473,8 +1480,7 @@ final class AppModel {
     /// The "x" on Home's Claude usage hint: hide it for good.
     func dismissClaudeUsageHint() {
         settings.claudeUsageHint = false
-        saveSettings()
-        startEventSources()
+        saveAndApplySettings()
     }
 
     /// Silence a source: remove its activities now and ignore it from now on. Saved and applied
@@ -1484,19 +1490,17 @@ final class AppModel {
         if !settings.mutedSources.contains(source) { settings.mutedSources.append(source) }
         // Gone at once, even what shows while muted (a battery about to run out).
         _ = center.removeAll(source: source)
-        saveSettings()
         applyMutes()
         reschedule()
-        NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
+        saveAndApplySettings()
     }
 
     /// Settings → Apps → Muted, or a feature's page: hear from a source again. What it has
     /// now shows at once.
     func unmute(source: String) {
         settings.mutedSources.removeAll { $0 == source }
-        saveSettings()
         applyMutes()
-        NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
+        saveAndApplySettings()
     }
 
     /// Make what is on screen follow the muted sources, however they changed: Mute in the
