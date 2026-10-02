@@ -1608,12 +1608,13 @@ final class AppModel {
 
     /// Send a command to the player. Play and pause show at once (`PlaybackIntent`), then
     /// follow what the player reports.
-    /// - Parameter target: the player to send it to: the one on show (`nowPlaying`) if nil, or
-    ///   the song a swipe on the closed island moved (`closedNowPlaying`).
+    /// - Parameter target: the player to send it to: if nil, the one on show (`nowPlaying`) or,
+    ///   with nothing on show, the one macOS gives the controls to while Islet offers it
+    ///   (`commandTarget`); or the song a swipe on the closed island moved (`closedNowPlaying`).
     @discardableResult
     func send(_ command: PlaybackCommand, position: Double? = nil, to target: NowPlaying? = nil) -> Bool {
         let now = Date()
-        let np = target ?? nowPlaying
+        let np = target ?? commandTarget(now: now)
         // Only a press on the player on show shows at once.
         let onShow = np.map(MediaArbiter.playerID) == nowPlaying.map(MediaArbiter.playerID)
         let intent = onShow ? nowPlaying.flatMap { PlaybackIntent.intended(command, on: $0, at: now) } : nil
@@ -1665,15 +1666,21 @@ final class AppModel {
         AppActions.openSettings(.permissions, at: "permissions.\(kind.rawValue)")
     }
 
+    /// The player a command with no target goes to: the one on show or, with nothing on show,
+    /// the one macOS gives the controls to while Islet offers it (Spotify paused an hour ago).
+    /// Never one Islet keeps out of the island, and with no player at all nothing, rather than
+    /// the system's Now Playing, which could start Music.
+    private func commandTarget(now: Date) -> NowPlaying? {
+        nowPlaying ?? (systemMedia.isRunning ? media.controlsHolder(now: now) : nil)
+    }
+
     /// Commands go to the player on show (the one picked in the island, or the newest): the
     /// bridge only when macOS gives that app the controls, Music and Spotify otherwise through
     /// their own integration, and any other player nothing at all, since the bridge would reach
     /// the app with the controls instead. So a press on Spotify never pauses a video in Chrome.
     private func route(_ command: PlaybackCommand, position: Double?, to target: NowPlaying?) -> Bool {
-        guard let np = target else {
-            // Nothing on show: the bridge controls whatever macOS considers "now playing".
-            return systemMedia.isRunning && systemMedia.send(command, position: position)
-        }
+        // Nothing on show and no player to take it (`commandTarget`): nowhere to send it.
+        guard let np = target else { return false }
         let r = mediaRoute(for: np)
         if let routed = sendControl(command, position: position, bridge: r == .bridge, on: np) { return routed }
         switch r {

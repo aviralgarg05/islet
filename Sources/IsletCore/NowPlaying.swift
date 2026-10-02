@@ -500,6 +500,16 @@ public struct MediaArbiter: Sendable {
         return id
     }
 
+    /// The player a command reaches with nothing on show: the one macOS gives the controls to,
+    /// while Islet offers it (`available`), however long ago it paused. Nil when nobody has the
+    /// controls or Islet doesn't offer the one that has them (its app hidden, its source switched
+    /// off, a bare clip still settling): a command sent through the bridge then would reach a
+    /// player Islet keeps out of the island or, with no player at all, could start Music.
+    public func controlsHolder(now: Date) -> NowPlaying? {
+        guard let id = bridgePlayer else { return nil }
+        return available(now: now).first { Self.playerID($0) == id }
+    }
+
     /// The players to offer, one per app, newest first. The island offers the others as chips.
     /// Every player macOS lists is offered, however long it has been paused, as macOS's own Now
     /// Playing list does; one known only from Music's or Spotify's own reports or the API goes

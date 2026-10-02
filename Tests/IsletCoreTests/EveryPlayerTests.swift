@@ -124,6 +124,40 @@ import Testing
         #expect(MediaRoute.route(for: Self.safari(), bridgeRunning: false, bridgePlayer: Self.safariID) == .none)
     }
 
+    /// With nothing on show (a link, a script or a focus round), a command goes to the player
+    /// macOS gives the controls to while Islet offers it, however long ago it paused, and
+    /// otherwise nowhere: not to an app Islet hides, nor, with no player at all, to the system's
+    /// Now Playing, which could start Music.
+    @Test func withNothingOnShowOnlyAnOfferedPlayerTakesACommand() {
+        var m = MediaArbiter(pausedTimeout: 60)
+        m.updateFromBridge(Self.report([Self.spotify()], current: Self.spotifyID))
+        let now = t0.addingTimeInterval(1)
+        #expect(m.current(now: now) == nil)
+        let holder = m.controlsHolder(now: now)
+        #expect(holder?.bundleID == Self.spotifyID)
+        #expect(holder.map { MediaRoute.route(for: $0, bridgeRunning: true, bridgePlayer: m.bridgePlayer) } == .bridge)
+        // Hidden, or its source switched off: nothing.
+        m.hidden = [Self.spotifyID]
+        #expect(m.controlsHolder(now: now) == nil)
+        m.hidden = []
+        m.disabled = [.spotify]
+        #expect(m.controlsHolder(now: now) == nil)
+        m.disabled = []
+        // A bare clip that hasn't played long enough to show: nothing.
+        let clip = NowPlaying(source: .system, bundleID: "com.example.chat", title: "Voice message", isPlaying: true,
+                              duration: 4, elapsed: 0, timestamp: t0)
+        m.updateFromBridge(Self.report([Self.spotify(), clip], current: "com.example.chat"))
+        #expect(m.controlsHolder(now: now) == nil)
+        // Another player has them: that one.
+        m.updateFromBridge(Self.report([Self.spotify(), Self.safari()], current: Self.safariID))
+        #expect(m.controlsHolder(now: now)?.bundleID == Self.safariID)
+        // Nobody has them, or nothing is listed at all: nothing.
+        m.updateFromBridge(Self.report([Self.spotify()], current: nil))
+        #expect(m.controlsHolder(now: now) == nil)
+        m.updateFromBridge(Self.report([], current: nil))
+        #expect(m.controlsHolder(now: now) == nil)
+    }
+
     @Test func aPressThatWentNowhereSaysWhy() {
         let safari = Self.safari()
         let hint = PlayerIntegration.hint(for: safari, route: .none, sent: false, canScript: false, bridgeRunning: true,
