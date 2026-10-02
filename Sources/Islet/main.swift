@@ -284,6 +284,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Only geometry changes need fresh panels; everything else updates in place.
         let panels = PanelSettings(model.settings)
         guard panels != panelSettings else { return }
+        // A measurement made for "Always full width" doesn't fit "Fit the menu bar", nor the other
+        // way round: the wings start narrow until the menu bar is measured again.
+        if panelSettings?.layout != panels.layout { model.closedPlacements = [:] }
         panelSettings = panels
         controllers.forEach { $0.close() }
         controllers = []

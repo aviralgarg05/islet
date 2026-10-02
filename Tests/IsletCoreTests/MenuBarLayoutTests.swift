@@ -135,6 +135,20 @@ import Testing
         #expect(!MenuBarLayoutEngine.shouldReplace(54, with: 54, preferredWing: 54))
     }
 
+    /// A measurement kept from before a change in Settings, until the menu bar is measured
+    /// again: a smaller size draws the new, narrower wing at once rather than shrinking to it.
+    @Test func aKeptMeasurementNeverDrawsWiderThanTheSetting() {
+        // Large (84 pt) measured, then Compact (52 pt) chosen while nothing showed.
+        #expect(MenuBarLayoutEngine.usableWing(measured: 84, preference: .auto, preferredWing: 52) == 52)
+        // A tight menu bar's narrow wing stays as it is.
+        #expect(MenuBarLayoutEngine.usableWing(measured: 36, preference: .auto, preferredWing: 52) == 36)
+        // A bigger size waits for the next measurement, starting narrow.
+        #expect(MenuBarLayoutEngine.usableWing(measured: 52, preference: .auto, preferredWing: 84) == 52)
+        // "Always full width" wants the whole wing: an older measurement can't be used.
+        #expect(MenuBarLayoutEngine.usableWing(measured: 36, preference: .wings, preferredWing: 52) == nil)
+        #expect(MenuBarLayoutEngine.usableWing(measured: 52, preference: .wings, preferredWing: 52) == 52)
+    }
+
     @Test func smallSlackChangesAreIgnored() {
         #expect(!MenuBarLayoutEngine.differs(20, 17))
         #expect(MenuBarLayoutEngine.differs(20, 16))

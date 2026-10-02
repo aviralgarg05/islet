@@ -110,4 +110,15 @@ public enum MenuBarLayoutEngine {
         if current > preferredWing || (next == preferredWing && current != next) { return true }
         return differs(current, next)
     }
+
+    /// The wing to draw from a measurement taken with other settings, until the next one: nil
+    /// when it can't be used ("Always full width" chosen since, which wants the whole wing),
+    /// the wing width now set when the measurement is wider (a smaller size or wing chosen
+    /// since: the wings never start wide and then shrink), or else the measurement.
+    public static func usableWing(measured: CGFloat, preference: ClosedLayoutPreference, preferredWing: CGFloat) -> CGFloat? {
+        switch preference {
+        case .wings: return measured == preferredWing ? measured : nil
+        case .auto: return min(measured, preferredWing)
+        }
+    }
 }

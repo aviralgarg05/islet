@@ -1067,11 +1067,13 @@ final class AppModel {
             return .unmeasured(preference, wing: metrics.wingWidth, hasMenuBar: true)
         }
         // A measurement taken before "Always full width" was chosen has narrower wings; until the
-        // next one, keep bubbles out of the row rather than trust its room.
-        if preference == .wings, measured.wing != metrics.wingWidth {
+        // next one, keep bubbles out of the row rather than trust its room. One taken before a
+        // smaller size or wing was chosen draws the new width at once instead of shrinking to it.
+        guard let wing = MenuBarLayoutEngine.usableWing(measured: measured.wing, preference: preference,
+                                                        preferredWing: metrics.wingWidth) else {
             return .unmeasured(preference, wing: metrics.wingWidth, hasMenuBar: true)
         }
-        return measured
+        return wing == measured.wing ? measured : ClosedPlacement(wing: wing, leftSlack: measured.leftSlack, rightSlack: measured.rightSlack)
     }
 
     var upcomingEvent: AgendaItem? { settings.calendarEnabled ? Agenda.upcoming(visibleAgenda, now: Date()) : nil }
