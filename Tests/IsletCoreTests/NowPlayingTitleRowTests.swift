@@ -78,3 +78,46 @@ import Testing
                 == Layout(chips: 0, showsVolume: true))
     }
 }
+
+/// The lyrics button on the Now Playing card fits at every size without cutting the title: in
+/// the row where there is room, under the other buttons where there isn't.
+@Suite struct NowPlayingLyricsButtonTests {
+    typealias Layout = NowPlayingTitleRow.Layout
+    static let spacing = 12.0
+
+    @Test func compactBesideTheGlancesPutsItUnderTheVolumeButton() {
+        let width = NowPlayingTitleRowTests.width(hero: 201, art: 40)
+        let row = NowPlayingTitleRow.layout(width: width, spacing: Self.spacing, otherPlayers: 0, volumeRow: false, lyrics: true)
+        #expect(row == Layout(chips: 0, showsVolume: true, lyrics: .below))
+        #expect(width - Self.spacing - NowPlayingTitleRow.beside(row) >= NowPlayingTitleRow.titleRoom)
+        // With another player, under its chip.
+        #expect(NowPlayingTitleRow.layout(width: width, spacing: Self.spacing, otherPlayers: 2, volumeRow: false, lyrics: true)
+                == Layout(chips: 1, showsVolume: false, lyrics: .below))
+    }
+
+    @Test func roomyCardsKeepItInTheRow() {
+        // Compact with the whole width, standard, and large (with its volume row).
+        #expect(NowPlayingTitleRow.layout(width: NowPlayingTitleRowTests.width(hero: 428, art: 40), spacing: Self.spacing,
+                                          otherPlayers: 0, volumeRow: false, lyrics: true)
+                == Layout(chips: 0, showsVolume: true, lyrics: .beside))
+        #expect(NowPlayingTitleRow.layout(width: NowPlayingTitleRowTests.width(hero: 291, art: 56), spacing: Self.spacing,
+                                          otherPlayers: 1, volumeRow: false, lyrics: true)
+                == Layout(chips: 1, showsVolume: true, lyrics: .beside))
+        #expect(NowPlayingTitleRow.layout(width: NowPlayingTitleRowTests.width(hero: 347, art: 72), spacing: Self.spacing,
+                                          otherPlayers: 0, volumeRow: true, lyrics: true)
+                == Layout(chips: 0, showsVolume: false, lyrics: .beside))
+    }
+
+    @Test func itMovesUnderBeforePlayersFold() {
+        let width = NowPlayingTitleRowTests.width(hero: 291, art: 56)
+        #expect(NowPlayingTitleRow.layout(width: width, spacing: Self.spacing, otherPlayers: 3, volumeRow: false, lyrics: true)
+                == Layout(chips: 3, showsVolume: true, lyrics: .below))
+    }
+
+    @Test func noButtonWithoutASongOrRoom() {
+        #expect(NowPlayingTitleRow.layout(width: 300, spacing: Self.spacing, otherPlayers: 0, volumeRow: false)
+                == Layout(chips: 0, showsVolume: true, lyrics: .none))
+        #expect(NowPlayingTitleRow.layout(width: 100, spacing: Self.spacing, otherPlayers: 0, volumeRow: true, lyrics: true).isEmpty)
+        #expect(!Layout(chips: 0, showsVolume: false, lyrics: .beside).isEmpty)
+    }
+}

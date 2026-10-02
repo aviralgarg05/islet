@@ -35,7 +35,7 @@ extension AppModel {
     /// Called from `applyTools()` (AppModel+Tools.swift) with the tools under More.
     func applyEverydayTools() {
         let s = settings
-        if !s.lyricsEnabled { tools.lyrics.clear() }
+        tools.lyrics.settingsChanged()
         if !s.stopwatchEnabled { tools.stopwatch.reset() }
         tools.weather.settingsChanged()
         tools.focus.update()
@@ -54,7 +54,9 @@ extension AppModel {
 // MARK: - Lyrics
 
 /// Lyrics for the song on show. Looked up only while lyrics are on and Now Playing is in the
-/// open island, once per song (`LyricsService` keeps each answer).
+/// open island, once per song (`LyricsService` keeps each answer). The lyrics button on the card
+/// shows or hides them; with lyrics off it opens an offer that says what turning them on sends,
+/// and nothing is sent before **Show lyrics** is clicked.
 @MainActor
 @Observable
 final class LyricsController {
@@ -62,22 +64,45 @@ final class LyricsController {
         case idle
         case loading
         case found(SongLyrics)
-        /// LRCLIB has nothing for the song, or it isn't a song from Music or Spotify.
+        /// LRCLIB has nothing for the song, or it doesn't read as a song.
         case missing
         /// The network failed; asked again a minute later at the soonest.
         case failed
     }
 
+    /// What Home's column shows for the song instead of the glances.
+    enum Column: Equatable {
+        case lyrics(SongLyrics)
+        /// Turning lyrics on, and what that sends. `browser`: the song plays in a web browser,
+        /// so **Show lyrics** turns that switch on too.
+        case offer(browser: Bool)
+        /// Asked for with the button and not back yet.
+        case lookingUp
+        /// Asked for with the button, and none came: said for a moment, then the glances return.
+        case note(String)
+    }
+
     private(set) var state: State = .idle
     /// The song `state` is about.
     private(set) var trackKey: String?
-    /// The song whose lyrics were hidden with the "x" on them (the next song shows its own).
+    /// The song whose lyrics were hidden with the button or the "x" on them (the next song shows
+    /// its own).
     private(set) var hiddenTrack: String?
+    /// The song whose lyrics button was clicked while lyrics were off for it: Home offers them.
+    private(set) var offerTrack: String?
+    /// The song asked for with the button: while it is looked up Home shows a spinner, and
+    /// "No lyrics for this song" for a moment when there are none. Lookups on their own (a new
+    /// song) stay quiet and leave the glances until lyrics are found.
+    private(set) var askedTrack: String?
 
     @ObservationIgnored private unowned let model: AppModel
     @ObservationIgnored private lazy var service = LyricsService(
         cache: LyricsCache(directory: IsletPaths.supportDirectory.appendingPathComponent("lyrics")), version: AppModel.version)
     @ObservationIgnored private var failedAt: Date?
+    /// Whether `state` was worked out with browsers' songs included.
+    @ObservationIgnored private var withBrowsers = false
+    /// How long "No lyrics for this song" stays before the glances come back.
+    static let noteSeconds: Double = 4
 
     init(model: AppModel) {
         self.model = model
@@ -95,24 +120,97 @@ final class LyricsController {
 
     func isHidden(_ np: NowPlaying) -> Bool { hiddenTrack == np.trackKey }
 
+    /// Lyrics are on for `np`: on, and on for browsers too when it plays in one.
+    func isOn(for np: NowPlaying) -> Bool {
+        let s = model.settings
+        return s.lyricsEnabled && (s.lyricsIncludeBrowsers || LyricsQuery.origin(of: np) != .browser)
+    }
+
+    /// The lyrics are in Home's column for `np` (or on their way, asked for): the button is lit.
+    func isShowing(_ np: NowPlaying) -> Bool {
+        guard isOn(for: np) else { return offerTrack == np.trackKey }
+        switch column(for: np) {
+        case .lyrics, .lookingUp: return true
+        default: return false
+        }
+    }
+
+    /// What Home's column shows for `np`, or nil for the glances.
+    func column(for np: NowPlaying) -> Column? {
+        guard isOn(for: np) else {
+            return offerTrack == np.trackKey ? .offer(browser: LyricsQuery.origin(of: np) == .browser) : nil
+        }
+        guard !isHidden(np) else { return nil }
+        let asked = askedTrack == np.trackKey
+        switch state(for: np) {
+        case .found(let lyrics): return .lyrics(lyrics)
+        case .idle, .loading: return asked ? .lookingUp : nil
+        case .missing: return asked ? .note("No lyrics for this song") : nil
+        case .failed: return asked ? .note("Lyrics can\u{2019}t be reached just now") : nil
+        }
+    }
+
+    /// The lyrics button: the offer while lyrics are off for the song, otherwise show or hide.
+    func toggle(_ np: NowPlaying) {
+        guard isOn(for: np) else {
+            offerTrack = offerTrack == np.trackKey ? nil : np.trackKey
+            return
+        }
+        offerTrack = nil
+        if isShowing(np) {
+            hide(np)
+            return
+        }
+        hiddenTrack = nil
+        if lyrics(for: np) != nil { return }
+        askedTrack = np.trackKey
+        want(np, force: true)
+    }
+
+    /// **Show lyrics** in the offer: lyrics on (for browsers too when the song plays in one),
+    /// and this song looked up at once.
+    func accept(_ np: NowPlaying) {
+        model.settings.lyricsEnabled = true
+        if LyricsQuery.origin(of: np) == .browser { model.settings.lyricsIncludeBrowsers = true }
+        model.saveSettings()
+        NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
+        offerTrack = nil
+        hiddenTrack = nil
+        askedTrack = np.trackKey
+        want(np, force: true)
+    }
+
+    /// **Not now**: the offer closes, and nothing else changes.
+    func decline() {
+        offerTrack = nil
+    }
+
     /// Hide the lyrics for this song; Home shows its glances again.
     func hide(_ np: NowPlaying) {
         hiddenTrack = np.trackKey
+        if askedTrack == np.trackKey { askedTrack = nil }
     }
 
-    /// Now Playing is on show with `np`: look its lyrics up if they aren't known yet.
-    func want(_ np: NowPlaying) {
-        guard model.settings.lyricsEnabled else { return }
-        if np.trackKey == trackKey {
+    /// Now Playing is on show with `np`: look its lyrics up if they aren't known yet. `force`
+    /// (the button) asks again for a song already settled, from the cache when it is there.
+    func want(_ np: NowPlaying, force: Bool = false) {
+        let s = model.settings
+        guard s.lyricsEnabled else { return }
+        if !force, np.trackKey == trackKey {
             guard state == .failed, Date().timeIntervalSince(failedAt ?? .distantPast) > 60 else { return }
         }
+        if askedTrack != np.trackKey { askedTrack = nil }
+        if offerTrack != np.trackKey { offerTrack = nil }
         trackKey = np.trackKey
-        guard let query = LyricsQuery(np) else {
+        withBrowsers = s.lyricsIncludeBrowsers
+        guard let query = LyricsQuery(np, includeBrowsers: s.lyricsIncludeBrowsers) else {
             state = .missing
+            settled(np.trackKey)
             return
         }
         if let saved = service.cached(query) {
             apply(saved)
+            settled(np.trackKey)
             return
         }
         state = .loading
@@ -125,6 +223,7 @@ final class LyricsController {
                 self.state = .failed
                 self.failedAt = Date()
             }
+            self.settled(key)
         }
     }
 
@@ -135,15 +234,52 @@ final class LyricsController {
         }
     }
 
+    /// A lookup the button asked for ended without lyrics: its note shows for a moment, then
+    /// the glances come back.
+    private func settled(_ key: String) {
+        guard askedTrack == key, lyrics(forKey: key) == nil else { return }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(Self.noteSeconds))
+            guard let self, self.askedTrack == key, self.lyrics(forKey: key) == nil else { return }
+            self.askedTrack = nil
+        }
+    }
+
+    private func lyrics(forKey key: String) -> SongLyrics? {
+        guard key == trackKey, case .found(let lyrics) = state else { return nil }
+        return lyrics
+    }
+
+    /// Settings changed: lyrics turned off forget what they had, and turning browsers on or off
+    /// works the song out again next time.
+    func settingsChanged() {
+        let s = model.settings
+        if !s.lyricsEnabled || s.lyricsIncludeBrowsers != withBrowsers { clear() }
+    }
+
     func clear() {
         state = .idle
         trackKey = nil
+        askedTrack = nil
     }
 
     func showForSnapshot(_ lyrics: SongLyrics?, for np: NowPlaying, hidden: Bool = false) {
         trackKey = np.trackKey
         state = lyrics.map(State.found) ?? .idle
         hiddenTrack = hidden ? np.trackKey : nil
+        offerTrack = nil
+        askedTrack = nil
+        withBrowsers = model.settings.lyricsIncludeBrowsers
+    }
+
+    /// The offer, a lookup under way or its note, for snapshots.
+    func showForSnapshot(offer: Bool = false, state: State, asked: Bool, for np: NowPlaying) {
+        trackKey = np.trackKey
+        self.state = state
+        hiddenTrack = nil
+        offerTrack = offer ? np.trackKey : nil
+        askedTrack = asked ? np.trackKey : nil
+        withBrowsers = model.settings.lyricsIncludeBrowsers
     }
 }
 

@@ -19,13 +19,15 @@ struct LyricsColumn: View {
     /// A line shows a moment before it is sung, so it is read in time.
     static let lead: Double = 0.2
 
-    /// What Home's column shows beside the music: the lyrics (when on, found for the song on
-    /// show and not hidden for it) under any timer or stopwatch that is counting, or nil for the
-    /// glances when something needs you or more is counting than fits (`LyricsPlacement`).
-    static func lyrics(for plan: HomePlan, model: AppModel, height: CGFloat)
-        -> (media: NowPlaying, lyrics: SongLyrics, kept: [HomePlan.Glance])? {
-        guard model.settings.lyricsEnabled, case .media(let np) = plan.primary, !model.tools.lyrics.isHidden(np),
-              let lyrics = model.tools.lyrics.lyrics(for: np) else { return nil }
+    /// What Home's column shows beside the music, or nil for the glances: the lyrics (when on,
+    /// found for the song on show and not hidden for it), or a lookup the lyrics button asked
+    /// for, under any timer or stopwatch that is counting; nil too when something needs you or
+    /// more is counting than fits (`LyricsPlacement`). The offer to turn lyrics on, opened with
+    /// the button, takes the whole column until it is answered.
+    static func side(for plan: HomePlan, model: AppModel, height: CGFloat)
+        -> (media: NowPlaying, content: LyricsController.Column, kept: [HomePlan.Glance])? {
+        guard case .media(let np) = plan.primary, let content = model.tools.lyrics.column(for: np) else { return nil }
+        if case .offer = content { return (np, content, []) }
         let kinds = plan.glances.map { g -> LyricsPlacement.Glance in
             switch g {
             case .activity(let a) where HomePlan.needsYou(a): return .needsYou
@@ -36,7 +38,7 @@ struct LyricsColumn: View {
         guard case .lyrics(let keeping) = LyricsPlacement.column(kinds, room: LyricsPlacement.room(height: Double(height))) else {
             return nil
         }
-        return (np, lyrics, keeping.map { plan.glances[$0] })
+        return (np, content, keeping.map { plan.glances[$0] })
     }
 
     var body: some View {
@@ -147,5 +149,99 @@ struct LyricLines: View {
         .accessibilityAddTraits(isCurrent ? .isSelected : [])
         .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity),
                                 removal: .move(edge: .top).combined(with: .opacity)))
+    }
+}
+
+/// What the lyrics column says while it has no lyrics to show: a small spinner while the song
+/// is looked up, or a quiet line ("No lyrics for this song") for a moment.
+struct LyricsStatus: View {
+    let note: String?
+
+    var body: some View {
+        Group {
+            if let note {
+                Text(note)
+                    .textStyle(.body)
+                    .foregroundStyle(Ink.tertiary)
+                    .lineLimit(2)
+            } else {
+                SpinnerArc(tint: Ink.tertiary, lineWidth: 1.5)
+                    .frame(width: 12, height: 12)
+                    .accessibilityLabel("Looking up lyrics")
+            }
+        }
+        // On the first line's baseline, where the lyrics will start.
+        .frame(height: 18, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+/// The lyrics button's offer, in the column beside the song: what turning lyrics on sends, then
+/// **Show lyrics** and **Not now**. Nothing is sent before Show lyrics.
+struct LyricsOffer: View {
+    let model: AppModel
+    let media: NowPlaying
+    /// The song plays in a web browser: Show lyrics turns lyrics on for browsers too.
+    let browser: Bool
+
+    static func line(browser: Bool) -> String {
+        browser
+            ? "Lyrics come from LRCLIB, a free lyrics library. Islet sends the song\u{2019}s title, artist, album and length, including from your browser."
+            : "Lyrics come from LRCLIB, a free lyrics library. Islet sends the song\u{2019}s title, artist, album and length, once per song."
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.s) {
+            Text(Self.line(browser: browser))
+                .textStyle(.caption)
+                .foregroundStyle(Ink.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: Space.s) {
+                Button("Show lyrics") {
+                    Haptics.play(.tap)
+                    model.tools.lyrics.accept(media)
+                }
+                .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true, compact: true))
+                Button("Not now") { model.tools.lyrics.decline() }
+                    .buttonStyle(QuietTextButtonStyle())
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Show lyrics?")
+    }
+}
+
+/// The lyrics button on the Now Playing card: a quote bubble, lit while the lyrics show. With
+/// lyrics off for the song it opens the offer instead.
+struct LyricsButton: View {
+    let model: AppModel
+    let media: NowPlaying
+    /// The button's frame: 24 beside the title, less under the other buttons.
+    var size = CGSize(width: 24, height: 24)
+
+    var body: some View {
+        let lyrics = model.tools.lyrics
+        let on = lyrics.isOn(for: media)
+        let lit = lyrics.isShowing(media)
+        let label = !on ? (lit ? "Close the lyrics offer" : "Show lyrics")
+            : lit ? "Hide lyrics for this song"
+            : lyrics.state(for: media) == .missing ? "No lyrics for this song" : "Show lyrics"
+        Button {
+            Haptics.play(.tap)
+            lyrics.toggle(media)
+        } label: {
+            Image(systemName: lit ? "quote.bubble.fill" : "quote.bubble")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(lit ? Ink.primary : Ink.tertiary)
+                .frame(width: min(size.width, size.height), height: min(size.width, size.height))
+                .background(Circle().fill(lit ? Wash.strong : .clear))
+                .frame(width: size.width, height: size.height)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(label)
+        .accessibilityLabel(label)
     }
 }

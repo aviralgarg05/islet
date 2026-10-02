@@ -27,9 +27,12 @@ struct NowPlayingHero: View {
         let art: CGFloat = roomy ? 72 : size.height >= 110 ? 56 : 40
         let shown = MediaArbiter.playerID(media)
         let others = model.players.filter { MediaArbiter.playerID($0) != shown }
-        // The title keeps its room: the volume button goes first, then chips past the first.
+        // The title keeps its room: the lyrics button moves under the others, then chips past
+        // the first fold, then the volume button goes.
         let row = NowPlayingTitleRow.layout(width: Double(size.width - art - Space.m), spacing: Double(Space.m),
-                                            otherPlayers: others.count, volumeRow: roomy)
+                                            otherPlayers: others.count, volumeRow: roomy,
+                                            lyrics: LyricsQuery.couldHaveLyrics(media))
+        let stacked = row.lyrics == .below
         let showsSound = row.showsVolume && model.controls.soundRowShown
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: Space.m) {
@@ -45,16 +48,27 @@ struct NowPlayingHero: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                // The other players and the volume toggle, close together so the title keeps its room.
+                // The other players, the volume toggle and the lyrics button, close together so the
+                // title keeps its room. Where they don't fit in a line, the lyrics button sits under
+                // the others, within the artwork's height.
                 if !row.isEmpty {
-                    HStack(spacing: Space.xs) {
-                        PlayerChips(model: model, others: others, chips: row.chips)
-                        if row.showsVolume {
-                            // The same speaker either way; on, it sits on a wash, as shuffle does.
-                            ModeToggle(symbol: "speaker.wave.2.fill", on: showsSound, tint: nil,
-                                       label: showsSound ? "Show playback controls" : "Show volume and output") {
-                                model.controls.soundRowShown.toggle()
+                    VStack(alignment: .trailing, spacing: 0) {
+                        HStack(spacing: Space.xs) {
+                            PlayerChips(model: model, others: others, chips: row.chips)
+                            if row.showsVolume {
+                                // The same speaker either way; on, it sits on a wash, as shuffle does.
+                                ModeToggle(symbol: "speaker.wave.2.fill", on: showsSound, tint: nil,
+                                           label: showsSound ? "Show playback controls" : "Show volume and output",
+                                           size: stacked ? 22 : 24) {
+                                    model.controls.soundRowShown.toggle()
+                                }
                             }
+                            if row.lyrics == .beside {
+                                LyricsButton(model: model, media: media)
+                            }
+                        }
+                        if stacked {
+                            LyricsButton(model: model, media: media, size: CGSize(width: 22, height: 18))
                         }
                     }
                 }
@@ -364,6 +378,8 @@ struct ModeToggle: View {
     let on: Bool
     let tint: Color?
     let label: String
+    /// The circle's diameter.
+    var size: CGFloat = 24
     var action: () -> Void
 
     var body: some View {
@@ -374,7 +390,7 @@ struct ModeToggle: View {
             Image(systemName: symbol)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(on ? tint ?? Ink.primary : Ink.tertiary)
-                .frame(width: 24, height: 24)
+                .frame(width: size, height: size)
                 .background(Circle().fill(on ? tint?.opacity(0.16) ?? Wash.strong : .clear))
                 .contentShape(Circle())
         }

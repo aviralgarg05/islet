@@ -114,35 +114,49 @@ public enum MediaModes {
     }
 }
 
-/// The row beside Now Playing's artwork on Home: the title, the other players' chips and the
-/// volume button. The title keeps `titleRoom` points, about a dozen characters, and what doesn't
-/// fit beside it gives way in order: the other players fold into one chip that counts them
-/// (a menu picks one), then the volume button goes, so another player can always be picked.
-/// At the compact size beside the glances, one chip and the button together would cut
-/// "Midnight City" to "Midnight…", so there the button makes way; the volume keys still work,
-/// and a card tall enough for the volume row has no button at all.
+/// The row beside Now Playing's artwork on Home: the title, the other players' chips, the
+/// volume button and the lyrics button. The title keeps `titleRoom` points, about a dozen
+/// characters, and what doesn't fit beside it gives way in order: the lyrics button moves under
+/// the others (`LyricsSpot.below`, in the height of the artwork), the other players fold into one
+/// chip that counts them (a menu picks one), then the volume button goes, so another player can
+/// always be picked. At the compact size beside the glances, one chip and the button together
+/// would cut "Midnight City" to "Midnight…", so there the button makes way; the volume keys still
+/// work, and a card tall enough for the volume row has no button at all.
 public enum NowPlayingTitleRow {
     public static let titleRoom: Double = 96
     public static let chip: Double = 22
     public static let volumeButton: Double = 24
-    /// Between the chips and the button.
+    /// The lyrics button beside the others; under them it takes no width.
+    public static let lyricsButton: Double = 24
+    /// Between the chips and the buttons.
     public static let gap: Double = 4
     /// The most chips shown, however wide the card.
     public static let maxChips = 3
+
+    /// Where the lyrics button sits.
+    public enum LyricsSpot: Equatable, Sendable {
+        case none
+        /// In the row, after the chips and the volume button.
+        case beside
+        /// Under them, at the row's trailing edge.
+        case below
+    }
 
     public struct Layout: Equatable, Sendable {
         /// Chips shown. When there are more players than chips, the last chip stands for the
         /// rest (`folded`).
         public var chips: Int
         public var showsVolume: Bool
+        public var lyrics: LyricsSpot
 
-        public init(chips: Int, showsVolume: Bool) {
+        public init(chips: Int, showsVolume: Bool, lyrics: LyricsSpot = .none) {
             self.chips = chips
             self.showsVolume = showsVolume
+            self.lyrics = lyrics
         }
 
         /// Whether anything sits beside the title.
-        public var isEmpty: Bool { chips == 0 && !showsVolume }
+        public var isEmpty: Bool { chips == 0 && !showsVolume && lyrics == .none }
 
         /// How many players the last chip stands for when `otherPlayers` are live: 1 when
         /// every player has a chip of its own, more when the rest are folded into it.
@@ -157,21 +171,28 @@ public enum NowPlayingTitleRow {
     ///   - spacing: the space the row puts between the title and what sits beside it.
     ///   - otherPlayers: players live beside the one on show.
     ///   - volumeRow: the card is tall enough to show the volume row all the time.
-    public static func layout(width: Double, spacing: Double, otherPlayers: Int, volumeRow: Bool) -> Layout {
-        let wanted = Layout(chips: min(max(otherPlayers, 0), maxChips), showsVolume: !volumeRow)
+    ///   - lyrics: the song could have lyrics, so the lyrics button shows.
+    public static func layout(width: Double, spacing: Double, otherPlayers: Int, volumeRow: Bool, lyrics: Bool = false) -> Layout {
+        let wanted = Layout(chips: min(max(otherPlayers, 0), maxChips), showsVolume: !volumeRow, lyrics: lyrics ? .beside : .none)
         func fits(_ l: Layout) -> Bool { l.isEmpty || width - spacing - beside(l) >= titleRoom }
         var l = wanted
+        // The lyrics button goes under the others before anything else gives way.
+        if l.lyrics == .beside, !fits(l), l.chips > 0 || l.showsVolume { l.lyrics = .below }
         // Players fold into one chip before the volume button goes.
         while l.chips > 1, !fits(l) { l.chips -= 1 }
         if fits(l) { return l }
         l.showsVolume = false
+        if l.lyrics == .below, l.chips == 0 { l.lyrics = .beside }
+        if fits(l) { return l }
+        if l.lyrics == .beside { l.lyrics = l.chips > 0 ? .below : .none }
         return l
     }
 
     /// The width of what sits beside the title.
     static func beside(_ l: Layout) -> Double {
-        let items = l.chips + (l.showsVolume ? 1 : 0)
+        let lyricsBeside = l.lyrics == .beside
+        let items = l.chips + (l.showsVolume ? 1 : 0) + (lyricsBeside ? 1 : 0)
         guard items > 0 else { return 0 }
-        return Double(l.chips) * chip + (l.showsVolume ? volumeButton : 0) + Double(items - 1) * gap
+        return Double(l.chips) * chip + (l.showsVolume ? volumeButton : 0) + (lyricsBeside ? lyricsButton : 0) + Double(items - 1) * gap
     }
 }

@@ -169,13 +169,19 @@ struct LyricsSettingsSection: View {
         Section {
             Toggle(isOn: $model.settings.lyricsEnabled) {
                 Text("Show lyrics")
-                Text("Time-synced lyrics beside the song on Home, for Music and Spotify. Click a line to jump to it.")
+                Text("Time-synced lyrics beside the song on Home, for Music and Spotify. Click a line to jump to it, or the quote button on the song to hide them.")
             }
             .settingsAnchor("nowPlaying.lyrics")
+            Toggle(isOn: $model.settings.lyricsIncludeBrowsers) {
+                Text("Also for music in a web browser")
+                Text("Songs playing in Chrome, Safari and other browsers, such as YouTube Music. Videos that don\u{2019}t look like songs are left out.")
+            }
+            .settingsAnchor("nowPlaying.lyricsBrowsers")
+            .disabled(!model.settings.lyricsEnabled)
         } header: {
             Text("Lyrics")
         } footer: {
-            SettingsFooter("Lyrics come from LRCLIB, a free lyrics library. Only the song's title, artist, album and length are sent, once per song.")
+            SettingsFooter("Lyrics come from LRCLIB, a free lyrics library. Only the song\u{2019}s title, artist, album and length are sent, once per song. For music in a browser, that\u{2019}s the title of what it\u{2019}s playing and its artist or channel.")
         }
     }
 }

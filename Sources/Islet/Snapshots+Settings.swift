@@ -97,6 +97,20 @@ enum SettingsSnapshots {
         window.setContentSize(SettingsWindow.defaultSize)
         RunLoop.main.run(until: Date().addingTimeInterval(0.5))
 
+        // Lyrics with music in a web browser too, opened at their rows.
+        var lyricsOn = sampleSettings
+        lyricsOn.lyricsEnabled = true
+        lyricsOn.lyricsIncludeBrowsers = true
+        model.settings = lyricsOn
+        window.setContentSize(NSSize(width: SettingsWindow.defaultSize.width, height: 1400))
+        navigation.open(.nowPlaying, at: "nowPlaying.lyrics")
+        shoot("now-playing-lyrics")
+        model.settings = sampleSettings
+        navigation.open(.nowPlaying, at: "nowPlaying.lyrics")
+        shoot("now-playing-lyrics-off", dark: false)
+        window.setContentSize(SettingsWindow.defaultSize)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+
         // The note tools and the pages in the switcher, each opened at its row in a tall window.
         // (How long the shelf keeps files and Send feedback show on their pages' own shots.)
         window.setContentSize(NSSize(width: SettingsWindow.defaultSize.width, height: 1400))

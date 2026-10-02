@@ -238,8 +238,8 @@ struct HomeTab: View {
         } else {
             let plan = HomePlan(model: model)
             // Lyrics, when on and found, take the glances' column beside the music, under a
-            // timer or the stopwatch that is counting.
-            let lyrics = LyricsColumn.lyrics(for: plan, model: model, height: size.height)
+            // timer or the stopwatch that is counting; so do the lyrics button's offer and lookup.
+            let lyrics = LyricsColumn.side(for: plan, model: model, height: size.height)
             let split = !plan.glances.isEmpty || lyrics != nil
             // The primary thing gets the larger share; the glances the rest, past a hairline.
             let share: CGFloat = size.width < 480 ? 0.47 : 0.56
@@ -259,7 +259,16 @@ struct HomeTab: View {
                                 GlanceColumn(model: model, glances: lyrics.kept, height: keptHeight)
                                     .frame(height: keptHeight, alignment: .topLeading)
                             }
-                            LyricsColumn(model: model, media: lyrics.media, lyrics: lyrics.lyrics, showsSungLine: lyrics.kept.isEmpty)
+                            switch lyrics.content {
+                            case .lyrics(let words):
+                                LyricsColumn(model: model, media: lyrics.media, lyrics: words, showsSungLine: lyrics.kept.isEmpty)
+                            case .offer(let browser):
+                                LyricsOffer(model: model, media: lyrics.media, browser: browser)
+                            case .lookingUp:
+                                LyricsStatus(note: nil)
+                            case .note(let text):
+                                LyricsStatus(note: text)
+                            }
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     } else {

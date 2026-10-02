@@ -201,6 +201,29 @@ struct IconButton: View {
     }
 }
 
+/// A word that is a button and reads as a caption, for the quiet choice beside a capsule
+/// ("Not now"): tertiary ink, primary under the pointer, as tall as a compact capsule.
+struct QuietTextButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        QuietTextButtonBody(configuration: configuration)
+    }
+}
+
+private struct QuietTextButtonBody: View {
+    let configuration: ButtonStyleConfiguration
+    @ViewState private var hovering = false
+
+    var body: some View {
+        configuration.label
+            .font(TextStyle.caption.font(emphasized: true))
+            .foregroundStyle(hovering || configuration.isPressed ? Ink.primary : Ink.tertiary)
+            .padding(.horizontal, Space.xs)
+            .frame(height: 20)
+            .contentShape(Rectangle())
+            .onHover { hovering = $0 }
+    }
+}
+
 /// A small text capsule. Without a tint it is a quiet white wash. With one it is a wash of that
 /// colour with tinted text (0.18 at rest, 0.24 under the pointer, 0.30 pressed); `filled` makes
 /// it solid, for the one primary action in a view. Disabled, it is a faint wash with quiet text

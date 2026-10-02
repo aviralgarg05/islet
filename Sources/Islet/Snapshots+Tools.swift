@@ -148,6 +148,49 @@ extension Snapshots {
             model.tools.stopwatch.showForSnapshot(Stopwatch())
             model.tools.lyrics.showForSnapshot(nil, for: np)
             model.settings.lyricsEnabled = false
+
+            // Lyrics off: the quote button on the card, at every size, and the offer it opens,
+            // which says what turning lyrics on sends.
+            for preset in [SizePreset.compact, .standard, .large] {
+                size(preset)
+                shoot("90f-lyrics-button-off-\(preset.rawValue)")
+            }
+            model.tools.lyrics.showForSnapshot(offer: true, state: .idle, asked: false, for: np)
+            for preset in [SizePreset.compact, .standard] {
+                size(preset)
+                shoot("90g-lyrics-offer-\(preset.rawValue)")
+            }
+            size(.compact)
+            // Asked for with the button: a spinner while it is looked up, then a quiet line.
+            model.settings.lyricsEnabled = true
+            model.tools.lyrics.showForSnapshot(state: .loading, asked: true, for: np)
+            shoot("90h-lyrics-looking-up")
+            model.tools.lyrics.showForSnapshot(state: .missing, asked: true, for: np)
+            shoot("90i-lyrics-none")
+
+            // A song from YouTube in Chrome: its offer turns browsers on too, then its lyrics.
+            let video = NowPlaying(source: .browser, bundleID: "com.google.Chrome", appName: "Google Chrome",
+                                   title: "Neon Harbour - Paper Lanterns (Official Video)", artist: "NeonHarbourVEVO",
+                                   isPlaying: true, duration: 214, elapsed: 71, timestamp: now)
+            model.loadPlayersForSnapshot([], bridge: video, now: now)
+            if let shown = model.nowPlaying {
+                model.settings.lyricsEnabled = false
+                model.tools.lyrics.showForSnapshot(offer: true, state: .idle, asked: false, for: shown)
+                shoot("90j-lyrics-offer-browser-compact")
+                model.settings.lyricsEnabled = true
+                model.tools.lyrics.showForSnapshot(offer: true, state: .idle, asked: false, for: shown)
+                shoot("90j-lyrics-offer-browser-lyrics-on-compact")
+                model.settings.lyricsIncludeBrowsers = true
+                model.tools.lyrics.showForSnapshot(lyrics, for: shown)
+                shoot("90k-lyrics-browser-compact")
+                size(.standard)
+                shoot("90k-lyrics-browser-standard")
+                size(.compact)
+                model.tools.lyrics.showForSnapshot(nil, for: shown)
+            }
+            model.loadPlayersForSnapshot([], bridge: nil, now: now, song: np)
+            model.settings.lyricsEnabled = false
+            model.settings.lyricsIncludeBrowsers = false
         }
 
         // Shortcuts: off (Turn on), then on with one running and one just done.
