@@ -254,6 +254,11 @@ private struct GlassBody: View {
                                                 : .opacity.animation(.linear(duration: Self.glassOut * Motion.pace))))
                 if let stem {
                     shape.fill(Color.black.opacity(GlassMelt.smoke(level: level)))
+                    // The whole menu bar row is black, not just the stem: at rest the shape is only
+                    // the stem there, but while it morphs from a closed island or a peek its
+                    // shoulders haven't formed, and glass beside the notch would frame the stem
+                    // as a black box.
+                    Color.black.frame(height: row).frame(maxHeight: .infinity, alignment: .top).clipShape(shape)
                     StemMelt(stem: stem, row: row, depth: GlassMelt.depth(body: height - row, level: level))
                         .clipShape(shape)
                 } else {
