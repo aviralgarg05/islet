@@ -228,7 +228,7 @@ final class ShortcutsController {
         var failure: String?
         if case .failed(let reason) = state { failure = reason }
         _ = try? model.applyLocal(ActivitySpec(
-            id: "shortcut-run", source: "shortcuts", title: item.name, subtitle: ok ? "Done" : failure ?? "Didn't finish",
+            id: "shortcut-run", source: "shortcuts", title: item.name, subtitle: ok ? "Done" : failure ?? "Didn\u{2019}t finish",
             icon: .symbol(ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"), state: ok ? .success : .warning,
             tint: ok ? "green" : "orange", priority: .low, ttl: 3, sneak: true
         ))

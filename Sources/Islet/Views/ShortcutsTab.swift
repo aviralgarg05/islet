@@ -25,7 +25,7 @@ struct ShortcutsTab: View {
                         .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
                 }
             } else if c.unavailable {
-                EmptyHint(symbol: "square.stack.3d.up", text: "The Shortcuts app isn't on this Mac.")
+                EmptyHint(symbol: "square.stack.3d.up", text: "The Shortcuts app isn’t on this Mac.")
             } else {
                 VStack(alignment: .leading, spacing: Space.s) {
                     field
@@ -81,7 +81,8 @@ struct ShortcutsTab: View {
         }
         .textStyle(.body)
         .padding(.horizontal, Space.m)
-        .frame(height: 26)
+        // Ask's field, so the two search fields match.
+        .frame(height: AskView.fieldHeight)
         .background(Capsule().fill(Wash.regular))
         .contrastEdge(Capsule())
     }
@@ -155,8 +156,12 @@ struct ShortcutRow: View {
                     .textStyle(.body, emphasized: true)
                     .foregroundStyle(Ink.primary)
                     .lineLimit(1)
+                // Beside its own name, not at the far edge where it reads as the next one's.
+                status
                 Spacer(minLength: 0)
-                trailing
+                if state == nil, let caption {
+                    Text(caption).textStyle(.caption).foregroundStyle(hovering ? Ink.secondary : Ink.tertiary).lineLimit(1).fixedSize()
+                }
             }
             .padding(.horizontal, Space.s)
             .frame(height: ShortcutsTab.rowHeight)
@@ -169,7 +174,7 @@ struct ShortcutRow: View {
         .accessibilityLabel("Run \(item.name)")
     }
 
-    @ViewBuilder private var trailing: some View {
+    @ViewBuilder private var status: some View {
         switch state {
         case .running:
             SpinnerArc(tint: Ink.secondary, lineWidth: 1.5).frame(width: 10, height: 10)
@@ -178,9 +183,7 @@ struct ShortcutRow: View {
         case .failed:
             Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(Color.orange)
         case nil:
-            if let caption {
-                Text(caption).textStyle(.caption).foregroundStyle(hovering ? Ink.secondary : Ink.tertiary).lineLimit(1).fixedSize()
-            } else if hovering {
+            if caption == nil && hovering {
                 Image(systemName: "play.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(Ink.tertiary)
             }
         }
@@ -190,7 +193,7 @@ struct ShortcutRow: View {
         switch state {
         case .running: return "Running"
         case .done: return "Done"
-        case .failed(let reason): return reason ?? "It didn't finish"
+        case .failed(let reason): return reason ?? "It didn’t finish"
         case nil: return "Run “\(item.name)”"
         }
     }
