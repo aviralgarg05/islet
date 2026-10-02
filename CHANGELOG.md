@@ -10,6 +10,8 @@
 - A browser video playing beside a song in Spotify or Music no longer takes the island back every few seconds after the next song starts.
 - Closing a video that was playing no longer brings back a song paused minutes earlier as if you had just paused it.
 - Next and previous are faint for a browser video without a next track, rather than doing nothing when pressed.
+- With nothing on the island, play or pause from a link, a script or **Your music** goes only to a player the island would offer, never to an app in **Ignore apps** or a source you switched off.
+- At the end of a focus round, **Your music** pauses only the player it started, so a video you started during the round keeps playing.
 - Swiping to move through a live stream, or skipping 15 s from a script, no longer takes it back to its start.
 - Lyrics for a song in a browser show even when the browser sends the video’s length a moment after its title.
 - Opera Beta, Opera Developer, Opera Air, Helium, SigmaOS, Waterfox, LibreWolf, Tor Browser, Mullvad Browser, Yandex Browser and DuckDuckGo from the App Store count as web browsers, for Now Playing’s **Web browsers** switch, lyrics and calls in a browser.
