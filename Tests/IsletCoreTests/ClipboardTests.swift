@@ -51,16 +51,48 @@ import Testing
         var h = ClipboardHistory()
         #expect(h.add("fujvy7-Bezkah-doqnij", types: [], sourceBundleID: "com.apple.Safari", now: t0) == .ignored)
         #expect(h.add("xT3!kP9#qr", types: [], sourceBundleID: "com.google.Chrome", now: t0) == .ignored)
+        // A browser's helper process counts as the browser.
+        #expect(h.add("xT3!kP9#qr", types: [], sourceBundleID: "com.google.Chrome.helper", now: t0) == .ignored)
         // The same text from another app is kept: only browsers copy for password extensions.
         #expect(h.add("fujvy7-Bezkah-doqnij", types: [], sourceBundleID: "com.apple.Terminal", now: t0) == .added)
-        // A link, a sentence and a short word from a browser are kept.
+        // A link, a sentence, a product name and a UUID from a browser are kept.
         #expect(h.add("https://example.com/Path?q=1", types: [], sourceBundleID: "com.apple.Safari", now: t0) == .added)
         #expect(h.add("Meet at 5 PM!", types: [], sourceBundleID: "com.apple.Safari", now: t0) == .added)
+        #expect(h.add("Windows11", types: [], sourceBundleID: "com.google.Chrome", now: t0) == .added)
+        #expect(h.add("3F2504E0-4F89-11D3-9A0C-0305E82C3301", types: [], sourceBundleID: "com.apple.Safari", now: t0) == .added)
         // Switched off, it keeps them.
         h.skipsSecrets = false
         #expect(h.add("xT3!kP9#qr", types: [], sourceBundleID: "com.google.Chrome", now: t0) == .added)
     }
 
+    /// Chromium browsers name the page a copy came from (`org.chromium.source-url`). A password
+    /// manager's extension is skipped whatever it copies; another extension's page is held to
+    /// the broad shape; a web page to the generated-password shape only.
+    @Test func whereABrowserSaysACopyCameFrom() {
+        var h = ClipboardHistory()
+        let bitwarden = "chrome-extension://nngceckbapebfimnlniiiahkandclblb/offscreen-document/index.html"
+        #expect(h.add("Summer2024!", types: [ClipboardHistory.sourceURLType], sourceBundleID: "com.google.Chrome",
+                      sourceURL: bitwarden, now: t0) == .ignored)
+        #expect(h.add("jane@example.com", types: [], sourceBundleID: "com.brave.Browser",
+                      sourceURL: "chrome-extension://AEBLFDKHHHDCDJPIFHHBDIOJPLFJNCOA/popup.html", now: t0) == .ignored)
+        // Even with the browser rule switched off, like a password manager's own app.
+        h.skipsSecrets = false
+        #expect(h.add("plain words", types: [], sourceBundleID: "com.microsoft.edgemac", sourceURL: bitwarden, now: t0) == .ignored)
+        h.skipsSecrets = true
+        // Another extension's page: anything shaped like a password, a person's own included.
+        let other = "chrome-extension://abcdefghijklmnopabcdefghijklmnop/popup.html"
+        #expect(h.add("Summer2024!", types: [], sourceBundleID: "com.google.Chrome", sourceURL: other, now: t0) == .ignored)
+        #expect(h.add("Copied as Markdown", types: [], sourceBundleID: "com.google.Chrome", sourceURL: other, now: t0) == .added)
+        #expect(h.add("Summer2024!", types: [], sourceBundleID: "org.mozilla.firefox",
+                      sourceURL: "moz-extension://0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0/popup.html", now: t0) == .ignored)
+        // A web page: the same text is ordinary.
+        #expect(h.add("Summer2024!", types: [], sourceBundleID: "com.google.Chrome",
+                      sourceURL: "https://example.com/blog", now: t0) == .added)
+        #expect(ClipboardHistory.extensionID("https://example.com") == nil)
+        #expect(ClipboardHistory.extensionID("chrome-extension://") == nil)
+    }
+
+    /// The broad shape, for a copy from an extension's own page.
     @Test(arguments: [
         ("fujvy7-Bezkah-doqnij", true),
         ("xT3!kP9#qr", true),
@@ -77,8 +109,91 @@ import Testing
         ("github.com/Owner-1/Repo", false),
         (String(repeating: "aA1-", count: 33), false), // over 128
     ])
-    func whatLooksLikeASecret(text: String, secret: Bool) {
-        #expect(ClipboardHistory.looksLikeSecret(text) == secret, "\(text)")
+    func whatLooksLikeAPassword(text: String, password: Bool) {
+        #expect(ClipboardHistory.looksLikePassword(text) == password, "\(text)")
+    }
+
+    /// Text people copy from web pages every day, which clipboard history must keep. Every one
+    /// mixes enough kinds of character to pass the broad shape.
+    static let ordinaryBrowserText = [
+        // Product names, models and versions.
+        "Windows11", "COVID-19", "iPhone15", "iPhone15Pro", "iPhone-15-Pro-Max", "MacBookPro16,1", "Mac14,7",
+        "M2-MacBook-Air", "PlayStation5", "PS5-Pro-Max", "RTX-4090", "GeForce-RTX4090", "Ryzen9-7950X", "i9-14900K",
+        "M3-Max-16GB", "DDR5-6000", "Wi-Fi-6E", "Wi-Fi6E-Router", "Bluetooth5.3", "AirPods-Pro-2", "AirTag-4pk",
+        "ThinkPad-X1", "ZenBook14", "Xbox-Series-X", "Pixel8a", "SM-G991B", "XPS13-9310", "A320neo", "F-35A",
+        "iPadOS-17.5", "macOS-14.5", "iOS-17.5.1", "iOS17.5", "tvOS-18.1", "visionOS-2", "watchOS11.2", "TLSv1.3",
+        "Python3.12", "SwiftUI-5", "GPT-4o", "Llama-3.1-70B", "v2.0.0-rc.1", "1.2.3-beta.4+exp.sha.5114f85",
+        "3.2GHz-i7", "2.4GHz-5GHz", "5000mAh-USB-C", "120kWh/year", "iCloud+50GB", "mRNA-1273", "eSIM-Plan2",
+        // Identifiers: UUIDs, hashes, colours, codes, tracking and booking references.
+        "3F2504E0-4F89-11D3-9A0C-0305E82C3301", "3f2504e0-4f89-11d3-9a0c-0305e82c3301", "#FF5733", "A1B2-C3D4",
+        "ABCD1-EFGH2-IJKL3-MNOP4", "SKU-12345", "B0C1234XYZ", "GB82WEST12345698765432", "FY2026-Q4", "eBay-Order-12",
+        "PR#1234", "Fixes-#42", "BA2490", "LH-400",
+        // Code, file names and handles.
+        "getElementById2", "setUpHUD()", "XMLHttpRequest2", "x86_64-apple-darwin", "user_id_2", "e2e-tests",
+        "Report_Q3-2026.pdf", "IMG_2024.HEIC", "DSC01234.JPG", "AppModel+Controls.swift", "CHANGELOG.md",
+        "#WWDC2025", "#100DaysOfCode", "@Jane_Doe99", "r/MacOS", "u/Spez_99",
+        // Words with punctuation, dates and amounts.
+        "Ctrl+Alt+Del", "Hello,World!", "Oct-2-2026", "2026-10-02T09:30:00Z", "COVID-19_pandemic", "Mid-Year-Review-2026",
+        "Q3-Sales-Report-v2", "St.John's", "Straße-12", "naïve-café2", "東京2020", "Great👍Job1",
+        // A person's own password with words in it: kept from a web page, skipped from a password
+        // manager (its app or extension).
+        "MyPass123!", "Summer2024!",
+    ]
+
+    /// Generated passwords in the styles password managers make them.
+    static let generatedPasswords = [
+        "fujvy7-Bezkah-doqnij", "Hosvy3-xatrum-Kyjgob",               // Safari and the Passwords app
+        "Vf8hN2kq5LxGtUw", "aB3xK9mQ2vL7pRt", "Vn7kLp2QxR9tWzE",       // Chrome and Firefox: 15 letters and digits
+        "Xk9#mP2$vL7qRt", "N8!vQz@4pLs^", "q7#Lx!9pZ2@k", "rT9#kLm2!xQp", // with symbols
+        "8Kd!Rv3@mXq5Lz", "hY7$kq2Lm#Pz9vWx4Rt!", "G7v#qL2!wZ9k", "p4Q-x8Rz-L2mV", "Tz8@uY3^eW1&",
+        "kQ7mW2xR9pL4", "J8f*Gk2$Lm9!Qx", "4gT#pV9k@Rz2", "xT3!kP9#qr",
+    ]
+
+    @Test func ordinaryBrowserTextIsKept() {
+        for text in Self.ordinaryBrowserText {
+            #expect(!ClipboardHistory.looksLikeGeneratedPassword(text), "\(text)")
+            var h = ClipboardHistory()
+            #expect(h.add(text, types: [], sourceBundleID: "com.google.Chrome", now: t0) == .added, "\(text)")
+        }
+        // They are mixed enough that the old rule (three kinds of character) skipped most of them.
+        let mixed = Self.ordinaryBrowserText.filter(ClipboardHistory.looksLikePassword)
+        #expect(mixed.count >= Self.ordinaryBrowserText.count * 3 / 4)
+    }
+
+    @Test func generatedPasswordsAreSkipped() {
+        for text in Self.generatedPasswords {
+            #expect(ClipboardHistory.looksLikeGeneratedPassword(text), "\(text)")
+            var h = ClipboardHistory()
+            #expect(h.add(text, types: [], sourceBundleID: "com.apple.Safari", now: t0) == .ignored, "\(text)")
+        }
+    }
+
+    /// Most random passwords fall apart into scraps. Some read wordy enough to be kept: the rule
+    /// would rather keep a password on this Mac than lose ordinary text.
+    @Test func mostRandomPasswordsAreCaught() {
+        var rng = SplitMix(seed: 42)
+        let letters = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        let symbols = Array("!@#$%^&*-_+=?")
+        for (length, pool, least) in [(15, letters, 0.70), (16, letters + symbols, 0.75), (20, letters + symbols, 0.80)] {
+            var tried = 0, caught = 0
+            while tried < 400 {
+                let p = String((0..<length).map { _ in pool[Int(rng.next() % UInt64(pool.count))] })
+                // Generators always mix lower case, upper case and digits.
+                guard p.contains(where: \.isLowercase), p.contains(where: \.isUppercase), p.contains(where: \.isNumber) else { continue }
+                tried += 1
+                if ClipboardHistory.looksLikeGeneratedPassword(p) { caught += 1 }
+            }
+            #expect(Double(caught) / Double(tried) >= least, "\(length) characters: \(caught) of \(tried)")
+        }
+    }
+
+    @Test func wordsSplitAsNamesAreWritten() {
+        #expect(ClipboardHistory.words(in: "getHUDValue") == ["get", "HUD", "Value"])
+        #expect(ClipboardHistory.words(in: "iOS-17.5") == ["i", "OS"])
+        #expect(ClipboardHistory.words(in: "3.2GHz-i7") == ["GHz", "i"])
+        #expect(ClipboardHistory.words(in: "xT3!kP9#qr") == ["x", "T", "k", "P", "qr"])
+        #expect(ClipboardHistory.isSafariStrongPassword("fujvy7-Bezkah-doqnij"))
+        #expect(!ClipboardHistory.isSafariStrongPassword("abcdef-ghijkl-mnopqr"))
     }
 
     @Test func blankAndHugeTextIsSkipped() {
@@ -105,6 +220,19 @@ import Testing
         #expect(!s.clipboardSkipSecrets)
         #expect(IsletSettings().clipboardSkipSecrets)
         #expect(IsletSettings().clipboardIgnoredApps.isEmpty)
+    }
+}
+
+/// A small seeded generator (SplitMix64), so random samples are the same on every run.
+struct SplitMix {
+    var state: UInt64
+    init(seed: UInt64) { state = seed }
+    mutating func next() -> UInt64 {
+        state &+= 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
     }
 }
 

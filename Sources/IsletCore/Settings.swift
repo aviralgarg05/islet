@@ -356,7 +356,7 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// Apps whose copies clipboard history never keeps (bundle ids), beside the password
     /// managers it always skips.
     public var clipboardIgnoredApps: [String] = []
-    /// Skip what looks like a password copied in a browser (`ClipboardHistory.looksLikeSecret`).
+    /// Skip what looks like a password copied in a browser (`ClipboardHistory.skipsSecrets`).
     public var clipboardSkipSecrets = true
     public var privacyIndicatorsEnabled = true
     public var systemStatsEnabled = true

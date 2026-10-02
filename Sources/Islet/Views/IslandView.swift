@@ -298,7 +298,7 @@ extension AppModel {
             acts.removeAll { $0.id == a.id }
             // Music paused a moment ago keeps its bubble (dimmed) for "Hide paused music after".
             if settings.mediaEnabled, display.map({ fullscreenBehaviour(on: $0) != .hideMusic }) ?? true,
-               let np = Presenter.mediaInView(nowPlaying, pausedMedia: pausedMusic.show(timeout: settings.pausedMusicTimeout, now: Date())) {
+               let np = Presenter.mediaInView(closedNowPlaying, pausedMedia: pausedMusic.show(timeout: settings.pausedMusicTimeout, now: Date())) {
                 items.append(.media(np))
             }
         case .nowPlaying:

@@ -91,7 +91,8 @@ extension Snapshots {
         size(.compact)
         model.pickPlayer(chrome)
         shoot("78-expanded-picked-player")
-        if let np = model.nowPlaying {
+        // Closed, the island shows what plays: Spotify's song, not the paused video picked.
+        if let np = model.closedNowPlaying {
             model.forcedPresentation = .compact(.nowPlaying(np))
             shoot("79-compact-picked-player")
         }

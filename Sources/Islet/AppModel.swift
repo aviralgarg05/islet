@@ -60,7 +60,14 @@ final class AppModel {
     var settings: IsletSettings
     private(set) var center = ActivityCenter()
     private(set) var media = MediaArbiter()
+    /// The player the open island shows and the controls reach: the one picked there, or the
+    /// newest (`MediaArbiter.current`).
     private(set) var nowPlaying: NowPlaying?
+    /// What the closed island shows when that isn't `nowPlaying`: a song that plays on while a
+    /// paused player is picked (`MediaArbiter.closedIsland`).
+    private var playingElsewhere: NowPlaying?
+    /// What the closed island shows: what is playing.
+    var closedNowPlaying: NowPlaying? { playingElsewhere ?? nowPlaying }
     private(set) var battery: BatteryState?
     private(set) var batteryEvent: BatteryEvent?
     private(set) var agenda: [AgendaItem] = []
@@ -655,8 +662,8 @@ final class AppModel {
     }
 
     private func startClipboard() {
-        clipboardMonitor.onCopy = { [weak self] text, types, bundle in
-            self?.clipboard.add(text, types: types, sourceBundleID: bundle, now: Date())
+        clipboardMonitor.onCopy = { [weak self] text, types, bundle, page in
+            self?.clipboard.add(text, types: types, sourceBundleID: bundle, sourceURL: page, now: Date())
         }
         clipboardMonitor.start()
     }
@@ -837,13 +844,13 @@ final class AppModel {
         var inputs = PresenterInputs(
             now: now,
             center: center,
-            nowPlaying: showsMedia ? nowPlaying : nil,
+            nowPlaying: showsMedia ? closedNowPlaying : nil,
             batteryEvent: batteryEvent,
             isExpanded: expandedScreen == display || (isDraggingFile && expandedScreen == display),
             isSuppressed: isSuppressed(display) && expandedScreen != display,
             pausedMedia: showsMedia ? pausedMusic.show(timeout: settings.pausedMusicTimeout, now: now) : .hidden,
             focusedActivityID: controls.focusedActivityID,
-            songPeek: Presenter.hoverPeek(showsMedia ? nowPlaying : nil, hovering: hoverPeekDisplay == display, settings: settings)
+            songPeek: Presenter.hoverPeek(showsMedia ? closedNowPlaying : nil, hovering: hoverPeekDisplay == display, settings: settings)
                 ?? (showsMedia && settings.songChangePeek ? songPeek.current(now: now) : nil),
             idleSticker: showsMedia && Presenter.showsIdleSticker(settings)
         )
@@ -872,7 +879,7 @@ final class AppModel {
     /// The pointer has rested on the notch long enough: peek at what's playing there.
     func peekOnHover(_ display: CGDirectDisplayID) {
         guard expandedScreen == nil, hoverDisplay == display, hoverPeekDisplay != display,
-              Presenter.hoverPeek(nowPlaying, hovering: true, settings: settings) != nil else { return }
+              Presenter.hoverPeek(closedNowPlaying, hovering: true, settings: settings) != nil else { return }
         hoverPeekDisplay = display
     }
 
@@ -976,7 +983,10 @@ final class AppModel {
 
     func setDemoBatteryEvent(_ ev: BatteryEvent) { batteryEvent = ev }
 
-    func clearNowPlayingForSnapshot() { nowPlaying = nil }
+    func clearNowPlayingForSnapshot() {
+        nowPlaying = nil
+        playingElsewhere = nil
+    }
 
     /// Snapshots: the song paused a moment ago (`pause`), or playing as before.
     func setPausedForSnapshot(_ pause: Bool, now: Date) {
@@ -1054,10 +1064,20 @@ final class AppModel {
                 next = intent.applied(to: r, now: now)
             }
         }
-        guard next != nowPlaying else { return }
+        // The closed island shows what plays. When that is the player on show, or the player on
+        // show plays (a click on Play counts at once), it is the same snapshot.
+        let elsewhere = media.closedIsland(now: now).flatMap { closed -> NowPlaying? in
+            guard let next else { return closed }
+            return next.isPlaying || MediaArbiter.playerID(closed) == MediaArbiter.playerID(next) ? nil : closed
+        }
+        guard next != nowPlaying || elsewhere != playingElsewhere else { return }
+        let shownBefore = closedNowPlaying
         nowPlaying = next
-        songPeek.ingest(next, now: now)
-        pausedMusic.ingest(next, now: now)
+        playingElsewhere = elsewhere
+        // A new song peeks, and a pause stays a while, as the closed island sees them.
+        guard closedNowPlaying != shownBefore else { return }
+        songPeek.ingest(closedNowPlaying, now: now)
+        pausedMusic.ingest(closedNowPlaying, now: now)
     }
 
     // MARK: Inputs
@@ -1349,11 +1369,16 @@ final class AppModel {
 
     /// Send a command to the player. Play and pause show at once (`PlaybackIntent`), then
     /// follow what the player reports.
+    /// - Parameter target: the player to send it to: the one on show (`nowPlaying`) if nil, or
+    ///   the song a swipe on the closed island moved (`closedNowPlaying`).
     @discardableResult
-    func send(_ command: PlaybackCommand, position: Double? = nil) -> Bool {
+    func send(_ command: PlaybackCommand, position: Double? = nil, to target: NowPlaying? = nil) -> Bool {
         let now = Date()
-        let intent = nowPlaying.flatMap { PlaybackIntent.intended(command, on: $0, at: now) }
-        let sent = route(command, position: position)
+        let np = target ?? nowPlaying
+        // Only a press on the player on show shows at once.
+        let onShow = np.map(MediaArbiter.playerID) == nowPlaying.map(MediaArbiter.playerID)
+        let intent = onShow ? nowPlaying.flatMap { PlaybackIntent.intended(command, on: $0, at: now) } : nil
+        let sent = route(command, position: position, to: np)
         // Only for a player that reports back (not the demo's made-up song).
         if sent, let intent, !media.snapshots.isEmpty {
             playbackIntent = intent
@@ -1362,7 +1387,7 @@ final class AppModel {
         }
         // A press that went nowhere because macOS hasn't allowed Islet to control the player
         // says so, instead of doing nothing.
-        let hint = nowPlaying.flatMap { np -> String? in
+        let hint = np.flatMap { np -> String? in
             let r = mediaRoute(for: np)
             return PlayerIntegration.controlHint(route: r, sent: sent, canScript: r == .player(.spotify) ? spotify.canScript : music.canScript)
         }
@@ -1387,13 +1412,13 @@ final class AppModel {
     /// Commands go to the player on show (the one picked in the island, or the newest): the
     /// bridge only when it is that app's, Music and Spotify otherwise through their own
     /// integration, so a press on Spotify never pauses a video in Chrome.
-    private func route(_ command: PlaybackCommand, position: Double?) -> Bool {
-        guard let np = nowPlaying else {
+    private func route(_ command: PlaybackCommand, position: Double?, to target: NowPlaying?) -> Bool {
+        guard let np = target else {
             // Nothing on show: the bridge controls whatever macOS considers "now playing".
             return systemMedia.isRunning && systemMedia.send(command, position: position)
         }
         let r = mediaRoute(for: np)
-        if let routed = sendControl(command, position: position, bridge: r == .bridge) { return routed }
+        if let routed = sendControl(command, position: position, bridge: r == .bridge, on: np) { return routed }
         switch r {
         case .bridge: return systemMedia.send(command, position: position)
         case .player(.spotify): return spotify.send(command, position: position)
@@ -1414,7 +1439,8 @@ final class AppModel {
         return settings.mediaEnabled ? media.available(now: Date()) : []
     }
 
-    /// A player chip: show and control that player. The closed island follows it.
+    /// A player chip: show and control that player. The closed island keeps showing what plays,
+    /// and follows the pick once it plays.
     func pickPlayer(_ np: NowPlaying) {
         Haptics.play(.tap)
         let now = Date()
@@ -1433,6 +1459,7 @@ final class AppModel {
         for np in list { media.update(np) }
         media.updateFromBridge(bridge)
         nowPlaying = song ?? media.current(now: now)
+        playingElsewhere = nil
     }
 
     func openPlayer() {
@@ -1760,6 +1787,7 @@ extension AppModel {
         for p in [music, spotify] as [ScriptablePlayerProvider] { p.stop() }
         for source in MediaSourceKind.allCases { media.clear(source) }
         nowPlaying = nil
+        playingElsewhere = nil
         // Switched back on, the song already playing is the first one again, not a new one.
         songPeek.reset()
         pausedMusic = PausedMusic()

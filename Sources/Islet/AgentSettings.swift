@@ -82,6 +82,15 @@ struct CodingAgentsSettings: View {
 
     private func preview(_ agent: CodingAgent) {
         notes[agent] = nil
+        // From a temporary copy macOS made of a download, the hooks would point nowhere after
+        // the next launch: offer to move to Applications first.
+        switch AppActions.offerMoveToApplications(.connecting(agent.title)) {
+        case .moving: return
+        case .declined:
+            notes[agent] = "Move Islet to Applications first, so \(agent.title) can keep finding it."
+            return
+        case .notNeeded: break
+        }
         do {
             let plan = try AgentHookSetup.plan(agent, home: IsletPaths.home, executable: Self.executable, wait: wait)
             if plan.isUpToDate { refresh() } else { pending = PendingConnection(plan: plan) }

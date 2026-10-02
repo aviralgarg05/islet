@@ -5,7 +5,8 @@ import SwiftUI
 
 /// Now Playing, the primary thing on Home: large artwork and titles, a scrubber you can drag,
 /// and the transport. The volume row is always there when the island is tall enough; otherwise
-/// the speaker button swaps it with the transport. A new song cross-fades the artwork and
+/// the speaker button swaps it with the transport, when the title leaves room for the button
+/// (`NowPlayingTitleRow`). A new song cross-fades the artwork and
 /// pushes the titles in from below (`TrackChange`).
 struct NowPlayingHero: View {
     let model: AppModel
@@ -23,7 +24,12 @@ struct NowPlayingHero: View {
         let tint = model.musicTint(media)
         let roomy = size.height >= Self.roomyHeight
         let art: CGFloat = roomy ? 72 : size.height >= 110 ? 56 : 40
-        let showsSound = !roomy && model.controls.soundRowShown
+        let shown = MediaArbiter.playerID(media)
+        let others = model.players.filter { MediaArbiter.playerID($0) != shown }
+        // The title keeps its room: the volume button goes first, then chips past the first.
+        let row = NowPlayingTitleRow.layout(width: Double(size.width - art - Space.m), spacing: Double(2 * Space.m),
+                                            otherPlayers: others.count, volumeRow: roomy)
+        let showsSound = row.showsVolume && model.controls.soundRowShown
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: Space.m) {
                 TrackArtwork(media: media, size: art, corner: model.artworkCorner(size: art, standard: art >= 56 ? Radius.m : Radius.s))
@@ -38,13 +44,15 @@ struct NowPlayingHero: View {
                 }
                 Spacer(minLength: 0)
                 // The other players and the volume toggle, close together so the title keeps its room.
-                HStack(spacing: Space.xs) {
-                    PlayerChips(model: model, current: media)
-                    if !roomy {
-                        IconButton(symbol: showsSound ? "playpause.fill" : "speaker.wave.2.fill",
-                                   help: showsSound ? "Show playback controls" : "Show volume and output",
-                                   size: 24, glyph: 11, ink: Ink.tertiary) {
-                            model.controls.soundRowShown.toggle()
+                if !row.isEmpty {
+                    HStack(spacing: Space.xs) {
+                        PlayerChips(model: model, others: Array(others.prefix(row.chips)))
+                        if row.showsVolume {
+                            IconButton(symbol: showsSound ? "playpause.fill" : "speaker.wave.2.fill",
+                                       help: showsSound ? "Show playback controls" : "Show volume and output",
+                                       size: 24, glyph: 11, ink: Ink.tertiary) {
+                                model.controls.soundRowShown.toggle()
+                            }
                         }
                     }
                 }
@@ -73,18 +81,17 @@ struct NowPlayingHero: View {
 }
 
 /// The other players live now (a video in Chrome beside a song in Spotify), as small app icons
-/// beside the title. Clicking one shows and controls that player instead, and the closed island
-/// follows. Nothing shows while there is only one player.
+/// beside the title, as many as `NowPlayingTitleRow` leaves room for. Clicking one shows and
+/// controls that player instead; the closed island keeps showing what plays. Nothing shows while
+/// there is only one player.
 struct PlayerChips: View {
     let model: AppModel
-    let current: NowPlaying
+    let others: [NowPlaying]
 
     var body: some View {
-        let shown = MediaArbiter.playerID(current)
-        let others = model.players.filter { MediaArbiter.playerID($0) != shown }
         if !others.isEmpty {
             HStack(spacing: Space.xs) {
-                ForEach(Array(others.prefix(3).enumerated()), id: \.offset) { _, np in
+                ForEach(Array(others.enumerated()), id: \.offset) { _, np in
                     PlayerChip(media: np) { model.pickPlayer(np) }
                 }
             }

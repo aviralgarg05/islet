@@ -87,6 +87,31 @@ enum SettingsSnapshots {
         window.setContentSize(SettingsWindow.defaultSize)
         RunLoop.main.run(until: Date().addingTimeInterval(0.5))
 
+        // Opened from Downloads: General offers to move Islet to Applications, and the offer
+        // itself, at launch and before connecting a coding agent.
+        let installedAt = AppActions.bundleURL
+        let runsAsApp = AppActions.runsAsApp
+        AppActions.bundleURL = home.appendingPathComponent("Downloads/Islet.app")
+        AppActions.runsAsApp = true
+        navigation.open(.appearance)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        navigation.open(.general)
+        shoot("general-move-to-applications", dark: false)
+        let moments: [(String, AppLocation.MoveMoment)] = [("launch", .launch), ("connecting", .connecting("Claude Code"))]
+        for (name, moment) in moments {
+            let alert = AppActions.moveAlert(moment, folder: "Downloads", translocated: true,
+                                             destination: URL(fileURLWithPath: "/Applications/Islet.app"), replacing: false)
+            alert.window.appearance = NSAppearance(named: .aqua)
+            alert.layout()
+            if let view = alert.window.contentView?.superview ?? alert.window.contentView {
+                capture(view, to: dir.appendingPathComponent("move-offer-\(name)-light.png"))
+            }
+        }
+        AppActions.bundleURL = installedAt
+        AppActions.runsAsApp = runsAsApp
+        navigation.open(.appearance)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+
         if ProcessInfo.processInfo.environment["ISLET_SNAPSHOT_EXTRA"] == "1" {
             let extra = dir.appendingPathComponent("extra")
             try? FileManager.default.createDirectory(at: extra, withIntermediateDirectories: true)
@@ -211,6 +236,11 @@ enum SettingsSnapshots {
         // Let SwiftUI apply the change, lay out, and run the page's onAppear work.
         RunLoop.main.run(until: Date().addingTimeInterval(0.5))
         guard let frame = window.contentView?.superview else { return }
+        capture(frame, to: url)
+    }
+
+    /// Draws a view, with everything inside it, to a PNG.
+    private static func capture(_ frame: NSView, to url: URL) {
         frame.layoutSubtreeIfNeeded()
         guard let rep = frame.bitmapImageRepForCachingDisplay(in: frame.bounds) else { return }
         frame.cacheDisplay(in: frame.bounds, to: rep)
