@@ -135,8 +135,8 @@ final class SalesModel {
     /// Checks the key by asking for today's takings, then keeps it in the Keychain.
     func connect(_ store: SalesStore, key raw: String, shop: String, now: Date = Date()) async throws -> StoreSales {
         let key = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard SalesAPI.looksLikeKey(key) else { throw WebProblem.message("that doesn't look like a key.") }
-        if store == .shopify, SalesAPI.shopifyHost(shop) == nil { throw WebProblem.message("type the store's address, such as example.myshopify.com.") }
+        guard SalesAPI.looksLikeKey(key) else { throw WebProblem.message("that doesn’t look like a key.") }
+        if store == .shopify, SalesAPI.shopifyHost(shop) == nil { throw WebProblem.message("type the store’s address, such as example.myshopify.com.") }
         let result = await service.sales(store, key: key, shop: shop, since: SalesSchedule.startOfDay(now, calendar: calendar), now: now)
         if let problem = result.problem { throw problem }
         try secrets.save(key, account: store.keyAccount)
@@ -394,12 +394,12 @@ final class ToolUsageModel {
         guard let account = source.keyAccount else { return }
         switch source {
         case .openRouter:
-            guard OpenRouterUsage.looksLikeKey(key) else { throw WebProblem.message("that doesn't look like an OpenRouter key. It starts with sk-or-.") }
+            guard OpenRouterUsage.looksLikeKey(key) else { throw WebProblem.message("that doesn’t look like an OpenRouter key. It starts with sk-or-.") }
             let card = try await service.openRouter(key: key, now: now).get()
             try secrets.save(key, account: account)
             cards[.openRouter] = settings.openRouterUsageEnabled ? card : nil
         case .copilot:
-            guard SalesAPI.looksLikeKey(key) else { throw WebProblem.message("that doesn't look like a GitHub key.") }
+            guard SalesAPI.looksLikeKey(key) else { throw WebProblem.message("that doesn’t look like a GitHub key.") }
             let login = try await service.copilotLogin(token: key).get()
             try secrets.save(key, account: account)
             copilotLogin = login

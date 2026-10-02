@@ -249,14 +249,19 @@ import Testing
         #expect(WebProblem.from(status: 429) == .rateLimited && WebProblem.from(status: 502) == .server(502))
         #expect(WebProblem.rejectedKey.text("Stripe") == "Stripe turned the key down. Paste a new one in Settings.")
         #expect(WebProblem.missingKey.text("Polar").hasPrefix("Polar needs its key again"))
-        for p in [WebProblem.rejectedKey, .notFound, .rateLimited, .server(500), .unreadable, .unreachable, .missingKey, .message("x")] {
+        for p in [WebProblem.rejectedKey, .notFound, .rateLimited, .server(500), .unreadable, .unreachable, .missingKey, .message("x"), .blocked] {
             #expect(!p.text("Paddle").contains("—"))
             #expect(!p.text("Paddle").contains("'") && !p.shortText.contains("'"))
             #expect(p.shortText.split(separator: " ").count <= 3)
+            // A status code is for the log, never the sentence.
+            #expect(!p.text("Paddle").contains { $0.isNumber })
         }
         // A store row says what to do beside the warning sign, in the words the page connects it with.
         #expect(WebProblem.rejectedKey.shortText == "Reconnect" && WebProblem.missingKey.shortText == "Reconnect")
         #expect(WebProblem.unreachable.shortText == "Can\u{2019}t connect")
+        #expect(WebProblem.server(502).text("Stripe") == "Stripe is having problems right now. Islet tries again later.")
+        #expect(WebProblem.server(502).shortText == "Try again later")
+        #expect(WebProblem.blocked.text("Stripe") == "Islet couldn\u{2019}t check Stripe.")
     }
 
     @Test func onlyHTTPSToNamedHostsOrOllamaOnThisMac() {

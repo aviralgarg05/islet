@@ -59,7 +59,7 @@ public final class ToolsService: NSObject, URLSessionTaskDelegate, @unchecked Se
     /// Sends `r` if it goes to one of `hosts`. Throws `WebProblem.unreachable` when there is no
     /// connection; a reply of any status is returned.
     public func send(_ r: WebRequest, hosts: Set<String>) async throws -> Reply {
-        guard r.isAllowed(hosts: hosts) else { throw WebProblem.message("Islet doesn't send this request.") }
+        guard r.isAllowed(hosts: hosts) else { throw WebProblem.blocked }
         var request = URLRequest(url: r.url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: timeout)
         request.httpMethod = r.method
         request.httpShouldHandleCookies = false

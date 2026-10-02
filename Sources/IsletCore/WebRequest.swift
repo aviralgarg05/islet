@@ -45,7 +45,10 @@ public enum WebProblem: Error, Equatable, Sendable {
     case notFound
     /// 429: asked too often.
     case rateLimited
+    /// Any other failing status, kept for the log; the text never shows it.
     case server(Int)
+    /// A request Islet won't send (it would go somewhere other than the service).
+    case blocked
     /// The reply wasn't what the service documents.
     case unreadable
     /// No connection, a timeout or a refused connection.
@@ -71,9 +74,10 @@ public enum WebProblem: Error, Equatable, Sendable {
         switch self {
         case .rejectedKey, .missingKey: return "Reconnect"
         case .unreachable: return "Can\u{2019}t connect"
-        case .rateLimited: return "Try again later"
+        case .rateLimited, .server: return "Try again later"
         case .notFound: return "Not found"
-        case .server, .unreadable, .message: return "Couldn\u{2019}t read"
+        case .unreadable, .message: return "Couldn\u{2019}t read"
+        case .blocked: return "Couldn\u{2019}t check"
         }
     }
 
@@ -83,7 +87,8 @@ public enum WebProblem: Error, Equatable, Sendable {
         case .rejectedKey: return "\(service) turned the key down. Paste a new one in Settings."
         case .notFound: return "\(service) couldn\u{2019}t find that account."
         case .rateLimited: return "\(service) asked Islet to wait. It tries again later."
-        case .server(let status): return "\(service) had a problem (\(status))."
+        case .server: return "\(service) is having problems right now. Islet tries again later."
+        case .blocked: return "Islet couldn\u{2019}t check \(service)."
         case .unreadable: return "\(service) sent something Islet can\u{2019}t read."
         case .unreachable: return "Couldn\u{2019}t reach \(service)."
         case .message(let m): return "\(service): \(m)"

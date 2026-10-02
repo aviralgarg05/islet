@@ -15,14 +15,14 @@ struct MirrorSettingsSection: View {
         Section {
             Toggle(isOn: $model.settings.mirror.enabled) {
                 Text("Camera mirror")
-                Text("Your camera in the island, for a quick look before a call. It's on only while the Mirror page is open, and nothing is recorded.")
+                Text("Your camera in the island, for a quick look before a call. It’s on only while the Mirror page is open, and nothing is recorded.")
             }
             .settingsAnchor("tools.mirror")
             if model.settings.mirror.enabled {
                 Toggle("Flip like a mirror", isOn: $model.settings.mirror.flipped)
                     .settingsAnchor("tools.mirrorFlip")
                 if access == .denied || access == .restricted {
-                    AccessRow(text: "Islet isn't allowed to use the camera.", button: "Open System Settings") {
+                    AccessRow(text: "Islet isn’t allowed to use the camera.", button: "Open System Settings") {
                         NSWorkspace.shared.open(PermissionKind.camera.settingsURL)
                     }
                 }
@@ -63,7 +63,7 @@ struct TeleprompterSettingsSection: View {
                         // Whole lines, so the last one isn't cut through.
                         .frame(height: Self.editorHeight)
                         .accessibilityLabel("Script")
-                    Text(t.words == 0 ? "Type or paste what you'll say."
+                    Text(t.words == 0 ? "Type or paste what you’ll say."
                          : "\(t.words) words. \(Teleprompter.durationLabel(words: t.words, wordsPerMinute: pace)) at this speed.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -102,7 +102,7 @@ struct StocksSettingsSection: View {
         Section {
             Toggle(isOn: $model.settings.stocks.enabled) {
                 Text("Show stocks")
-                Text("A watchlist with each price, the day's change and a line for the day.")
+                Text("A watchlist with each price, the day’s change and a line for the day.")
             }
             .settingsAnchor("tools.stocks")
             if model.settings.stocks.enabled {
@@ -182,7 +182,7 @@ struct SalesSettingsSection: View {
         Section {
             Toggle(isOn: $model.settings.sales.enabled) {
                 Text("Sales today")
-                Text("Today's takings from your stores, as one total and per store, on the Sales page.")
+                Text("Today’s takings from your stores, as one total and per store, on the Sales page.")
             }
             .settingsAnchor("tools.sales")
             if model.settings.sales.enabled {
@@ -231,7 +231,8 @@ private struct SalesStoreRow: View {
                         let problem = model.sales.stores.first(where: { $0.store == store })?.problem
                         HStack(alignment: .firstTextBaseline, spacing: 5) {
                             StatusDot(colour: problem == nil ? .green : .orange)
-                            Text(problem.map { $0 == .rejectedKey ? "Key turned down" : "Couldn\u{2019}t read" } ?? "Connected")
+                            // The same few words the island's Sales page shows for it.
+                            Text(problem?.shortText ?? "Connected")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         .help(problem?.text(store.title) ?? "")
@@ -311,7 +312,7 @@ struct MoreUsageRows: View {
     var body: some View {
         Toggle(isOn: $model.settings.openRouterUsageEnabled) {
             Text("OpenRouter spending")
-            Text("What your key has spent today, and what's left of its limit, on Home.")
+            Text("What your key has spent today, and what’s left of its limit, on Home.")
         }
         .settingsAnchor("agents.openRouterUsage")
         if model.settings.openRouterUsageEnabled {
@@ -324,7 +325,7 @@ struct MoreUsageRows: View {
         }
         Toggle(isOn: $model.settings.copilotUsageEnabled) {
             Text("Copilot premium requests")
-            Text("This month's premium requests against your plan, on Home.")
+            Text("This month’s premium requests against your plan, on Home.")
         }
         .settingsAnchor("agents.copilotUsage")
         if model.settings.copilotUsageEnabled {
