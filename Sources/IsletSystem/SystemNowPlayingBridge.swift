@@ -21,7 +21,8 @@ public final class SystemNowPlayingBridge {
     private var stdin: FileHandle?
     private var stdout: FileHandle?
     private var startedAt = Date.distantPast
-    private var buffer = Data()
+    /// Its output, cut into lines.
+    private var lines = HelperLines()
     /// The artwork the helper sent, for the players in its last report.
     private var artwork = BridgeArtwork()
     private var restarts = HelperRestarts()
@@ -83,6 +84,8 @@ public final class SystemNowPlayingBridge {
             unavailable("MediaRemote helper not found; system-wide Now Playing is disabled.")
             return
         }
+        // A line the last helper left unfinished would swallow this one's first, which says it is up.
+        lines.reset()
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
         p.arguments = [paths.script.path, paths.library.path]
@@ -129,6 +132,7 @@ public final class SystemNowPlayingBridge {
         stdin = nil
         stdout = nil
         isRunning = false
+        lines.reset()
     }
 
     private func helperExited(status: Int32) {
@@ -137,6 +141,8 @@ public final class SystemNowPlayingBridge {
         stdin = nil
         stdout = nil
         isRunning = false
+        // What it left unfinished can't be finished now.
+        lines.reset()
         guard !stopped else { return }
         failed("MediaRemote helper keeps exiting (status \(status)).", ranFor: Date().timeIntervalSince(startedAt))
     }
@@ -230,14 +236,7 @@ public final class SystemNowPlayingBridge {
     }
 
     private func ingest(_ data: Data) {
-        guard !data.isEmpty else { return }
-        buffer.append(data)
-        while let nl = buffer.firstIndex(of: 0x0A) {
-            let line = buffer[buffer.startIndex..<nl]
-            buffer.removeSubrange(buffer.startIndex...nl)
-            handle(line: Data(line))
-        }
-        if buffer.count > 8 * 1024 * 1024 { buffer.removeAll() }
+        for line in lines.append(data) { handle(line: line) }
     }
 
     private func handle(line: Data) {
