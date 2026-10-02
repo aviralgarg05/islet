@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+- The Ask chip in the island now changes the provider in Settings → Ask & AI, and it's kept after a restart. A link's provider lasts until the island closes.
+- Changes made while `config.json` has a typo are kept when it's fixed, rather than lost.
+- Edits to `config.json` by hand always load, including undoing one and a config folder replaced by a dotfiles tool. With Settings open, Islet no longer rewrites a file you edited by hand.
+
 ## 0.2.0 (2 October 2026)
 
 Islet now shows the Live Activities your iPhone sends to the Mac, lets you answer coding agents' permission requests in the island, runs timers, and asks Apple Intelligence, Claude or ChatGPT. It also stays beside the notch and shrinks to the free space in the menu bar.
