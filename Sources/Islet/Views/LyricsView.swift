@@ -44,16 +44,14 @@ struct LyricsColumn: View {
             if lyrics.isSynced {
                 synced
             } else if let plain = lyrics.plain {
-                VStack(alignment: .leading, spacing: Space.xs) {
-                    SectionLabel(title: "Lyrics").frame(height: 16)
-                    AdaptiveScroll {
-                        Text(plain)
-                            .textStyle(.body)
-                            .foregroundStyle(Ink.secondary)
-                            .lineSpacing(2)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                // No heading, as the synced lines have none: the column beside the song says it.
+                AdaptiveScroll {
+                    Text(plain)
+                        .textStyle(.body)
+                        .foregroundStyle(Ink.secondary)
+                        .lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             } else {
                 Label("Instrumental", systemImage: "music.note")
@@ -136,6 +134,9 @@ struct LyricLines: View {
                 .foregroundStyle(isCurrent ? Ink.primary : sung ? Ink.quaternary : Ink.tertiary)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
+                // Its own one or two rows, whatever the column has left: the column's frame cuts
+                // what doesn't fit at the bottom, never a long line down to one row.
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
         }

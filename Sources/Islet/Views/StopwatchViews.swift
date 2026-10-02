@@ -120,10 +120,12 @@ enum StopwatchText {
         return s.laps.isEmpty ? nil : "Lap \(s.laps.count + 1)"
     }
 
-    /// The glance's line: the lap under way and how long the last one took ("Lap 3 · last 4:48").
+    /// The glance's line: the lap under way and how long the one before took
+    /// ("Lap 3 · lap 2 took 4:48").
     static func glance(_ s: Stopwatch, now: Date) -> String {
         if !s.isRunning { return "Paused" }
         guard let last = s.lapDurations.last else { return "Running" }
-        return "Lap \(s.laps.count + 1) · last \(Format.clock(last))"
+        let lap = s.laps.count + 1
+        return "Lap \(lap) · lap \(lap - 1) took \(Format.clock(last))"
     }
 }
