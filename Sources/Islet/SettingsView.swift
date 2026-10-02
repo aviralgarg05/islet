@@ -423,6 +423,17 @@ private struct AccentPicker: View {
                         Image(systemName: "eyedropper").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
                     }
                 }
+                // A picked colour can look like a preset; the dropper says this one is your own.
+                .overlay(alignment: .bottomTrailing) {
+                    if isCustom {
+                        Image(systemName: "eyedropper")
+                            .font(.system(size: 6.5, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 11, height: 11)
+                            .background(Circle().fill(Color.black.opacity(0.65)))
+                            .offset(x: 3, y: 3)
+                    }
+                }
             }
             .buttonStyle(.plain)
             .help(isCustom ? "\(selection). Click to pick another colour." : "Pick any colour")
@@ -599,6 +610,7 @@ struct IslandSketch: View {
         let art = 20 * scale
         let inset = Wings<EmptyView, EmptyView>.inset(for: settings.effectiveWingWidth) * scale
         let shape = IslandShape(topRadius: 6 * scale, bottomRadius: min(12, notch.height / 2.4) * scale)
+        let vinylDot = max(5, DotNSView.diameter * scale)
         return shape
             .fill(Color.black)
             .overlay { if settings.outline { IslandEdge(shape: shape).stroke(Color.white.opacity(0.18), lineWidth: 0.5) } }
@@ -633,6 +645,14 @@ struct IslandSketch: View {
             .overlay(alignment: .trailing) {
                 if settings.visualiserStyle == .gif, let stickers {
                     StickerSketch(library: stickers, settings: settings, scale: scale, playing: playing)
+                        .padding(.trailing, inset)
+                } else if settings.visualiserStyle == .vinyl {
+                    // The record's dot, kept big enough to see at the drawing's size.
+                    Circle().fill(Self.indicatorTint(settings))
+                        .frame(width: vinylDot, height: vinylDot)
+                        .scaleEffect(playing ? 1 : 0.8)
+                        .opacity(playing ? 1 : Double(PausedLook.indicatorOpacity))
+                        .frame(width: 14 * scale)
                         .padding(.trailing, inset)
                 } else {
                     PlayingIndicator(tint: Self.indicatorTint(settings), playing: playing, height: 14 * scale)
@@ -709,20 +729,28 @@ struct IslandSketch: View {
         case .black:
             shape.fill(Color.black)
         case .graphite:
-            shape.fill(Color(white: 0.105)).overlay(shape.stroke(Color.white.opacity(0.1), lineWidth: 1))
-        case .glass:
-            // Black in the stem over the notch; the body is a tinted, see-through glass from the
-            // bottom of the menu bar, darker towards the Black end of the level.
+            // Black in the menu bar row, as every theme is, then graphite below it.
             let top = min(0.95, row / max(height, 1))
-            let smoke = 0.36 + 0.5 * max(0, (0.6 - settings.glassLevel) / 0.6)
-            shape.fill(Color.black.opacity(smoke))
+            shape.fill(LinearGradient(stops: [
+                .init(color: .black, location: 0),
+                .init(color: .black, location: top),
+                .init(color: Color(white: 0.105), location: min(1, top + 12 * scale / max(height, 1))),
+            ], startPoint: .top, endPoint: .bottom))
+            .overlay(IslandEdge(shape: shape).stroke(Color.white.opacity(0.08), lineWidth: 1))
+        case .glass:
+            // Black in the stem over the notch, melting into a tinted, see-through glass below
+            // the menu bar: a short melt at the Glass end, down to half the body at the Black end,
+            // as the island does (`GlassMelt`).
+            let top = min(0.95, row / max(height, 1))
+            let melt = GlassMelt.depth(body: (height - row) / max(scale, 0.01), level: settings.glassLevel) * scale
+            shape.fill(Color.black.opacity(GlassMelt.smoke(level: settings.glassLevel)))
                 .overlay(shape.fill(LinearGradient(stops: [
                     .init(color: .black, location: 0),
                     .init(color: .black, location: top),
-                    .init(color: .black.opacity(0), location: min(1, top + 0.01)),
+                    .init(color: .black.opacity(0), location: min(1, top + melt / max(height, 1))),
                 ], startPoint: .top, endPoint: .bottom)))
                 .overlay(shape.fill(LinearGradient(colors: [.white.opacity(0.0), .white.opacity(0.1)], startPoint: .top, endPoint: .bottom)))
-                .overlay(shape.stroke(Color.white.opacity(0.22), lineWidth: 0.75))
+            // Its edge is the outline's, drawn only when Subtle outline is on.
         }
     }
 
