@@ -49,9 +49,27 @@ import Testing
         // Only an unknown symbol is "Not found"; being offline or asked too often says so.
         #expect(StocksAPI.problemLabel(.message("No data found")) == "Not found")
         #expect(StocksAPI.problemLabel(.notFound) == "Not found")
-        #expect(StocksAPI.problemLabel(.unreachable) == "Can't connect")
+        #expect(StocksAPI.problemLabel(.unreachable) == "Can\u{2019}t connect")
         #expect(StocksAPI.problemLabel(.rateLimited) == "Try again later")
-        #expect(StocksAPI.problemLabel(.server(503)) == "Couldn't read")
+        #expect(StocksAPI.problemLabel(.server(503)) == "Couldn\u{2019}t read")
+    }
+
+    @Test func rowNames() {
+        let index = StockQuote(symbol: "^GSPC", name: "S&P 500 Index", price: 6688.46)
+        // One name for an index, before and after its price arrives, and never the caret.
+        #expect(StocksAPI.title(symbol: "^GSPC", quote: nil) == "S&P 500")
+        #expect(StocksAPI.title(symbol: "^GSPC", quote: index) == "S&P 500")
+        #expect(StocksAPI.title(symbol: "^XYZ", quote: StockQuote(symbol: "^XYZ", name: "Some Index", price: 1)) == "Some Index")
+        #expect(StocksAPI.title(symbol: "^XYZ", quote: nil) == "XYZ")
+        #expect(StocksAPI.title(symbol: "AAPL", quote: nil) == "AAPL")
+        #expect(StocksAPI.subtitle(symbol: "^GSPC", quote: index, problem: nil) == "Index")
+        #expect(StocksAPI.subtitle(symbol: "^GSPC", quote: nil, problem: .unreachable) == "Can\u{2019}t connect")
+        let msft = StockQuote(symbol: "MSFT", name: "Microsoft Corporation", price: 507.12)
+        #expect(StocksAPI.subtitle(symbol: "MSFT", quote: msft, problem: nil) == "Microsoft Corporation")
+        // A price kept after a failed refresh says so.
+        #expect(StocksAPI.subtitle(symbol: "MSFT", quote: msft, problem: .unreachable) == "Earlier price")
+        #expect(StocksAPI.isEarlier(quote: msft, problem: .rateLimited) && !StocksAPI.isEarlier(quote: msft, problem: nil))
+        #expect(StocksAPI.subtitle(symbol: "NVDA", quote: nil, problem: nil) == nil)
     }
 
     @Test func sparklineFitsItsBox() {

@@ -50,8 +50,8 @@ struct MirrorTab: View {
     static func accessText(_ access: PermissionStatus) -> String {
         switch access {
         case .notDetermined: return "See yourself before a call. The camera is on only while this page is open, and nothing is recorded."
-        case .restricted: return "This Mac doesn't allow apps to use the camera."
-        default: return "Islet isn't allowed to use the camera. Switch it on in Privacy & Security → Camera."
+        case .restricted: return "This Mac doesn’t allow apps to use the camera."
+        default: return "Islet isn’t allowed to use the camera. Turn it on in System Settings."
         }
     }
 }
@@ -274,7 +274,7 @@ struct StocksTab: View {
         if stocks.symbols.isEmpty {
             EmptyHint(symbol: "chart.line.uptrend.xyaxis", text: "Add shares or indices to the watchlist in Settings.") {
                 Button("Open Settings") { AppActions.openSettings(.tools, at: "tools.stocks") }
-                    .buttonStyle(CapsuleButtonStyle(tint: .blue))
+                    .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
             }
         } else {
             let fits = Self.fitting(in: size.height)
@@ -300,15 +300,18 @@ struct StockRow: View {
 
     var body: some View {
         let pct = quote?.changePercent ?? 0
-        let tint: Color = pct > 0.005 ? Color(tint: "#34C759") : pct < -0.005 ? Color(tint: "#FF453A") : Ink.secondary
+        // A price kept after a refresh failed is drawn quietly, so it can't pass for a live one.
+        let earlier = StocksAPI.isEarlier(quote: quote, problem: problem)
+        let tint: Color = earlier ? Ink.tertiary
+            : pct > 0.005 ? Color(tint: "#34C759") : pct < -0.005 ? Color(tint: "#FF453A") : Ink.secondary
         HStack(spacing: Space.m) {
             VStack(alignment: .leading, spacing: 0) {
-                Text(symbol.hasPrefix("^") ? (quote?.displayName ?? symbol) : symbol)
+                // One name whether or not the price has come: an index by its plain name.
+                Text(StocksAPI.title(symbol: symbol, quote: quote))
                     .textStyle(.body, emphasized: true)
                     .foregroundStyle(Ink.primary)
                     .lineLimit(1)
-                // A price from earlier stays with its name; without one, why it is missing.
-                Text(quote.map { symbol.hasPrefix("^") ? symbol : $0.displayName } ?? problem.map(StocksAPI.problemLabel) ?? " ")
+                Text(StocksAPI.subtitle(symbol: symbol, quote: quote, problem: problem) ?? " ")
                     .textStyle(.caption)
                     .foregroundStyle(Ink.tertiary)
                     .lineLimit(1)
@@ -319,17 +322,18 @@ struct StockRow: View {
                     .frame(width: 72, height: 20)
                 Text(quote.priceText)
                     .textStyle(.body, emphasized: true, numeric: true)
-                    .foregroundStyle(Ink.primary)
+                    .foregroundStyle(earlier ? Ink.tertiary : Ink.primary)
                     .frame(minWidth: 64, alignment: .trailing)
                 Text(quote.changeText ?? "–")
                     .textStyle(.caption, emphasized: true, numeric: true)
                     .foregroundStyle(tint)
                     .frame(width: 58, alignment: .trailing)
             } else if loading && problem == nil {
-                Text("…").textStyle(.caption).foregroundStyle(Ink.tertiary)
+                SpinnerArc(tint: Ink.tertiary, lineWidth: 1.5).frame(width: 10, height: 10)
             }
         }
         .frame(height: StocksTab.rowHeight)
+        .help(earlier ? problem.map { "An earlier price. " + $0.text("Yahoo Finance") } ?? "" : "")
         .accessibilityElement(children: .combine)
     }
 }
@@ -370,29 +374,41 @@ struct SparklineView: View {
 struct SalesTab: View {
     let model: AppModel
     let size: CGSize
-    @Environment(\.snapshotMode) private var snapshotMode
 
     var body: some View {
         let sales = model.sales
         if model.settings.sales.stores.isEmpty {
-            EmptyHint(symbol: "cart", text: "Connect a store in Settings to see today's sales here. Keys stay in your Keychain, and Islet only reads.") {
+            EmptyHint(symbol: "cart",
+                      text: "Connect a store in Settings to see today’s sales here. Your sign-in details stay on this Mac, and Islet only reads your sales.") {
                 Button("Open Settings") { AppActions.openSettings(.tools, at: "tools.sales") }
-                    .buttonStyle(CapsuleButtonStyle(tint: .blue))
+                    .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
             }
         } else {
             let left = (size.width * 0.44).rounded()
             let connected = model.settings.sales.stores
             let fits = Self.fitting(in: size.height)
-            // Snapshots can't scroll, so they show what fits.
-            let shown = snapshotMode ? Array(connected.prefix(fits)) : connected
+            // More stores than fit: the last row says how many more, and its help lists them.
+            let shown = connected.count > fits ? Array(connected.prefix(max(1, fits - 1))) : connected
+            let hidden = Array(connected.dropFirst(shown.count))
             HStack(alignment: .top, spacing: 0) {
                 summary(sales).frame(width: left, height: size.height, alignment: .topLeading)
                 ColumnRule().frame(height: size.height).padding(.horizontal, Space.l)
-                AdaptiveScroll(scrolls: connected.count > fits) {
-                    VStack(alignment: .leading, spacing: Space.s) {
-                        ForEach(shown) { store in
-                            StoreRow(store: store, sales: sales.stores.first { $0.store == store })
+                VStack(alignment: .leading, spacing: Space.s) {
+                    ForEach(shown) { store in
+                        StoreRow(store: store, sales: sales.stores.first { $0.store == store })
+                    }
+                    if !hidden.isEmpty {
+                        let lines = hidden.map { store in
+                            let s = sales.stores.first { $0.store == store }
+                            return "\(store.title): \(s?.problem?.shortText ?? s.map(StoreRow.amount) ?? "…")"
                         }
+                        Text("+\(hidden.count) more")
+                            .textStyle(.caption, emphasized: true, numeric: true)
+                            .foregroundStyle(Ink.tertiary)
+                            .frame(height: StoreRow.height)
+                            .padding(.leading, StoreRow.dot + Space.s)
+                            .help(lines.joined(separator: "\n"))
+                            .accessibilityLabel("\(hidden.count) more: " + lines.joined(separator: ", "))
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -419,7 +435,6 @@ struct SalesTab: View {
                     .foregroundStyle(Ink.secondary)
                     .lineLimit(1)
             }
-            Spacer(minLength: 0)
             HStack(spacing: Space.xs) {
                 Text(figures.orders == 1 ? "1 order" : "\(figures.orders) orders")
                 if let at = sales.lastRefresh {
@@ -437,6 +452,8 @@ struct SalesTab: View {
             }
             .textStyle(.caption)
             .foregroundStyle(Ink.tertiary)
+            // Under the total at every size, not down at the column's foot.
+            .padding(.top, Space.m)
         }
     }
 }
@@ -446,23 +463,37 @@ struct StoreRow: View {
     let sales: StoreSales?
 
     static let height: CGFloat = 20
+    static let dot: CGFloat = 6
+
+    /// "£462.00 + €89.00", largest first; "–" for nothing yet today.
+    static func amount(_ s: StoreSales) -> String {
+        let all = s.figures.amounts.map { Money(minor: $0.value, currency: $0.key) }.sorted { $0.major > $1.major }
+        return all.isEmpty ? "–" : all.map { $0.formatted() }.joined(separator: " + ")
+    }
 
     var body: some View {
         HStack(spacing: Space.s) {
-            Circle().fill(Color(tint: store.tint)).frame(width: 6, height: 6)
+            Circle().fill(Color(tint: store.tint)).frame(width: Self.dot, height: Self.dot)
             Text(store.title).textStyle(.body).foregroundStyle(Ink.primary).lineLimit(1)
             Spacer(minLength: Space.s)
             if let problem = sales?.problem {
-                Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(Color.orange)
-                    .help(problem.text(store.title))
+                // What to do, in a word or two, beside the sign; the whole sentence in the help.
+                HStack(spacing: Space.xs) {
+                    Text(problem.shortText).textStyle(.caption).foregroundStyle(Ink.tertiary).lineLimit(1)
+                    Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(Color.orange)
+                        .accessibilityHidden(true)
+                }
+                .help(problem.text(store.title))
             } else if let s = sales {
-                let all = s.figures.amounts.map { Money(minor: $0.value, currency: $0.key) }.sorted { $0.major > $1.major }
-                Text(all.isEmpty ? "–" : all.map { $0.formatted() }.joined(separator: " + "))
+                Text(Self.amount(s))
                     .textStyle(.body, numeric: true)
                     .foregroundStyle(Ink.secondary)
                     .lineLimit(1)
             } else {
-                Text("…").textStyle(.body).foregroundStyle(Ink.tertiary)
+                SpinnerArc(tint: Ink.tertiary, lineWidth: 1.5)
+                    .frame(width: 10, height: 10)
+                    .help("Asking \(store.title)")
+                    .accessibilityLabel("Loading")
             }
         }
         .frame(height: Self.height)

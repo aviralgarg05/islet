@@ -81,11 +81,43 @@ public enum StocksAPI {
     public static func problemLabel(_ problem: WebProblem) -> String {
         switch problem {
         case .notFound, .message: return "Not found"
-        case .unreachable: return "Can't connect"
+        case .unreachable: return "Can\u{2019}t connect"
         case .rateLimited: return "Try again later"
-        default: return "Couldn't read"
+        default: return "Couldn\u{2019}t read"
         }
     }
+
+    /// Plain names for the common indices, which Yahoo writes with a caret ("^GSPC").
+    public static let indexNames: [String: String] = [
+        "^GSPC": "S&P 500", "^DJI": "Dow Jones", "^IXIC": "Nasdaq", "^NDX": "Nasdaq 100", "^RUT": "Russell 2000",
+        "^VIX": "VIX", "^FTSE": "FTSE 100", "^FTMC": "FTSE 250", "^GDAXI": "DAX", "^FCHI": "CAC 40",
+        "^STOXX50E": "Euro Stoxx 50", "^AEX": "AEX", "^IBEX": "IBEX 35", "^SSMI": "SMI", "^N225": "Nikkei 225",
+        "^HSI": "Hang Seng", "^AXJO": "ASX 200", "^GSPTSE": "TSX", "^BSESN": "Sensex", "^NSEI": "Nifty 50",
+        "^KS11": "KOSPI",
+    ]
+
+    /// A row's name, the same before and after its price arrives: an index by its plain name
+    /// (the table's, else the one Yahoo sends, else the symbol without its caret), a share by
+    /// its ticker.
+    public static func title(symbol: String, quote: StockQuote?) -> String {
+        guard symbol.hasPrefix("^") else { return symbol }
+        if let name = indexNames[symbol] { return name }
+        if let name = quote?.name, !name.isEmpty { return name }
+        return String(symbol.dropFirst())
+    }
+
+    /// The line under a row's name: "Index" or the company; "Earlier price" when a price is
+    /// kept after a refresh failed; why it is missing when there is none.
+    public static func subtitle(symbol: String, quote: StockQuote?, problem: WebProblem?) -> String? {
+        if let quote {
+            if problem != nil { return "Earlier price" }
+            return symbol.hasPrefix("^") ? "Index" : quote.displayName
+        }
+        return problem.map(problemLabel)
+    }
+
+    /// Whether a row's price is one kept from before, drawn quietly so it can't pass for live.
+    public static func isEarlier(quote: StockQuote?, problem: WebProblem?) -> Bool { quote != nil && problem != nil }
 
     public static func parse(_ data: Data) throws -> StockQuote {
         let o = try ToolJSON.object(data)

@@ -251,7 +251,12 @@ import Testing
         #expect(WebProblem.missingKey.text("Polar").hasPrefix("Polar needs its key again"))
         for p in [WebProblem.rejectedKey, .notFound, .rateLimited, .server(500), .unreadable, .unreachable, .missingKey, .message("x")] {
             #expect(!p.text("Paddle").contains("—"))
+            #expect(!p.text("Paddle").contains("'") && !p.shortText.contains("'"))
+            #expect(p.shortText.split(separator: " ").count <= 3)
         }
+        // A store row says what to do beside the warning sign, in the words the page connects it with.
+        #expect(WebProblem.rejectedKey.shortText == "Reconnect" && WebProblem.missingKey.shortText == "Reconnect")
+        #expect(WebProblem.unreachable.shortText == "Can\u{2019}t connect")
     }
 
     @Test func onlyHTTPSToNamedHostsOrOllamaOnThisMac() {
