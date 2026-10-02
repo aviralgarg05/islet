@@ -202,7 +202,7 @@ private struct PermissionRow: View {
         case .appNotRunning: return "Open \(kind == .automationMusic ? "Music" : "Spotify") to check"
         case .appNotInstalled: return "Not installed"
         case .unknown: return "Asked on first use"
-        case .writeOnly: return "Can only add events"
+        case .writeOnly: return "Add events only"
         case .restricted: return "Turned off by this Mac's restrictions"
         }
     }
