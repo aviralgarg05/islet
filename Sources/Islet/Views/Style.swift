@@ -393,6 +393,37 @@ struct GlassSurface<S: Shape>: View {
 
 // MARK: - Urgent glow
 
+/// The urgent glow on the closed island: a soft rim just inside its sides and bottom, so it
+/// stays in the menu bar row and never tints the status items beside it. It pulses a few times
+/// to catch the eye, then holds; with less motion it simply holds.
+struct InnerGlow: View {
+    let shape: IslandShape
+    let color: Color
+    @Environment(\.reduceMotionAnywhere) private var reduceMotion
+    @Environment(\.snapshotMode) private var snapshotMode
+    @ViewState private var bright = false
+
+    var body: some View {
+        // A lit edge with a soft haze inside it: bright where it meets the edge, so it reads
+        // as light rather than as a dull border.
+        ZStack {
+            IslandEdge(shape: shape).stroke(color.opacity(0.55), lineWidth: 10).blur(radius: 4)
+            IslandEdge(shape: shape).stroke(color, lineWidth: 2).blur(radius: 0.5)
+        }
+        .clipShape(shape)
+        .opacity(bright || snapshotMode ? 1 : 0.55)
+            .allowsHitTesting(false)
+            .onAppear {
+                guard !reduceMotion, !snapshotMode else {
+                    bright = true
+                    return
+                }
+                // An odd count, so the last swing lands on the steady glow.
+                withAnimation(.easeInOut(duration: 0.9).repeatCount(5, autoreverses: true)) { bright = true }
+            }
+    }
+}
+
 /// Soft pulsing glow behind the island while something needs attention. Animated by
 /// Core Animation (shadow opacity), so it costs the app no CPU per frame.
 struct GlowPulse: NSViewRepresentable {

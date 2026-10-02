@@ -529,14 +529,28 @@ struct IslandView: View {
     @ViewBuilder
     private func island(_ p: IslandPresentation, geometry g: IslandGeometry, from fromG: IslandGeometry?, move: ShellMove,
                         counted: Int) -> some View {
-        let glow = model.urgentGlow(for: p)
+        // In a frozen frame the glow comes and goes with the content it belongs to: the old
+        // one fading as its content leaves, the new one arriving with its content.
+        let glows: [(color: Color, presentation: IslandPresentation, opacity: Double)] = {
+            guard let frame else { return model.urgentGlow(for: p).map { [($0, p, 1)] } ?? [] }
+            let delay = move.opening ? IslandMotion.contentDelay : IslandMotion.contentDelayClosing
+            var list: [(Color, IslandPresentation, Double)] = []
+            if let old = model.urgentGlow(for: frame.from) { list.append((old, frame.from, IslandMotion.contentLeft(at: frame.t))) }
+            if let new = model.urgentGlow(for: p) { list.append((new, p, IslandMotion.contentReveal(at: frame.t, delay: delay))) }
+            return list
+        }()
         ZStack(alignment: .top) {
-            if let glow {
-                if snapshotMode {
-                    g.shape.fill(Color.black).shadow(color: glow.opacity(0.8), radius: 9)
-                } else {
-                    GlowPulse(color: NSColor(glow), cornerRadius: g.bottom)
-                        .frame(width: g.outerWidth, height: g.size.height)
+            // A peek's glow spreads round it; the closed island's stays inside its edge (below).
+            ForEach(Array(glows.enumerated()), id: \.offset) { _, glow in
+                if !Self.glowsInside(glow.presentation) {
+                    if snapshotMode {
+                        // As the live glow draws it (`GlowNSView`).
+                        g.shape.fill(Color.black).shadow(color: glow.color.opacity(0.5), radius: 9)
+                            .opacity(glow.opacity)
+                    } else {
+                        GlowPulse(color: NSColor(glow.color), cornerRadius: g.bottom)
+                            .frame(width: g.outerWidth, height: g.size.height)
+                    }
                 }
             }
             if let frame {
@@ -545,6 +559,13 @@ struct IslandView: View {
                     .environment(\.shellClock, ShellClock(t: frame.t, wasExpanded: frame.from == .expanded))
             } else {
                 ShellStretch(move: move) { stretch in shell(p, geometry: g, stretch: stretch) }
+            }
+            ForEach(Array(glows.enumerated()), id: \.offset) { _, glow in
+                if Self.glowsInside(glow.presentation) {
+                    InnerGlow(shape: g.shape, color: glow.color)
+                        .frame(width: g.outerWidth, height: g.size.height)
+                        .opacity(glow.opacity)
+                }
             }
             contentLayer(p, geometry: g, from: fromG, opening: move.opening, counted: counted)
         }
@@ -568,18 +589,29 @@ struct IslandView: View {
         .contextMenu { islandMenu(p) }
     }
 
+    /// The closed island (compact, a HUD in the row) keeps its urgent glow inside its edge, so
+    /// nothing spills below the menu bar row or over the status items beside it.
+    static func glowsInside(_ p: IslandPresentation) -> Bool { IslandLayout.rank(p) <= 1 }
+
     /// The island's surface and outline, `stretch` points wider on each side while it squashes.
     private func shell(_ p: IslandPresentation, geometry g: IslandGeometry, stretch: CGFloat) -> some View {
         let shape = g.stretched(by: stretch)
         // The teleprompter's "See-through while reading" turns the open island to clear glass.
         let seeThrough = p == .expanded && model.seeThroughPage
+        // The open island's shadow. In a frozen frame it grows and goes with the shell, so a
+        // closing island doesn't lose it at once nor an opening one wear it while still small.
+        var shadow = p == .expanded ? 0.45 : 0
+        if let frame, (frame.from == .expanded) != (p == .expanded) {
+            let k = IslandMotion.shellProgress(at: frame.t, opening: p == .expanded)
+            shadow = 0.45 * (p == .expanded ? k : 1 - k)
+        }
         return ZStack {
             (seeThrough ? IslandTheme.glass : model.settings.theme)
                 .background(expanded: p == .expanded, shape: shape, row: g.stemHeight, height: g.size.height,
                             glassLevel: seeThrough ? 1 : model.settings.glassLevel,
                             closedGlass: closedGlass,
                             stem: p == .expanded && model.look(for: display).stemmedOpen ? g.stemWidth : nil)
-                .shadow(color: .black.opacity(p == .expanded ? 0.45 : 0), radius: 14, y: 6)
+                .shadow(color: .black.opacity(shadow), radius: 14, y: 6)
             IslandOutline(shape: shape, on: model.settings.outline)
         }
         .frame(width: max(0, g.outerWidth + 2 * stretch), height: g.size.height)
