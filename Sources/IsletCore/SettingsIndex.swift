@@ -46,7 +46,7 @@ public enum SettingsPage: String, CaseIterable, Sendable, Identifiable {
         case .downloads: return "Browser downloads with their progress, then Open and Show when they finish."
         case .ai: return "Ask a question from anywhere, answered on this Mac or by Claude or ChatGPT."
         case .agents: return "See what your coding agents are doing and answer their questions in the island."
-        case .tools: return "To-dos, a note, a converter, emoji, shortcuts, weather, a camera mirror, a teleprompter, stocks and sales, each a page under More. All start off."
+        case .tools: return "To-dos, a note, a converter, emoji, shortcuts, weather, CPU and memory, a camera mirror, a teleprompter, stocks and sales, each a page under More. All start off."
         case .apps: return "Give an app a colour or a priority, hide the island for it, or mute its notifications."
         case .permissions: return "What Islet may use, and what uses it. None is needed to run."
         case .about: return "Version, licence and feedback."
@@ -249,7 +249,6 @@ public enum SettingsIndex {
                       keywords: ["cycle", "gesture"], anchor: "general.gestures"),
         SettingsEntry("general.reverseSwipes", .general, "Reverse sideways swipes", section: "Gestures",
                       keywords: ["invert", "direction", "natural", "swap", "gesture"], anchor: "general.gestures"),
-        SettingsEntry("general.stats", .general, "System stats", section: "Island pages", keywords: ["CPU", "memory", "RAM", "performance"]),
         SettingsEntry("general.pages", .general, "Pages in the switcher", section: "Island pages",
                       keywords: ["tabs", "order", "reorder", "drag", "arrange", "More", "hide", "show", "customise", "customize", "capsule"]),
     ]
@@ -457,6 +456,7 @@ public enum SettingsIndex {
                       keywords: ["where I am", "my location", "city", "town", "place"]),
         SettingsEntry("tools.temperature", .tools, "Temperature in", section: "Weather",
                       keywords: ["Celsius", "Fahrenheit", "units", "degrees"]),
+        SettingsEntry("tools.stats", .tools, "Show CPU and memory", section: "System", keywords: ["system stats", "CPU", "memory", "RAM", "performance"]),
 
         SettingsEntry("tools.todos", .tools, "To-dos", section: "To-dos and notes",
                       keywords: ["todo", "to do", "tasks", "list", "tick", "star", "checklist"]),

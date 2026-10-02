@@ -30,6 +30,13 @@ struct ToolsSettings: View {
                 SettingsFooter("Shortcuts run on this Mac, as they do in the Shortcuts app.")
             }
             WeatherSettingsSection(model: model)
+            Section("System") {
+                Toggle(isOn: $model.settings.systemStatsEnabled) {
+                    Text("Show CPU and memory")
+                    Text("A System page under More, measured only while it\u{2019}s open.")
+                }
+                .settingsAnchor("tools.stats")
+            }
             MirrorSettingsSection(model: model)
             TeleprompterSettingsSection(model: model)
             StocksSettingsSection(model: model)

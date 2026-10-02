@@ -362,7 +362,8 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// Skip what looks like a password copied in a browser (`ClipboardHistory.skipsSecrets`).
     public var clipboardSkipSecrets = true
     public var privacyIndicatorsEnabled = true
-    public var systemStatsEnabled = true
+    /// The System page (CPU and memory). A tool like the others, so it starts off.
+    public var systemStatsEnabled = false
     /// Live call timer when a call app is using the microphone.
     public var callDetection = true
     /// Download progress from ~/Downloads (macOS asks for folder access once).

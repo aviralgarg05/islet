@@ -4,7 +4,7 @@ Pages you turn on when you want them: to-dos, a quick note, a unit converter, em
 
 Home can also show usage for more AI tools beside Claude Code and Codex: see [Usage limits](INTEGRATIONS.md#usage-limits).
 
-The same Tools page also turns on a Shortcuts page and a Weather page. Lyrics, the month calendar, the stopwatch and focus sounds are switched on from the Settings page of the feature they belong to (Now Playing, Calendar & Reminders, Timers).
+The same Tools page also turns on a Shortcuts page, a Weather page and a System page (CPU and memory, measured only while it is open). Lyrics, the month calendar, the stopwatch and focus sounds are switched on from the Settings page of the feature they belong to (Now Playing, Calendar & Reminders, Timers).
 
 ## Arranging the pages
 

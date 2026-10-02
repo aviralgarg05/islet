@@ -9,7 +9,7 @@ import Testing
         #expect(!s.openRouterUsageEnabled && !s.ollamaUsageEnabled && !s.copilotUsageEnabled)
         #expect(s.sales.stores.isEmpty)
         let pages = IslandPage.switcher(s, current: nil)
-        for tool in [IslandPage.mirror, .teleprompter, .stocks, .sales] {
+        for tool in [IslandPage.mirror, .teleprompter, .stocks, .sales, .stats] {
             #expect(!pages.main.contains(tool) && !pages.more.contains(tool))
             #expect(!tool.isAvailable(s))
         }
@@ -27,6 +27,7 @@ import Testing
         s.noteEnabled = true
         s.converterEnabled = true
         s.emojiEnabled = true
+        s.systemStatsEnabled = true
         let pages = IslandPage.switcher(s, current: nil)
         #expect(pages.main == [.home, .today, .shelf])
         #expect(pages.more.contains(.todos) && pages.more.contains(.emoji))

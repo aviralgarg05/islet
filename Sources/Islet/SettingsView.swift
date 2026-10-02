@@ -79,12 +79,8 @@ struct GeneralSettings: View {
                 .settingsAnchor("general.capture")
             }
             GestureSettingsSection(model: model)
+            // The System page is switched on Tools, with the other pages that start off.
             Section("Island pages") {
-                Toggle(isOn: $model.settings.systemStatsEnabled) {
-                    Text("System stats")
-                    Text("CPU and memory on the System page, measured only while it's open.")
-                }
-                .settingsAnchor("general.stats")
                 IslandPagesEditor(model: model)
             }
         }

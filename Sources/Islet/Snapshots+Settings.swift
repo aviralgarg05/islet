@@ -237,6 +237,7 @@ enum SettingsSnapshots {
         s.sales = SalesSettings(enabled: true, stores: [.stripe, .shopify], shopifyStore: "example.myshopify.com")
         s.openRouterUsageEnabled = true
         s.copilotUsageEnabled = true
+        s.systemStatsEnabled = true
         s.todosEnabled = true
         s.noteEnabled = true
         s.converterEnabled = true

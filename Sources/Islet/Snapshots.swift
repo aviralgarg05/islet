@@ -24,6 +24,8 @@ enum Snapshots {
         var settings = IsletSettings()
         settings.clipboardEnabled = true
         settings.remindersEnabled = true
+        // The System page starts off; it has a shot of its own.
+        settings.systemStatsEnabled = true
         // Static renders: no transitions, so nothing is captured mid-animation.
         settings.animationStyle = .off
         let model = AppModel(settings: settings, secrets: MemorySecretStore(), scriptFile: nil)
