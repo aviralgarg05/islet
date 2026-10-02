@@ -83,11 +83,22 @@ enum IslandLayout {
         case .hidden, .idle:
             if m.floats { return grown(pill(width: n.width, metrics: m, wing: 0), by: look.hoverGrow) }
             return grown(IslandGeometry(size: n, top: 6, bottom: small, stemWidth: n.width, stemHeight: n.height), by: look.hoverGrow)
+        case .compact(.sticker):
+            // The resting sticker alone: the island hugs the notch with one small wing for it,
+            // rather than a long bar with an empty left wing.
+            let w = min(wing, MenuBarLayoutEngine.iconOnlyWing)
+            let hug = n.width + 2 * w
+            if m.floats { return grown(pill(width: hug, metrics: m, wing: w), by: look.hoverGrow) }
+            return grown(IslandGeometry(size: CGSize(width: hug, height: n.height), top: 6, bottom: small,
+                                        stemWidth: hug, stemHeight: n.height, wing: w), by: look.hoverGrow)
         case .compact where m.floats, .hud where m.floats && !look.detailedHUD:
             return grown(pill(width: row, metrics: m, wing: wing), by: look.hoverGrow)
         case .expanded where look.stemmedOpen:
+            // Over a notch the stem is the notch's width. Without one there is no notch to
+            // match: the stem keeps the pill's width, so opening never pinches it.
             return IslandGeometry(size: m.expanded, top: stemFlare, bottom: Radius.shell,
-                                  stemWidth: n.width, stemHeight: ExpandedLayout(metrics: m).row)
+                                  stemWidth: m.floats ? min(row, m.expanded.width) : n.width,
+                                  stemHeight: ExpandedLayout(metrics: m).row)
         case .expanded:
             return IslandGeometry(size: m.expanded, top: Radius.flare, bottom: Radius.shell,
                                   stemWidth: m.expanded.width, stemHeight: n.height)
@@ -109,6 +120,13 @@ enum IslandLayout {
         let n = m.notch
         let row = n.width + 2 * wing
         let width = max(row + 32, 276)
+        if m.floats {
+            // Without a notch the row part floats like the pill it grows from: inside the
+            // row's top edge, its top corners rounded, and the body below it as tall as ever.
+            let inset = NotchGeometry.pillInset
+            return IslandGeometry(size: CGSize(width: width, height: n.height + 46 + extra + inset), top: 0, bottom: 18,
+                                  stemWidth: min(row, width), stemHeight: n.height, wing: wing, inset: inset)
+        }
         return IslandGeometry(size: CGSize(width: width, height: n.height + 46 + extra), top: 8, bottom: 18,
                               stemWidth: min(row, width), stemHeight: n.height, wing: wing)
     }
