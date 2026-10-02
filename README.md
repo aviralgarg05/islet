@@ -15,8 +15,8 @@
 - **Timers and Pomodoro**, started from the island, a phrase like "tea 4m", Siri via Shortcuts ([recipes](docs/SHORTCUTS.md)) or a script.
 - **Calendar and Reminders**: meeting reminders that count down beside the notch and stay until you join, a large Join button, the rest of today, and reminders you can tick off. When macOS hasn't allowed Islet to read your calendar, it says why and opens the right page of System Settings.
 - **Calls, HUDs and system events**: call timers, volume and brightness, charging and battery, Focus, keep awake, a summary when you unlock.
-- **A file shelf, clipboard history, download progress and script widgets** (xbar and SwiftBar plugins run unchanged).
-- **Tools you turn on when you want them**: time-synced lyrics, your Shortcuts, the weather, a month calendar on Today, a stopwatch, Pomodoro lengths and focus sounds, a camera mirror and a teleprompter just under the camera, a stocks watchlist with sparklines, and today's sales from Stripe, Shopify, Lemon Squeezy, Gumroad, Dodo Payments, Polar and Paddle. Home can also show OpenRouter, Copilot and Ollama usage. Each starts off until you turn it on in Settings; the pages among them then appear under More. See [Tools](docs/TOOLS.md).
+- **A file shelf, clipboard history, download progress and script widgets** (xbar and SwiftBar plugins run unchanged). The clipboard shows links, colours, pictures and files as themselves, with search, filters and pins; the shelf AirDrops a file in one click and lets files go after a day, or when you choose.
+- **Tools you turn on when you want them**: to-dos, a quick note, a unit converter, emoji search, time-synced lyrics, your Shortcuts, the weather, a month calendar on Today, a stopwatch, Pomodoro lengths and focus sounds, a camera mirror and a teleprompter just under the camera, a stocks watchlist with sparklines, and today's sales from Stripe, Shopify, Lemon Squeezy, Gumroad, Dodo Payments, Polar and Paddle. Home can also show OpenRouter, Copilot and Ollama usage. Each starts off until you turn it on in Settings; the pages among them then appear under More, and Settings → General puts the pages in the order you like. See [Tools](docs/TOOLS.md).
 - **Your own activities** from the command line, a local HTTP API, the `islet://` URL scheme or iPhone Shortcuts. See the [API](docs/API.md).
 
 ## How it stays out of the way
@@ -90,7 +90,7 @@ To connect a coding agent, press **Connect…** beside it in *Settings → Codin
 
 | Feature | Permission |
 |---|---|
-| Fitting beside the notch, iPhone Live Activities, mirrored notifications, replacing the system HUD | Accessibility |
+| Fitting beside the notch, iPhone Live Activities, mirrored notifications, replacing the system HUD, typing emoji where you're typing | Accessibility |
 | Calendar events | Calendars |
 | Reminders | Reminders |
 | Download progress | Downloads folder |
@@ -99,7 +99,7 @@ To connect a coding agent, press **Connect…** beside it in *Settings → Codin
 
 Now Playing, volume, brightness, battery, calls, camera and microphone indicators, timers, the shelf, the Ask box and the API need no permission.
 
-Islet doesn't read what you type. With Accessibility it reads where menu bar items are, whether a window is in full screen, the text of Live Activities and banners, and, only with *Replace the system volume and brightness display* on, those keys. From macOS 27, System Settings calls Accessibility *Device Control and Data Access*.
+Islet doesn't read what you type. With Accessibility it reads where menu bar items are, whether a window is in full screen, the text of Live Activities and banners, and, only with *Replace the system volume and brightness display* on, those keys. With *Type emoji where you're typing* on, it types the emoji you click, and nothing else. From macOS 27, System Settings calls Accessibility *Device Control and Data Access*.
 
 ## Configure
 
@@ -120,7 +120,7 @@ The code is split into `IsletCore` (pure, tested logic), `IsletSystem` (macOS ad
 
 ## Help and contributing
 
-Questions go to [Discussions](https://github.com/aviralgarg05/islet/discussions), and bugs and ideas to [issues](https://github.com/aviralgarg05/islet/issues); [SUPPORT.md](SUPPORT.md) says what to include. Report security problems privately, as [SECURITY.md](SECURITY.md) describes. To send a change, read [CONTRIBUTING.md](CONTRIBUTING.md).
+Questions go to [Discussions](https://github.com/aviralgarg05/islet/discussions), and bugs and ideas to [issues](https://github.com/aviralgarg05/islet/issues) (*Send feedback* in Settings → About opens the form with your versions filled in); [SUPPORT.md](SUPPORT.md) says what to include. Report security problems privately, as [SECURITY.md](SECURITY.md) describes. To send a change, read [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Licence
 

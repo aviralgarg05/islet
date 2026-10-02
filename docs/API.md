@@ -466,6 +466,10 @@ Now Playing, closed island, HUD, gestures and battery keys:
 | `clipboardLimit` | `30` | Items kept, 1–500. Pinned items are never dropped. |
 | `clipboardSkipSecrets` | `true` | Skip passwords copied in a browser, where password manager extensions copy as the browser. A copy a Chromium browser says came from a known password manager extension (`org.chromium.source-url`) is always skipped. From another extension's page, text shaped like a password is skipped (one line, no spaces, 8–128 characters, three of lower case, upper case, digits and symbols). From a web page, only text that also looks generated: Safari's strong passwords, or mixed case whose letters don't make words. "Windows11", "COVID-19", UUIDs, links, paths, email addresses and domain names are kept. |
 | `clipboardIgnoredApps` | `[]` | Bundle ids whose copies are never kept, beside the password managers that always are. |
+| `shelfKeepFor` | `86400` | Seconds a file stays on the shelf before the shelf lets it go (the file itself stays where it is): Settings offers `3600`, `86400`, `604800` and `0` (until you remove it). Other values from 60 to 2592000 (30 days) work too. A config from before this setting keeps `0`. |
+| `islandPages` | Home, Today and Shelf in the capsule | The switcher's order: `{"bar": [...], "more": [...], "hidden": [...]}` with page names (`home`, `today`, `shelf`, `widgets`, `clipboard`, `stats`, `shortcuts`, `weather`, `todos`, `note`, `converter`, `emoji`, `mirror`, `teleprompter`, `stocks`, `sales`). At most four pages that are on show in the capsule; `hidden` ones are left out of the switcher. Home is always in the capsule, and pages not named go at the end of the list they come in. |
+| `todosEnabled`, `noteEnabled`, `converterEnabled`, `emojiEnabled` | `false` | The To-dos, Note, Converter and Emoji pages under More ([Tools](TOOLS.md)). |
+| `emojiTypes` | `false` | A click on an emoji types it into the app you were typing in instead of copying it. Needs Accessibility. |
 
 The old `hapticFeedback: false` is read as `"hapticsMode": "off"`; use `hapticsMode` from now on.
 
