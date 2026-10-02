@@ -429,9 +429,10 @@ struct PlayingIndicator: View {
             EmptyView()
         } else if snapshotMode {
             // Snapshots can't host the layer view: draw the resting pose of the same look.
+            // Paused, every look settles on the middle line.
             still
                 .opacity(playing ? 1 : Double(PausedLook.indicatorOpacity))
-                .frame(width: width, height: height, alignment: .bottom)
+                .frame(width: width, height: height, alignment: playing ? .bottom : .center)
         } else {
             EqualizerView(color: NSColor(tint), playing: playing, style: style).frame(width: width, height: height)
         }
@@ -455,9 +456,10 @@ struct PlayingIndicator: View {
                     .frame(width: height / 2, height: height / 2)
                     .scaleEffect(playing ? 1 : 0.8)
             }
-            .frame(width: width, height: height)
+            .frame(width: height, height: height)
+            .frame(width: width, height: height, alignment: .trailing)
         case .dots:
-            HStack(alignment: .bottom, spacing: 3 * k) {
+            HStack(alignment: playing ? .bottom : .center, spacing: 3 * k) {
                 ForEach(0..<3, id: \.self) { i in
                     Circle().fill(tint).frame(width: 4 * k, height: 4 * k).offset(y: playing ? -CGFloat([3, 6, 2][i]) * k : 0)
                 }
@@ -476,7 +478,7 @@ struct PlayingIndicator: View {
             Circle().fill(tint)
                 .frame(width: DotNSView.diameter * k, height: DotNSView.diameter * k)
                 .scaleEffect(playing ? 1 : 0.8)
-                .frame(width: width, height: height)
+                .frame(width: width, height: height, alignment: .trailing)
         default:
             // Bars, slim bars, and the bars that stand in for a sticker outside the closed island.
             let heights: [CGFloat] = style == .slim ? [0.55, 0.9, 0.45, 0.75, 0.6, 0.8] : [0.45, 0.8, 0.35, 0.65]

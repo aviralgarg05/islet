@@ -288,11 +288,15 @@ final class EqualizerNSView: IndicatorLayerView {
     }
 
     /// The resting value of bar `i` in the current state: its height (bars) or lift (dots).
+    /// Paused, every look settles on the middle line, as the mirror, wave and pulse do.
     private func rest(_ i: Int) -> CGFloat {
-        guard isPlaying else { return isDots ? 0 : Self.pausedScale }
+        guard isPlaying else { return isDots ? Self.pausedLift : Self.pausedScale }
         if isMirror { return Self.mirrorLively[i % Self.mirrorLively.count] }
         return isDots ? Self.lively[i % Self.lively.count] * 0.5 : Self.lively[i % Self.lively.count]
     }
+
+    /// Paused dots sit halfway up their room: on the middle line.
+    static let pausedLift: CGFloat = 0.5
 
     private var keyPath: String { isDots ? "transform.translation.y" : "transform.scale.y" }
 
@@ -300,8 +304,17 @@ final class EqualizerNSView: IndicatorLayerView {
     private func lift(_ v: CGFloat) -> CGFloat { v * max(0, bounds.height - (bars.first?.bounds.height ?? 0)) }
 
     private func pose(_ v: CGFloat, _ bar: CALayer) {
-        bar.transform = isDots ? CATransform3DMakeTranslation(0, lift(v), 0) : CATransform3DMakeScale(1, v, 1)
+        bar.transform = transform(v)
         bar.opacity = isPlaying ? 1 : PausedLook.indicatorOpacity
+    }
+
+    /// Bars grow from the bottom while playing; paused, the short bars are lifted to sit on the
+    /// middle line (mirrored bars are centred already).
+    private func transform(_ v: CGFloat) -> CATransform3D {
+        if isDots { return CATransform3DMakeTranslation(0, lift(v), 0) }
+        let scale = CATransform3DMakeScale(1, v, 1)
+        guard !isPlaying, !isMirror else { return scale }
+        return CATransform3DConcat(scale, CATransform3DMakeTranslation(0, (1 - v) * bounds.height / 2, 0))
     }
 
     override func settle() {
@@ -318,7 +331,8 @@ final class EqualizerNSView: IndicatorLayerView {
     /// staggered, then (when playing) into the loop.
     override func transition() {
         for (i, bar) in bars.enumerated() {
-            let from = (bar.presentation()?.value(forKeyPath: keyPath) as? CGFloat) ?? (isDots ? 0 : Self.pausedScale)
+            // The whole transform: a bar settling to the middle line moves as it shrinks.
+            let from = NSValue(caTransform3D: bar.presentation()?.transform ?? bar.transform)
             let fromOpacity = bar.presentation()?.opacity ?? bar.opacity
             bar.removeAnimation(forKey: "eq")
             bar.removeAnimation(forKey: "opacity")
@@ -326,17 +340,17 @@ final class EqualizerNSView: IndicatorLayerView {
             fade(bar, "opacity", from: fromOpacity)
             guard !still else {
                 // No movement: a quick cross-fade to the new heights.
-                let swap = CABasicAnimation(keyPath: keyPath)
+                let swap = CABasicAnimation(keyPath: "transform")
                 swap.fromValue = from
-                swap.toValue = bar.value(forKeyPath: keyPath)
+                swap.toValue = NSValue(caTransform3D: bar.transform)
                 swap.duration = 0.15
                 bar.add(swap, forKey: "eq")
                 continue
             }
             let delay = Double(i) * 0.035
-            let s = CASpringAnimation(keyPath: keyPath)
+            let s = CASpringAnimation(keyPath: "transform")
             s.fromValue = from
-            s.toValue = bar.value(forKeyPath: keyPath)
+            s.toValue = NSValue(caTransform3D: bar.transform)
             s.damping = isPlaying ? 12 : 16
             s.stiffness = 220
             s.mass = 0.6
@@ -503,7 +517,8 @@ final class PulseNSView: IndicatorLayerView {
 
     override func layoutLayers() {
         let d = min(bounds.width, bounds.height)
-        let centre = CGPoint(x: bounds.midX, y: bounds.midY)
+        // At the wing's outer end, where the bars, the mirror and the wave end too.
+        let centre = CGPoint(x: bounds.maxX - d / 2, y: bounds.midY)
         ring.bounds = CGRect(x: 0, y: 0, width: d, height: d)
         ring.position = centre
         let inset = Self.ringWidth / 2
@@ -608,7 +623,8 @@ final class DotNSView: IndicatorLayerView {
         let d = min(Self.diameter, bounds.height)
         dot.bounds = CGRect(x: 0, y: 0, width: d, height: d)
         dot.cornerRadius = d / 2
-        dot.position = CGPoint(x: bounds.midX, y: bounds.midY)
+        // At the wing's outer end, where the bars, the mirror and the wave end too.
+        dot.position = CGPoint(x: bounds.maxX - d / 2, y: bounds.midY)
         if dot.animationKeys() == nil { pose() }
     }
 
