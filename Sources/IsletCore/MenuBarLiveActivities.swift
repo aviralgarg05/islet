@@ -118,6 +118,30 @@ public enum MenuBarLiveActivities {
 
     public static func isSupported(osMajor: Int) -> Bool { osMajor >= minimumOSMajor }
 
+    /// What follows MenuBarAgent's menu bar between measurements.
+    public enum Watch: Equatable, Sendable {
+        /// Nothing: the menu bar is measured when an app comes to the front, launches or quits,
+        /// or the pointer reaches the island.
+        case off
+        /// Only items appearing, going or moving, so "Fit the menu bar" fits the wings again as
+        /// soon as an item appears or widens. No item's content is read.
+        case layout
+        /// Live Activities are read and shown in the island; layout changes are followed too.
+        case mirror
+    }
+
+    /// - Parameters:
+    ///   - showActivities: "Show Live Activities" is on.
+    ///   - fitsMenuBar: the closed island fits the menu bar ("Fit the menu bar").
+    ///   - inFront: this login session is the one in front.
+    ///   - supported: this macOS puts Live Activities in the menu bar (`isSupported`).
+    ///   - trusted: Islet has Accessibility.
+    public static func watch(showActivities: Bool, fitsMenuBar: Bool, inFront: Bool, supported: Bool, trusted: Bool) -> Watch {
+        guard inFront, supported, trusted else { return .off }
+        if showActivities { return .mirror }
+        return fitsMenuBar ? .layout : .off
+    }
+
     /// The source of one app's mirrored activities: "live-activity:uber".
     public static func source(for appName: String) -> String {
         let slug = appName.lowercased().unicodeScalars

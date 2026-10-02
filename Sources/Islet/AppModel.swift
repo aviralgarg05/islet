@@ -365,14 +365,24 @@ final class AppModel {
         if settings.unlockSplash { unlock.start() } else { unlock.stop() }
         let onlyHiddenChanged = lastMirrorOnlyHidden != settings.mirrorOnlyHiddenActivities
         lastMirrorOnlyHidden = settings.mirrorOnlyHiddenActivities
-        if settings.mirrorMenuBarActivities && inFront && liveActivitiesSupported && MenuBarLiveActivityMonitor.isAvailable {
+        // Items appearing, going or widening in the menu bar re-measure it, so "Fit the menu bar"
+        // keeps the wings off them with Live Activities off too.
+        let watch = MenuBarLiveActivities.watch(showActivities: settings.mirrorMenuBarActivities, fitsMenuBar: settings.closedLayout == .auto,
+                                                inFront: inFront, supported: liveActivitiesSupported,
+                                                trusted: MenuBarLiveActivityMonitor.isAvailable)
+        menuBarActivities.onStructureChange = { NotificationCenter.default.post(name: .isletMenuBarChanged, object: nil) }
+        menuBarActivities.mirrors = watch == .mirror
+        switch watch {
+        case .mirror:
             menuBarActivities.onChange = { [weak self] list in self?.syncMenuBarActivities(list) }
             menuBarActivities.knownApp = { $0.count <= 24 && LiveActivityCatalog.look(for: $0) != nil }
-            menuBarActivities.onStructureChange = { NotificationCenter.default.post(name: .isletMenuBarChanged, object: nil) }
             menuBarActivities.start()
             // The scan only publishes a changed menu bar; the filter changed, so publish it again.
             if onlyHiddenChanged { menuBarActivities.refresh() }
-        } else {
+        case .layout:
+            menuBarActivities.start()
+            syncMenuBarActivities([])
+        case .off:
             menuBarActivities.stop()
             syncMenuBarActivities([])
         }

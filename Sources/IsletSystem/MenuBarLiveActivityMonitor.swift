@@ -14,6 +14,9 @@ import IsletCore
 /// Cost: nothing polls while no activity exists. It wakes on the Darwin notifications that
 /// `liveactivitiesd` posts when an activity changes, on items appearing or disappearing, and on
 /// changes to the mirrored items themselves; a scan takes a few milliseconds.
+///
+/// With `mirrors` off it only follows the menu bar's layout (items appearing, going or moving),
+/// so the closed island can fit the menu bar again; it then reads nothing at all.
 public final class MenuBarLiveActivityMonitor {
     public static let agentBundleID = MenuBarAgentScanner.agentBundleID
 
@@ -23,6 +26,17 @@ public final class MenuBarLiveActivityMonitor {
     public var onStructureChange: (() -> Void)?
     /// Recognises an app name among an activity's text (the Live Activity catalogue).
     public var knownApp: (String) -> Bool = { _ in false }
+    /// Whether Live Activities are read and published. Off, the monitor only follows the menu
+    /// bar's layout for `onStructureChange` ("Fit the menu bar"): it reads no item's content
+    /// and doesn't listen for Live Activity changes. Changing it while running starts afresh.
+    public var mirrors = true {
+        didSet {
+            guard mirrors != oldValue, started else { return }
+            stop()
+            start()
+        }
+    }
+    private var started = false
 
     private var observer: AXObserver?
     private var agent: pid_t = 0
@@ -64,8 +78,9 @@ public final class MenuBarLiveActivityMonitor {
     @discardableResult
     public func start() -> Bool {
         guard Self.isAvailable else { return false }
+        started = true
         if observer == nil { attach() }
-        if notifyTokens.isEmpty {
+        if mirrors, notifyTokens.isEmpty {
             for name in Self.triggers {
                 var token: Int32 = 0
                 let status = notify_register_dispatch(name, &token, DispatchQueue.main) { [weak self] _ in
@@ -85,14 +100,17 @@ public final class MenuBarLiveActivityMonitor {
                     self?.scheduleScan(after: 1)
                 }
             })
-            for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
-                workspaceObservers.append(wnc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+            // Looking again for activities only: the layout has its own notifications.
+            if mirrors {
+                for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
+                    workspaceObservers.append(wnc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                        self?.scheduleScan(after: 0.5)
+                    })
+                }
+                appObservers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
                     self?.scheduleScan(after: 0.5)
                 })
             }
-            appObservers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
-                self?.scheduleScan(after: 0.5)
-            })
         }
         scheduleScan(after: 0)
         return observer != nil
@@ -101,6 +119,7 @@ public final class MenuBarLiveActivityMonitor {
     private var appObservers: [NSObjectProtocol] = []
 
     public func stop() {
+        started = false
         detach()
         notifyTokens.forEach { notify_cancel($0) }
         notifyTokens = []
@@ -217,6 +236,7 @@ public final class MenuBarLiveActivityMonitor {
     }
 
     private func scheduleScan(after delay: TimeInterval) {
+        guard mirrors else { return }
         scanWork?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.scan() }
         scanWork = work
@@ -225,12 +245,12 @@ public final class MenuBarLiveActivityMonitor {
 
     /// Publish the last list again, unchanged (an app was unmuted): no menu bar read.
     public func refresh() {
-        if observer != nil { onChange?(last) }
+        if mirrors, observer != nil { onChange?(last) }
     }
 
     /// Read MenuBarAgent's items off the main thread and publish the Live Activities among them.
     public func scan() {
-        guard observer != nil, agent != 0 else { return }
+        guard mirrors, observer != nil, agent != 0 else { return }
         let agent = agent
         queue.async { [weak self] in
             let slots = MenuBarAgentScanner.slots(agent: agent, readContent: true)
