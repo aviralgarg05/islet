@@ -202,30 +202,44 @@ private struct SalesStoreRow: View {
     @ViewState private var shop = ""
     @ViewState private var checking = false
     @ViewState private var error: String?
+    @ViewState private var confirmingDisconnect = false
 
     private var connected: Bool { model.settings.sales.stores.contains(store) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Circle().fill(Color(tint: store.tint)).frame(width: 8, height: 8)
-                Text(store.title)
-                if connected, store == .shopify, let host = SalesAPI.shopifyHost(model.settings.sales.shopifyStore) {
-                    Text(host).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            HStack(spacing: 10) {
+                // The store's colour, square so it isn't read as a status dot.
+                RoundedRectangle(cornerRadius: 2.5, style: .continuous).fill(Color(tint: store.tint)).frame(width: 9, height: 9)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
+                        Text(store.title)
+                        if connected, store == .shopify, let host = SalesAPI.shopifyHost(model.settings.sales.shopifyStore) {
+                            Text(host).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                    }
+                    // As a coding agent's connection reads: a dot and a few words under the name.
+                    if connected {
+                        let problem = model.sales.stores.first(where: { $0.store == store })?.problem
+                        HStack(alignment: .firstTextBaseline, spacing: 5) {
+                            StatusDot(colour: problem == nil ? .green : .orange)
+                            Text(problem.map { $0 == .rejectedKey ? "Key turned down" : "Couldn\u{2019}t read" } ?? "Connected")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        .help(problem?.text(store.title) ?? "")
+                    }
                 }
                 Spacer(minLength: 8)
                 if connected {
-                    if let problem = model.sales.stores.first(where: { $0.store == store })?.problem {
-                        Text(problem == .rejectedKey ? "Key turned down" : "Couldn't read")
-                            .font(.caption).foregroundStyle(.orange)
-                            .help(problem.text(store.title))
-                    } else {
-                        Text("Connected").font(.caption).foregroundStyle(.secondary)
-                    }
-                    Button("Remove", role: .destructive) {
-                        model.sales.disconnect(store)
-                        model.settings.sales.stores.removeAll { $0 == store }
-                    }
+                    Button("Disconnect\u{2026}") { confirmingDisconnect = true }
+                        .confirmationDialog("Disconnect \(store.title)?", isPresented: $confirmingDisconnect) {
+                            Button("Disconnect", role: .destructive) {
+                                model.sales.disconnect(store)
+                                model.settings.sales.stores.removeAll { $0 == store }
+                            }
+                        } message: {
+                            Text("Its key is removed from your Keychain. You can connect it again at any time.")
+                        }
                 } else if !connecting {
                     Button("Connect…") {
                         connecting = true

@@ -168,19 +168,20 @@ private struct AgentConnectionRow: View {
                 if let note {
                     Text(note).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 } else if let connection {
-                    HStack(spacing: 5) {
-                        Circle().fill(colour(connection)).frame(width: 6, height: 6)
+                    // The dot sits on the first line when the detail runs to two.
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        StatusDot(colour: colour(connection))
                         Text(detail(connection)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
             Spacer(minLength: 8)
+            // "Connected" is said once, by the dot; every action is a button of the same kind.
             switch connection {
             case .connected?:
-                Button("Disconnect…", action: disconnect).buttonStyle(.borderless).foregroundStyle(.secondary)
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityLabel("Connected")
+                Button("Disconnect…", action: disconnect)
             case .needsUpdate?:
-                Button("Disconnect…", action: disconnect).buttonStyle(.borderless).foregroundStyle(.secondary)
+                Button("Disconnect…", action: disconnect)
                 Button("Update…", action: connect)
             case .problem?, nil:
                 EmptyView()
@@ -226,6 +227,21 @@ struct AgentMark: View {
             .foregroundStyle(.white)
             .frame(width: 24, height: 24)
             .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(colour.gradient))
+            // A faint edge, so a dark tile still reads against the dark card.
+            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5))
+            .accessibilityHidden(true)
+    }
+}
+
+/// A status dot that sits on the first line of the text beside it.
+struct StatusDot: View {
+    let colour: Color
+    var size: CGFloat = 6
+
+    var body: some View {
+        Circle().fill(colour).frame(width: size, height: size)
+            // Centred on the x-height of a caption line.
+            .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 3.5 }
             .accessibilityHidden(true)
     }
 }
