@@ -507,3 +507,30 @@ private func times(to end: Double, step: Double = 1.0 / 240) -> [Double] {
         #expect(IslandLoops.resumeOffset(elapsed: .nan) == 0)
     }
 }
+
+@Suite struct FloatingPillAppearTests {
+    /// A floating pill appearing from nothing grows out of a capsule at the middle of the row,
+    /// however far, without its ends ever reaching past their place towards the menu bar.
+    @Test func itGrowsWithoutOvershooting() {
+        #expect(IslandMotion.appear.peak <= 1 + 1e-9)
+        let from: CGFloat = 32
+        for to in [CGFloat(212), 284, 380, 520] {
+            for t in times(to: 1.5) {
+                let k = IslandMotion.shellProgress(at: t, opening: true, appearing: true)
+                let width = from + (to - from) * CGFloat(k)
+                #expect(width <= to + 1e-9, "\(to) pt pill at \(t) s")
+            }
+            #expect(IslandMotion.shellProgress(at: 1.5, opening: true, appearing: true) > 0.995)
+        }
+        // Everything else moves as before.
+        #expect(IslandMotion.shellProgress(at: 0.2, opening: true) == IslandMotion.open.value(at: 0.2))
+    }
+
+    /// Its content waits until the pill is nearly its full width, so it never shows cut off.
+    @Test func itsContentWaitsForTheRoom() {
+        let start = IslandMotion.contentStart(opening: true, appearing: true)
+        #expect(start > IslandMotion.contentStart(opening: true))
+        #expect(IslandMotion.shellProgress(at: start, opening: true, appearing: true) > 0.9)
+        #expect(IslandMotion.contentStart(opening: false) == IslandMotion.contentDelayClosing)
+    }
+}

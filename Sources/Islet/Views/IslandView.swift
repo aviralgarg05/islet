@@ -82,7 +82,14 @@ enum IslandLayout {
         // the stem smoothly instead of passing through a thin one.
         switch p {
         case .hidden, .idle:
-            if m.floats { return grown(pill(width: n.width, metrics: m, wing: 0), by: look.hoverGrow) }
+            if m.floats {
+                // Resting the pointer there shows the pill. Otherwise nothing shows, and the
+                // shape waits as a capsule about as wide as it is tall at the row's centre, so
+                // an activity appearing grows out of it instead of popping in at full width,
+                // and one going away shrinks into it as it fades.
+                if look.hoverGrow > 0 { return grown(pill(width: n.width, metrics: m, wing: 0), by: look.hoverGrow) }
+                return pill(width: min(n.width, n.height), metrics: m, wing: 0)
+            }
             return grown(IslandGeometry(size: n, top: 6, bottom: small, stemWidth: n.width, stemHeight: n.height), by: look.hoverGrow)
         case .compact(.sticker):
             // The resting sticker alone: the island hugs the notch with one small wing for it,
@@ -425,10 +432,14 @@ struct IslandView: View {
         let fromG = frame.map { IslandLayout.geometry(for: $0.from, metrics: metrics, wing: placement.wing, look: look) }
         let fromRank = frame.map { IslandLayout.rank($0.from) } ?? origin?.rank ?? IslandLayout.rank(p)
         let opening = IslandLayout.rank(p) >= fromRank
+        // A floating pill appearing from nothing grows out of the middle of the row.
+        let appearing = metrics.floats && fromRank == 0 && IslandLayout.rank(p) == 1
         let fromWidth = fromG?.outerWidth ?? origin?.width ?? target.outerWidth
         let move = ShellMove(key: key, opening: opening, delta: target.outerWidth - fromWidth, stretches: style.stretches,
-                             intoRow: IslandLayout.rank(p) <= 1)
-        let g = frame.map { target.moved(from: fromG ?? target, by: IslandMotion.shellProgress(at: $0.t, opening: opening)) } ?? target
+                             intoRow: IslandLayout.rank(p) <= 1, appearing: appearing)
+        let g = frame.map {
+            target.moved(from: fromG ?? target, by: IslandMotion.shellProgress(at: $0.t, opening: opening, appearing: appearing))
+        } ?? target
         // Resting on the notch shows the island growing out of it, even with nothing to show.
         let visible = IslandLayout.isVisible(p) || dropTargeted || (p == .idle && look.hoverGrow > 0)
         let fitted = model.fittedBubbles(for: p, placement: placement, metrics: metrics, display: display)
@@ -487,7 +498,7 @@ struct IslandView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         // Shape first: opening springs open at once; closing waits for the content to go.
-        .animation(opening ? style.morph : style.collapse, value: key)
+        .animation(appearing ? style.grow : opening ? style.morph : style.collapse, value: key)
         .animation(style.morph, value: bubbles.key)
         .animation(style.morph, value: placement)
         // An approval card arriving on the open island (or answered) changes its shape between
@@ -561,7 +572,7 @@ struct IslandView: View {
         // one fading as its content leaves, the new one arriving with its content.
         let glows: [(color: Color, presentation: IslandPresentation, opacity: Double)] = {
             guard let frame else { return model.urgentGlow(for: p).map { [($0, p, 1)] } ?? [] }
-            let delay = move.opening ? IslandMotion.contentDelay : IslandMotion.contentDelayClosing
+            let delay = IslandMotion.contentStart(opening: move.opening, appearing: move.appearing)
             var list: [(Color, IslandPresentation, Double)] = []
             // The same glow on both sides (the waiting agent's, from the closed island to its
             // peek): the live island cross-fades one into the other as the shell moves, so it
@@ -606,7 +617,7 @@ struct IslandView: View {
                 }
             }
             .frame(width: g.outerWidth, height: g.size.height, alignment: .top)
-            contentLayer(p, geometry: g, from: fromG, opening: move.opening, counted: counted)
+            contentLayer(p, geometry: g, from: fromG, opening: move.opening, appearing: move.appearing, counted: counted)
         }
         // A canvas as wide as the window, which never changes size, with the shell and the
         // content centred on it. The shell grows about its centre, and new content is drawn
@@ -669,7 +680,7 @@ struct IslandView: View {
     /// the shell; in a frozen frame, the outgoing and incoming content at their progress.
     @ViewBuilder
     private func contentLayer(_ p: IslandPresentation, geometry g: IslandGeometry, from fromG: IslandGeometry?,
-                              opening: Bool, counted: Int) -> some View {
+                              opening: Bool, appearing: Bool, counted: Int) -> some View {
         let detailed = model.settings.hudStyle == .detailed
         let stale = model.focusedActivity(for: p)?.isStale(at: Date()) ?? false
         if let frame, let fromG,
@@ -681,11 +692,11 @@ struct IslandView: View {
                 .opacity(IslandMotion.contentLeft(at: frame.t))
             dressed(content(p, geometry: g, counted: counted, row: nil), geometry: g, stale: stale)
                 .modifier(ContentReveal(progress: IslandMotion.contentReveal(
-                    at: frame.t, delay: opening ? IslandMotion.contentDelay : IslandMotion.contentDelayClosing)))
+                    at: frame.t, delay: IslandMotion.contentStart(opening: opening, appearing: appearing))))
         } else {
             dressed(content(p, geometry: g, counted: counted, row: frame), geometry: g, stale: stale)
                 .id(IslandLayout.contentKey(p, detailedHUD: detailed))
-                .transition(style.contentTransition(opening: opening))
+                .transition(style.contentTransition(opening: opening, appearing: appearing))
         }
     }
 

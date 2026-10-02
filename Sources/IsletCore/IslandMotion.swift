@@ -91,6 +91,10 @@ public enum IslandMotion {
     public static let bud = MotionSpring(response: 0.34, damping: 0.64)
     /// A glyph arriving in a wing: one soft bounce.
     public static let bounce = MotionSpring(response: 0.36, damping: 0.58)
+    /// A floating pill appearing from nothing grows out of a capsule at the middle of the menu
+    /// bar row on this: it never overshoots, so however far the pill grows, its ends never
+    /// reach past their place towards the menu bar items beside them.
+    public static let appear = MotionSpring(response: 0.36, damping: 1)
 
     // MARK: Shape first, content after
 
@@ -98,6 +102,14 @@ public enum IslandMotion {
     public static let contentDelay = 0.16
     /// Closing, the smaller shape's content waits until the shell has mostly closed.
     public static let contentDelayClosing = 0.32
+    /// A floating pill appearing from nothing grows from the middle of the row: its content
+    /// waits until the pill is nearly its full width, so it never shows cut off at the ends.
+    public static let contentDelayAppearing = 0.24
+
+    /// When content starts to fade in, `opening` or closing, or on a pill `appearing`.
+    public static func contentStart(opening: Bool, appearing: Bool = false) -> Double {
+        appearing ? contentDelayAppearing : opening ? contentDelay : contentDelayClosing
+    }
     /// How long content takes to fade and scale in.
     public static let contentFade = 0.24
     /// Content scales in from this.
@@ -221,9 +233,11 @@ public enum IslandMotion {
     }
 
     /// How far the shell has moved from one shape to the next, `t` seconds in: the open spring
-    /// at once, or the close spring after `closeDelay`.
-    public static func shellProgress(at t: Double, opening: Bool, pace: Double = 1) -> Double {
-        opening ? open.paced(pace).value(at: t) : close.paced(pace).value(at: t - closeDelay * pace)
+    /// at once, or the close spring after `closeDelay`. A floating pill `appearing` from nothing
+    /// grows on `appear`.
+    public static func shellProgress(at t: Double, opening: Bool, appearing: Bool = false, pace: Double = 1) -> Double {
+        if appearing { return appear.paced(pace).value(at: t) }
+        return opening ? open.paced(pace).value(at: t) : close.paced(pace).value(at: t - closeDelay * pace)
     }
 
     // MARK: Liquid bubbles

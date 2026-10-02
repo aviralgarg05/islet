@@ -71,6 +71,18 @@ extension AnimationStyle {
         }
     }
 
+    /// A floating pill appearing from nothing, growing out of the middle of the menu bar row:
+    /// no overshoot, so its ends never reach towards the menu bar items beside it.
+    var grow: Animation? {
+        switch self {
+        case .fluid: return Motion.spring(IslandMotion.appear)
+        case .snappy: return .smooth(duration: 0.26 * k)
+        case .smooth: return .smooth(duration: 0.38 * k)
+        case .minimal: return .easeInOut(duration: 0.16 * k)
+        case .off: return nil
+        }
+    }
+
     /// The shell shrinking back: once the content has faded, on a calmer spring.
     var collapse: Animation? {
         switch self {
@@ -91,11 +103,11 @@ extension AnimationStyle {
 
     /// How content enters and leaves. Shape first, content after: new content fades and scales
     /// in once the shell has made room, and outgoing content is gone before the shell closes.
-    func contentTransition(opening: Bool) -> AnyTransition {
+    func contentTransition(opening: Bool, appearing: Bool = false) -> AnyTransition {
         switch self {
         case .fluid, .smooth, .snappy:
             let quick = self == .snappy ? 0.7 : 1
-            let delay = opening ? IslandMotion.contentDelay : IslandMotion.contentDelayClosing
+            let delay = IslandMotion.contentStart(opening: opening, appearing: appearing)
             return .asymmetric(
                 insertion: ContentReveal.transition
                     .animation(.easeOut(duration: IslandMotion.contentFade * quick * k).delay(delay * quick * k)),

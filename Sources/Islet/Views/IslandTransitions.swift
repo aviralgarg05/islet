@@ -193,6 +193,8 @@ struct ShellMove: Equatable {
     var stretches: Bool
     /// The shape it moves to sits in the menu bar row (the closed island).
     var intoRow: Bool
+    /// A floating pill appearing from nothing (`IslandMotion.appear`).
+    var appearing = false
 
     static func == (a: ShellMove, b: ShellMove) -> Bool { a.key == b.key }
 }

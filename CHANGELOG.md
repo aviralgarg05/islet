@@ -27,7 +27,7 @@ Islet now shows the Live Activities your iPhone sends to the Mac, lets you answe
 - Something urgent lights the island's edge from inside rather than glowing over the icons beside it. The island keeps clear of the overflow chevron when there's room, and items hidden behind the chevron no longer make the menu bar look full.
 - With only the music sticker to show (**Also when nothing is playing**), the island hugs the notch with one small wing.
 - **In full screen** offers Keep showing, Hide music only or Hide everything, worked out per display, and an app's **Keep the island in full screen** rule on the Apps page overrides it. A game that goes full screen a moment after opening is caught, a large window under a menu bar that hides itself no longer counts by mistake, and Mission Control hides the island.
-- On a display without a notch the island is a **Floating pill** in the menu bar by default. It can also be a notch shape, appear only when the pointer reaches the top edge, or stay hidden.
+- On a display without a notch the island is a **Floating pill** in the menu bar by default, which grows out of the middle of the row when something appears. It can also be a notch shape, appear only when the pointer reaches the top edge, or stay hidden.
 
 ### Coding agents
 - **Approvals.** Claude Code, Codex and Cursor can ask in the island: Allow, **Always** (for the rest of the session), Deny or **Answer in the terminal**. Risky commands (recursive deletes, force pushes, sudo and more) need a second click. Questions and plans can be answered there too.
