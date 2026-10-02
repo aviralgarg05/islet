@@ -221,7 +221,6 @@ final class AppModel {
     @ObservationIgnored private var systemObservers: [NSObjectProtocol] = []
     /// Activities already sent to the on-device model for an icon.
     private var iconAttempts: Set<String> = []
-    private var settingsWatcher: DispatchSourceFileSystemObject?
     /// config.json, which is never written over while it doesn't parse.
     @ObservationIgnored private var configFile: SettingsFile
     /// What config.json is known to hold: written, read or (when it was broken at launch) the
@@ -761,6 +760,8 @@ final class AppModel {
         }
         committedSettings = settings
         noteSettingsProblem(configFile.problem)
+        // Saving makes the config folder again when it was deleted: watch the new one.
+        if watchingSettings, FileIdentity(path: IsletPaths.configDirectory.path) != settingsFolder { rearmSettingsWatchers() }
     }
 
     /// Settings → Advanced, while config.json doesn't parse: keep a copy of it as
@@ -834,28 +835,86 @@ final class AppModel {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
     }
 
-    /// Live-reload `config.json` when edited by hand or synced from dotfiles. Watches the
-    /// folder (editors that save by atomic rename) and the file itself (in-place writes).
+    /// Set once `start()` watches config.json; snapshots never do.
+    @ObservationIgnored private var watchingSettings = false
+    /// The config folder: editors that save by renaming a new file into place change it.
+    @ObservationIgnored private var settingsWatcher: DispatchSourceFileSystemObject?
+    /// Which folder `settingsWatcher` watches; nil while there is none.
+    @ObservationIgnored private var settingsFolder: FileIdentity?
+    /// The folder above it, or the nearest one there is: the config folder deleted, moved, made
+    /// again or swapped for another (stow, chezmoi, a link pointed elsewhere) changes it.
+    @ObservationIgnored private var settingsParentWatcher: DispatchSourceFileSystemObject?
+    /// config.json itself, for editors that write in place.
+    @ObservationIgnored private var fileWatcher: DispatchSourceFileSystemObject?
+
+    /// Live-reload `config.json` when edited by hand or synced from dotfiles. Watches the file
+    /// (in-place writes), its folder (atomic renames) and the folder above (the config folder
+    /// itself replaced). Event-driven throughout: nothing is polled, even while the folder is gone.
     private func watchSettingsFile() {
-        let url = IsletPaths.configFile
-        if !FileManager.default.fileExists(atPath: url.path) { saveSettings() }
-        let dirFD = open(url.deletingLastPathComponent().path, O_EVTONLY)
-        guard dirFD >= 0 else { return }
-        let dir = DispatchSource.makeFileSystemObjectSource(fileDescriptor: dirFD, eventMask: [.write, .rename], queue: .main)
+        if !FileManager.default.fileExists(atPath: IsletPaths.configFile.path) { saveSettings() }
+        watchingSettings = true
+        rearmSettingsWatchers()
+    }
+
+    /// Watches the config folder at its path now, and the folder above it, then reads config.json
+    /// in case it changed while nothing watched it. Creates nothing: a missing folder is waited
+    /// for through the folder above, or made by the next save.
+    private func rearmSettingsWatchers() {
+        let folder = IsletPaths.configDirectory
+        settingsWatcher?.cancel()
+        settingsWatcher = nil
+        settingsFolder = nil
+        watchAbove(folder)
+        let fd = open(folder.path, O_EVTONLY)
+        guard fd >= 0 else {
+            fileWatcher?.cancel()
+            fileWatcher = nil
+            return
+        }
+        settingsFolder = FileIdentity(descriptor: fd)
+        let dir = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete], queue: .main)
         dir.setEventHandler { [weak self] in
+            // The folder itself was deleted or moved: follow the path, not the old folder.
+            if let data = self?.settingsWatcher?.data, !data.isDisjoint(with: [.delete, .rename]) {
+                self?.rearmSettingsWatchers()
+                return
+            }
             self?.reloadSettingsFromDisk()
             self?.watchConfigFileItself()
         }
-        dir.setCancelHandler { close(dirFD) }
+        dir.setCancelHandler { close(fd) }
         dir.resume()
         settingsWatcher = dir
         watchConfigFileItself()
+        reloadSettingsFromDisk()
     }
 
-    private var fileWatcher: DispatchSourceFileSystemObject?
+    /// Watches the nearest existing folder above `folder`. A change there that leaves a different
+    /// config folder at the path (or none) moves the watchers.
+    private func watchAbove(_ folder: URL) {
+        settingsParentWatcher?.cancel()
+        settingsParentWatcher = nil
+        var above = folder.deletingLastPathComponent()
+        var fd = open(above.path, O_EVTONLY)
+        while fd < 0, above.pathComponents.count > 1 {
+            above = above.deletingLastPathComponent()
+            fd = open(above.path, O_EVTONLY)
+        }
+        guard fd >= 0 else { return }
+        let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete], queue: .main)
+        src.setEventHandler { [weak self] in
+            guard let self else { return }
+            let moved = !(self.settingsParentWatcher?.data ?? []).isDisjoint(with: [.delete, .rename])
+            if moved || FileIdentity(path: folder.path) != self.settingsFolder { self.rearmSettingsWatchers() }
+        }
+        src.setCancelHandler { close(fd) }
+        src.resume()
+        settingsParentWatcher = src
+    }
 
     private func watchConfigFileItself() {
         fileWatcher?.cancel()
+        fileWatcher = nil
         let fd = open(IsletPaths.configFile.path, O_EVTONLY)
         guard fd >= 0 else { return }
         let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .extend, .delete, .rename], queue: .main)

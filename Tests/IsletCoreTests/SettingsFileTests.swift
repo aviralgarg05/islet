@@ -142,6 +142,33 @@ private func scratchFolder(_ name: String) throws -> URL {
         #expect(file.holdsOwnWrite())
     }
 
+    /// The config folder's watcher follows the path: a folder made again, or a link pointed at
+    /// another folder, is told apart from the one being watched.
+    @Test func aFolderMadeAgainIsADifferentOne() throws {
+        let dir = try scratchFolder("identity")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let folder = dir.appendingPathComponent("islet")
+        #expect(FileIdentity(path: folder.path) == nil)
+
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let first = try #require(FileIdentity(path: folder.path))
+        #expect(FileIdentity(path: folder.path) == first)
+        let fd = open(folder.path, O_EVTONLY)
+        defer { close(fd) }
+        #expect(FileIdentity(descriptor: fd) == first)
+
+        // Moved away and made again: the same path, another folder.
+        try FileManager.default.moveItem(at: folder, to: dir.appendingPathComponent("islet.bak"))
+        #expect(FileIdentity(path: folder.path) == nil)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        #expect(FileIdentity(path: folder.path) != first)
+
+        // A link leads to the folder it points at.
+        let link = dir.appendingPathComponent("link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: dir.appendingPathComponent("islet.bak"))
+        #expect(FileIdentity(path: link.path) == first)
+    }
+
     @Test func fixingTheFileClearsTheProblem() throws {
         let dir = try scratchFolder("config")
         defer { try? FileManager.default.removeItem(at: dir) }

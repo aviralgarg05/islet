@@ -401,3 +401,30 @@ public struct SettingsFile: Sendable {
         return try e.encode(object)
     }
 }
+
+/// Which file or folder a path leads to, through links: its disk and its number on that disk.
+/// A folder deleted and made again, swapped for another (stow, chezmoi) or reached through a link
+/// pointed elsewhere is a different one at the same path, so a watcher on the old one must move.
+public struct FileIdentity: Equatable, Sendable {
+    let device: UInt64
+    let inode: UInt64
+
+    /// Nil when nothing is there.
+    public init?(path: String) {
+        var info = stat()
+        guard stat(path, &info) == 0 else { return nil }
+        self.init(info)
+    }
+
+    /// The file or folder an open descriptor refers to.
+    public init?(descriptor: Int32) {
+        var info = stat()
+        guard fstat(descriptor, &info) == 0 else { return nil }
+        self.init(info)
+    }
+
+    private init(_ info: stat) {
+        device = UInt64(bitPattern: Int64(info.st_dev))
+        inode = UInt64(info.st_ino)
+    }
+}
