@@ -205,6 +205,17 @@ enum SettingsSnapshots {
             navigation.open(.liveActivities)
             shoot("live-activities-before-macos-26", in: extra, dark: false)
             model.liveActivitiesSupported = liveActivitiesSupported
+            // Battery and timers muted from the island: their pages list them with Unmute, and
+            // say what still shows.
+            var muted = sampleSettings
+            muted.mutedSources += ["battery", TimerEngine.source]
+            model.settings = muted
+            navigation.open(.notifications)
+            shoot("notifications-muted", in: extra, dark: false)
+            navigation.open(.timers)
+            shoot("timers-muted", in: extra, dark: false)
+            model.settings = sampleSettings
+            RunLoop.main.run(until: Date().addingTimeInterval(0.5))
             // Islet.app moved since Claude Code was connected: it runs from a new place, and the
             // isletctl the hooks call is gone. Needs an update, and a dot.
             window.setContentSize(SettingsWindow.defaultSize)
