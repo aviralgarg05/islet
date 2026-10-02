@@ -88,7 +88,9 @@ extension Snapshots {
         }
         model.settings = saved
 
-        // A notch fit: 8 points wider and 2 shorter than the hardware notch drawn behind it.
+        // A notch fit: 8 points wider and 2 shorter than measured, over the notch it was fitted
+        // to. The backdrop is drawn with the fitted notch, as the hardware the fit matches: one
+        // shape, not an island stacked on a lip of notch.
         var fitted = saved
         fitted.notchWidthAdjust = 8
         fitted.notchHeightAdjust = -2
@@ -98,7 +100,7 @@ extension Snapshots {
         model.forcedPresentation = .compact(.nowPlaying(playing))
         let view = IslandView(model: model, display: 1, metrics: m)
             .frame(width: 760, height: m.expanded.height + 30)
-            .background(backdrop(metrics: metrics))
+            .background(backdrop(metrics: m))
         write(view, to: dir.appendingPathComponent("42-compact-media-notch-fit.png"))
         renderLiveIndicators(to: dir.appendingPathComponent("43-live-indicators.png"))
         renderLiveRecordsAndStickers(to: dir.appendingPathComponent("43-live-records-stickers.png"), library: model.stickers)
