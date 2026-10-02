@@ -112,7 +112,7 @@ struct ClipboardLimitPicker: View {
 /// "Add app": the apps running now, then any app from the Applications folder. Used by the
 /// Apps page and by clipboard history's ignore list.
 struct AddAppMenu: View {
-    var title = "Add app"
+    var title = "Add app\u{2026}"
     /// Bundle ids already on the list, which the menu leaves out.
     let existing: Set<String>
     let add: (String) -> Void
@@ -131,6 +131,8 @@ struct AddAppMenu: View {
             if !runningApps.isEmpty { Divider() }
             Button("Other app…", action: chooseApp)
         }
+        // A button that opens a list, not a picker with a value.
+        .menuIndicator(.hidden)
         .fixedSize()
     }
 

@@ -887,17 +887,22 @@ struct AppRulesSettings: View {
             Form {
                 Section {
                     SettingsHero(page: .apps) { addMenu }
+                } footer: {
+                    // With muted sources below, an empty card would say the page has nothing on it.
+                    if model.settings.appRules.isEmpty && !model.settings.mutedSources.isEmpty {
+                        SettingsFooter("No app rules yet. Use Add app to give one a colour or a priority.")
+                    }
                 }
                 if model.settings.appRules.isEmpty {
-                    Section {
-                        VStack(spacing: 8) {
-                            Image(systemName: "app.dashed").font(.system(size: 30, weight: .light)).foregroundStyle(.tertiary)
-                            Text("No apps yet").font(.headline)
-                            Text("Add an app to change how the island treats it.")
-                                .font(.callout).foregroundStyle(.secondary)
+                    if model.settings.mutedSources.isEmpty {
+                        Section {
+                            ContentUnavailableView {
+                                Label("No apps yet", systemImage: SettingsPage.apps.symbol)
+                            } description: {
+                                Text("Use Add app to give one a colour or a priority, hide the island for it, or mute it.")
+                            }
+                            .padding(.vertical, 12)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 28)
                     }
                 } else {
                     Section {
@@ -963,34 +968,40 @@ struct AppRuleRow: View {
                 AppIconView(bundleID: rule.bundleID, size: 24)
                 Text(name).font(.body.weight(.medium)).lineLimit(1)
                 Spacer(minLength: 8)
+                // Two columns of fixed width, so the pickers and the colour dot line up from row to
+                // row: the priority ends at one edge, and the colour, with its dot, starts at the next.
                 priorityPicker
-                // Menus draw their icons in one colour, so the chosen colour shows beside the menu.
-                // Clicking it picks any colour, as the accent's custom swatch does.
-                Button(action: pickColour) {
-                    Circle()
-                        .fill(rule.tint.map { Color(tint: $0) } ?? Color.clear)
-                        .overlay(Circle().strokeBorder(Color.primary.opacity(rule.tint == nil ? 0.25 : 0.12), lineWidth: 1))
-                        .frame(width: 12, height: 12)
-                        .padding(3)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Pick any colour")
-                .accessibilityLabel("Pick any colour for \(name)")
-                Picker("Colour", selection: tintChoice) {
-                    Text("Its own colour").tag("")
-                    Divider()
-                    ForEach(Self.tints, id: \.self) { tint in
-                        Text(tint == "gray" ? "Grey" : tint.capitalized).tag(tint)
+                HStack(spacing: 2) {
+                    // Menus draw their icons in one colour, so the chosen colour shows beside the menu.
+                    // Clicking it picks any colour, as the accent's custom swatch does.
+                    Button(action: pickColour) {
+                        Circle()
+                            .fill(rule.tint.map { Color(tint: $0) } ?? Color.clear)
+                            .overlay(Circle().strokeBorder(Color.primary.opacity(rule.tint == nil ? 0.25 : 0.12), lineWidth: 1))
+                            .frame(width: 12, height: 12)
+                            .padding(3)
+                            .contentShape(Rectangle())
                     }
-                    Divider()
-                    if let custom = customTint {
-                        Text("Custom").tag(custom)
+                    .buttonStyle(.plain)
+                    .help("Pick any colour")
+                    .accessibilityLabel("Pick any colour for \(name)")
+                    Picker("Colour", selection: tintChoice) {
+                        Text("App\u{2019}s own colour").tag("")
+                        Divider()
+                        ForEach(Self.tints, id: \.self) { tint in
+                            Text(tint == "gray" ? "Grey" : tint.capitalized).tag(tint)
+                        }
+                        Divider()
+                        if let custom = customTint {
+                            Text("Custom").tag(custom)
+                        }
+                        Text("Other colour…").tag(Self.otherColour)
                     }
-                    Text("Other colour…").tag(Self.otherColour)
+                    .labelsHidden()
+                    .fixedSize()
                 }
-                .labelsHidden()
-                .fixedSize()
+                .frame(width: Self.colourWidth, alignment: .leading)
+                .padding(.leading, 8)
                 Button(role: .destructive, action: onDelete) { Image(systemName: "minus.circle") }
                     .buttonStyle(.borderless)
                     .help("Remove \(name)")
@@ -1030,10 +1041,13 @@ struct AppRuleRow: View {
         ColourPanelRelay.pick(starting: customTint) { rule.tint = $0 }
     }
 
+    private static let priorityWidth: CGFloat = 150
+    private static let colourWidth: CGFloat = 156
+
     @ViewBuilder private var options: some View {
-        Toggle("Hide the island in front", isOn: Binding(get: { rule.hideIsland ?? false }, set: { rule.hideIsland = $0 ? true : nil }))
+        Toggle("Hide the island while it\u{2019}s in front", isOn: Binding(get: { rule.hideIsland ?? false }, set: { rule.hideIsland = $0 ? true : nil }))
             .fixedSize()
-        Toggle("Keep it in full screen", isOn: Binding(get: { rule.showInFullscreen ?? false }, set: { rule.showInFullscreen = $0 ? true : nil }))
+        Toggle("Keep the island in full screen", isOn: Binding(get: { rule.showInFullscreen ?? false }, set: { rule.showInFullscreen = $0 ? true : nil }))
             .fixedSize()
         Toggle("Mute notifications and calls", isOn: Binding(get: { rule.muteNotifications ?? false }, set: { rule.muteNotifications = $0 ? true : nil }))
             .fixedSize()
@@ -1042,7 +1056,7 @@ struct AppRuleRow: View {
     /// Where the app's activities and notifications rank when several want the island.
     private var priorityPicker: some View {
         Picker("Priority", selection: Binding(get: { rule.priority }, set: { rule.priority = $0 })) {
-            Text("Its own priority").tag(ActivityPriority?.none)
+            Text("Usual priority").tag(ActivityPriority?.none)
             Divider()
             Text("Low priority").tag(ActivityPriority?.some(.low))
             Text("Normal priority").tag(ActivityPriority?.some(.normal))
@@ -1050,7 +1064,7 @@ struct AppRuleRow: View {
             Text("Urgent").tag(ActivityPriority?.some(.critical))
         }
         .labelsHidden()
-        .fixedSize()
+        .frame(width: Self.priorityWidth, alignment: .trailing)
         .help("How its activities and notifications rank when several want the island. Urgent ones also show over full screen apps.")
     }
 }
