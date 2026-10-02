@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+- With an island on every display, moving from the open island onto another display closes it after the usual moment instead of leaving it open.
+- With Shelf off, files dropped on the notch are refused rather than kept on a hidden shelf.
+- Turning off **Answer requests in the island** sends waiting requests back to the terminal at once, and lets go of the island.
+- Closing the island while a request waits no longer pins it or closes it later under the pointer. A card with several questions keeps the answers given when hidden or moved to another display.
+- **Fit the menu bar** fits the wings again as soon as a menu bar item appears or widens, with Live Activities off too.
+- The Clipboard page goes back to All once its filter has nothing left, and stays there when such a clip comes back.
+- With Accessibility, a video or game that goes full screen without switching apps is noticed, and so is it leaving, for **In full screen**.
+
 ## 0.2.0 (2 October 2026)
 
 Islet now shows the Live Activities your iPhone sends to the Mac, lets you answer coding agents' permission requests in the island, runs timers, and asks Apple Intelligence, Claude or ChatGPT. It also stays beside the notch and shrinks to the free space in the menu bar.
