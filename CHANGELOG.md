@@ -34,6 +34,8 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 - Commands shown in the notch, and Codex's last message, hide anything that looks like a key or password.
 - **More usage on Home**, each off until switched on in Settings → Coding agents → Usage limits: **OpenRouter spending** (today's spend and what's left of the key's limit, with your own key), **Copilot premium requests** (this month's count against your plan, with a GitHub key that can read Plan) and **Ollama models** (what Ollama has loaded on this Mac and the memory it takes). They are asked for when the island opens, at most every few minutes, and never between. Keys are checked once, then kept in the Keychain. No other app's sign-in is read; Cursor offers usage only to team admins, so it isn't included.
 
+- Approval cards keep a command whole: the box stops between two lines and fades the next, the risks fit one line with **Click twice to allow** beside them, an edit names the file before its folder, and every card's buttons sit on the same line, with **Answer in the terminal** on the left.
+
 ### Ask
 - An Ask box answered on the Mac by Apple Intelligence, by Claude or ChatGPT with your own API key (kept in the Keychain), or by the Claude Code and Codex command-line tools with the login you already have. ⌃⌥A opens it from anywhere.
 - Answers stream in and stop when the island closes. Nothing is kept on disk, and an `islet://ask` link only fills in the question.
@@ -43,6 +45,7 @@ Islet now shows the Live Activities your iPhone sends to the Mac, answers coding
 - Timers you can start, pause, extend and stop from the island, the API, the URL scheme or `isletctl`, including phrases like "tea 4m" or "in 20 minutes to check the oven". A Pomodoro cycle. Timers survive a relaunch and ring with a sound of your choice.
 - A timer that ended more than an hour ago, while the Mac was asleep or Islet wasn't running, leaves a quiet note beside the notch instead of vanishing.
 - Siri reaches Islet through Shortcuts; [docs/SHORTCUTS.md](docs/SHORTCUTS.md) has the recipes.
+- A paused timer keeps its time left beside the notch, in grey, and a ringing one shows 0:00. The timer panel sits at the top of the island with the timers already running under it, and the Pomodoro wears the same leaf everywhere.
 
 ### Tools
 Every tool starts off until you turn it on in Settings: on the Tools page, or on the page of the feature it belongs to. To-dos, Note, Converter, Emoji, Shortcuts, Weather, Mirror, Teleprompter, Stocks and Sales then appear under More in the page switcher. Each tool has a row the Settings search finds.
@@ -65,6 +68,7 @@ Every tool starts off until you turn it on in Settings: on the Tools page, or on
 - **Sales.** Today's takings from Stripe, Shopify, Lemon Squeezy, Gumroad, Dodo Payments, Polar and Paddle, as one total (in your own currency when there are takings in it, with other currencies beside it) and per store, with the number of orders. Paste a read-only key for each store (Lemon Squeezy's keys can't be limited, and Islet only reads); it is checked, then kept in the Keychain. Paid orders since midnight count, less refunds, without test orders. Islet asks every 15 minutes while Sales is on and the Mac is unlocked, not in Low Power Mode, at midnight, and when you open the page.
 - Requests for sales, stocks and usage go only to the service each one names, over HTTPS (Ollama over plain HTTP on 127.0.0.1), with no cookies or cache, and never follow a redirect, so a key can't be sent anywhere else.
 - Settings → Permissions lists Location, and the Settings window is a little taller so every page still fits in the sidebar.
+- The tool pages read more plainly: the teleprompter's script rests on whole lines, a stock price kept after a failed refresh says **Earlier price**, indices go by their names (S&P 500), a store that can't be reached says what to do (**Reconnect**), an old weather report takes today's sky and keeps its place, a long lyric wraps to two rows, and a running shortcut shows its progress beside its name.
 
 ### Now Playing and controls
 - The scrubber seeks. ±15 seconds, shuffle and repeat where the player supports them, the system volume and an output picker.
