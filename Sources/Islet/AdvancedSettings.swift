@@ -245,7 +245,8 @@ private struct AgentHookDisclosure: View {
 
     var body: some View {
         DisclosureGroup(isExpanded: $expanded) {
-            CodeBlock(title: file, code: code.trimmingCharacters(in: .whitespacesAndNewlines))
+            // Tall enough to read a whole hook; the rest scrolls, with the bottom edge fading.
+            CodeBlock(title: file, code: code.trimmingCharacters(in: .whitespacesAndNewlines), maxHeight: 300)
         } label: {
             Text(title)
         }

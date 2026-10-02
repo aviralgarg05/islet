@@ -75,11 +75,19 @@ struct LANBridgeSection: View {
 struct CodeBlock: View {
     let title: String
     let code: String
-    /// Long blocks scroll inside this height.
+    /// Long blocks scroll inside this height, with the bottom edge fading to say there is more.
     var maxHeight: CGFloat = 150
     @ViewState private var copied = false
+    @ViewState private var width: CGFloat = 0
+
+    /// Space round the code inside its box.
+    private static let inset: CGFloat = 8
+    /// How far the fade at the bottom of a block that scrolls reaches in.
+    private static let fade: CGFloat = 24
 
     var body: some View {
+        // Measured from the box's width, which doesn't depend on what is in it.
+        let height = width > 0 ? CodeText.height(code, width: width - Self.inset * 2) + Self.inset * 2 : 0
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text(title).font(.callout)
@@ -89,28 +97,124 @@ struct CodeBlock: View {
                     NSPasteboard.general.setString(code, forType: .string)
                     copied = true
                 }
-                .controlSize(.small)
             }
+            // Every line wraps, at spaces only, so nothing is out of sight sideways and a path
+            // never splits at a slash.
+            let text = CodeText(code: code).padding(Self.inset)
             Group {
-                if code.contains("\n") {
-                    // Several lines keep their layout and scroll.
-                    ScrollView([.horizontal, .vertical]) {
-                        text.fixedSize().padding(8).frame(maxWidth: .infinity, alignment: .leading)
+                if height > maxHeight {
+                    // Taller than it may be: it scrolls, and the end can scroll clear of the fade.
+                    ScrollView(.vertical) {
+                        text.padding(.bottom, Self.fade)
                     }
-                    .frame(maxHeight: min(maxHeight, CGFloat(code.split(separator: "\n", omittingEmptySubsequences: false).count) * 14 + 22))
+                    .frame(height: maxHeight)
+                    .mask {
+                        VStack(spacing: 0) {
+                            Rectangle()
+                            LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+                                .frame(height: Self.fade)
+                        }
+                    }
                 } else {
-                    // One command wraps, so none of it is out of sight.
-                    text.fixedSize(horizontal: false, vertical: true).padding(8).frame(maxWidth: .infinity, alignment: .leading)
+                    text
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.primary.opacity(0.05)))
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         }
         .padding(.vertical, 2)
     }
+}
 
-    private var text: some View {
-        Text(verbatim: code)
-            .font(.system(size: 11, design: .monospaced))
-            .textSelection(.enabled)
+/// Monospaced code that wraps only at spaces (`CodeWrap`), so a long path moves to the next
+/// line whole rather than splitting at a slash, and a wrapped line goes on a little further in.
+/// Selectable, and copies exactly the code.
+private struct CodeText: NSViewRepresentable {
+    let code: String
+
+    private static let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+    private static let advance = ("0" as NSString).size(withAttributes: [.font: font]).width
+
+    func makeNSView(context: Context) -> NSTextView {
+        let view = CodeTextView(usingTextLayoutManager: false)
+        view.isEditable = false
+        view.isSelectable = true
+        view.drawsBackground = false
+        view.isRichText = false
+        view.textContainerInset = .zero
+        view.textContainer?.lineFragmentPadding = 0
+        view.textContainer?.widthTracksTextView = true
+        return view
+    }
+
+    func updateNSView(_ view: NSTextView, context: Context) {
+        // Until a width is known, the code as it is; `sizeThatFits` wraps it for its width.
+        if context.coordinator.code != code { show(in: view, columns: nil, context.coordinator) }
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView view: NSTextView, context: Context) -> CGSize? {
+        guard let width = proposal.width, width.isFinite, width > 0 else { return nil }
+        let columns = Self.columns(width)
+        if context.coordinator.code != code || context.coordinator.columns != columns {
+            show(in: view, columns: columns, context.coordinator)
+        }
+        return CGSize(width: width, height: Self.height(code, width: width))
+    }
+
+    private func show(in view: NSTextView, columns: Int?, _ shown: Shown) {
+        shown.code = code
+        shown.columns = columns
+        view.textStorage?.setAttributedString(Self.attributed(code, columns: columns))
+    }
+
+    func makeCoordinator() -> Shown { Shown() }
+
+    /// What the view holds, so it is set again only when the code or the width changes.
+    final class Shown {
+        var code: String?
+        var columns: Int?
+    }
+
+    /// Whole characters that fit in `width`, with a little to spare so layout never wraps again.
+    private static func columns(_ width: CGFloat) -> Int { max(1, Int(((width - 0.5) / advance).rounded(.down))) }
+
+    /// The height the code takes at `width`.
+    static func height(_ code: String, width: CGFloat) -> CGFloat {
+        let storage = NSTextStorage(attributedString: attributed(code, columns: columns(width)))
+        let layout = NSLayoutManager()
+        let container = NSTextContainer(size: NSSize(width: max(1, width), height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        layout.addTextContainer(container)
+        storage.addLayoutManager(layout)
+        layout.ensureLayout(for: container)
+        return ceil(layout.usedRect(for: container).height)
+    }
+
+    /// The code wrapped for `columns`, each line with its hanging indent.
+    private static func attributed(_ code: String, columns: Int?) -> NSAttributedString {
+        let out = NSMutableAttributedString()
+        let lines = code.split(separator: "\n", omittingEmptySubsequences: false)
+        for (i, line) in lines.enumerated() {
+            let style = NSMutableParagraphStyle()
+            style.lineBreakMode = .byWordWrapping
+            if let columns { style.headIndent = CGFloat(CodeWrap.hangingIndent(line, columns: columns)) * advance }
+            let text = (columns.map { CodeWrap.wrapped(String(line), columns: $0) } ?? String(line)) + (i < lines.count - 1 ? "\n" : "")
+            out.append(NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: NSColor.labelColor,
+                                                                    .paragraphStyle: style]))
+        }
+        return out
+    }
+}
+
+/// Copies and drags the code with the spaces it wrapped at, not the line ends shown there.
+private final class CodeTextView: NSTextView {
+    override var writablePasteboardTypes: [NSPasteboard.PasteboardType] { [.string] }
+
+    override func writeSelection(to pboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) -> Bool {
+        let all = string as NSString
+        let selected = selectedRanges.map { all.substring(with: $0.rangeValue) }.joined(separator: "\n")
+        pboard.declareTypes([.string], owner: nil)
+        return pboard.setString(CodeWrap.copied(selected), forType: .string)
     }
 }
