@@ -464,18 +464,23 @@ struct IslandView: View {
                 // under the edge), and take no part in centring it: nothing a bubble does, coming
                 // or going, can move the island. (Balancing them with spacers on the other side
                 // let the island slide sideways while the two sides animated at different speeds.)
-                .background(alignment: left ? .topLeading : .topTrailing) {
-                    HStack(alignment: .top, spacing: IslandLayout.bubbleGap) {
-                        bubbleViews(slots, diameter: bp.diameter, top: bp.top, geometry: g, shift: shift)
-                    }
-                    .fixedSize()
-                    // The row's inner edge sits one gap outside the island's body, measured from
-                    // its side rather than from the flare at the top of the screen, so the first
-                    // bubble is as far from the island as the next is from it.
-                    .alignmentGuide(left ? HorizontalAlignment.leading : HorizontalAlignment.trailing) { d in
-                        left ? d[HorizontalAlignment.trailing] + IslandLayout.bubbleGap - g.top
-                             : d[HorizontalAlignment.leading] - IslandLayout.bubbleGap + g.top
-                    }
+                .background(alignment: .top) {
+                    // The shell's own frame on the canvas, for the bubbles to hang from.
+                    Color.clear
+                        .frame(width: g.outerWidth, height: g.size.height)
+                        .background(alignment: left ? .topLeading : .topTrailing) {
+                            HStack(alignment: .top, spacing: IslandLayout.bubbleGap) {
+                                bubbleViews(slots, diameter: bp.diameter, top: bp.top, geometry: g, shift: shift)
+                            }
+                            .fixedSize()
+                            // The row's inner edge sits one gap outside the island's body, measured
+                            // from its side rather than from the flare at the top of the screen, so
+                            // the first bubble is as far from the island as the next is from it.
+                            .alignmentGuide(left ? HorizontalAlignment.leading : HorizontalAlignment.trailing) { d in
+                                left ? d[HorizontalAlignment.trailing] + IslandLayout.bubbleGap - g.top
+                                     : d[HorizontalAlignment.leading] - IslandLayout.bubbleGap + g.top
+                            }
+                        }
                 }
             switcher(p)
         }
@@ -558,38 +563,47 @@ struct IslandView: View {
             return list
         }()
         ZStack(alignment: .top) {
-            // A peek's glow spreads round it; the closed island's stays inside its edge (below).
-            ForEach(Array(glows.enumerated()), id: \.offset) { _, glow in
-                if !Self.glowsInside(glow.presentation) {
-                    if snapshotMode {
-                        // As the live glow draws it (`GlowNSView`).
-                        g.shape.fill(Color.black).shadow(color: glow.color.opacity(0.5), radius: 9)
-                            .opacity(glow.opacity)
-                    } else {
-                        GlowPulse(color: NSColor(glow.color), cornerRadius: g.bottom)
+            ZStack(alignment: .top) {
+                // A peek's glow spreads round it; the closed island's stays inside its edge (below).
+                ForEach(Array(glows.enumerated()), id: \.offset) { _, glow in
+                    if !Self.glowsInside(glow.presentation) {
+                        if snapshotMode {
+                            // As the live glow draws it (`GlowNSView`).
+                            g.shape.fill(Color.black).shadow(color: glow.color.opacity(0.5), radius: 9)
+                                .opacity(glow.opacity)
+                        } else {
+                            GlowPulse(color: NSColor(glow.color), cornerRadius: g.bottom)
+                                .frame(width: g.outerWidth, height: g.size.height)
+                        }
+                    }
+                }
+                if let frame {
+                    shell(p, geometry: g, stretch: IslandMotion.stretch(at: frame.t, opening: move.opening, delta: move.delta,
+                                                                        intoRow: move.intoRow))
+                        .environment(\.shellClock, ShellClock(t: frame.t, wasExpanded: frame.from == .expanded))
+                } else {
+                    ShellStretch(move: move) { stretch in shell(p, geometry: g, stretch: stretch) }
+                }
+                ForEach(Array(glows.enumerated()), id: \.offset) { _, glow in
+                    if Self.glowsInside(glow.presentation) {
+                        InnerGlow(shape: g.shape, color: glow.color)
                             .frame(width: g.outerWidth, height: g.size.height)
+                            .opacity(glow.opacity)
                     }
                 }
             }
-            if let frame {
-                shell(p, geometry: g, stretch: IslandMotion.stretch(at: frame.t, opening: move.opening, delta: move.delta,
-                                                                    intoRow: move.intoRow))
-                    .environment(\.shellClock, ShellClock(t: frame.t, wasExpanded: frame.from == .expanded))
-            } else {
-                ShellStretch(move: move) { stretch in shell(p, geometry: g, stretch: stretch) }
-            }
-            ForEach(Array(glows.enumerated()), id: \.offset) { _, glow in
-                if Self.glowsInside(glow.presentation) {
-                    InnerGlow(shape: g.shape, color: glow.color)
-                        .frame(width: g.outerWidth, height: g.size.height)
-                        .opacity(glow.opacity)
-                }
-            }
+            .frame(width: g.outerWidth, height: g.size.height, alignment: .top)
             contentLayer(p, geometry: g, from: fromG, opening: move.opening, counted: counted)
         }
-        // Top-aligned: outgoing content keeps its old, larger frame while it fades, and must
-        // not push the shell off the top of the screen.
-        .frame(width: g.outerWidth, height: g.size.height, alignment: .top)
+        // A canvas as wide as the window, which never changes size, with the shell and the
+        // content centred on it. The shell grows about its centre, and new content is drawn
+        // where it ends up from its first frame. (Framed to the shell instead, the content was
+        // laid out from the shell's left edge and rode on that edge as it moved out, so the
+        // whole page slid left while the island opened.) Top-aligned: outgoing content keeps
+        // its old, larger frame while it fades, and must not push the shell off the top of
+        // the screen.
+        .frame(maxWidth: .infinity, alignment: .top)
+        .frame(height: g.size.height, alignment: .top)
         .keyframeAnimator(initialValue: CGFloat(1), trigger: model.pulse) { view, scale in
             // The closed island bounces only sideways, so it never dips below the menu bar row,
             // and no further than the room kept clear beside its wings, so it never covers a
