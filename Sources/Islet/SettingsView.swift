@@ -105,8 +105,8 @@ extension GeneralSettings {
     static func fullscreenDetail(_ behaviour: FullscreenBehaviour) -> String {
         switch behaviour {
         case .show: return "The island stays over full screen apps."
-        case .hideMusic: return "What's playing goes; timers, activities and HUDs stay. Apps can keep everything from the Apps page."
-        case .hide: return "Only HUDs and urgent alerts show. Apps can keep the island from the Apps page."
+        case .hideMusic: return "What\u{2019}s playing goes; timers, activities and HUDs stay. On the Apps page, pick apps that keep everything."
+        case .hide: return "Only HUDs and urgent alerts show. On the Apps page, pick apps that keep the island."
         }
     }
 }

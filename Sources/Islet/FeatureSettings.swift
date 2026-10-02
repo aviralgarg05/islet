@@ -433,14 +433,14 @@ struct ShelfSettings: View {
             Section("Clipboard") {
                 Toggle(isOn: $model.settings.clipboardEnabled) {
                     Text("Clipboard history")
-                    Text("What you copy, on the Clipboard page: text, links, colours, pictures and files, each shown as itself. It stays on this Mac and skips passwords. Turning it off clears it, pinned items too.")
+                    Text("What you copy, on the Clipboard page: text, links, colours, pictures and files, each shown as itself. It stays on this Mac. Turning it off clears it, pinned items too.")
                 }
                 .settingsAnchor("shelf.clipboard")
                 Group {
                     ClipboardLimitPicker(model: model)
                     Toggle(isOn: $model.settings.clipboardSkipSecrets) {
                         Text("Skip passwords copied in a browser")
-                        Text("Password manager extensions copy as the browser, so their copies, and text shaped like a generated password, are left out. Words, names, codes and version numbers are kept.")
+                        Text("Leaves out passwords copied by a browser\u{2019}s password manager. Ordinary words, names and codes are kept.")
                     }
                     .settingsAnchor("shelf.clipboardSecrets")
                     ClipboardIgnoredApps(model: model)
