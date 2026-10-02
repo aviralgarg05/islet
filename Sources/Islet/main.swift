@@ -293,9 +293,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // way round: the wings start narrow until the menu bar is measured again.
         if panelSettings?.layout != panels.layout { model.closedPlacements = [:] }
         panelSettings = panels
-        controllers.forEach { $0.close() }
-        controllers = []
-        rebuildPanels()
+        // Forced, so the pointer, the open island and the displays the model knows are reset
+        // even when no display is wanted any more ("Don't show" with no notched display).
+        rebuildPanels(force: true)
     }
 
     private func setUpHotkey() {
@@ -444,9 +444,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func toggleIsland() {
-        let target = model.targetDisplay()
-        model.pinned = model.expandedScreen == nil
-        model.setExpanded(model.expandedScreen == nil ? target : nil)
+        guard model.expandedScreen == nil else {
+            model.setExpanded(nil)
+            return
+        }
+        // No display has an island (all hidden by "On displays without a notch"): nothing to open.
+        guard let target = model.targetDisplay() else { return }
+        model.pinned = true
+        model.setExpanded(target)
     }
 
     @objc private func openSettingsAction() { showSettings() }
