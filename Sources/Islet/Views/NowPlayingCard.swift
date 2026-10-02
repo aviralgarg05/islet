@@ -386,10 +386,13 @@ struct TransportControls: View {
                 if canSkip {
                     IconButton(symbol: "gobackward.15", help: "Back 15 seconds", size: 28, glyph: 12, ink: Ink.secondary) { model.send(.skipBackward) }
                 }
-                IconButton(symbol: "backward.fill", help: "Previous track", size: 30, glyph: 14, ink: Ink.primary) { model.send(.previous) }
+                // Faint for a player that says it has none (a video in Chrome outside a playlist).
+                IconButton(symbol: "backward.fill", help: media.takes(.previous) ? "Previous track" : "No previous track",
+                           size: 30, glyph: 14, ink: Ink.primary, enabled: media.takes(.previous)) { model.send(.previous) }
                 IconButton(symbol: media.isPlaying ? "pause.fill" : "play.fill", help: media.isPlaying ? "Pause" : "Play",
                            size: 32, glyph: 18, ink: Ink.primary) { model.send(.togglePlayPause) }
-                IconButton(symbol: "forward.fill", help: "Next track", size: 30, glyph: 14, ink: Ink.primary) { model.send(.next) }
+                IconButton(symbol: "forward.fill", help: media.takes(.next) ? "Next track" : "No next track",
+                           size: 30, glyph: 14, ink: Ink.primary, enabled: media.takes(.next)) { model.send(.next) }
                 if canSkip {
                     IconButton(symbol: "goforward.15", help: "Forward 15 seconds", size: 28, glyph: 12, ink: Ink.secondary) { model.send(.skipForward) }
                 }

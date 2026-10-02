@@ -119,6 +119,22 @@ private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
         #expect(r.players[0].artworkData == nil)
     }
 
+    /// The commands each player takes, as macOS says (Chrome: no next or previous outside a
+    /// playlist). A player without the list takes everything.
+    @Test func theCommandsEachPlayerTakes() throws {
+        var art = BridgeArtwork()
+        var chrome = Self.chrome
+        chrome["commands"] = [0, 1, 2, 3, 24]
+        var spotify = Self.spotify
+        spotify["commands"] = [0, 1, 2, 4, 5, 24]
+        let r = try #require(SystemNowPlayingBridge.report(from: Self.line([chrome, spotify, Self.probe]), artwork: &art))
+        #expect(r.players[0].commands == [.play, .pause, .togglePlayPause, .seek])
+        #expect(!r.players[0].takes(.next) && !r.players[0].takes(.previous))
+        #expect(r.players[1].takes(.next) && r.players[1].takes(.previous))
+        #expect(r.players[2].commands == nil)
+        #expect(r.players[2].takes(.next))
+    }
+
     /// A helper on a macOS that can't list players sends the current one alone, as before.
     @Test func theSinglePlayerLineStillWorks() throws {
         var art = BridgeArtwork()

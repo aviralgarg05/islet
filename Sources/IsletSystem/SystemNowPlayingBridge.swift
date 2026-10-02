@@ -291,7 +291,11 @@ public final class SystemNowPlayingBridge {
             elapsed: finite("elapsed"), playbackRate: rate > 0 ? rate : 1,
             timestamp: finite("timestamp").map(Date.init(timeIntervalSince1970:)) ?? Date(),
             shuffle: MediaModes.shuffle(mediaRemote: finite("shuffleMode").flatMap { Int(exactly: $0) }),
-            repeatMode: MediaModes.repeatMode(mediaRemote: finite("repeatMode").flatMap { Int(exactly: $0) })
+            repeatMode: MediaModes.repeatMode(mediaRemote: finite("repeatMode").flatMap { Int(exactly: $0) }),
+            // What the player says it takes, when macOS says.
+            commands: (o["commands"] as? [Any]).map { list in
+                PlaybackCommand.taken(mediaRemote: list.compactMap { number($0).flatMap { Int(exactly: $0) } })
+            }
         )
         let art = (o["artwork"] as? String).flatMap { Data(base64Encoded: $0) }
         let hash = (o["artworkHash"] as? Int) ?? finite("artworkHash").flatMap { Int(exactly: $0) }

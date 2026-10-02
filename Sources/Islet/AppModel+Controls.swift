@@ -128,7 +128,11 @@ extension AppModel {
         case .compact(.nowPlaying(let np)), .songPeek(let np): shown = np
         default: shown = nil
         }
-        if action != .expand { Haptics.play(.snap) }
+        // No snap for a move the player can't make (next in a video outside a playlist).
+        let target = shown ?? nowPlaying
+        let refused = action == .nextTrack && target?.takes(.next) == false
+            || action == .previousTrack && target?.takes(.previous) == false
+        if action != .expand, !refused { Haptics.play(.snap) }
         switch action {
         case .expand:
             setExpanded(display)

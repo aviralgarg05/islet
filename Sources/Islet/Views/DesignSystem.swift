@@ -182,6 +182,9 @@ struct IconButton: View {
     var size: CGFloat = 28
     var glyph: CGFloat = 12
     var ink: Color = Ink.secondary
+    /// False for something that can't be done here (a next track in a video without one): the
+    /// glyph is faint and the button does nothing.
+    var enabled = true
     var action: () -> Void
     @Environment(\.islandMotion) private var motion
 
@@ -192,13 +195,14 @@ struct IconButton: View {
         } label: {
             Image(systemName: symbol)
                 .font(.system(size: glyph, weight: .semibold))
-                .foregroundStyle(ink)
+                .foregroundStyle(enabled ? ink : Ink.quaternary)
                 .contentTransition(.symbolEffect(.replace))
                 .animation(motion == .off ? nil : Motion.settle, value: symbol)
                 .frame(width: size, height: size)
                 .contentShape(Circle())
         }
-        .buttonStyle(HoverButtonStyle())
+        .buttonStyle(HoverButtonStyle(enabled: enabled))
+        .disabled(!enabled)
         .help(help)
         .accessibilityLabel(help)
     }

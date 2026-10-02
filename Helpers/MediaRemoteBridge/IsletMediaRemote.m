@@ -23,6 +23,7 @@
 //       {"title":…,"artist":…,"album":…,"duration":…,"elapsed":…,"rate":…,"timestamp":<unix>,
 //        "playing":bool,"bundleID":…,"appName":…,"artworkHash":…,"artwork":<base64, only when this
 //        player's artwork changed>,"shuffleMode":<int, when reported>,"repeatMode":<int, when reported>,
+//        "commands":[<n>, ...] <the commands it takes, as for "cmd", when macOS says>,
 //        "current":true <only on the player macOS gives the controls to>}
 //   {"type":"nowPlaying","empty":true}
 //   {"type":"nowPlaying",<the fields of one player, without "current">}
@@ -45,6 +46,9 @@ typedef void (*MRGetIsPlayingFn)(dispatch_queue_t, void (^)(BOOL));
 typedef void (*MRGetClientFn)(dispatch_queue_t, void (^)(id));
 typedef void (*MRGetClientsFn)(dispatch_queue_t, void (^)(NSArray *));
 typedef void (*MRGetInfoForPlayerFn)(id, Boolean, dispatch_queue_t, void (^)(NSDictionary *));
+typedef void (*MRGetCommandsForPlayerFn)(id, dispatch_queue_t, void (^)(NSArray *));
+typedef int (*MRCommandInfoGetCommandFn)(id);
+typedef Boolean (*MRCommandInfoGetEnabledFn)(id);
 typedef Boolean (*MRSendCommandFn)(int, NSDictionary *);
 typedef void (*MRSetElapsedFn)(double);
 typedef void (*MRSetModeFn)(int);
@@ -56,6 +60,10 @@ static MRGetIsPlayingFn gIsPlaying;
 static MRGetClientFn gGetClient;
 static MRGetClientsFn gGetClients;
 static MRGetInfoForPlayerFn gGetInfoForPlayer;
+// What each player says it takes (Chrome: play, pause and seek, no next or previous). Read only.
+static MRGetCommandsForPlayerFn gGetCommandsForPlayer;
+static MRCommandInfoGetCommandFn gCommandInfoGetCommand;
+static MRCommandInfoGetEnabledFn gCommandInfoGetEnabled;
 // Commands. Only these untargeted calls are ever used; see ReadCommands.
 static MRSendCommandFn gSend;
 static MRSetElapsedFn gSetElapsed;
@@ -223,6 +231,28 @@ static id PlayerPath(id origin, id client) {
     return ((id (*)(id, SEL, id, id, id))objc_msgSend)([cls alloc], init, origin, client, nil);
 }
 
+// The commands a player takes, as numbers, the enabled ones only. Nil when macOS doesn't say.
+static NSArray<NSNumber *> *CommandNumbers(NSArray *infos) {
+    if (![infos isKindOfClass:NSArray.class] || !gCommandInfoGetCommand) return nil;
+    NSMutableArray<NSNumber *> *out = [NSMutableArray array];
+    for (id info in infos) {
+        if (gCommandInfoGetEnabled && !gCommandInfoGetEnabled(info)) continue;
+        [out addObject:@(gCommandInfoGetCommand(info))];
+    }
+    return [out sortedArrayUsingSelector:@selector(compare:)];
+}
+
+// Reads the commands the player at `path` takes into slot[@"commands"], within `group`.
+static void ReadCommandsInto(NSMutableDictionary *slot, id path, dispatch_group_t group) {
+    if (!gGetCommandsForPlayer || !path) return;
+    dispatch_group_enter(group);
+    gGetCommandsForPlayer(path, gQueue, ^(NSArray *infos) {
+        NSArray *commands = CommandNumbers(infos);
+        if (commands) slot[@"commands"] = commands;
+        dispatch_group_leave(group);
+    });
+}
+
 // Every player macOS lists, read without touching any of them. The current player comes from the
 // same calls as before (its info, whether it plays, its app); the others from their own info,
 // where a rate above zero means playing.
@@ -237,6 +267,8 @@ static void FetchPlayersAndEmit(void) {
                     if (currentBundle) [seen addObject:currentBundle];
                     id origin = LocalOrigin();
                     dispatch_group_t group = dispatch_group_create();
+                    NSMutableDictionary *currentSlot = [NSMutableDictionary dictionary];
+                    ReadCommandsInto(currentSlot, PlayerPath(origin, currentClient), group);
                     for (id client in [clients isKindOfClass:NSArray.class] ? clients : @[]) {
                         NSString *bundle = ClientBundle(client);
                         // One player per app; a player that names no app can't be told apart.
@@ -251,6 +283,7 @@ static void FetchPlayersAndEmit(void) {
                             if ([info isKindOfClass:NSDictionary.class]) slot[@"info"] = info;
                             dispatch_group_leave(group);
                         });
+                        ReadCommandsInto(slot, path, group);
                     }
                     // Everything runs on gQueue, so the answers and the deadline can't overlap. A
                     // player that never answers is left out rather than holding up the rest.
@@ -264,6 +297,7 @@ static void FetchPlayersAndEmit(void) {
                         if (current) {
                             current[@"playing"] = currentPlaying ? @YES : @NO;
                             current[@"current"] = @YES;
+                            if (currentSlot[@"commands"]) current[@"commands"] = currentSlot[@"commands"];
                             AddClientAndArtwork(current, currentClient, currentInfo, currentBundle ?: @"", sent);
                             [players addObject:current];
                         }
@@ -272,6 +306,7 @@ static void FetchPlayersAndEmit(void) {
                             NSMutableDictionary *out = Describe(info);
                             if (!out) continue;
                             out[@"playing"] = [Finite(info[INFO_KEY(PlaybackRate)]) doubleValue] > 0 ? @YES : @NO;
+                            if (slot[@"commands"]) out[@"commands"] = slot[@"commands"];
                             AddClientAndArtwork(out, slot[@"client"], info, slot[@"key"], sent);
                             [players addObject:out];
                         }
@@ -356,6 +391,9 @@ void islet_mediaremote_main(void *interp, void *cv) {
         gGetClient = (MRGetClientFn)dlsym(gMR, "MRMediaRemoteGetNowPlayingClient");
         gGetClients = (MRGetClientsFn)dlsym(gMR, "MRMediaRemoteGetNowPlayingClients");
         gGetInfoForPlayer = (MRGetInfoForPlayerFn)dlsym(gMR, "MRMediaRemoteGetNowPlayingInfoForPlayer");
+        gGetCommandsForPlayer = (MRGetCommandsForPlayerFn)dlsym(gMR, "MRMediaRemoteGetSupportedCommandsForPlayer");
+        gCommandInfoGetCommand = (MRCommandInfoGetCommandFn)dlsym(gMR, "MRMediaRemoteCommandInfoGetCommand");
+        gCommandInfoGetEnabled = (MRCommandInfoGetEnabledFn)dlsym(gMR, "MRMediaRemoteCommandInfoGetEnabled");
         gSend = (MRSendCommandFn)dlsym(gMR, "MRMediaRemoteSendCommand");
         gSetElapsed = (MRSetElapsedFn)dlsym(gMR, "MRMediaRemoteSetElapsedTime");
         gSetShuffle = (MRSetModeFn)dlsym(gMR, "MRMediaRemoteSetShuffleMode");
@@ -380,6 +418,9 @@ void islet_mediaremote_main(void *interp, void *cv) {
             MRConst("kMRMediaRemotePlayerIsPlayingDidChangeNotification", @"kMRMediaRemotePlayerIsPlayingDidChangeNotification"),
             MRConst("kMRMediaRemotePlayerPlaybackStateDidChangeNotification", @"kMRMediaRemotePlayerPlaybackStateDidChangeNotification"),
             MRConst("kMRMediaRemoteElectedPlayerDidChangeNotification", @"kMRMediaRemoteElectedPlayerDidChangeNotification"),
+            // A page gaining a next track (a playlist), or losing it.
+            MRConst("kMRMediaRemoteSupportedCommandsDidChangeNotification", @"kMRMediaRemoteSupportedCommandsDidChangeNotification"),
+            MRConst("kMRMediaRemotePlayerSupportedCommandsDidChangeNotification", @"kMRMediaRemotePlayerSupportedCommandsDidChangeNotification"),
         ];
         for (NSString *n in names) Observe(n, ^{ ScheduleFetch(); });
         // mediaremoted restarted and the connection came back: register again and read afresh,

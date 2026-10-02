@@ -310,6 +310,19 @@ import Testing
         #expect(m.current(now: later) == nil)
     }
 
+    /// Spotify's own report shows, with the commands macOS lists for it.
+    @Test func theCommandsComeFromTheListing() {
+        var m = MediaArbiter()
+        m.update(NowPlaying(source: .spotify, bundleID: Self.spotifyID, appName: "Spotify", title: "Song", artist: "Band",
+                            album: "Record", isPlaying: true, duration: 300, elapsed: 105, timestamp: t0))
+        var listed = Self.spotify(true, at: t0)
+        listed.commands = [.play, .pause, .next, .previous, .seek]
+        m.updateFromBridge(Self.report([listed], current: Self.spotifyID))
+        let shown = m.current(now: t0.addingTimeInterval(1))
+        #expect(shown?.source == .spotify)
+        #expect(shown?.commands == [.play, .pause, .next, .previous, .seek])
+    }
+
     /// The single-report convenience still replaces everything the bridge said.
     @Test func aSingleReportReplacesTheList() {
         var m = MediaArbiter()

@@ -1677,7 +1677,11 @@ final class AppModel {
         let r = mediaRoute(for: np)
         if let routed = sendControl(command, position: position, bridge: r == .bridge, on: np) { return routed }
         switch r {
-        case .bridge: return systemMedia.send(command, position: position)
+        case .bridge:
+            // A command the player says it doesn't take (next in a video outside a playlist) would
+            // do nothing: it isn't sent, so the press and the API say it went nowhere.
+            guard np.takes(command) else { return false }
+            return systemMedia.send(command, position: position)
         case .player(.spotify): return spotify.send(command, position: position)
         case .player(.appleMusic): return music.send(command, position: position)
         case .player, .none: return false

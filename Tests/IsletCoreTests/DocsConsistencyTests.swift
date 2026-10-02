@@ -61,6 +61,9 @@ import Testing
             "MRMediaRemoteGetNowPlayingClients", "MRMediaRemoteGetNowPlayingInfoForPlayer",
             "MRMediaRemoteSendCommand", "MRMediaRemoteSetElapsedTime", "MRMediaRemoteSetShuffleMode",
             "MRMediaRemoteSetRepeatMode",
+            // Read only: the commands each player takes.
+            "MRMediaRemoteGetSupportedCommandsForPlayer", "MRMediaRemoteCommandInfoGetCommand",
+            "MRMediaRemoteCommandInfoGetEnabled",
         ])
         // Nor named anywhere else in code (the comment that warns against them names them unquoted).
         for targeted in ["SendCommandToApp", "SendCommandToClient", "SendCommandToPlayer", "SendCommandToPlayerWithResult",

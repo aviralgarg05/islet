@@ -72,7 +72,7 @@ private func track(elapsed: Double? = 60, duration: Double? = 200, playing: Bool
     }
 }
 
-/// A jump on a video without a length.
+/// A jump on a video without a length, and the commands a player takes.
 @Suite struct PlayerCommandTests {
     /// Chrome says 0 for a live stream's position again every quarter of a minute: a jump worked
     /// out from it would take the stream back to its start, so it is left to the player.
@@ -82,6 +82,29 @@ private func track(elapsed: Double? = 60, duration: Double? = 200, playing: Bool
         #expect(MediaSeek.target(for: track(), from: 60, by: 15) == 75)
         #expect(MediaSeek.target(for: track(), from: 190, by: 15) == 199)
         #expect(MediaSeek.target(for: track(elapsed: nil), from: nil, by: 15) == nil)
+    }
+
+    @Test func theCommandsAPlayerTakes() {
+        // A video in Chrome, as macOS listed it on the owner's Mac: play, pause, toggle, stop, seek.
+        let chrome = PlaybackCommand.taken(mediaRemote: [24, 3, 2, 1, 0])
+        #expect(chrome == [.seek, .togglePlayPause, .pause, .play])
+        // Spotify: those and next, previous, fast forward and rewind.
+        let spotify = PlaybackCommand.taken(mediaRemote: [24, 10, 11, 8, 9, 5, 4, 2, 1, 0])
+        #expect(spotify == [.seek, .previous, .next, .togglePlayPause, .pause, .play])
+        #expect(PlaybackCommand.taken(mediaRemote: [6, 7, 12, 13, 25, 26, 99]) == [.toggleShuffle, .toggleRepeat, .skipBackward, .skipForward])
+
+        var video = track()
+        video.commands = chrome
+        #expect(!video.takes(.next) && !video.takes(.previous))
+        #expect(!video.takes(.skipForward) && !video.takes(.skipBackward))
+        #expect(video.takes(.seek) && video.takes(.togglePlayPause) && video.takes(.play) && video.takes(.pause))
+        // Shuffle and repeat show only when the player reports them, and are never refused.
+        #expect(video.takes(.toggleShuffle) && video.takes(.toggleRepeat))
+        // A player that doesn't say takes everything.
+        video.commands = nil
+        #expect(PlaybackCommand.allCases.allSatisfy(video.takes))
+        video.commands = []
+        #expect(!video.takes(.next) && video.takes(.play))
     }
 }
 

@@ -140,6 +140,26 @@ public enum PlaybackCommand: String, Codable, Sendable, CaseIterable {
     case skipForward, skipBackward
     /// Only offered when the player reports its shuffle or repeat state.
     case toggleShuffle, toggleRepeat
+
+    /// The commands a player takes, from MediaRemote's numbers for them. Numbers with no command
+    /// here (stop, fast forward, rate a track) are left out.
+    public static func taken(mediaRemote numbers: [Int]) -> Set<PlaybackCommand> {
+        Set(numbers.compactMap { n -> PlaybackCommand? in
+            switch n {
+            case 0: return .play
+            case 1: return .pause
+            case 2: return .togglePlayPause
+            case 4: return .next
+            case 5: return .previous
+            case 6, 26: return .toggleShuffle
+            case 7, 25: return .toggleRepeat
+            case 12: return .skipBackward
+            case 13: return .skipForward
+            case 24: return .seek
+            default: return nil
+            }
+        })
+    }
 }
 
 public enum RepeatMode: String, Codable, Sendable, CaseIterable {
@@ -168,18 +188,33 @@ public struct NowPlaying: Codable, Equatable, Sendable {
     public var shuffle: Bool?
     /// Repeat state; nil when the player doesn't report it (no repeat button then).
     public var repeatMode: RepeatMode?
+    /// The commands the player says it takes; nil when it doesn't say (`takes`). A video in
+    /// Chrome takes play, pause and seek, and next and previous only in a playlist.
+    public var commands: Set<PlaybackCommand>?
 
     public init(
         source: MediaSourceKind, bundleID: String? = nil, appName: String? = nil, title: String,
         artist: String? = nil, album: String? = nil, isPlaying: Bool, duration: Double? = nil,
         elapsed: Double? = nil, playbackRate: Double = 1, timestamp: Date,
-        artworkData: Data? = nil, artworkURL: URL? = nil, shuffle: Bool? = nil, repeatMode: RepeatMode? = nil
+        artworkData: Data? = nil, artworkURL: URL? = nil, shuffle: Bool? = nil, repeatMode: RepeatMode? = nil,
+        commands: Set<PlaybackCommand>? = nil
     ) {
         self.source = source; self.bundleID = bundleID; self.appName = appName; self.title = title
         self.artist = artist; self.album = album; self.isPlaying = isPlaying; self.duration = duration
         self.elapsed = elapsed; self.playbackRate = playbackRate; self.timestamp = timestamp
         self.artworkData = artworkData; self.artworkURL = artworkURL
-        self.shuffle = shuffle; self.repeatMode = repeatMode
+        self.shuffle = shuffle; self.repeatMode = repeatMode; self.commands = commands
+    }
+
+    /// Whether the player takes `command`, as far as it says: a player that doesn't say is
+    /// believed to take them all. Only the track and position commands are ever refused; play
+    /// and pause, shuffle and repeat always count.
+    public func takes(_ command: PlaybackCommand) -> Bool {
+        guard let commands else { return true }
+        switch command {
+        case .next, .previous, .seek, .skipForward, .skipBackward: return commands.contains(command)
+        case .play, .pause, .togglePlayPause, .toggleShuffle, .toggleRepeat: return true
+        }
     }
 
     /// Elapsed time extrapolated to `now` (clamped to the duration).
@@ -655,6 +690,7 @@ public struct MediaArbiter: Sendable {
             if result.bundleID == nil { result.bundleID = other.bundleID }
             if result.shuffle == nil { result.shuffle = other.shuffle }
             if result.repeatMode == nil { result.repeatMode = other.repeatMode }
+            if result.commands == nil { result.commands = other.commands }
             if result.elapsed == nil, other.elapsed != nil {
                 result.elapsed = other.elapsed
                 result.timestamp = other.timestamp

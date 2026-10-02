@@ -506,12 +506,14 @@ extension EnvironmentValues {
 
 /// Round hover wash and a little give when pressed, for borderless icon buttons.
 struct HoverButtonStyle: ButtonStyle {
+    /// False for a button that does nothing: no wash under the pointer.
+    var enabled = true
     @ViewState private var hovering = false
     @Environment(\.islandMotion) private var motion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .background(Circle().fill(configuration.isPressed ? Wash.strong : hovering ? Wash.regular : .clear))
+            .background(Circle().fill(configuration.isPressed ? Wash.strong : hovering && enabled ? Wash.regular : .clear))
             .scaleEffect(configuration.isPressed ? Motion.pressScale : 1)
             .animation(Motion.press(motion), value: configuration.isPressed)
             .onHover { hovering = $0 }

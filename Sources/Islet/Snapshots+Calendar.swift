@@ -101,8 +101,10 @@ extension Snapshots {
 
         // Every player macOS lists: a live video playing in Chrome, which has the controls, a song
         // paused in Spotify an hour ago and a Safari tab. Both are chips; closed, the video shows.
+        // The video, outside a playlist, has no next or previous track: those buttons are faint.
         let stream = NowPlaying(source: .browser, bundleID: "com.google.Chrome", appName: "Google Chrome",
-                                title: "Harbour lights, live", artist: "Slow TV", isPlaying: true, elapsed: 0, timestamp: now)
+                                title: "Harbour lights, live", artist: "Slow TV", isPlaying: true, elapsed: 0, timestamp: now,
+                                commands: [.play, .pause, .togglePlayPause, .seek])
         let pausedSong = NowPlaying(source: .system, bundleID: "com.spotify.client", appName: "Spotify", title: "Midnight City",
                                     artist: "M83", album: "Hurry Up, We're Dreaming", isPlaying: false, duration: 243, elapsed: 71,
                                     timestamp: now.addingTimeInterval(-3600))
