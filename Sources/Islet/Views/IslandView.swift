@@ -823,7 +823,7 @@ struct IslandView: View {
         let rest = slot.fromNeighbour ? gap + diameter / 2
             : gap + CGFloat(slot.index) * (diameter + gap) + diameter / 2
         return GooBud(progress: 1, kind: .split, diameter: diameter, rest: rest, left: left,
-                      anchor: slot.fromNeighbour ? .bubble : .island(cap))
+                      anchor: slot.fromNeighbour ? .bubble(seeThrough: cap.seeThrough) : .island(cap))
     }
 
     /// In a frozen frame, a bubble arriving or leaving at its progress; otherwise at rest.

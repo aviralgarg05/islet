@@ -236,8 +236,17 @@ struct ShellStretch<Content: View>: View {
 enum GooAnchor: Equatable {
     /// The island's side, with its end drawn in.
     case island(GooCap)
-    /// The bubble nearer the island, a disc the size of this one.
-    case bubble
+    /// The bubble nearer the island, a disc the size of this one. `seeThrough`: that bubble is
+    /// glass (beside a glass pill), so the goo is cut away under it too.
+    case bubble(seeThrough: Bool)
+
+    /// What the goo grows from shows what is under it, so the goo is drawn only outside it.
+    var seeThrough: Bool {
+        switch self {
+        case .island(let cap): return cap.seeThrough
+        case .bubble(let seeThrough): return seeThrough
+        }
+    }
 }
 
 /// The island's end, where a bubble's goo joins it.
@@ -282,12 +291,15 @@ struct GooBud: ViewModifier, Animatable {
         let pose = progress >= 1 ? IslandMotion.BudPose.resting
                                  : IslandMotion.bud(kind, progress: kind == .split ? progress : 1 - progress)
         let centre = IslandMotion.budCentre(travel: pose.travel, rest: rest, radius: diameter / 2)
+        // Beside glass only the bridge shows (the discs are cut away under the glass), so with
+        // no bridge there is nothing to draw.
+        let drawn = moving && !(anchor.seeThrough && pose.bridge <= 0)
         content
             .scaleEffect(pose.scale)
             .opacity(pose.icon)
             .offset(x: (left ? -1 : 1) * (centre - rest))
             .background {
-                if moving {
+                if drawn {
                     GooCanvas(pose: pose, centre: centre, rest: rest, diameter: diameter, left: left, anchor: anchor)
                         .allowsHitTesting(false)
                 }
@@ -321,11 +333,16 @@ struct GooCanvas: View {
     var body: some View {
         let m = Self.margin
         Canvas { context, size in
-            if case .island(let cap) = anchor, cap.seeThrough {
-                // Nothing under the glass: only the goo outside the island's end is drawn.
-                var outside = Path(CGRect(origin: .zero, size: size))
-                outside.addPath(end(cap, size: size, inset: Self.seam, reach: size.width))
-                context.clip(to: outside, style: FillStyle(eoFill: true))
+            if anchor.seeThrough {
+                // Nothing under the glass: only the goo outside the island's end (or the glass
+                // bubble beside) and outside this bubble, which is glass too, is drawn. Each is
+                // cut away on its own, so where they overlap stays cut away as well.
+                let frame = Path(CGRect(origin: .zero, size: size))
+                for glass in glassShapes(size: size) {
+                    var outside = frame
+                    outside.addPath(glass)
+                    context.clip(to: outside, style: FillStyle(eoFill: true))
+                }
             }
             // Blur the shapes, then cut at half opacity: where they come close their blurs add
             // up past the cut and they flow together. The cut is made twice, because one leaves
@@ -347,9 +364,26 @@ struct GooCanvas: View {
         .opacity(seeThrough ? pose.icon : 1)
     }
 
-    private var seeThrough: Bool {
-        if case .island(let cap) = anchor { return cap.seeThrough }
-        return false
+    private var seeThrough: Bool { anchor.seeThrough }
+
+    /// The glass the goo must not show through: the island's end or the bubble beside, and this
+    /// bubble as it is now, each `seam` inside its edge so no hairline shows between.
+    private func glassShapes(size: CGSize) -> [Path] {
+        let dir: CGFloat = left ? -1 : 1
+        let midY = size.height / 2
+        let side = size.width / 2 - dir * rest
+        var shapes: [Path] = []
+        switch anchor {
+        case .island(let cap):
+            shapes.append(end(cap, size: size, inset: Self.seam, reach: size.width))
+        case .bubble:
+            let r = diameter / 2 - Self.seam, x = side - dir * diameter / 2
+            shapes.append(Path(ellipseIn: CGRect(x: x - r, y: midY - r, width: 2 * r, height: 2 * r)))
+        }
+        let r = max(0, diameter / 2 * CGFloat(pose.scale) - Self.seam)
+        let x = side + dir * centre
+        shapes.append(Path(ellipseIn: CGRect(x: x - r, y: midY - r, width: 2 * r, height: 2 * r)))
+        return shapes
     }
 
     /// The anchor, the bubble and the bridge, in black.
@@ -357,7 +391,7 @@ struct GooCanvas: View {
         let dir: CGFloat = left ? -1 : 1
         let midY = size.height / 2
         let side = size.width / 2 - dir * rest
-        if anchor == .bubble, pose.bridge > 0 {
+        if case .bubble = anchor, pose.bridge > 0 {
             // The bubble nearer the island, at rest, a point smaller so the blur's soft edge
             // stays inside it. It is drawn over this one's goo, so only where the goo flows
             // out of it shows.
