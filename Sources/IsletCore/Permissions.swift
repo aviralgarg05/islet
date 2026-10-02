@@ -159,7 +159,7 @@ extension PermissionKind {
         switch status {
         case nil: return "Checking\u{2026}"
         case .granted: return "Allowed"
-        case .denied: return "Turned off in System Settings"
+        case .denied: return "Turned off"
         case .notDetermined: return "Not allowed yet"
         case .appNotRunning: return "\(appName ?? "The app") isn\u{2019}t open"
         case .appNotInstalled: return "Not installed"
