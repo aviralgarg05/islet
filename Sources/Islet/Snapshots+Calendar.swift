@@ -29,7 +29,9 @@ extension Snapshots {
             shoot("70-compact-meeting-soon")
             placement(ClosedPlacement(wing: MenuBarLayoutEngine.iconOnlyWing, slack: 0))
             shoot("i70-compact-meeting-soon")
-            placement(ClosedPlacement(wing: 120, slack: .infinity))
+            // Full width with room beside it, as the other "w" shots: the wing width set, which a
+            // measured menu bar never exceeds.
+            placement(ClosedPlacement(wing: CGFloat(model.settings.effectiveWingWidth), slack: .infinity))
             shoot("w70-compact-meeting-soon")
             placement(nil)
             model.forcedPresentation = .sneak(a)
