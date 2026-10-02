@@ -230,6 +230,8 @@ final class AppModel {
     @ObservationIgnored private var systemObservers: [NSObjectProtocol] = []
     /// Activities already sent to the on-device model for an icon.
     private var iconAttempts: Set<String> = []
+    /// The muted sources as what is on screen last followed them (`applyMutes`).
+    @ObservationIgnored private var appliedMutes: Set<String> = []
     /// config.json, which is never written over while it doesn't parse.
     @ObservationIgnored private var configFile: SettingsFile
     /// What config.json is known to hold: written, read or (when it was broken at launch) the
@@ -281,6 +283,7 @@ final class AppModel {
         clipboard.ignoredApps = Set(settings.clipboardIgnoredApps)
         clipboard.skipsSecrets = settings.clipboardSkipSecrets
         songPeek.duration = settings.alertDuration
+        appliedMutes = Set(settings.mutedSources)
     }
 
     // MARK: Lifecycle
@@ -1462,20 +1465,64 @@ final class AppModel {
         startEventSources()
     }
 
-    /// Silence a source: remove its activities now and ignore it from now on.
+    /// Silence a source: remove its activities now and ignore it from now on. Saved and applied
+    /// as a change in Settings is.
     func mute(source: String) {
+        guard MutedSources.canMute(source) else { return }
         if !settings.mutedSources.contains(source) { settings.mutedSources.append(source) }
-        center.removeAll(source: source)
+        // Gone at once, even what shows while muted (a battery about to run out).
+        _ = center.removeAll(source: source)
         saveSettings()
+        applyMutes()
         reschedule()
+        NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
     }
 
-    /// Settings → Apps → Muted: hear from a source again. Its next activity shows as usual.
+    /// Settings → Apps → Muted, or a feature's page: hear from a source again. What it has
+    /// now shows at once.
     func unmute(source: String) {
         settings.mutedSources.removeAll { $0 == source }
         saveSettings()
-        // Mirrored Live Activities come back at once, rather than at their next change.
-        if MenuBarLiveActivities.isMirroredSource(source) { menuBarActivities.refresh() }
+        applyMutes()
+        NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
+    }
+
+    /// Make what is on screen follow the muted sources, however they changed: Mute in the
+    /// island, Unmute in Settings, Reset or an edit of config.json. A source muted since leaves
+    /// at once; one unmuted shows what it has now, rather than at its next change.
+    func applyMutes() {
+        let muted = Set(settings.mutedSources)
+        guard muted != appliedMutes else { return }
+        let unmuted = appliedMutes.subtracting(muted)
+        let added = !muted.subtracting(appliedMutes).isEmpty
+        appliedMutes = muted
+        if added {
+            // Taken off the island without counting as dismissed, so each comes back on Unmute
+            // (a dismissed Live Activity would stay away while it is in the menu bar).
+            for source in Set(center.activities.values.map(\.source)) where settings.isMuted(source: source) {
+                _ = center.removeAll(source: source)
+            }
+        }
+        for source in unmuted { bringBack(source) }
+        // Calls follow app mutes either way.
+        updateCalls()
+        reschedule()
+    }
+
+    /// An unmuted source shows what it has now. Sources whose activities only arrive (a
+    /// notification, a finished download) show their next one.
+    private func bringBack(_ source: String) {
+        if MenuBarLiveActivities.isMirroredSource(source) {
+            menuBarActivities.refresh()
+        } else if source == TimerEngine.source {
+            timers.resync()
+        } else if source == Stopwatch.source {
+            tools.stopwatch.resync()
+        } else if source == MeetingReminders.source {
+            syncMeetings(now: Date())
+        } else if source == KeepAwake.source, let session = controls.awake {
+            _ = try? applyLocal(KeepAwake.activity(for: session, sneak: false) { $0.formatted(date: .omitted, time: .shortened) })
+        }
     }
 
     /// How a muted source reads in menus and Settings: an app's name rather than its bundle id.

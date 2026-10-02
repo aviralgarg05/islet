@@ -96,6 +96,13 @@ final class TimerController {
         changed()
     }
 
+    /// Show every timer's activity afresh: unmuted, the running countdowns come back at once
+    /// rather than when a timer is next paused or rings.
+    func resync() {
+        shown = [:]
+        sync(announce: [])
+    }
+
     /// Every activity from the "timer" source was removed (`isletctl clear --source timer`).
     func activitiesRemoved(source: String) {
         guard !syncing, source == TimerEngine.source, !engine.timers.isEmpty else { return }

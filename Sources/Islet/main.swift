@@ -266,6 +266,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Haptics.mode = model.settings.hapticsMode
         model.applyTiming()
         model.startEventSources()
+        // Reset or a hand edit of config.json may have muted or unmuted sources.
+        model.applyMutes()
         setUpHotkey()
         pointer.applySettings()
         setUpHUD()

@@ -618,6 +618,12 @@ final class StopwatchController {
         changed()
     }
 
+    /// Show its activity afresh: unmuted, a running stopwatch comes back at once.
+    func resync() {
+        shown = nil
+        sync()
+    }
+
     /// Its activity was dismissed (the island's close button, a script): that resets it.
     func activityRemoved(_ id: String) {
         guard !syncing, id == Stopwatch.activityID, shown != nil else { return }
