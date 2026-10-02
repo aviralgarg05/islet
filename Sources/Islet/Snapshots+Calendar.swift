@@ -98,6 +98,36 @@ extension Snapshots {
             model.forcedPresentation = .compact(.nowPlaying(np))
             shoot("79-compact-picked-player")
         }
+
+        // Every player macOS lists: a live video playing in Chrome, which has the controls, a song
+        // paused in Spotify an hour ago and a Safari tab. Both are chips; closed, the video shows.
+        let stream = NowPlaying(source: .browser, bundleID: "com.google.Chrome", appName: "Google Chrome",
+                                title: "Harbour lights, live", artist: "Slow TV", isPlaying: true, elapsed: 0, timestamp: now)
+        let pausedSong = NowPlaying(source: .system, bundleID: "com.spotify.client", appName: "Spotify", title: "Midnight City",
+                                    artist: "M83", album: "Hurry Up, We're Dreaming", isPlaying: false, duration: 243, elapsed: 71,
+                                    timestamp: now.addingTimeInterval(-3600))
+        let tab = NowPlaying(source: .browser, bundleID: "com.apple.Safari", appName: "Safari", title: "Bread at home",
+                             artist: "Kitchen notes", isPlaying: false, duration: 840, elapsed: 125, timestamp: now.addingTimeInterval(-600))
+        model.loadPlayersForSnapshot([], bridge: BridgeReport(players: [stream, pausedSong, tab], current: "com.google.Chrome"), now: now)
+        model.forcedPresentation = .expanded
+        model.tab = .home
+        shoot("79b-expanded-every-player")
+        if let np = model.closedNowPlaying {
+            model.forcedPresentation = .compact(.nowPlaying(np))
+            shoot("79c-compact-every-player")
+        }
+        model.forcedPresentation = .expanded
+        // The song paused an hour ago, picked: it shows, and Spotify's own controls take it.
+        model.pickPlayer(pausedSong)
+        shoot("79d-expanded-picked-long-paused")
+        // The Safari tab, picked: Chrome has the controls, so a press says so and offers Safari.
+        model.pickPlayer(tab)
+        model.setControlHintForSnapshot(.otherApp(OtherAppHint(app: "Safari", bundleID: "com.apple.Safari", holder: "Google Chrome")))
+        shoot("79e-expanded-other-app-hint")
+        size(.standard)
+        shoot("79f-expanded-other-app-hint-standard")
+        size(.compact)
+        model.setControlHintForSnapshot(nil)
         model.loadPlayersForSnapshot([], bridge: nil, now: now, song: song)
         model.forcedPresentation = .expanded
         model.tab = .home
