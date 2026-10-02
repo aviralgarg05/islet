@@ -47,4 +47,55 @@ public enum GlassMelt {
     private static func clamped(_ level: Double) -> Double {
         min(1, max(0, level.isFinite ? level : 1))
     }
+
+    // MARK: Opening and closing
+
+    /// Opening, the black melts into glass this long after the island starts to open, over
+    /// `melt`; closing, it comes back over `unmelt`.
+    public static let meltDelay = 0.15
+    public static let melt = 0.18
+    public static let unmelt = 0.08
+    /// Closing, the glass fades this quickly under the black coming back.
+    public static let glassOut = 0.12
+
+    /// How much of each layer of the open island shows: at rest, open or closed.
+    public static func layers(expanded: Bool) -> GlassLayers {
+        expanded ? GlassLayers(glass: 1, row: 1, black: 0) : GlassLayers(glass: 0, row: 0, black: 1)
+    }
+
+    /// How much of each layer shows `t` seconds after the island starts to open or close. Every
+    /// layer is the island's own shape, so the black covers the whole shape evenly as it comes
+    /// back: the close is one shape shrinking into the notch. The glass fades under the black,
+    /// and the black over the menu bar row goes only once the black over the whole shape is
+    /// back, so the row never shows the wallpaper beside the notch.
+    public static func layers(at t: Double, opening: Bool, pace: Double = 1) -> GlassLayers {
+        let k = max(0.05, pace)
+        if opening {
+            return GlassLayers(glass: 1, row: 1,
+                               black: 1 - IslandMotion.eased(.easeOut, from: meltDelay * k, length: melt * k, at: t))
+        }
+        let glass = 1 - min(1, max(0, t / (glassOut * k)))
+        return GlassLayers(glass: glass,
+                           row: 1 - IslandMotion.eased(.easeIn, from: unmelt * k, length: glassOut * k, at: t),
+                           black: IslandMotion.eased(.easeIn, from: 0, length: unmelt * k, at: t))
+    }
+}
+
+/// How much of each layer of the Glass theme's open island shows (0 to 1).
+public struct GlassLayers: Equatable, Sendable {
+    /// The glass itself and the smoke and melt over it.
+    public var glass: Double
+    /// The black in the menu bar row above the glass.
+    public var row: Double
+    /// The black over the whole shape: the closed island's.
+    public var black: Double
+
+    public init(glass: Double, row: Double, black: Double) {
+        self.glass = glass
+        self.row = row
+        self.black = black
+    }
+
+    /// How opaque the menu bar row is, with the black over the whole shape on top of it.
+    public var rowCover: Double { 1 - (1 - row) * (1 - black) }
 }

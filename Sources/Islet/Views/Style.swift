@@ -141,23 +141,17 @@ extension IslandTheme {
     ///   - row: height of the menu bar row, which stays black in every theme.
     ///   - height: the island's current height, to place the seam below that row.
     ///   - closedGlass: the closed island is glass too ("Glass on displays without a notch").
-    ///   - stem: the stem's width when the open island has the stem-and-body shape.
+    ///   - stemmed: the open island has the stem-and-body shape. Passed while the island is
+    ///     closed too, so a closing island keeps the look it had open while its glass fades.
     @ViewBuilder
     func background(expanded: Bool, shape: IslandShape, row: CGFloat = 0, height: CGFloat = 0, glassLevel: Double = 0.6,
-                    closedGlass: Bool = false, stem: CGFloat? = nil) -> some View {
+                    closedGlass: Bool = false, stemmed: Bool = false) -> some View {
         switch self {
-        case .graphite where expanded:
-            // The menu bar row stays black, so the hardware notch never shows as a dark bite
-            // in a grey bar; the grey starts just below it. The edge leaves out the top, at the
-            // top of the screen.
-            let h = max(height, row + Space.m, 1)
-            shape.fill(LinearGradient(stops: [.init(color: .black, location: 0),
-                                              .init(color: .black, location: row / h),
-                                              .init(color: Self.graphite, location: (row + Space.m) / h)],
-                                      startPoint: .top, endPoint: .bottom))
-                .overlay(IslandEdge(shape: shape).stroke(Color.white.opacity(0.08), lineWidth: 1))
+        case .graphite:
+            GraphiteBody(shape: shape, expanded: expanded, row: row, height: height)
         case .glass:
-            GlassBody(shape: shape, expanded: expanded, row: row, height: height, level: glassLevel, closedGlass: closedGlass, stem: stem)
+            GlassBody(shape: shape, expanded: expanded, row: row, height: height, level: glassLevel, closedGlass: closedGlass,
+                      stemmed: stemmed)
         default:
             shape.fill(Color.black)
         }
@@ -192,13 +186,54 @@ struct IslandOutline: View {
     }
 }
 
+/// How much of each layer of the open island shows: at rest, or in a transition frozen for the
+/// motion sheets.
+private func shellLayers(expanded: Bool, clock: ShellClock?) -> GlassLayers {
+    guard let clock, clock.wasExpanded != expanded else { return GlassMelt.layers(expanded: expanded) }
+    return GlassMelt.layers(at: clock.t, opening: expanded, pace: Motion.pace)
+}
+
+/// Graphite: dark grey below a black menu bar row while open, black closed. The grey is drawn
+/// over the black at every size and only its opacity changes, so closing is one shape
+/// shrinking into the notch rather than a grey slab fading where the open island was.
+private struct GraphiteBody: View {
+    let shape: IslandShape
+    let expanded: Bool
+    let row: CGFloat
+    let height: CGFloat
+    @Environment(\.shellClock) private var clock
+    @Environment(\.islandMotion) private var motion
+
+    var body: some View {
+        // The menu bar row stays black, so the hardware notch never shows as a dark bite in a
+        // grey bar; the grey starts just below it. The edge leaves out the top, at the top of
+        // the screen.
+        let h = max(height, row + Space.m, 1)
+        let fade: Animation? = motion == .off || expanded ? nil : .linear(duration: GlassMelt.glassOut * Motion.pace)
+        ZStack {
+            shape.fill(Color.black)
+            shape.fill(LinearGradient(stops: [.init(color: .black, location: 0),
+                                              .init(color: .black, location: row / h),
+                                              .init(color: IslandTheme.graphite, location: (row + Space.m) / h)],
+                                      startPoint: .top, endPoint: .bottom))
+                .overlay(IslandEdge(shape: shape).stroke(Color.white.opacity(0.08), lineWidth: 1))
+                .animation(fade) { $0.opacity(shellLayers(expanded: expanded, clock: clock).glass) }
+        }
+        // One shape for the open island's shadow, not one for the black and one for the grey.
+        .compositingGroup()
+    }
+}
+
 /// Dynamic Glass: one piece of Liquid Glass that is black where it meets the notch and melts
 /// into glass below the menu bar row. Beside the hardware notch glass would show the wallpaper
 /// at the notch's edges, so the row stays black. A faint smoke stays under the content so text
 /// never loses contrast, and a slow sheen drifts across while the island is open.
 ///
 /// The glass fades in once the island has grown clear of the notch, and the black comes back
-/// first when it closes.
+/// first when it closes. Every layer is always drawn, in the shell's own shape, and only its
+/// opacity changes: a layer removed with a transition keeps the size it had when it went, so
+/// the open island's glass faded as a full-size slab under a black island shrinking into the
+/// notch. Each fade is scoped to its opacity, so the layers keep the shell's own spring.
 private struct GlassBody: View {
     let shape: IslandShape
     let expanded: Bool
@@ -208,81 +243,77 @@ private struct GlassBody: View {
     let level: Double
     /// Closed, the island is glass as well (a display without a notch).
     var closedGlass = false
-    /// The stem's width when the open island has the stem-and-body shape: then only the stem is
-    /// black, and the glass starts right at the bottom of the menu bar, with a short melt under
-    /// the stem whose depth follows the glass level (`GlassMelt`).
-    var stem: CGFloat? = nil
+    /// The open island has the stem-and-body shape: then only the stem is black, and the glass
+    /// starts right at the bottom of the menu bar, with a short melt under the stem whose depth
+    /// follows the glass level (`GlassMelt`). Otherwise the black fades down from the row.
+    var stemmed = false
 
     /// The least black left over the glass, so text always has a floor of contrast.
     static let smoke = GlassMelt.standardSmoke
+    /// The stem-and-body look and the full-width one cross-fade over this, under the shell
+    /// morphing between them (an approval card arriving on the open island, or answered).
+    static let restyle = 0.3
     @Environment(\.snapshotMode) private var snapshotMode
     @Environment(\.shellClock) private var clock
     @Environment(\.islandMotion) private var motion
-
-    /// The black melts into glass this long after the island starts to open, over `melt`, and
-    /// comes back over `unmelt` as it closes.
-    static let meltDelay = 0.15
-    static let melt = 0.18
-    static let unmelt = 0.08
-    /// The glass itself fades out this quickly as the island closes, under the black.
-    static let glassOut = 0.12
-
-    /// How much of the black is over the glass: at rest, or in a transition frozen for the
-    /// motion sheets.
-    private var blackness: Double {
-        let rest: Double = expanded || closedGlass ? 0 : 1
-        guard let clock, clock.wasExpanded != expanded, !closedGlass else { return rest }
-        let k = Motion.pace
-        if expanded { return 1 - IslandMotion.eased(.easeOut, from: Self.meltDelay * k, length: Self.melt * k, at: clock.t) }
-        return IslandMotion.eased(.easeIn, from: 0, length: Self.unmelt * k, at: clock.t)
-    }
-
-    /// In a transition frozen for the motion sheets just after the island starts to close, how
-    /// much of the glass is still there, fading out under the black (nil once it has gone).
-    private var leavingGlass: Double? {
-        guard let clock, clock.wasExpanded, !expanded, !closedGlass else { return nil }
-        let left = 1 - clock.t / (Self.glassOut * Motion.pace)
-        return left > 0 ? min(1, left) : nil
-    }
+    @Environment(\.reduceMotionAnywhere) private var reduceMotion
 
     var body: some View {
+        // A glass pill has no black to come and go: it stays glass, closed or open.
+        let l = closedGlass ? GlassMelt.layers(expanded: expanded) : shellLayers(expanded: expanded, clock: clock)
+        let black = closedGlass ? 0 : l.black
+        let k = Motion.pace
+        let off = motion == .off
+        // Opening, the glass is there at once under the black, which melts away after a moment
+        // (a glass pill has no black over it, so its open look fades in); closing, the black
+        // comes back first, the glass fades under it, and the row's black goes last.
+        let appear: Animation? = closedGlass ? .easeOut(duration: GlassMelt.melt * k) : nil
+        let glassFade: Animation? = off ? nil : expanded ? appear : .linear(duration: GlassMelt.glassOut * k)
+        let rowFade: Animation? = off ? nil : expanded ? appear
+            : .easeIn(duration: GlassMelt.glassOut * k).delay(GlassMelt.unmelt * k)
+        let blackFade: Animation? = off ? nil
+            : expanded ? .easeOut(duration: GlassMelt.melt * k).delay(GlassMelt.meltDelay * k)
+            : .easeIn(duration: GlassMelt.unmelt * k)
+        let restyle: Animation? = off ? nil : .easeInOut(duration: Self.restyle * k)
         ZStack {
-            if expanded {
-                GlassSurface(shape: shape, tint: Color.black.opacity(0.2), fallback: Color(white: 0.13).opacity(0.78))
-                    .transition(.asymmetric(insertion: .identity,
-                                            removal: motion == .off ? .identity
-                                                : .opacity.animation(.linear(duration: Self.glassOut * Motion.pace))))
-                if let stem {
-                    shape.fill(Color.black.opacity(GlassMelt.smoke(level: level)))
-                    // The whole menu bar row is black, not just the stem: at rest the shape is only
-                    // the stem there, but while it morphs from a closed island or a peek its
-                    // shoulders haven't formed, and glass beside the notch would frame the stem
-                    // as a black box.
-                    Color.black.frame(height: row).frame(maxHeight: .infinity, alignment: .top).clipShape(shape)
-                    StemMelt(stem: stem, row: row, depth: GlassMelt.depth(body: height - row, level: level))
-                        .clipShape(shape)
-                } else {
-                    shape.fill(LinearGradient(stops: Self.stops(row: row, height: height, level: level), startPoint: .top, endPoint: .bottom))
-                }
-                // An AppKit view, which offline snapshots can't draw.
-                if !snapshotMode { GlassSheen().clipShape(shape).allowsHitTesting(false) }
-            } else if let left = leavingGlass {
-                GlassSurface(shape: shape, tint: Color.black.opacity(0.2), fallback: Color(white: 0.13).opacity(0.78))
-                    .opacity(left)
-                shape.fill(Color.black.opacity(Self.smoke * left))
-                // The menu bar row stays black over the notch.
-                Color.black.frame(height: row).frame(maxHeight: .infinity, alignment: .top).clipShape(shape)
-            } else if closedGlass {
+            GlassSurface(shape: shape, tint: Color.black.opacity(0.2), fallback: Color(white: 0.13).opacity(0.78))
+                .animation(glassFade) { $0.opacity(closedGlass ? 1 : l.glass) }
+            if closedGlass {
                 // No hardware to match: glass under the same smoke, and no sheen on something
                 // that is always there.
-                GlassSurface(shape: shape, tint: Color.black.opacity(0.2), fallback: Color(white: 0.13).opacity(0.78))
                 shape.fill(Color.black.opacity(Self.smoke))
+                    .animation(off ? nil : .easeInOut(duration: GlassMelt.melt * k)) { $0.opacity(expanded ? 0 : 1) }
+            }
+            // The stem-and-body look: the smoke over the glass, and the black melting a little
+            // way down into it under the stem.
+            ZStack {
+                shape.fill(Color.black.opacity(GlassMelt.smoke(level: level)))
+                StemMelt(stem: shape.stemWidth, row: row, depth: GlassMelt.depth(body: height - row, level: level))
+                    .clipShape(shape)
+            }
+            .animation(restyle) { $0.opacity(stemmed ? 1 : 0) }
+            .animation(glassFade) { $0.opacity(l.glass) }
+            // The full-width look: black down to the row, then a fade to the smoke. Its black is
+            // the row's, so it goes with the row's, once the black over the whole shape is back.
+            shape.fill(LinearGradient(stops: Self.stops(row: row, height: height, level: level), startPoint: .top, endPoint: .bottom))
+                .animation(restyle) { $0.opacity(stemmed ? 0 : 1) }
+                .animation(rowFade) { $0.opacity(l.row) }
+            // In the stem-and-body look the whole menu bar row is black, not just the stem: at
+            // rest the shape is only the stem there, but while it morphs from a closed island or
+            // a peek its shoulders haven't formed, and glass beside the notch would frame the
+            // stem as a black box.
+            Color.black.frame(height: row).frame(maxHeight: .infinity, alignment: .top).clipShape(shape)
+                .animation(restyle) { $0.opacity(stemmed ? 1 : 0) }
+                .animation(rowFade) { $0.opacity(l.row) }
+            // An AppKit view, which offline snapshots can't draw. It drifts only while open.
+            if !snapshotMode {
+                GlassSheen(moving: expanded && !reduceMotion)
+                    .clipShape(shape)
+                    .allowsHitTesting(false)
+                    .animation(glassFade) { $0.opacity(l.glass) }
             }
             shape.fill(Color.black)
-                .opacity(blackness)
-                .animation(motion == .off ? nil
-                               : expanded ? .easeOut(duration: Self.melt * Motion.pace).delay(Self.meltDelay * Motion.pace)
-                               : .easeIn(duration: Self.unmelt * Motion.pace), value: expanded)
+                .animation(blackFade) { $0.opacity(black) }
         }
     }
 
@@ -314,31 +345,37 @@ private struct StemMelt: View {
     var body: some View {
         let width = stem + 2 * depth
         let side = depth / max(width, 1)
-        ZStack(alignment: .top) {
-            Color.black.frame(height: row)
-            LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black.opacity(0.55), location: 0.35),
-                                   .init(color: .black.opacity(0), location: 1)],
-                           startPoint: .top, endPoint: .bottom)
-                .frame(width: width, height: depth)
-                .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: side),
-                                             .init(color: .black, location: 1 - side), .init(color: .clear, location: 1)],
-                                     startPoint: .leading, endPoint: .trailing))
-                .offset(y: row)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .allowsHitTesting(false)
+        // An overlay, so the melt never sizes the glass: while the stem is the island's whole
+        // width (closed, or closing) the melt is wider than the island, and laid out it would
+        // widen every layer beside it.
+        Color.clear
+            .overlay(alignment: .top) {
+                ZStack(alignment: .top) {
+                    Color.black.frame(height: row)
+                    LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black.opacity(0.55), location: 0.35),
+                                           .init(color: .black.opacity(0), location: 1)],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(width: width, height: depth)
+                        .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: side),
+                                                     .init(color: .black, location: 1 - side), .init(color: .clear, location: 1)],
+                                             startPoint: .leading, endPoint: .trailing))
+                        .offset(y: row)
+                }
+            }
+            .allowsHitTesting(false)
     }
 }
 
-/// A faint diagonal reflection that drifts slowly across the glass. Core Animation runs it, so
-/// the app does no per-frame work. It stays still with Reduce Motion and in Low Power Mode.
+/// A faint diagonal reflection that drifts slowly across the glass while the island is open.
+/// Core Animation runs it, so the app does no per-frame work. It stays still with Reduce
+/// Motion; in Low Power Mode it drifts at a lower frame rate, like the island's other loops.
 private struct GlassSheen: NSViewRepresentable {
-    @Environment(\.reduceMotionAnywhere) private var reduceMotion
+    var moving: Bool
 
     func makeNSView(context: Context) -> GlassSheenView { GlassSheenView() }
 
     func updateNSView(_ view: GlassSheenView, context: Context) {
-        view.setMoving(!reduceMotion && !ProcessInfo.processInfo.isLowPowerModeEnabled)
+        view.setMoving(moving)
     }
 }
 
@@ -372,6 +409,14 @@ final class GlassSheenView: NSView {
     func setMoving(_ on: Bool) {
         guard on != moving else { return }
         moving = on
+        // Stopping (the island closing), the band stays where it had drifted to while the glass
+        // fades, rather than jumping back to the middle.
+        if !on, let here = sheen.presentation()?.locations {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            sheen.locations = here
+            CATransaction.commit()
+        }
         sheen.removeAnimation(forKey: "drift")
         guard on else { return }
         let drift = CABasicAnimation(keyPath: "locations")

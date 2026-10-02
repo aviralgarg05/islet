@@ -32,6 +32,8 @@ extension Snapshots {
         var notchless: NotchlessStyle = .notch
         /// The closed pill is glass too ("Glass on displays without a notch").
         var glassPill = false
+        /// The theme (nil: the default, Glass).
+        var theme: IslandTheme? = nil
     }
 
     static func renderMotion(to dir: URL) {
@@ -87,9 +89,16 @@ extension Snapshots {
         sheet("motion-open", zoom: 1, model: model, dir: dir, strips: [
             MotionStrip(title: "Open from music, with two bubbles", from: media, to: .expanded, duration: 0.7, height: open),
         ])
+        // The first frames of a close, where the black comes back over the glass (or the grey):
+        // it covers the whole shape evenly, so the island shrinks into the notch as one shape.
+        let closing: [Double] = [0, 0.02, 0.04, 0.06, 0.08, 0.1, 0.15, 0.3]
         sheet("motion-close", zoom: 1, model: model, dir: dir, strips: [
             MotionStrip(title: "Close to music; the bubbles bud off once the shell has closed", from: .expanded, to: media,
                         duration: 1.0, height: open),
+            MotionStrip(title: "Glass: the first frames of the close", from: .expanded, to: media,
+                        duration: 1.0, height: open, times: closing),
+            MotionStrip(title: "Graphite: the first frames of the close", from: .expanded, to: media,
+                        duration: 1.0, height: open, times: closing, theme: .graphite),
         ])
         sheet("motion-sneak-in", zoom: 2, model: model, dir: dir, strips: [
             MotionStrip(title: "Sneak peek of the waiting agent", from: .compact(.activity(waiting, others: 0)), to: .sneak(waiting),
@@ -151,7 +160,8 @@ extension Snapshots {
         for strip in strips {
             model.settings.notchlessStyle = strip.notchless
             model.settings.glassOnNotchless = strip.glassPill
-            if strip.glassPill { model.settings.theme = .glass }
+            // Each strip in its own theme: none carries over from the strip before.
+            model.settings.theme = strip.glassPill ? .glass : strip.theme ?? saved.theme
             let display = strip.screen ?? screen
             let metrics = metricsFor(model.settings, screen: display, notchless: strip.notchless)
             model.closedPlacements[display.id] = ClosedPlacement(wing: metrics.wingWidth, slack: .infinity)

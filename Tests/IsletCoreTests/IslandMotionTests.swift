@@ -435,3 +435,45 @@ private func times(to end: Double, step: Double = 1.0 / 240) -> [Double] {
         }
     }
 }
+
+/// The Glass theme opening and closing: every layer is the island's own shape, and only how much
+/// of each shows changes.
+@Suite struct GlassCloseTests {
+    @Test func atRestTheOpenIslandIsGlassAndTheClosedOneBlack() {
+        #expect(GlassMelt.layers(expanded: true) == GlassLayers(glass: 1, row: 1, black: 0))
+        #expect(GlassMelt.layers(expanded: false) == GlassLayers(glass: 0, row: 0, black: 1))
+    }
+
+    /// Closing reads as one shape shrinking into the notch: the black is back over the whole
+    /// shape quickly, and the menu bar row never shows the wallpaper on the way.
+    @Test func closingBringsTheBlackBackOverTheWholeShapeFirst() {
+        for pace in [0.8, 1.0, 1.25] {
+            let back = GlassMelt.unmelt * pace
+            var lastBlack = 0.0, lastGlass = 1.0
+            for t in times(to: 1) {
+                let l = GlassMelt.layers(at: t, opening: false, pace: pace)
+                #expect(l.black >= lastBlack && l.glass <= lastGlass, "the black only comes back and the glass only goes")
+                lastBlack = l.black
+                lastGlass = l.glass
+                #expect(l.rowCover > 0.999, "the row stays black at \(t) s")
+                if t >= back { #expect(l.black == 1, "all black by \(back) s, before the shell has shrunk far") }
+            }
+            #expect(GlassMelt.layers(at: 1, opening: false, pace: pace) == GlassMelt.layers(expanded: false))
+        }
+        // Black over the whole shape by the time the shell starts to move in earnest (0.15 s,
+        // the frame where the old close showed a black stem over a grey slab).
+        let early = GlassMelt.layers(at: 0.15, opening: false)
+        #expect(early.black == 1 && early.glass == 0)
+    }
+
+    /// Opening is unchanged: the glass is there at once under the black, the menu bar row stays
+    /// black, and the black melts away once the island has grown clear of the notch.
+    @Test func openingKeepsTheRowBlackAndMeltsTheRestLater() {
+        for t in times(to: 1) {
+            let l = GlassMelt.layers(at: t, opening: true)
+            #expect(l.glass == 1 && l.row == 1)
+            if t <= GlassMelt.meltDelay { #expect(l.black == 1) }
+            if t >= GlassMelt.meltDelay + GlassMelt.melt { #expect(l.black == 0) }
+        }
+    }
+}

@@ -489,6 +489,10 @@ struct IslandView: View {
         .animation(opening ? style.morph : style.collapse, value: key)
         .animation(style.morph, value: bubbles.key)
         .animation(style.morph, value: placement)
+        // An approval card arriving on the open island (or answered) changes its shape between
+        // the stem-and-body one and the full-width one: the shell morphs, as it does for a new
+        // placement, instead of snapping.
+        .animation(style.morph, value: look.stemmedOpen)
         // The hover response: a quick, small spring, in step with the others.
         .animation(style.inPlace, value: look.hoverGrow)
         // Appearing from nothing and going back to it. The animation wraps the ones above, so
@@ -641,7 +645,7 @@ struct IslandView: View {
                 .background(expanded: p == .expanded, shape: shape, row: g.stemHeight, height: g.size.height,
                             glassLevel: seeThrough ? 1 : model.settings.glassLevel,
                             closedGlass: closedGlass,
-                            stem: p == .expanded && model.look(for: display).stemmedOpen ? g.stemWidth : nil)
+                            stemmed: model.look(for: display).stemmedOpen)
                 .shadow(color: .black.opacity(shadow), radius: 14, y: 6)
             IslandOutline(shape: shape, on: model.settings.outline)
         }
