@@ -201,6 +201,33 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
 @Suite struct StickerLayoutTests {
     let row: CGFloat = 32
 
+    /// Settings' sliders reach only what the row can draw: past it the sticker stops changing.
+    @Test func slidersStopWhereTheRowDoes() {
+        // A 32 pt row draws up to 30 pt; the standard sticker is 24 pt, so 1.25× at most.
+        #expect(StickerLayout.scaleRange(row: row) == 0.6...1.2)
+        #expect(StickerLayout.scaleRange(row: 38).upperBound == 1.5)
+        #expect(StickerLayout.scaleRange(row: 0) == StickerSettings.scaleRange)
+        // Up and down: 3 pt each way at the standard size, none once it fills the row.
+        #expect(StickerLayout.verticalReach(row: row, scale: 1) == 3)
+        #expect(StickerLayout.verticalReach(row: row, scale: 0.6) == 7)
+        #expect(StickerLayout.verticalReach(row: row, scale: 1.2) == 0)
+        // Left across the room (held to the slider's ±12), right only into the edge space.
+        #expect(StickerLayout.horizontalRange(room: 80, row: row, outerSpace: 6, aspect: 1, scale: 1) == -12...5)
+        #expect(StickerLayout.horizontalRange(room: 20, row: row, outerSpace: 6, aspect: 1, scale: 1).lowerBound > -12)
+        // The whole reach moves it; a point more can't move it a whole point further.
+        for scale in [0.6, 1.0] {
+            let reach = StickerLayout.verticalReach(row: row, scale: scale)
+            func frame(_ y: Double) -> CGRect {
+                StickerLayout.frame(room: 80, row: row, outerSpace: 6, aspect: 1, settings: StickerSettings(offsetY: y, scale: scale))
+            }
+            #expect(abs(frame(-reach).minY - (frame(0).minY - reach)) < 1e-9)
+            #expect(frame(-reach - 1).minY > frame(0).minY - reach - 1)
+        }
+        let biggest = StickerLayout.frame(room: 80, row: row, outerSpace: 6, aspect: 1, settings: StickerSettings(scale: 1.2))
+        let beyond = StickerLayout.frame(room: 80, row: row, outerSpace: 6, aspect: 1, settings: StickerSettings(scale: 1.6))
+        #expect(biggest.height < beyond.height + 1e-9 && beyond.height - biggest.height < 2)
+    }
+
     @Test func atRestItSitsAtTheOuterEdgeInTheMiddleOfTheRow() {
         let r = StickerLayout.frame(room: 60, row: row, outerSpace: 5, aspect: 1, settings: StickerSettings())
         #expect(r.height == 24 && r.width == 24)

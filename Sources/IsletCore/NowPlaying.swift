@@ -12,6 +12,11 @@ public enum MediaSourceKind: String, Codable, Sendable, CaseIterable {
     /// Pushed through the local API (`POST /v1/media`) by any app or script.
     case external
 
+    /// The sources Settings → Now Playing lists, in its order: the players by name, then the
+    /// browsers, then every other app. What the local API sends (`external`) is switched in
+    /// Advanced, beside the API itself.
+    public static let settingsOrder: [MediaSourceKind] = [.appleMusic, .spotify, .browser, .system]
+
     /// The dedicated integration for a player's bundle ID (Music, Spotify), if it has one.
     public static func player(bundleID: String?) -> MediaSourceKind? {
         switch bundleID {

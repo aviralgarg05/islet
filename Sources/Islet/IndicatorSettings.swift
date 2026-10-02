@@ -24,16 +24,18 @@ struct IndicatorStylePicker: View {
         case .wave: return "Wave"
         case .pulse: return "Pulse"
         case .vinyl: return "Vinyl"
-        case .gif: return "GIF"
+        case .gif: return "Sticker"
         case .off: return "None"
         }
     }
 
-    private static let columns = Array(repeating: GridItem(.fixed(52), spacing: 8), count: 5)
+    private static let columns = Array(repeating: GridItem(.fixed(LookTile.width), spacing: LookTile.spacing), count: 5)
 
     var body: some View {
-        SettingsRow(title: "Playing indicator") {
-            LazyVGrid(columns: Self.columns, alignment: .leading, spacing: 10) {
+        // The label above its grid, as the sticker gallery's is, so both grids start at the same edge.
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Playing indicator")
+            LazyVGrid(columns: Self.columns, alignment: .leading, spacing: LookTile.spacing) {
                 ForEach(Self.styles, id: \.self) { style in
                     tile(style)
                 }
@@ -66,25 +68,41 @@ struct IndicatorStylePicker: View {
                         PlayingIndicator(tint: tint, playing: true).environment(\.visualiserStyle, style)
                     }
                 }
-                .frame(width: 52, height: 34)
+                .frame(width: LookTile.width, height: LookTile.height)
                 .modifier(TileOutline(selected: selected, cornerRadius: 7))
-                Text(Self.name(style)).font(.caption).foregroundStyle(selected ? .primary : .secondary)
+                Text(Self.name(style)).font(LookTile.font).foregroundStyle(selected ? .primary : .secondary)
                     .lineLimit(1).fixedSize()
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(style == .gif ? "GIF sticker" : Self.name(style))
+        .accessibilityLabel(Self.name(style))
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
-/// The GIF look's rows: which sticker, where it sits, how big, and whether it stays when
-/// nothing plays. Shown only while the GIF look is chosen.
+/// The tiles of the indicator and sticker pickers: one size and one caption for both.
+enum LookTile {
+    static let width: CGFloat = 52
+    static let height: CGFloat = 38
+    static let spacing: CGFloat = 8
+    static let font = Font.caption
+}
+
+/// The Sticker look's rows: which sticker, where it sits, how big, and whether it stays when
+/// nothing plays. Shown only while the Sticker look is chosen. The sliders reach only as far
+/// as the menu bar row lets the sticker go (`StickerLayout`).
 struct StickerSettingsRows: View {
     @Bindable var model: AppModel
 
     var body: some View {
+        let sticker = model.settings.sticker
+        let row = IslandSketch.notch.height
+        let wing = model.settings.effectiveWingWidth
+        let inset = Wings<EmptyView, EmptyView>.inset(for: wing)
+        let across = StickerLayout.horizontalRange(room: wing - inset, row: row, outerSpace: inset / 2,
+                                                   aspect: model.stickers.aspect(model.stickers.resolved(sticker)), scale: sticker.scale)
+        let upDown = StickerLayout.verticalReach(row: row, scale: sticker.scale)
         StickerGallery(model: model)
             .settingsAnchor("nowPlaying.sticker")
         if let problem = model.stickers.problem {
@@ -92,12 +110,15 @@ struct StickerSettingsRows: View {
                 .font(.callout)
                 .foregroundStyle(.orange)
         }
-        SettingsSlider(title: "Left and right", value: $model.settings.sticker.offsetX, range: StickerSettings.offsetRange,
+        SettingsSlider(title: "Left and right", value: $model.settings.sticker.offsetX, range: Self.usable(across),
                        step: 1, format: Self.offset)
+            .disabled(across.lowerBound == across.upperBound)
             .settingsAnchor("nowPlaying.stickerPosition")
-        SettingsSlider(title: "Up and down", value: $model.settings.sticker.offsetY, range: StickerSettings.offsetRange,
+        SettingsSlider(title: "Up and down", value: $model.settings.sticker.offsetY, range: Self.usable(-upDown...upDown),
                        step: 1, format: Self.offset)
-        SettingsSlider(title: "Size", value: $model.settings.sticker.scale, range: StickerSettings.scaleRange, step: 0.1) {
+            // Filling the row, it has nowhere to go.
+            .disabled(upDown == 0)
+        SettingsSlider(title: "Size", value: $model.settings.sticker.scale, range: StickerLayout.scaleRange(row: row), step: 0.1) {
             String(format: "%.1f×", $0)
         }
         .settingsAnchor("nowPlaying.stickerSize")
@@ -108,6 +129,11 @@ struct StickerSettingsRows: View {
         .settingsAnchor("nowPlaying.stickerIdle")
     }
 
+    /// A slider needs some width to its range: one with none draws, disabled, round 0.
+    static func usable(_ range: ClosedRange<Double>) -> ClosedRange<Double> {
+        range.lowerBound < range.upperBound ? range : -1...1
+    }
+
     /// "0 pt", "+3 pt", "−3 pt".
     static func offset(_ v: Double) -> String {
         let n = Int(v.rounded())
@@ -115,14 +141,14 @@ struct StickerSettingsRows: View {
     }
 }
 
-/// Islet's stickers, then yours, then "Add GIF…". Drop a file on it to add it too; a context
+/// Islet's stickers, then yours, then "Add…". Drop a file on it to add it too; a context
 /// menu removes one of yours.
 struct StickerGallery: View {
     @Bindable var model: AppModel
     @ViewState private var dropTargeted = false
 
-    /// As many tiles a row as fit, so "Add GIF…" sits beside the others when there's room.
-    private static let columns = [GridItem(.adaptive(minimum: 48, maximum: 48), spacing: 8, alignment: .top)]
+    /// As many tiles a row as fit, so "Add…" sits beside the others when there's room.
+    private static let columns = [GridItem(.adaptive(minimum: LookTile.width, maximum: LookTile.width), spacing: LookTile.spacing, alignment: .top)]
 
     var body: some View {
         let library = model.stickers
@@ -130,7 +156,7 @@ struct StickerGallery: View {
         let shown = library.resolved(model.settings.sticker)
         VStack(alignment: .leading, spacing: 6) {
             Text("Sticker")
-            LazyVGrid(columns: Self.columns, alignment: .leading, spacing: 8) {
+            LazyVGrid(columns: Self.columns, alignment: .leading, spacing: LookTile.spacing) {
                 ForEach(BuiltInSticker.allCases, id: \.self) { b in
                     tile(.builtIn(b), name: b.title, selected: shown == .builtIn(b))
                 }
@@ -145,10 +171,11 @@ struct StickerGallery: View {
                 }
                 if !library.isFull { addTile }
             }
-            .padding(4)
+            // The tiles start at the label's edge; the drop outline stands a little outside them.
             .background {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                    .padding(-4)
                     .opacity(dropTargeted ? 1 : 0)
             }
             .onDrop(of: [.fileURL], isTargeted: $dropTargeted) { providers in
@@ -171,14 +198,14 @@ struct StickerGallery: View {
             model.settings.sticker.id = choice.id
             model.stickers.problem = nil
         } label: {
-            VStack(spacing: 4) {
+            VStack(spacing: 5) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.black)
                     StickerThumbnail(library: model.stickers, choice: choice, size: 30)
                 }
-                .frame(width: 48, height: 40)
+                .frame(width: LookTile.width, height: LookTile.height)
                 .modifier(TileOutline(selected: selected, cornerRadius: 7))
-                Text(name).font(.caption2).foregroundStyle(selected ? .primary : .secondary).lineLimit(1)
+                Text(name).font(LookTile.font).foregroundStyle(selected ? .primary : .secondary).lineLimit(1)
             }
             .contentShape(Rectangle())
         }
@@ -189,7 +216,7 @@ struct StickerGallery: View {
 
     private var addTile: some View {
         Button(action: choose) {
-            VStack(spacing: 4) {
+            VStack(spacing: 5) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
                         .strokeBorder(Color.primary.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
@@ -199,15 +226,15 @@ struct StickerGallery: View {
                         Image(systemName: "plus").font(.system(size: 14, weight: .medium)).foregroundStyle(.secondary)
                     }
                 }
-                .frame(width: 48, height: 40)
-                Text("Add GIF…").font(.caption2).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+                .frame(width: LookTile.width, height: LookTile.height)
+                Text("Add…").font(LookTile.font).foregroundStyle(.secondary).lineLimit(1).fixedSize()
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(model.stickers.adding)
         .settingsAnchor("nowPlaying.stickerAdd")
-        .help("Add a GIF of your own")
+        .help("Add a sticker of your own: a GIF, animated PNG, WebP or HEIC")
     }
 
     private func choose() {

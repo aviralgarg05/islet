@@ -197,7 +197,7 @@ public enum StickerImportError: Error, Equatable, Sendable {
     public var message: String {
         switch self {
         case .full: return "You have \(StickerLimits.maxCustom) stickers already. Remove one to add another."
-        case .tooLarge: return "That file is over 5 MB. Try a smaller GIF."
+        case .tooLarge: return "That file is over 5 MB. Try a smaller one."
         case .tooBigPicture: return "That picture is too big to use as a sticker."
         case .notAnimation: return "Islet can use GIF, animated PNG, WebP and HEIC files."
         case .unreadable: return "Islet couldn't read that file."
@@ -292,6 +292,35 @@ public enum StickerLayout {
     /// The standard height in points: a little taller than the closed artwork, never more than
     /// the row allows.
     public static func standardHeight(row: CGFloat) -> CGFloat { max(10, min(24, row - 8)) }
+
+    /// The sizes that look different in a row `row` points tall: past the row's height (less
+    /// a point each side) the sticker is held to the row, so Settings' slider stops there.
+    public static func scaleRange(row: CGFloat) -> ClosedRange<Double> {
+        let all = StickerSettings.scaleRange
+        guard row.isFinite, row > 2 else { return all }
+        let most = (Double((row - 2) / standardHeight(row: row)) * 10).rounded(.down) / 10
+        return all.lowerBound...min(all.upperBound, max(all.lowerBound + 0.1, most))
+    }
+
+    /// How far, in whole points, a sticker at `scale` can move left (negative) and right of
+    /// where it rests before the wing holds it: across the room, and into the space beyond it.
+    public static func horizontalRange(room: CGFloat, row: CGFloat, outerSpace: CGFloat, aspect: CGFloat,
+                                       scale: Double) -> ClosedRange<Double> {
+        let r = frame(room: room, row: row, outerSpace: outerSpace, aspect: aspect, settings: StickerSettings(scale: scale))
+        guard r.width > 0 else { return 0...0 }
+        let cap = StickerSettings.offsetRange.upperBound
+        let left = min(cap, max(0, Double((r.minX - 1).rounded(.down))))
+        let right = min(cap, max(0, Double((room + max(0, outerSpace) - 1 - r.maxX).rounded(.down))))
+        return -left...right
+    }
+
+    /// How far, in whole points, a sticker at `scale` can move up or down from the middle of
+    /// the row before the row's edge holds it. 0 when it fills the row.
+    public static func verticalReach(row: CGFloat, scale: Double) -> Double {
+        guard row.isFinite, row > 2 else { return 0 }
+        let h = min(row - 2, standardHeight(row: row) * CGFloat(scale.isFinite ? scale : 1))
+        return min(StickerSettings.offsetRange.upperBound, max(0, Double(((row - 2 - h) / 2).rounded(.down))))
+    }
 
     /// The sticker's frame inside the wing's room: `room` points wide (from the notch side to
     /// the content inset at the wing's outer edge) and `row` points tall. `aspect` is the

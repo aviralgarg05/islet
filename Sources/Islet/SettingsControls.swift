@@ -51,18 +51,14 @@ struct LaunchAtLoginToggle: View {
     }
 }
 
-/// Settings → Now Playing: which sources can appear, one switch each.
+/// Settings → Now Playing: which sources can appear, one switch each, the players by name first.
+/// What the local API sends is switched in Advanced (`MediaSourceToggles.binding`).
 struct MediaSourceToggles: View {
     @Bindable var model: AppModel
 
     var body: some View {
-        ForEach(MediaSourceKind.allCases, id: \.self) { source in
-            Toggle(isOn: Binding(
-                get: { !model.settings.disabledMediaSources.contains(source) },
-                set: { on in
-                    model.settings.disabledMediaSources.removeAll { $0 == source }
-                    if !on { model.settings.disabledMediaSources.append(source) }
-                })) {
+        ForEach(MediaSourceKind.settingsOrder, id: \.self) { source in
+            Toggle(isOn: Self.binding(source, model: model)) {
                 Label {
                     Text(Self.name(source))
                 } icon: {
@@ -70,6 +66,15 @@ struct MediaSourceToggles: View {
                 }
             }
         }
+    }
+
+    /// Whether `source` can show what's playing.
+    static func binding(_ source: MediaSourceKind, model: AppModel) -> Binding<Bool> {
+        Binding(get: { !model.settings.disabledMediaSources.contains(source) },
+                set: { on in
+                    model.settings.disabledMediaSources.removeAll { $0 == source }
+                    if !on { model.settings.disabledMediaSources.append(source) }
+                })
     }
 
     static func name(_ source: MediaSourceKind) -> String {

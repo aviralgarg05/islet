@@ -311,7 +311,7 @@ struct AppearanceSettings: View {
     static func indicatorSummary(_ s: IsletSettings) -> String {
         guard s.visualiserStyle != .off else { return "Off" }
         // A sticker keeps its own colours.
-        if s.visualiserStyle == .gif { return "GIF sticker" }
+        if s.visualiserStyle == .gif { return "Sticker" }
         let style = IndicatorStylePicker.name(s.visualiserStyle)
         switch s.musicColour {
         case .artwork: return "\(style), artwork colour"

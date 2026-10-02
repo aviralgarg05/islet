@@ -121,6 +121,12 @@ struct AdvancedSettings: View {
                 Text("They often hold addresses, names and scores, so they're left out unless you allow it.")
             }
             .settingsAnchor("advanced.shareLive")
+            // Moved here from Now Playing's sources: it is the API's, not a player's.
+            Toggle(isOn: MediaSourceToggles.binding(.external, model: model)) {
+                Text("Scripts can show what\u{2019}s playing")
+                Text("Apps and scripts that send a song to the local API show it in the island, as Music and Spotify do.")
+            }
+            .settingsAnchor("advanced.mediaScripts")
             CodeBlock(title: "Command-line tool: put isletctl on your PATH", code: "ln -sf '\(cli)' /opt/homebrew/bin/isletctl")
                 .settingsAnchor("advanced.cli")
         } header: {
