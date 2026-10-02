@@ -76,6 +76,8 @@ final class LyricsController {
     private(set) var state: State = .idle
     /// The song `state` is about.
     private(set) var trackKey: String?
+    /// Its length when it was looked up (`LyricsQuery.isSameLookup`).
+    @ObservationIgnored private var lookedUpLength: Double?
     /// The song whose lyrics were hidden with the button or the "x" on them (the next song shows
     /// its own).
     private(set) var hiddenTrack: String?
@@ -189,13 +191,20 @@ final class LyricsController {
     /// (the button) asks again for a song already settled, from the cache when it is there.
     func want(_ np: NowPlaying, force: Bool = false) {
         let s = model.settings
+        let same = LyricsQuery.isSameLookup(np, trackKey: trackKey, length: lookedUpLength)
         guard s.lyricsEnabled,
-              state.needsLookUp(sameSong: np.trackKey == trackKey, force: force,
+              state.needsLookUp(sameSong: same, force: force,
                                 sinceFailure: Date().timeIntervalSince(failedAt ?? .distantPast)) else { return }
         if askedTrack != np.trackKey { askedTrack = nil }
         if offerTrack != np.trackKey { offerTrack = nil }
         trackKey = np.trackKey
+        lookedUpLength = np.duration
         guard let query = LyricsQuery(np, includeBrowsers: s.lyricsIncludeBrowsers) else {
+            // A browser's song whose length is still to come waits for it (the button asks now).
+            if !force, LyricsQuery.awaitsLength(np, includeBrowsers: s.lyricsIncludeBrowsers) {
+                state = .idle
+                return
+            }
             state = .missing
             settled(np.trackKey)
             return
@@ -207,8 +216,10 @@ final class LyricsController {
         }
         state = .loading
         let key = np.trackKey
+        let length = np.duration
         service.lookUp(query) { [weak self] result in
-            guard let self, self.trackKey == key else { return }
+            // Only the latest lookup for the song on show: a length that came later asked again.
+            guard let self, self.trackKey == key, self.lookedUpLength == length else { return }
             switch result {
             case .success(let lookup): self.apply(lookup)
             case .failure:
@@ -260,6 +271,7 @@ final class LyricsController {
     func clear() {
         state = .idle
         trackKey = nil
+        lookedUpLength = nil
         askedTrack = nil
     }
 

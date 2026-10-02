@@ -100,6 +100,8 @@ struct NowPlayingHero: View {
         // Lyrics are looked up while Now Playing is on show, once per song.
         .onAppear { if !snapshotMode { model.tools.lyrics.want(media) } }
         .onChange(of: media.trackKey) { _, _ in if !snapshotMode { model.tools.lyrics.want(media) } }
+        // A browser can send a video's length a moment after its title (`LyricsQuery.isSameLookup`).
+        .onChange(of: media.duration) { _, _ in if !snapshotMode { model.tools.lyrics.want(media) } }
         // Lyrics just turned on in Settings (or browsers switched): this song, not the next.
         .onChange(of: model.tools.lyrics.resets) { _, _ in if !snapshotMode { model.tools.lyrics.want(media) } }
     }
