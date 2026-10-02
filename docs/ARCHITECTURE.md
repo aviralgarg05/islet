@@ -133,7 +133,7 @@ Without a pick, the rules are:
 - direct integrations beat the generic bridge for the same track;
 - missing fields (artwork, duration, position, shuffle and repeat, and the commands it takes) are filled from any source describing the same track;
 - paused sources expire after 15 minutes, on time rather than at the next media update (a player the bridge lists stops showing by itself then, and stays a chip);
-- a track that still says it is playing 5 s past its end (browsers often never report that a video finished) shows as stopped and goes 2 minutes after its end;
+- a track that still says it is playing 5 s past its end (browsers often never report that a video finished) shows as stopped, counts as having changed at its end (so a video that just finished stays ahead of a song paused before it ended), and goes 2 minutes after its end;
 - each report from the system bridge replaces everything the bridge said before, browser videos included, so closing a browser window clears its video and an app macOS no longer lists goes;
 - sources switched off in Settings (`disabledMediaSources`) are ignored. Music and Spotify count as themselves when the bridge reports them, so switching one off hides it whichever path reports it, and switching off "Other apps" doesn't hide them.
 

@@ -292,6 +292,31 @@ import Testing
         #expect(m.changedAt[Self.chromeID] == nil)
     }
 
+    /// Rule 4a with rule 2: a video that ran to its end, Chrome still saying it plays, stopped at
+    /// its end. So it stays ahead of a song paused before then, in the open island, beside the
+    /// notch and among the chips, rather than ranking by when it started.
+    @Test func aVideoThatJustEndedStaysAheadOfASongPausedBefore() {
+        var m = MediaArbiter()
+        var video = NowPlaying(source: .browser, bundleID: Self.chromeID, appName: "Google Chrome", title: "Clip",
+                               artist: "Channel", isPlaying: true, duration: 300, elapsed: 0, timestamp: t0.addingTimeInterval(60))
+        m.updateFromBridge(Self.report([video, Self.spotify(true, at: t0)], current: Self.chromeID))
+        // Spotify paused at 90.
+        m.updateFromBridge(Self.report([video, Self.spotify(false, at: t0.addingTimeInterval(90))], current: Self.chromeID))
+        // At its end Chrome says the same again: playing, at 300 of 300.
+        video.elapsed = 300
+        video.timestamp = t0.addingTimeInterval(360)
+        m.updateFromBridge(Self.report([video, Self.spotify(false, at: t0.addingTimeInterval(90))], current: Self.chromeID))
+        let after = t0.addingTimeInterval(365)
+        #expect(m.current(now: after)?.bundleID == Self.chromeID)
+        #expect(m.current(now: after)?.isPlaying == false)
+        #expect(m.closedIsland(now: after)?.bundleID == Self.chromeID)
+        #expect(Self.ids(m.available(now: after)) == [Self.chromeID, Self.spotifyID])
+        // A song paused after the video ended is newer again.
+        m.updateFromBridge(Self.report([video, Self.spotify(true, at: t0.addingTimeInterval(370))], current: Self.spotifyID))
+        m.updateFromBridge(Self.report([video, Self.spotify(false, at: t0.addingTimeInterval(380))], current: Self.spotifyID))
+        #expect(m.current(now: t0.addingTimeInterval(381))?.bundleID == Self.spotifyID)
+    }
+
     /// The bridge stopping for good (given up, or unable to start) reports nothing: the live
     /// video it reported last doesn't stay "playing" with controls that reach nothing, and
     /// Spotify's own paused song is what is left.

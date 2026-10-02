@@ -268,7 +268,8 @@ public struct BridgeReport: Equatable, Sendable {
 /// 1. Anything playing beats anything paused.
 /// 2. Among equals, the one that changed last wins (the player you touched last): another track,
 ///    starting or stopping, or moved while paused (`changedAt`). A player reporting the same
-///    again, as a browser does every quarter of a minute, isn't newer for it.
+///    again, as a browser does every quarter of a minute, isn't newer for it. A track that ran to
+///    its end and still says it plays (rule 4a) stopped at its end.
 /// 3. Direct app integrations beat the generic system bridge when they describe the same
 ///    track, because they carry richer data (artwork URL, reliable state).
 /// 4. Paused players are forgotten after `pausedTimeout` so a stale track doesn't linger forever.
@@ -427,9 +428,16 @@ public struct MediaArbiter: Sendable {
         changedAt = changedAt.filter { players.contains($0.key) }
     }
 
-    /// Rule 2's moment for a snapshot: when its player last changed, or its own timestamp.
+    /// Rule 2's moment for a snapshot: when its player last changed, or its own timestamp. A track
+    /// shown as stopped at its end (rule 4a, `stoppedAtEnd`) stopped there, though its reports,
+    /// still saying it plays, never said so.
     func changed(_ s: NowPlaying) -> Date {
-        changedAt[Self.playerID(s)] ?? s.timestamp
+        let id = Self.playerID(s)
+        let moment = changedAt[id] ?? s.timestamp
+        guard !s.isPlaying, reports.contains(where: { r in
+            r.isPlaying && r.endsAt == s.timestamp && r.trackKey == s.trackKey && Self.playerID(r) == id
+        }) else { return moment }
+        return max(moment, s.timestamp)
     }
 
     // MARK: Bare clips from unknown apps (rule 8)
