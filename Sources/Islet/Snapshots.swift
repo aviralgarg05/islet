@@ -193,7 +193,7 @@ enum Snapshots {
         model.settings.sizePreset = .compact
         metrics = metricsFor(model.settings)
         // A control press that went nowhere: Automation for the player isn't allowed yet.
-        model.setControlHintForSnapshot("Spotify")
+        model.setControlHintForSnapshot(.allowControl(player: "Spotify"))
         shoot("23b-expanded-media-allow-control")
         model.setControlHintForSnapshot(nil)
         let awake = KeepAwakeSession(since: now, until: now.addingTimeInterval(2 * 3600))

@@ -459,7 +459,7 @@ final class AppModel {
     }
 
     private func startMedia() {
-        systemMedia.onUpdate = { [weak self] np in self?.mediaUpdate(np, source: .system) }
+        systemMedia.onUpdate = { [weak self] report in self?.bridgeUpdate(report) }
         systemMedia.onUnavailable = { [weak self] reason in
             // Fall back to per-player enrichment. It uses AppleScript only where Automation is
             // already allowed, so this never brings up the prompt; Settings → Permissions does.
@@ -1207,7 +1207,7 @@ final class AppModel {
         // A paused player timed out: show whatever is left, or nothing. A track that ran past
         // its end shows as stopped, and a click the player never confirmed shows its real state.
         // (With no player reporting there is nothing to work out, and the demo's song stays.)
-        if media.expire(now: now) || !media.snapshots.isEmpty {
+        if media.expire(now: now) || !media.isEmpty {
             setNowPlaying(media.current(now: now), now: now)
         }
         // A click whose window has ended never arms the timer again, even if the player went.
@@ -1322,12 +1322,20 @@ final class AppModel {
     }
 
     private func mediaUpdate(_ np: NowPlaying?, source: MediaSourceKind) {
-        if source == .system {
-            // The bridge files browsers under .browser; each report replaces both kinds.
-            media.updateFromBridge(np)
-        } else if let np { media.update(np) } else { media.clear(source) }
+        if let np { media.update(np) } else { media.clear(source) }
+        mediaChanged()
+    }
+
+    /// The system bridge's report: every player macOS lists, replacing what it said before.
+    private func bridgeUpdate(_ report: BridgeReport) {
+        media.updateFromBridge(report)
+        mediaChanged()
+    }
+
+    private func mediaChanged() {
         let now = Date()
         setNowPlaying(media.current(now: now), now: now)
+        dropStaleControlHint()
         reschedule()
     }
 
@@ -1603,38 +1611,56 @@ final class AppModel {
         let intent = onShow ? nowPlaying.flatMap { PlaybackIntent.intended(command, on: $0, at: now) } : nil
         let sent = route(command, position: position, to: np)
         // Only for a player that reports back (not the demo's made-up song).
-        if sent, let intent, !media.snapshots.isEmpty {
+        if sent, let intent, !media.isEmpty {
             playbackIntent = intent
             setNowPlaying(media.current(now: now), now: now)
             reschedule()
         }
-        // A press that went nowhere because macOS hasn't allowed Islet to control the player
-        // says so, instead of doing nothing.
-        let hint = np.flatMap { np -> String? in
+        // A press that went nowhere says why, instead of doing nothing: macOS hasn't allowed
+        // Islet to control Music or Spotify, or another app has the controls.
+        let hint = np.flatMap { np -> ControlHint? in
             let r = mediaRoute(for: np)
-            return PlayerIntegration.controlHint(route: r, sent: sent, canScript: r == .player(.spotify) ? spotify.canScript : music.canScript)
+            return PlayerIntegration.hint(
+                for: np, route: r, sent: sent, canScript: r == .player(.spotify) ? spotify.canScript : music.canScript,
+                bridgeRunning: systemMedia.isRunning, appName: np.bundleID.flatMap(Self.appName(bundleID:)),
+                holder: controlsHolderName)
         }
         if controlHint != hint { controlHint = hint }
         return sent
     }
 
-    /// "Allow Islet to control Music": the player whose controls just went nowhere, until a
-    /// control works or the island closes.
-    private(set) var controlHint: String?
+    /// What the open island says after a press on the player on show went nowhere, until a
+    /// control works, another player is picked, that player gets the controls or the island closes.
+    private(set) var controlHint: ControlHint?
 
     /// `--snapshot` draws the hint.
-    func setControlHintForSnapshot(_ player: String?) { controlHint = player }
+    func setControlHintForSnapshot(_ hint: ControlHint?) { controlHint = hint }
+
+    /// The name of the app macOS gives the controls to, if any.
+    private var controlsHolderName: String? {
+        guard systemMedia.isRunning, let id = media.bridgePlayer else { return nil }
+        return media.bridge[id]?.appName ?? media.available(now: Date()).first { MediaArbiter.playerID($0) == id }?.appName
+            ?? Self.appName(bundleID: id)
+    }
+
+    /// "… has the controls" is said only of the player it was said of, while it still has no way
+    /// to be controlled from here.
+    private func dropStaleControlHint() {
+        guard case .otherApp(let h)? = controlHint else { return }
+        if nowPlaying?.bundleID != h.bundleID || nowPlaying.map(mediaRoute(for:)) != MediaRoute.none { controlHint = nil }
+    }
 
     /// The hint's Allow button: Settings → Permissions, at that player's row.
     func openControlPermission() {
-        let kind: PermissionKind = controlHint == "Spotify" ? .automationSpotify : .automationMusic
+        let kind: PermissionKind = controlHint == .allowControl(player: "Spotify") ? .automationSpotify : .automationMusic
         controlHint = nil
         AppActions.openSettings(.permissions, at: "permissions.\(kind.rawValue)")
     }
 
     /// Commands go to the player on show (the one picked in the island, or the newest): the
-    /// bridge only when it is that app's, Music and Spotify otherwise through their own
-    /// integration, so a press on Spotify never pauses a video in Chrome.
+    /// bridge only when macOS gives that app the controls, Music and Spotify otherwise through
+    /// their own integration, and any other player nothing at all, since the bridge would reach
+    /// the app with the controls instead. So a press on Spotify never pauses a video in Chrome.
     private func route(_ command: PlaybackCommand, position: Double?, to target: NowPlaying?) -> Bool {
         guard let np = target else {
             // Nothing on show: the bridge controls whatever macOS considers "now playing".
@@ -1656,7 +1682,8 @@ final class AppModel {
 
     // MARK: Players
 
-    /// The players live now, one per app, newest first. More than one shows as chips in the open island.
+    /// The players to offer, one per app, newest first: every player macOS lists, and Music's,
+    /// Spotify's and the API's while live. More than one shows as chips in the open island.
     var players: [NowPlaying] {
         _ = tick
         return settings.mediaEnabled ? media.available(now: Date()) : []
@@ -1677,17 +1704,27 @@ final class AppModel {
     /// `--snapshot`: several players at once (a Chrome video and a Spotify song), or, with
     /// none, back to the demo's song alone.
     func loadPlayersForSnapshot(_ list: [NowPlaying], bridge: NowPlaying?, now: Date, song: NowPlaying? = nil) {
+        loadPlayersForSnapshot(list, bridge: BridgeReport(bridge), now: now, song: song)
+    }
+
+    /// `--snapshot`: every player macOS lists (`bridge`), with Music's and Spotify's own reports.
+    func loadPlayersForSnapshot(_ list: [NowPlaying], bridge: BridgeReport, now: Date, song: NowPlaying? = nil) {
         media = MediaArbiter(disabled: media.disabled)
         media.hidden = Set(settings.hiddenMediaApps)
         for np in list { media.update(np) }
         media.updateFromBridge(bridge)
         nowPlaying = song ?? media.current(now: now)
-        playingElsewhere = nil
+        playingElsewhere = media.closedIsland(now: now).flatMap { closed in
+            nowPlaying.map(MediaArbiter.playerID) == MediaArbiter.playerID(closed) || nowPlaying?.isPlaying == true ? nil : closed
+        }
+        controlHint = nil
     }
 
-    func openPlayer() {
-        guard let bundle = nowPlaying?.bundleID,
+    /// Brings the player on show forward, or the app with `bundleID` (the hint's Open button).
+    func openPlayer(bundleID: String? = nil) {
+        guard let bundle = bundleID ?? nowPlaying?.bundleID,
               let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) else { return }
+        controlHint = nil
         NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
     }
 

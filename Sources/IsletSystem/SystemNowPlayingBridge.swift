@@ -5,9 +5,11 @@ import IsletCore
 ///
 /// macOS 15.4+ refuses MediaRemote to non-Apple processes, so the helper library runs inside
 /// `/usr/bin/perl` (an Apple platform binary) and streams JSON lines back over a pipe.
-/// Transport commands are written to its stdin. The helper exits when the pipe closes.
+/// Transport commands are written to its stdin, and reach only the player macOS gives the
+/// controls to. The helper exits when the pipe closes.
 public final class SystemNowPlayingBridge {
-    public var onUpdate: ((NowPlaying?) -> Void)?
+    /// Every player macOS lists, and the one that has the controls.
+    public var onUpdate: ((BridgeReport) -> Void)?
     /// Called with a human-readable reason when the bridge can't run.
     public var onUnavailable: ((String) -> Void)?
 
@@ -16,8 +18,8 @@ public final class SystemNowPlayingBridge {
     private var stdout: FileHandle?
     private var startedAt = Date.distantPast
     private var buffer = Data()
-    private var lastArtwork: Data?
-    private var lastArtworkHash: Int?
+    /// Artwork by the hash the helper gives it, for the players in its last report.
+    private var artwork: [Int: Data] = [:]
     private var restarts = HelperRestarts()
     private var stopped = false
 
@@ -196,28 +198,50 @@ public final class SystemNowPlayingBridge {
 
     private func handle(line: Data) {
         guard let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { return }
-        switch obj["type"] as? String {
-        case "nowPlaying":
-            let (np, artHash, art) = Self.parse(obj)
-            if let art { lastArtwork = art; lastArtworkHash = artHash }
-            guard var np else { onUpdate?(nil); return }
-            if artHash != nil, artHash == lastArtworkHash { np.artworkData = lastArtwork }
-            onUpdate?(np)
-        case "error":
+        if let report = Self.report(from: obj, artwork: &artwork) {
+            onUpdate?(report)
+        } else if obj["type"] as? String == "error" {
             onUnavailable?(obj["message"] as? String ?? "MediaRemote error")
-        default:
-            break
         }
     }
 
-    /// Parse one helper line. Pure, for tests. Returns the snapshot, the artwork hash and any new artwork bytes.
+    /// A `players` line (every player macOS lists) or a `nowPlaying` line (the current player
+    /// alone, from a helper on a macOS that can't list them) as a report. Artwork the helper sent
+    /// before comes from `artwork`, by hash, which is left holding what this report uses. Nil
+    /// for any other line. Pure, for tests.
+    public static func report(from o: [String: Any], artwork: inout [Int: Data]) -> BridgeReport? {
+        let entries: [[String: Any]]
+        switch o["type"] as? String {
+        case "players": entries = (o["players"] as? [Any] ?? []).compactMap { $0 as? [String: Any] }
+        case "nowPlaying": entries = [o.merging(["current": true]) { _, new in new }]
+        default: return nil
+        }
+        var players: [NowPlaying] = []
+        var current: String?
+        var used: [Int: Data] = [:]
+        for e in entries {
+            let (parsed, hash, bytes) = parse(e)
+            guard var np = parsed else { continue }
+            if let hash, let art = bytes ?? artwork[hash] {
+                used[hash] = art
+                np.artworkData = art
+            }
+            if e["current"] as? Bool == true { current = MediaArbiter.playerID(np) }
+            players.append(np)
+        }
+        artwork = used
+        return BridgeReport(players: players, current: current)
+    }
+
+    /// Parse one player from a helper line. Pure, for tests. Returns the snapshot, the artwork
+    /// hash and any new artwork bytes.
     public static func parse(_ o: [String: Any]) -> (NowPlaying?, Int?, Data?) {
         if o["empty"] as? Bool == true { return (nil, nil, nil) }
         guard let title = o["title"] as? String, !title.isEmpty else { return (nil, nil, nil) }
-        let bundle = o["bundleID"] as? String
+        let bundle = (o["bundleID"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let source: MediaSourceKind = bundle.flatMap(Browsers.browser(for:)) != nil ? .browser : .system
         // The helper drops numbers JSON can't hold; a live stream has no duration at all.
-        func finite(_ key: String) -> Double? { (o[key] as? Double).flatMap { $0.isFinite ? $0 : nil } }
+        func finite(_ key: String) -> Double? { number(o[key]).flatMap { $0.isFinite ? $0 : nil } }
         let rate = finite("rate") ?? 1
         let playing = (o["playing"] as? Bool) ?? (rate > 0)
         let np = NowPlaying(
@@ -226,11 +250,21 @@ public final class SystemNowPlayingBridge {
             duration: finite("duration").flatMap { $0 > 0 ? $0 : nil },
             elapsed: finite("elapsed"), playbackRate: rate > 0 ? rate : 1,
             timestamp: finite("timestamp").map(Date.init(timeIntervalSince1970:)) ?? Date(),
-            shuffle: MediaModes.shuffle(mediaRemote: o["shuffleMode"] as? Int),
-            repeatMode: MediaModes.repeatMode(mediaRemote: o["repeatMode"] as? Int)
+            shuffle: MediaModes.shuffle(mediaRemote: finite("shuffleMode").flatMap { Int(exactly: $0) }),
+            repeatMode: MediaModes.repeatMode(mediaRemote: finite("repeatMode").flatMap { Int(exactly: $0) })
         )
         let art = (o["artwork"] as? String).flatMap { Data(base64Encoded: $0) }
-        return (np, o["artworkHash"] as? Int, art)
+        let hash = (o["artworkHash"] as? Int) ?? finite("artworkHash").flatMap { Int(exactly: $0) }
+        return (np, hash, art)
     }
 
+    /// A JSON number, whichever way it was read.
+    private static func number(_ value: Any?) -> Double? {
+        switch value {
+        case let d as Double: return d
+        case let i as Int: return Double(i)
+        case let n as NSNumber: return n.doubleValue
+        default: return nil
+        }
+    }
 }

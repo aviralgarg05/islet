@@ -77,9 +77,16 @@ struct NowPlayingHero: View {
             if media.duration != nil {
                 MediaScrubber(model: model, media: media, accent: tint)
             }
-            if let player = model.controlHint {
-                ControlPermissionHint(player: player) { model.openControlPermission() }
-                    .frame(height: TransportControls.height)
+            if let hint = model.controlHint {
+                Group {
+                    switch hint {
+                    case .allowControl(let player):
+                        ControlPermissionHint(player: player) { model.openControlPermission() }
+                    case .otherApp(let other):
+                        OtherAppHintView(hint: other) { model.openPlayer(bundleID: other.bundleID) }
+                    }
+                }
+                .frame(height: TransportControls.height)
             } else if showsSound {
                 SoundControls(model: model).frame(height: TransportControls.height)
             } else {
@@ -98,9 +105,10 @@ struct NowPlayingHero: View {
     }
 }
 
-/// The other players live now (a video in Chrome beside a song in Spotify), as small app icons
-/// beside the title, as many as `NowPlayingTitleRow` leaves room for. Clicking one shows and
-/// controls that player instead; the closed island keeps showing what plays. When there are more
+/// The other players (a video in Chrome beside a song in Spotify, and every other player macOS
+/// lists, however long ago it paused), as small app icons beside the title, as many as
+/// `NowPlayingTitleRow` leaves room for. Clicking one shows and controls that player instead; the
+/// closed island keeps showing what plays. When there are more
 /// players than chips, the last chip counts the rest ("+3") and offers them in a menu. Nothing
 /// shows while there is only one player.
 struct PlayerChips: View {
@@ -325,6 +333,36 @@ struct ControlPermissionHint: View {
         }
         .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
         .help("Opens Settings → Permissions")
+        .frame(maxWidth: .infinity)
+    }
+}
+
+/// In place of the transport after a press went nowhere because macOS gives the controls to
+/// another app (a command would reach that one instead): who has them, and a button that brings
+/// this player's app forward, to control it there.
+struct OtherAppHintView: View {
+    let hint: OtherAppHint
+    let open: () -> Void
+
+    var body: some View {
+        HStack(spacing: Space.s) {
+            Text(hint.message)
+                .textStyle(.caption)
+                .foregroundStyle(Ink.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Button(action: open) {
+                HStack(spacing: Space.xs) {
+                    Image(systemName: "arrow.up.forward.app").font(.system(size: 10, weight: .semibold))
+                    Text(hint.button).lineLimit(1)
+                }
+            }
+            .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
+            .help("Brings \(hint.app) to the front, to control it there")
+            .accessibilityHint("Brings \(hint.app) to the front, to control it there")
+            .layoutPriority(1)
+        }
+        .accessibilityElement(children: .contain)
         .frame(maxWidth: .infinity)
     }
 }
