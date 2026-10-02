@@ -533,23 +533,28 @@ final class GlowNSView: NSView {
         needsLayout = true
         if animate, !didPulse {
             didPulse = true
-            let a = CABasicAnimation(keyPath: "shadowOpacity")
-            a.fromValue = 0.15
-            a.toValue = 0.85
-            a.duration = 0.9
-            a.autoreverses = true
             // A few pulses to catch the eye, then a steady glow: something left waiting
-            // overnight shouldn't keep the window server busy.
-            a.repeatCount = 6
-            a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            // overnight shouldn't keep the window server busy. It starts and ends on the steady
+            // glow, so it never jumps brighter when the pulse stops.
+            let a = CAKeyframeAnimation(keyPath: "shadowOpacity")
+            a.values = Self.pulse
+            a.duration = Self.swing * Double(Self.pulse.count - 1)
+            a.timingFunctions = Array(repeating: CAMediaTimingFunction(name: .easeInEaseOut), count: Self.pulse.count - 1)
             a.capFrameRate()
-            glow.shadowOpacity = 0.5
+            glow.shadowOpacity = Self.steady
             glow.add(a, forKey: "pulse")
         } else if !animate {
             glow.removeAnimation(forKey: "pulse")
-            glow.shadowOpacity = 0.5
+            glow.shadowOpacity = Self.steady
         }
     }
+
+    /// The glow it settles on.
+    static let steady: Float = 0.5
+    /// From the steady glow, swings bright and dim, and back to the steady glow: 10.8 s in all.
+    static let pulse: [Float] = [steady] + (0..<11).map { $0.isMultiple(of: 2) ? 0.85 : 0.15 } + [steady]
+    /// Each swing, bright to dim or back.
+    static let swing: CFTimeInterval = 0.9
 }
 
 // MARK: - Activity appearance (smart icons + per-app rules)
