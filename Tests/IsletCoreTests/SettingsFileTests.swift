@@ -37,6 +37,38 @@ private func scratchFolder(_ name: String) throws -> URL {
         #expect(!FileManager.default.fileExists(atPath: file.brokenCopy.path))
     }
 
+    /// The file watcher sees Islet's own saves too. Reloading one would undo a change made since
+    /// (a slider still moving, an island change waiting for its save), so an echo of our own write
+    /// is told apart from an edit made by someone else.
+    @Test func ownWritesAreToldApartFromOtherEdits() throws {
+        let dir = try scratchFolder("config")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("config.json")
+        var file = SettingsFile(url: url)
+        #expect(!file.holdsOwnWrite(), "nothing written yet")
+
+        var s = IsletSettings()
+        s.hoverToOpen = false
+        #expect(try file.save(s) == .saved)
+        #expect(file.holdsOwnWrite())
+
+        // Saving what is already there is still ours.
+        #expect(try file.save(s) == .unchanged)
+        #expect(file.holdsOwnWrite())
+
+        // Someone else edits the file: that one must be loaded.
+        var other = s
+        other.hoverToOpen = true
+        try other.save(to: url)
+        #expect(!file.holdsOwnWrite())
+        guard case .loaded(let fresh) = file.read() else { Issue.record("expected loaded"); return }
+        #expect(fresh.hoverToOpen)
+
+        // A deleted file is not ours either.
+        try FileManager.default.removeItem(at: url)
+        #expect(!file.holdsOwnWrite())
+    }
+
     @Test func fixingTheFileClearsTheProblem() throws {
         let dir = try scratchFolder("config")
         defer { try? FileManager.default.removeItem(at: dir) }

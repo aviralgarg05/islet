@@ -191,6 +191,9 @@ public struct SettingsFile: Sendable {
     public private(set) var problem: FileProblem?
     /// What `lastGood` holds, once known, so an unchanged file isn't copied again.
     private var lastGoodData: Data?
+    /// The bytes this process last wrote (or found already there when saving), so the echo of its
+    /// own write can be told from someone else's edit (`holdsOwnWrite`).
+    private var lastWritten: Data?
 
     public init(url: URL, lastGood: URL? = nil) {
         self.url = url
@@ -282,13 +285,23 @@ public struct SettingsFile: Sendable {
         problem = nil
         let data = try Self.encode(settings, keeping: kept)
         if data == before {
+            lastWritten = data
             keepLastGood(data)
             return .unchanged
         }
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: url, options: .atomic)
+        lastWritten = data
         keepLastGood(data)
         return .saved
+    }
+
+    /// Whether the file holds exactly what this process last wrote: the file watcher seeing its
+    /// own save. Settings in memory may already be newer than that save (a slider still moving,
+    /// a change waiting for its save), so reloading it would undo them.
+    public func holdsOwnWrite() -> Bool {
+        guard let lastWritten, let data = try? Data(contentsOf: url) else { return false }
+        return data == lastWritten
     }
 
     /// The user chose to replace a file that doesn't parse: a copy goes to `config.json.broken`
@@ -301,6 +314,7 @@ public struct SettingsFile: Sendable {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             let data = try Self.encode(settings, keeping: [:])
             try data.write(to: url, options: .atomic)
+            lastWritten = data
             keepLastGood(data)
             problem = nil
             return
