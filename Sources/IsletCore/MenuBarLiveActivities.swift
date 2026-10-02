@@ -370,8 +370,9 @@ public struct MirrorTracker: Sendable {
 
 /// Names for the sources a right-click muted, as Settings → Apps lists them.
 public enum MutedSources {
-    /// "Uber (Live Activity)" for a mirrored app, the app's name for a bundle id, or the source
-    /// itself ("github-actions").
+    /// "Uber (Live Activity)" for a mirrored app, the app's name for a bundle id, the feature's
+    /// name for one of Islet's own, and for anything else (a script, a hook, CI) its id as
+    /// words: "Github actions (from a script)", never the raw "github-actions".
     public static func displayName(_ source: String, appName: (String) -> String?) -> String {
         if MenuBarLiveActivities.isMirroredSource(source) {
             let prefix = MenuBarLiveActivities.source + ":"
@@ -379,7 +380,19 @@ public enum MutedSources {
             let slug = source.dropFirst(prefix.count).split(separator: "-").map { $0.prefix(1).uppercased() + $0.dropFirst() }
             return slug.joined(separator: " ") + " (Live Activity)"
         }
+        if let own = builtIn[source] { return own }
         if source.contains("."), let name = appName(source) { return name }
-        return source
+        let words = source.split(whereSeparator: { $0 == "-" || $0 == "_" }).joined(separator: " ")
+        guard !words.isEmpty, !source.contains(".") else { return source }
+        return words.prefix(1).uppercased() + words.dropFirst() + " (from a script)"
     }
+
+    /// Islet's own sources, by the feature that sends them.
+    static let builtIn: [String: String] = [
+        TimerEngine.source: "Timers", Stopwatch.source: "Stopwatch", KeepAwake.source: "Keep awake",
+        MeetingReminders.source: "Meeting reminders", "reminders": "Reminders", "downloads": "Downloads",
+        "focus": "Focus", "system": "Islet", "agent-usage": "Usage limits", "claude-code": "Claude Code",
+        "codex": "Codex", "cursor": "Cursor", "battery": "Battery", "audio": "Sound output", "shelf": "Shelf",
+        "shortcuts": "Shortcuts", "preview": "Preview",
+    ]
 }

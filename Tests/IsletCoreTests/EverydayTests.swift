@@ -239,7 +239,10 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         #expect(name("live-activity") == "Live Activities")
         #expect(name("com.tinyspeck.slackmacgap") == "Slack")
         #expect(name("com.example.gone") == "com.example.gone")
-        #expect(name("github-actions") == "github-actions")
+        #expect(name("github-actions") == "Github actions (from a script)")
+        #expect(name("my_backup-job") == "My backup job (from a script)")
+        #expect(name(TimerEngine.source) == "Timers")
+        #expect(name(MeetingReminders.source) == "Meeting reminders")
     }
 
     @Test func scriptsCantUseAnAppsMirroredSource() throws {
