@@ -275,25 +275,25 @@ public enum AppLocation {
                               home: String, replacing: Bool) -> MovePrompt {
         let place = (destination as NSString).deletingLastPathComponent.hasPrefix(home + "/")
             ? "Applications in your home folder" : "Applications"
-        let why: String
-        if translocated {
-            let opened = folder.map { "Islet is still in \($0)" } ?? "Islet hasn't been moved to Applications"
-            why = "\(opened), so macOS runs it from a temporary copy that changes every time it opens."
-        } else {
-            why = "Islet runs from \(folder ?? "outside Applications"). From Applications it opens reliably at login, and connected coding agents keep finding it."
-        }
+        let stillThere = folder.map { "Islet is still in \($0)" } ?? "Islet hasn\u{2019}t been moved to Applications"
         var title = "Move Islet to Applications?"
-        var consequence = translocated ? " Connected coding agents would lose track of it, and it may not open at login." : ""
-        var offer = " Islet can move itself to \(place) and open again from there."
         var cancel = moment == .launch ? "Not now" : "Cancel"
+        // Two sentences: what goes wrong, and what Islet can do about it.
+        let message: String
         if case .connecting(let agent) = moment {
             title = "Move Islet to Applications first?"
-            consequence = " If you connect \(agent) now, it loses track of Islet the next time Islet opens."
-            offer = " Islet can move itself to \(place) and open again, and then you can connect."
+            message = "\(stillThere), so \(agent) would lose track of it the next time Islet opens."
+                + " Islet can move itself to \(place) and reopen, then you can connect."
             cancel = "Cancel"
+        } else if translocated {
+            message = "\(stillThere), so it may not open at login and coding agents can lose track of it."
+                + " Islet can move itself to \(place) and reopen."
+        } else {
+            message = "Islet runs from \(folder ?? "outside Applications"). From Applications it opens reliably at login, and coding agents keep finding it."
+                + " Islet can move itself to \(place) and reopen."
         }
         let replaced = replacing ? " The copy of Islet already there goes to the Bin." : ""
-        return MovePrompt(title: title, message: why + consequence + offer + replaced, confirm: "Move to Applications", cancel: cancel)
+        return MovePrompt(title: title, message: message + replaced, confirm: "Move to Applications", cancel: cancel)
     }
 
     /// The command that opens Islet from its new place once this copy has quit: it waits up to

@@ -53,6 +53,14 @@ public struct RGBA: Equatable, Sendable {
 }
 
 public enum Format {
+    /// A version as About shows it: "0.1.0-dev" is "0.1.0". The full one is kept for feedback
+    /// and the help text.
+    public static func version(_ full: String) -> String {
+        let base = full.split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? full
+        let trimmed = base.split(separator: "+", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? base
+        return trimmed.isEmpty ? full : trimmed
+    }
+
     /// `m:ss` below an hour, `h:mm:ss` above.
     public static func clock(_ seconds: Double) -> String {
         guard seconds.isFinite else { return "--:--" }

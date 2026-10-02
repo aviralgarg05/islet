@@ -1029,21 +1029,34 @@ struct AppRuleRow: View {
 
 // MARK: - About
 
+/// Islet's picture: a black capsule on a dusk gradient. On About, and on Islet's own alerts
+/// when it runs without its app icon (a build from the command line).
+struct IsletTile: View {
+    var size: CGFloat
+
+    var body: some View {
+        let unit = size / 80
+        ZStack {
+            RoundedRectangle(cornerRadius: 18 * unit, style: .continuous)
+                .fill(LinearGradient(colors: [Color(red: 0.36, green: 0.42, blue: 0.62), Color(red: 0.62, green: 0.45, blue: 0.55)],
+                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+            Capsule().fill(Color.black).frame(width: 46 * unit, height: 16 * unit).offset(y: -18 * unit)
+        }
+        .frame(width: size, height: size)
+    }
+}
+
 struct AboutSettings: View {
     var body: some View {
         Form {
             Section {
                 VStack(spacing: 10) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(LinearGradient(colors: [Color(red: 0.36, green: 0.42, blue: 0.62), Color(red: 0.62, green: 0.45, blue: 0.55)],
-                                                 startPoint: .topLeading, endPoint: .bottomTrailing))
-                        Capsule().fill(Color.black).frame(width: 46, height: 16).offset(y: -18)
-                    }
-                    .frame(width: 80, height: 80)
-                    .shadow(color: .black.opacity(0.18), radius: 6, y: 3)
+                    IsletTile(size: 80)
+                        .shadow(color: .black.opacity(0.18), radius: 6, y: 3)
                     Text("Islet").font(.title.bold())
-                    Text("Version \(AppModel.version)").foregroundStyle(.secondary).textSelection(.enabled)
+                    // Without a build's "-dev" suffix; the full version is in the help and in feedback.
+                    Text("Version \(Format.version(AppModel.version))").foregroundStyle(.secondary).textSelection(.enabled)
+                        .help("Version \(AppModel.version)")
                         .settingsAnchor("about.version")
                     Text("An open-source Dynamic Island for the Mac notch.")
                         .multilineTextAlignment(.center)

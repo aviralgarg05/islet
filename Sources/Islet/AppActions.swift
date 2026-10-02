@@ -147,7 +147,8 @@ enum AppActions {
             try AppMover.reopen(at: destination)
         } catch {
             let failed = NSAlert()
-            failed.messageText = "Islet couldn't move itself"
+            failed.icon = alertIcon
+            failed.messageText = "Islet couldn\u{2019}t move itself"
             failed.informativeText = "\(error.localizedDescription) You can drag Islet into Applications in Finder instead."
             failed.addButton(withTitle: "Show in Finder")
             failed.addButton(withTitle: "OK")
@@ -166,11 +167,24 @@ enum AppActions {
         let words = AppLocation.prompt(for: moment, folder: folder, translocated: translocated, destination: destination.path,
                                        home: NSHomeDirectory(), replacing: replacing)
         let alert = NSAlert()
+        alert.icon = alertIcon
         alert.messageText = words.title
         alert.informativeText = words.message
         alert.addButton(withTitle: words.confirm)
         alert.addButton(withTitle: words.cancel)
         return alert
+    }
+
+    /// The icon on Islet's own alerts: the app's icon, or, for a build run from the command line
+    /// (which has none, so the alert would show an empty square), the tile from About.
+    static var alertIcon: NSImage? {
+        if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"), let icon = NSImage(contentsOf: url) {
+            return icon
+        }
+        // A little inset, as app icons have.
+        let renderer = ImageRenderer(content: IsletTile(size: 56).padding(4))
+        renderer.scale = 2
+        return renderer.nsImage
     }
 
     /// The folder a copy sits in, as Finder names it ("Downloads").

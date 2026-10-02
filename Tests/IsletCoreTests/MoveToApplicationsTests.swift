@@ -50,9 +50,8 @@ import Testing
         let p = AppLocation.prompt(for: .launch, folder: "Downloads", translocated: true, destination: "/Applications/Islet.app",
                                    home: Self.home, replacing: false)
         #expect(p.title == "Move Islet to Applications?")
-        #expect(p.message.hasPrefix("Islet is still in Downloads, so macOS runs it from a temporary copy"))
-        #expect(p.message.contains("Connected coding agents would lose track of it"))
-        #expect(p.message.hasSuffix("Islet can move itself to Applications and open again from there."))
+        #expect(p.message == "Islet is still in Downloads, so it may not open at login and coding agents can lose track of it."
+                + " Islet can move itself to Applications and reopen.")
         #expect(p.confirm == "Move to Applications")
         #expect(p.cancel == "Not now")
         #expect(!p.message.contains("Bin"))
@@ -62,8 +61,8 @@ import Testing
         let p = AppLocation.prompt(for: .connecting("Claude Code"), folder: "Downloads", translocated: true,
                                    destination: "/Applications/Islet.app", home: Self.home, replacing: false)
         #expect(p.title == "Move Islet to Applications first?")
-        #expect(p.message.contains("If you connect Claude Code now, it loses track of Islet the next time Islet opens."))
-        #expect(p.message.contains("and then you can connect"))
+        #expect(p.message.contains("Claude Code would lose track of it the next time Islet opens."))
+        #expect(p.message.hasSuffix("and reopen, then you can connect."))
         #expect(p.cancel == "Cancel")
     }
 
@@ -77,7 +76,7 @@ import Testing
         // macOS didn't say where the download is.
         let unknown = AppLocation.prompt(for: .launch, folder: nil, translocated: true, destination: "/Applications/Islet.app",
                                          home: Self.home, replacing: false)
-        #expect(unknown.message.hasPrefix("Islet hasn't been moved to Applications, so macOS runs it"))
+        #expect(unknown.message.hasPrefix("Islet hasn\u{2019}t been moved to Applications, so it may not open at login"))
     }
 
     /// The owner's rules for words people read: plain, British, no em dashes, nothing technical.
@@ -91,6 +90,21 @@ import Testing
                 for word in ["\u{2014}", "translocat", "quarantine", "bundle", "hook", "/", "Trash"] {
                     #expect(!all.contains(word), "\(moment) \(translocated): \(word)")
                 }
+            }
+        }
+    }
+
+    /// The offer is short: what goes wrong, and what Islet can do, in two sentences.
+    @Test func theOfferIsTwoSentences() {
+        let moments: [AppLocation.MoveMoment] = [.launch, .connecting("Codex"), .asked]
+        for moment in moments {
+            for folder in ["Downloads", nil] {
+                let p = AppLocation.prompt(for: moment, folder: folder, translocated: true, destination: "/Applications/Islet.app",
+                                           home: Self.home, replacing: false)
+                let sentences = p.message.split(separator: ".", omittingEmptySubsequences: true)
+                    .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                #expect(sentences.count == 2, "\(moment): \(p.message)")
+                #expect(!p.message.contains("'"), "straight apostrophe in \(p.message)")
             }
         }
     }

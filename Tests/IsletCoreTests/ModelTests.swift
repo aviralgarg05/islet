@@ -459,6 +459,16 @@ import Testing
 }
 
 @Suite struct FormatTests {
+    /// About shows the version without a build's pre-release or build suffix.
+    @Test func versionForAbout() {
+        #expect(Format.version("0.1.0-dev") == "0.1.0")
+        #expect(Format.version("1.2.0-beta.1") == "1.2.0")
+        #expect(Format.version("1.2.0+42") == "1.2.0")
+        #expect(Format.version("1.2.0") == "1.2.0")
+        #expect(Format.version("") == "")
+        #expect(Format.version("-dev") == "-dev")
+    }
+
     @Test func clock() {
         #expect(Format.clock(0) == "0:00")
         #expect(Format.clock(59.9) == "0:59")
