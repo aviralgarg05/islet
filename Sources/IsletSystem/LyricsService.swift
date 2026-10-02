@@ -2,8 +2,9 @@ import Foundation
 import IsletCore
 
 /// Looks up time-synced lyrics on LRCLIB. Only the song's title, artist, album and length are
-/// sent, over an ephemeral session (no cookies, no cache), and each song's answer is kept in
-/// `cache` so it is asked once. Used only while the user has lyrics turned on.
+/// sent (for a browser's song, as `BrowserSong` reads its title), over an ephemeral session (no
+/// cookies, no cache), and each song's answer is kept in `cache` so it is asked once. Used only
+/// while the user has lyrics turned on.
 public final class LyricsService {
     public let cache: LyricsCache
     private let userAgent: String
@@ -49,11 +50,11 @@ public final class LyricsService {
     }
 
     private func fetch(_ query: LyricsQuery) async throws -> LyricsLookup {
-        if let record: LRCLIBRecord = try await get(LRCLIB.getURL(query)), let lyrics = LRCLIB.lyrics(from: record) {
+        if let record: LRCLIBRecord = try await get(LRCLIB.getURL(query)), let lyrics = LRCLIB.lyrics(from: record, for: query) {
             return .found(lyrics)
         }
         let records: [LRCLIBRecord] = try await get(LRCLIB.searchURL(query)) ?? []
-        if let best = LRCLIB.best(records, for: query), let lyrics = LRCLIB.lyrics(from: best) {
+        if let best = LRCLIB.best(records, for: query), let lyrics = LRCLIB.lyrics(from: best, for: query) {
             return .found(lyrics)
         }
         return .missing

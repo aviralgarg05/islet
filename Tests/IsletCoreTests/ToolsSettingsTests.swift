@@ -6,6 +6,7 @@ import Testing
     @Test func everyToolStartsOff() {
         let s = IsletSettings()
         #expect(!s.lyricsEnabled)
+        #expect(!s.lyricsIncludeBrowsers)
         #expect(!s.shortcutsEnabled)
         #expect(!s.weatherEnabled)
         #expect(!s.weatherUsesLocation)
@@ -14,9 +15,21 @@ import Testing
         #expect(s.focusSound == .off)
     }
 
+    /// A config written before browsers had lyrics, with lyrics on, keeps browsers off.
+    @Test func browserLyricsStayOffForOldConfigs() throws {
+        let old = IsletSettings.decodeLenient(Data(#"{"lyricsEnabled": true, "mediaEnabled": true}"#.utf8))
+        #expect(old.lyricsEnabled)
+        #expect(!old.lyricsIncludeBrowsers)
+        let wrong = IsletSettings.decodeLenient(Data(#"{"lyricsEnabled": true, "lyricsIncludeBrowsers": "yes"}"#.utf8))
+        #expect(wrong.lyricsEnabled)
+        #expect(!wrong.lyricsIncludeBrowsers)
+        #expect(SettingsIndex.entries.contains { $0.id == "nowPlaying.lyricsBrowsers" && $0.anchor == "nowPlaying.lyricsBrowsers" })
+    }
+
     @Test func toolSwitchesRoundTripThroughTheConfigFile() throws {
         var s = IsletSettings()
         s.lyricsEnabled = true
+        s.lyricsIncludeBrowsers = true
         s.shortcutsEnabled = true
         s.monthCalendar = true
         s.stopwatchEnabled = true
@@ -30,6 +43,8 @@ import Testing
     @Test(arguments: [
         ("lyrics", SettingsPage.nowPlaying),
         ("karaoke", .nowPlaying),
+        ("YouTube Music", .nowPlaying),
+        ("lyrics browser", .nowPlaying),
         ("weather", .tools),
         ("fahrenheit", .tools),
         ("forecast", .tools),

@@ -341,6 +341,8 @@ public enum SettingsIndex {
                       keywords: ["color", "artwork", "indicator colour", "progress bar", "scrubber", "tint"]),
         SettingsEntry("nowPlaying.lyrics", .nowPlaying, "Show lyrics", section: "Lyrics",
                       keywords: ["words", "sing along", "karaoke", "synced", "LRCLIB", "Spotify", "Music"]),
+        SettingsEntry("nowPlaying.lyricsBrowsers", .nowPlaying, "Also for music in a web browser", section: "Lyrics",
+                      keywords: ["lyrics", "YouTube", "YouTube Music", "Chrome", "Safari", "Arc", "Firefox", "Edge", "Brave", "web player"]),
 
         SettingsEntry("live.enabled", .liveActivities, "Show Live Activities",
                       keywords: ["iPhone", "rides", "deliveries", "scores", "flights", "Uber"]),

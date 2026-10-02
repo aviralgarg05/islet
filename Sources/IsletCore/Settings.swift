@@ -387,6 +387,10 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// Time-synced lyrics beside what's playing. Sends the song's title, artist, album and
     /// length to LRCLIB, so it waits to be turned on.
     public var lyricsEnabled = false
+    /// Lyrics also for songs playing in a web browser (YouTube, YouTube Music and so on), which
+    /// sends the title of what the browser plays once it reads as a song. Off until turned on;
+    /// a config from before it existed leaves it off.
+    public var lyricsIncludeBrowsers = false
     /// A month calendar beside today's events on the Today page.
     public var monthCalendar = false
     /// A page that searches and runs the user's shortcuts, also offered in the Ask box.

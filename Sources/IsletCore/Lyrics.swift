@@ -138,6 +138,14 @@ public struct LyricsQuery: Equatable, Sendable {
     public var album: String?
     /// Seconds.
     public var duration: Double?
+    /// From a web browser, whose length may be a video's rather than the recording's: a match
+    /// whose length differs a little shows its words without their times (`LRCLIB.lyrics(from:for:)`).
+    public var fromBrowser = false
+    /// What LRCLIB's search gets in place of the title and artist, when a browser's report leaves
+    /// the artist in doubt (`BrowserSong.Song.unsure`).
+    public var searchText: String?
+    /// Another title a found song may have: "A - B" read the other way round.
+    public var otherTitle: String?
 
     public init(title: String, artist: String, album: String? = nil, duration: Double? = nil) {
         self.title = title
@@ -149,18 +157,59 @@ public struct LyricsQuery: Equatable, Sendable {
     /// Players whose songs have lyrics worth looking up: Music and Spotify.
     public static let players: Set<String> = ["com.apple.Music", "com.spotify.client"]
 
-    /// The query for what's playing, or nil when it isn't a song from Music or Spotify (a video,
-    /// a podcast in a browser, an advert), so nothing about it is sent.
-    public init?(_ np: NowPlaying) {
-        let fromPlayer = np.source == .appleMusic || np.source == .spotify || np.bundleID.map(Self.players.contains) == true
+    /// How long a song is: half a minute to a quarter of an hour. Shorter is an advert or a
+    /// clip, longer a mix, a live stream or an audiobook.
+    public static let songLength: ClosedRange<Double> = 30...(15 * 60)
+
+    /// Where a track plays, for lyrics.
+    public enum Origin: Equatable, Sendable {
+        /// Music or Spotify.
+        case player
+        /// A web browser: YouTube, YouTube Music, Spotify's or Apple Music's web player and so on.
+        case browser
+    }
+
+    /// Music and Spotify, or a web browser; nil for every other app (a podcast app, a video call).
+    public static func origin(of np: NowPlaying) -> Origin? {
+        if np.source == .appleMusic || np.source == .spotify || np.bundleID.map(players.contains) == true { return .player }
+        if np.source == .browser || np.bundleID.flatMap(Browsers.browser(for:)) != nil { return .browser }
+        return nil
+    }
+
+    /// The query for what's playing, or nil when it doesn't look like a song, so nothing about it
+    /// is sent. A song has a title and an artist and lasts `songLength`; only Music and Spotify
+    /// may leave the length out. A browser's track counts only with `includeBrowsers`, and only
+    /// once its title reads as a song (`BrowserSong`), which also leaves out live streams.
+    public init?(_ np: NowPlaying, includeBrowsers: Bool = false) {
+        guard let origin = Self.origin(of: np), origin == .player || includeBrowsers else { return nil }
         let title = np.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let artist = (np.artist ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard fromPlayer, !title.isEmpty, !artist.isEmpty else { return nil }
-        // Spotify's adverts and very long tracks (mixes, audiobooks) have no lyrics to find.
-        if let d = np.duration, d > 0, d < 15 || d > 20 * 60 { return nil }
-        let album = np.album?.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.init(title: title, artist: artist, album: album?.isEmpty == false ? album : nil,
-                  duration: np.duration.flatMap { $0 > 0 ? $0 : nil })
+        guard !title.isEmpty, !artist.isEmpty else { return nil }
+        let duration = np.duration.flatMap { $0 > 0 ? $0 : nil }
+        if let duration {
+            guard Self.songLength.contains(duration) else { return nil }
+        } else if origin == .browser {
+            return nil
+        }
+        let trimmedAlbum = np.album?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let album = trimmedAlbum?.isEmpty == false ? trimmedAlbum : nil
+        guard origin == .browser else {
+            self.init(title: title, artist: artist, album: album, duration: duration)
+            return
+        }
+        guard let song = BrowserSong.song(title: title, artist: artist, album: album) else { return nil }
+        self.init(title: song.title, artist: song.artist, album: album, duration: duration)
+        fromBrowser = true
+        if song.unsure {
+            searchText = [song.otherTitle, song.title].compactMap { $0 }.joined(separator: " ")
+            otherTitle = song.otherTitle
+        }
+    }
+
+    /// Whether the song on show could have lyrics with every lyrics switch on: the lyrics button
+    /// shows for these.
+    public static func couldHaveLyrics(_ np: NowPlaying) -> Bool {
+        LyricsQuery(np, includeBrowsers: true) != nil
     }
 
     /// One cache entry per song: the same title, artist, album and whole seconds.
@@ -206,8 +255,10 @@ public enum LRCLIB {
         return url("/api/get", items)
     }
 
-    /// When the exact match fails: `/api/search` with the same title, artist and album.
+    /// When the exact match fails: `/api/search` with the same title, artist and album, or, when a
+    /// browser's report leaves the artist in doubt, with the words of its title (`searchText`).
     public static func searchURL(_ q: LyricsQuery) -> URL {
+        if let text = q.searchText { return url("/api/search", [URLQueryItem(name: "q", value: text)]) }
         var items = [URLQueryItem(name: "track_name", value: q.title), URLQueryItem(name: "artist_name", value: q.artist)]
         if let album = q.album { items.append(URLQueryItem(name: "album_name", value: album)) }
         return url("/api/search", items)
@@ -233,26 +284,67 @@ public enum LRCLIB {
         return lyrics.isEmpty ? nil : lyrics
     }
 
+    /// What a record says about `q`'s song. A browser's track whose length differs from the
+    /// record's by more than `sameLength` is most likely a video with an intro, so its words show
+    /// without their times, which would run early.
+    public static func lyrics(from r: LRCLIBRecord, for q: LyricsQuery) -> SongLyrics? {
+        guard var found = lyrics(from: r) else { return nil }
+        if q.fromBrowser, found.isSynced, !isSameLength(r, q) {
+            if found.plain == nil { found.plain = found.lines.map(\.text).joined(separator: "\n") }
+            found.lines = []
+        }
+        return found
+    }
+
+    /// Seconds two lengths may differ by and still be one recording.
+    public static let sameLength: Double = 2.5
+    /// How much longer or shorter a browser's video may be than the song it plays.
+    public static let videoLength: Double = 60
+
     /// The best of a search's records for the song: the same length within a couple of seconds
     /// (any length when the song's is unknown), synced lyrics before plain, then the closest length.
+    /// A browser's video may run up to `videoLength` longer or shorter than the song, if the record
+    /// has the same title; and when its artist is in doubt, only a record with one of its titles
+    /// counts.
     public static func best(_ records: [LRCLIBRecord], for q: LyricsQuery) -> LRCLIBRecord? {
         let candidates = records.filter { r in
             guard lyrics(from: r) != nil else { return false }
+            let titled = titleMatch(r, q) > 0
+            if q.searchText != nil, !titled { return false }
             guard let d = q.duration, let rd = r.duration else { return true }
-            return abs(d - rd) <= 2.5
+            return abs(d - rd) <= sameLength || q.fromBrowser && titled && abs(d - rd) <= videoLength
         }
         return candidates.enumerated().min { a, b in
+            let la = isSameLength(a.element, q), lb = isSameLength(b.element, q)
+            if la != lb { return la }
             let sa = a.element.syncedLyrics?.isEmpty == false, sb = b.element.syncedLyrics?.isEmpty == false
             if sa != sb { return sa }
-            let ta = sameTitle(a.element, q), tb = sameTitle(b.element, q)
-            if ta != tb { return ta }
+            let ta = titleMatch(a.element, q), tb = titleMatch(b.element, q)
+            if ta != tb { return ta > tb }
             let da = distance(a.element, q), db = distance(b.element, q)
             return da != db ? da < db : a.offset < b.offset
         }?.element
     }
 
-    private static func sameTitle(_ r: LRCLIBRecord, _ q: LyricsQuery) -> Bool {
-        r.trackName?.compare(q.title, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+    private static func isSameLength(_ r: LRCLIBRecord, _ q: LyricsQuery) -> Bool {
+        guard let d = q.duration, let rd = r.duration else { return true }
+        return abs(d - rd) <= sameLength
+    }
+
+    /// How well the record's title is the song's (or its other title): 2 the same, ignoring
+    /// case and accents; 1 the same once what follows in brackets or after a dash is left out
+    /// ("Kesariya (From \"Brahmastra\")", "Midnight City (Live)"); 0 another title.
+    static func titleMatch(_ r: LRCLIBRecord, _ q: LyricsQuery) -> Int {
+        guard let name = r.trackName else { return 0 }
+        let full = BrowserSong.key(name), bare = BrowserSong.key(BrowserSong.bareTitle(name))
+        var best = 0
+        for title in [q.title, q.otherTitle].compactMap({ $0 }) {
+            let k = BrowserSong.key(title)
+            guard !k.isEmpty else { continue }
+            if k == full { return 2 }
+            if k == bare || BrowserSong.key(BrowserSong.bareTitle(title)) == bare { best = 1 }
+        }
+        return best
     }
 
     private static func distance(_ r: LRCLIBRecord, _ q: LyricsQuery) -> Double {
