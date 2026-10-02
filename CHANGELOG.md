@@ -13,6 +13,14 @@
 - The Ask chip in the island now changes the provider in Settings → Ask & AI, and it's kept after a restart. A link's provider lasts until the island closes.
 - Changes made while `config.json` has a typo are kept when it's fixed, rather than lost.
 - Edits to `config.json` by hand always load, including undoing one and a config folder replaced by a dotfiles tool. With Settings open, Islet no longer rewrites a file you edited by hand.
+- **Mute** in the island now silences Islet's own cards too: battery, sound output, keep awake and welcome back. A battery about to run out still warns you.
+- An app muted from the island shows as muted in its row on the Apps page, and a muted feature, such as meeting reminders, is listed on its own page with **Unmute**.
+- Unmuting brings back a running timer, stopwatch, meeting reminder or keep awake at once, and so does **Reset**.
+- Settings follows Accessibility, camera and location changes made in System Settings while it's open.
+- Turning Accessibility off and on again no longer hands the volume and brightness keys back to macOS's display.
+- Turning on Lyrics shows the playing song's lyrics at once, not from the next song.
+- After a smaller size, the closed island starts at the new width instead of shrinking to it, and bubbles moved to the left of the notch can be clicked at once.
+- Opening the lid of a Mac that started with it closed shows Islet's brightness display when you change the brightness.
 
 ## 0.2.0 (2 October 2026)
 
