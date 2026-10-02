@@ -33,4 +33,39 @@ import Testing
         #expect(doc.contains("same setting as Settings → Ask & AI → Answer with"))
         #expect(doc.contains("picks the provider until the island closes"))
     }
+
+    /// The chips offer every player macOS lists, and the bridge's commands go only to the one
+    /// macOS gives the controls to; the docs say so.
+    @Test func theNowPlayingDocsDescribeEveryPlayer() throws {
+        let architecture = try text("docs/ARCHITECTURE.md")
+        #expect(architecture.contains("MRMediaRemoteGetNowPlayingClients"))
+        #expect(architecture.contains("through the bridge only when macOS gives that app the controls"))
+        #expect(!architecture.contains("only when the bridge is reporting that app"))
+        #expect(try text("docs/API.md").contains("through the system's Now Playing when macOS gives that app the controls"))
+        #expect(try text("README.md").contains("switch between every player macOS lists"))
+        let helper = try text("Helpers/MediaRemoteBridge/IsletMediaRemote.m")
+        #expect(helper.contains("{\"type\":\"players\",\"players\":[<player>, ...]}"))
+    }
+
+    /// mediaremoted sends a targeted command from Islet's helper to the current player instead,
+    /// so the helper must never even look one up: a pause for a Safari tab would pause Chrome.
+    @Test func theHelperLoadsOnlyUntargetedCommands() throws {
+        let helper = try text("Helpers/MediaRemoteBridge/IsletMediaRemote.m")
+        let pattern = try NSRegularExpression(pattern: #"dlsym\(gMR, "(\w+)"\)"#)
+        let names = Set(pattern.matches(in: helper, range: NSRange(helper.startIndex..., in: helper)).compactMap {
+            Range($0.range(at: 1), in: helper).map { String(helper[$0]) }
+        })
+        #expect(names == [
+            "MRMediaRemoteGetNowPlayingInfo", "MRMediaRemoteRegisterForNowPlayingNotifications",
+            "MRMediaRemoteGetNowPlayingApplicationIsPlaying", "MRMediaRemoteGetNowPlayingClient",
+            "MRMediaRemoteGetNowPlayingClients", "MRMediaRemoteGetNowPlayingInfoForPlayer",
+            "MRMediaRemoteSendCommand", "MRMediaRemoteSetElapsedTime", "MRMediaRemoteSetShuffleMode",
+            "MRMediaRemoteSetRepeatMode",
+        ])
+        // Nor named anywhere else in code (the comment that warns against them names them unquoted).
+        for targeted in ["SendCommandToApp", "SendCommandToClient", "SendCommandToPlayer", "SendCommandToPlayerWithResult",
+                         "SetElapsedTimeForPlayer", "SetShuffleModeForPlayer", "SetRepeatModeForPlayer"] {
+            #expect(!helper.contains("\"MRMediaRemote\(targeted)\""), "\(targeted)")
+        }
+    }
 }
