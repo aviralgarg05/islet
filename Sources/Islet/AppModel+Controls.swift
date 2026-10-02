@@ -128,25 +128,25 @@ extension AppModel {
         case .compact(.nowPlaying(let np)), .songPeek(let np): shown = np
         default: shown = nil
         }
-        // No snap for a move the player can't make (next in a video outside a playlist).
-        let target = shown ?? nowPlaying
-        let refused = action == .nextTrack && target?.takes(.next) == false
-            || action == .previousTrack && target?.takes(.previous) == false
-        if action != .expand, !refused { Haptics.play(.snap) }
+        // The music moves snap only once sent: not for a move the player can't make (next in a
+        // video outside a playlist), one nothing would reach (another app has the controls), or a
+        // jump in a live stream.
         switch action {
         case .expand:
             setExpanded(display)
         case .collapse:
+            Haptics.play(.snap)
             pinned = false
             controls.hoverOpenBlocked = true
             setExpanded(nil)
         case .nextTrack:
-            send(.next, to: shown)
+            if send(.next, to: shown) { Haptics.play(.snap) }
         case .previousTrack:
-            send(.previous, to: shown)
+            if send(.previous, to: shown) { Haptics.play(.snap) }
         case .seek(let delta):
-            skip(by: delta, on: shown)
+            if skip(by: delta, on: shown) { Haptics.play(.snap) }
         case .cycle(let forward):
+            Haptics.play(.snap)
             let current = focusedActivity(for: p)?.id
             if let next = CompactCycle.next(after: current, in: activities, forward: forward) {
                 controls.focusedActivityID = next
