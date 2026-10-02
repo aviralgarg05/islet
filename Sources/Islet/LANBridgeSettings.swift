@@ -8,8 +8,11 @@ struct LANBridgeSection: View {
     @Bindable var model: AppModel
     @ViewState private var copied = false
     @ViewState private var confirming = false
+    @Environment(\.snapshotMode) private var snapshotMode
 
     private var enabled: Bool { model.settings.lanBridgeEnabled }
+    /// The bridge only runs while the local API does.
+    private var apiOn: Bool { model.settings.apiEnabled }
 
     var body: some View {
         Section {
@@ -17,10 +20,17 @@ struct LANBridgeSection: View {
                 Text("Accept requests from this network")
                 Text("Lets Shortcuts on your iPhone, Home Assistant and other devices on this network show things in the island.")
             }
+            .disabled(!apiOn)
             .task(id: enabled) {
                 if enabled { model.lan.loadToken() }
             }
             .settingsAnchor("advanced.bridge")
+            if !apiOn {
+                HStack(spacing: 10) {
+                    Image(systemName: "info.circle").foregroundStyle(.secondary).font(.callout)
+                    Text("Needs Accept requests from apps on this Mac.").font(.callout).foregroundStyle(.secondary)
+                }
+            }
             LabeledContent("Status") { Text(model.lan.status).foregroundStyle(.secondary) }
             LabeledContent("Port") { PortField(port: $model.settings.lanPort, other: model.settings.apiPort) }
                 .settingsAnchor("advanced.bridgePort")
@@ -51,7 +61,7 @@ struct LANBridgeSection: View {
             if enabled {
                 // Verbatim, so the port isn't shown as "47,832".
                 CodeBlock(title: "In Shortcuts on iPhone, add Get Contents of URL",
-                          code: "POST http://\(ProcessInfo.processInfo.hostName):\(model.settings.lanPort)/v1/notify\nAuthorization: Bearer <token>\n{\"title\": \"…\"}")
+                          code: "POST http://\(host):\(model.settings.lanPort)/v1/notify\nAuthorization: Bearer <token>\n{\"title\": \"…\"}")
             }
         } header: {
             Text("iPhone bridge")
@@ -59,6 +69,9 @@ struct LANBridgeSection: View {
             SettingsFooter("The bridge is not encrypted, so anyone on this network can read what is sent, token included. It only takes notifications, timers, Focus and simple activities, without links, buttons or image files, and its token doesn't work on the local API.")
         }
     }
+
+    /// This Mac's name on the network; snapshots show a stand-in rather than the real one.
+    private var host: String { snapshotMode ? "my-mac.local" : ProcessInfo.processInfo.hostName }
 
     /// Concealed and transient, so clipboard managers skip it. Unlike the API token it isn't
     /// kept to this Mac: the token is needed on the iPhone.

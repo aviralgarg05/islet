@@ -17,9 +17,18 @@ struct CodingAgentsSettings: View {
         Form {
             Section { SettingsHero(page: .agents) }
             Section {
+                // Agents reach Islet through the same door as scripts: with it shut, a connected
+                // agent's updates and requests go nowhere.
+                if !model.settings.apiEnabled {
+                    AccessRow(text: "Islet isn\u{2019}t accepting requests from apps, so connected agents can\u{2019}t reach it.",
+                              button: "Turn on") {
+                        model.settings.apiEnabled = true
+                    }
+                }
                 ForEach(CodingAgent.allCases) { agent in
                     AgentConnectionRow(agent: agent, connection: connections[agent], note: notes[agent],
-                                       moved: model.agentsNeedingUpdate.contains(agent)) {
+                                       moved: model.agentsNeedingUpdate.contains(agent),
+                                       unreachable: !model.settings.apiEnabled) {
                         preview(agent)
                     } disconnect: {
                         previewDisconnect(agent)
@@ -153,6 +162,8 @@ private struct PendingConnection: Identifiable {
 /// or disconnect it.
 private struct AgentConnectionRow: View {
     let agent: CodingAgent
+    /// Islet isn't accepting requests from apps, so even a connected agent can't reach it.
+    let unreachable: Bool
     let connection: AgentConnection?
     let note: String?
     /// Its hooks call an isletctl that isn't there any more.
@@ -195,6 +206,7 @@ private struct AgentConnectionRow: View {
     private func detail(_ c: AgentConnection) -> String {
         switch c {
         case .problem(let why): return why
+        case .connected where unreachable: return "Connected, but can\u{2019}t reach Islet"
         case .needsUpdate:
             return moved ? "Islet has moved since it was connected, so \(agent.title) can't reach it. Update it to fix this."
                 : "Connected to an older setup. Update it so it keeps working as you set below."
@@ -205,7 +217,7 @@ private struct AgentConnectionRow: View {
 
     private func colour(_ c: AgentConnection) -> Color {
         switch c {
-        case .connected: return .green
+        case .connected: return unreachable ? .orange : .green
         case .needsUpdate, .problem: return .orange
         default: return Color.secondary.opacity(0.5)
         }

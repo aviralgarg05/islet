@@ -222,6 +222,20 @@ enum SettingsSnapshots {
             RunLoop.main.run(until: Date().addingTimeInterval(0.2))
             navigation.open(.agents)
             RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+            // Requests from apps turned off: connected agents can't reach Islet, and the iPhone
+            // bridge says what it needs.
+            var apiOff = sampleSettings
+            apiOff.apiEnabled = false
+            apiOff.lanBridgeEnabled = true
+            model.settings = apiOff
+            navigation.open(.general)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+            navigation.open(.agents)
+            shoot("agents-api-off", in: extra, dark: false)
+            navigation.open(.advanced, at: "advanced.bridge")
+            shoot("advanced-bridge-api-off", in: extra, dark: false)
+            model.settings = sampleSettings
+            RunLoop.main.run(until: Date().addingTimeInterval(0.5))
             window.setContentSize(SettingsWindow.minimumSize)
             for (i, page) in SettingsPage.allCases.enumerated() {
                 navigation.open(page)

@@ -36,6 +36,7 @@ Islet now shows the Live Activities your iPhone sends to the Mac, lets you answe
 - If Islet isn't running or you don't answer in time, the agent asks in the terminal as usual. A card that runs out of time leaves the agent's status saying **Answer in the terminal**, so it never waits unseen.
 - **Status for every agent.** Codex and Cursor now show each session (Thinking, the running command, Waiting, Done), as Claude Code does. Codex's older `notify` setup still works.
 - Settings → Coding agents connects each agent with one button, showing the change first. If Islet.app moves, the agent's row says so and **Update…** fixes it. **Disconnect…** removes Islet's hooks and nothing else.
+- With **Accept requests from apps on this Mac** off, Coding agents says connected agents can't reach Islet and offers **Turn on**, and the iPhone bridge's switch says it needs it.
 - **MCP.** `isletctl mcp` lets agents show progress, notes and timers in the notch.
 - An agent's status and Codex's last message hide anything that looks like a key or password. Approval cards still show the whole command, so you see what you're allowing.
 - An agent's status reads in words: "Running swift build" without the `cd` into the project before it, and other tools by what they do. Approval cards show a tool's details as plain lines, and **Always** says what it allows ("commands starting with “npm test”").
