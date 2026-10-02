@@ -95,9 +95,9 @@ public enum IslandMotion {
     // MARK: Shape first, content after
 
     /// Content starts fading in this long after the shell starts moving.
-    public static let contentDelay = 0.10
+    public static let contentDelay = 0.16
     /// Closing, the smaller shape's content waits until the shell has mostly closed.
-    public static let contentDelayClosing = 0.18
+    public static let contentDelayClosing = 0.32
     /// How long content takes to fade and scale in.
     public static let contentFade = 0.24
     /// Content scales in from this.
@@ -107,7 +107,7 @@ public enum IslandMotion {
     /// Closing waits this long, so the content is gone before the shell moves.
     public static let closeDelay = 0.06
     /// The page switcher starts rising this long after the shell, 0.06 s after the content.
-    public static let switcherDelay = 0.16
+    public static let switcherDelay = 0.22
     /// Each later part of the switcher (the discs beside the capsule) starts this much later.
     public static let switcherStep = 0.05
     /// How far the switcher's parts rise as they fade in.
