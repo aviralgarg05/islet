@@ -149,6 +149,23 @@ import Testing
         #expect(ClipFilter.kind(.colour).title == "Colours")
     }
 
+    @Test func aFilterNoLongerOfferedComesToAll() {
+        var h = ClipboardHistory()
+        h.add("plain", types: [], sourceBundleID: nil, now: t0)
+        #expect(h.resolved(.pinned) == .all)
+        h.togglePin(id: h.entries[0].id)
+        #expect(h.resolved(.pinned) == .pinned)
+        // The last pinned clip unpinned: Pinned is gone from the bar, and the choice with it.
+        h.togglePin(id: h.entries[0].id)
+        #expect(h.resolved(.pinned) == .all)
+        // The last picture removed: Images goes the same way.
+        h.add(.image(image(1_000)), types: [], sourceBundleID: nil, now: t0)
+        #expect(h.resolved(.kind(.image)) == .kind(.image))
+        h.remove(id: h.entries.first { $0.kind == .image }!.id)
+        #expect(h.resolved(.kind(.image)) == .all)
+        #expect(h.resolved(.all) == .all)
+    }
+
     @Test func copyingFromThePageMovesItToTheTop() {
         var h = ClipboardHistory()
         h.add(.files(["/tmp/a.txt"]), types: [], sourceBundleID: "com.apple.finder", now: t0)

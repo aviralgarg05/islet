@@ -95,7 +95,16 @@ final class AppModel {
     private(set) var clipboard = ClipboardHistory() {
         // Thumbnails of pictures that have left the history (removed, cleared, or history
         // turned off) are forgotten with them.
-        didSet { ClipThumbnails.forget(except: clipboard.entries) }
+        didSet {
+            ClipThumbnails.forget(except: clipboard.entries)
+            // A filter the Clipboard page no longer offers goes back to All, whatever took its
+            // last clip away (unpinned, removed, cleared, trimmed or ignored).
+            if clipboard.filters != oldValue.filters {
+                let page = tools.clipboardPage
+                let filter = clipboard.resolved(page.filter)
+                if filter != page.filter { page.filter = filter }
+            }
+        }
     }
     private(set) var stats: SystemStats?
     private(set) var plugins: [String: PluginResult] = [:]

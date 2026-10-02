@@ -383,6 +383,13 @@ public struct ClipboardHistory: Codable, Equatable, Sendable {
         return out
     }
 
+    /// The filter a choice comes to: the choice while the bar offers it, All once it doesn't
+    /// (the last pinned clip unpinned, the last picture removed). The page forgets a choice it
+    /// no longer offers, so a later copy doesn't switch the list back to it unasked.
+    public func resolved(_ filter: ClipFilter) -> ClipFilter {
+        filters.contains(filter) ? filter : .all
+    }
+
     public mutating func togglePin(id: String) {
         guard let i = entries.firstIndex(where: { $0.id == id }) else { return }
         entries[i].pinned.toggle()

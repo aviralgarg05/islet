@@ -24,7 +24,7 @@ struct ClipboardTab: View {
         } else {
             let page = model.tools.clipboardPage
             let filters = model.clipboard.filters
-            let active = filters.contains(page.filter) ? page.filter : .all
+            let active = model.clipboard.resolved(page.filter)
             let entries = model.clipboard.filtered(page.query, filter: active)
             VStack(alignment: .leading, spacing: Space.s) {
                 HStack(spacing: Space.s) {
