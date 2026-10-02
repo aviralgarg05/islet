@@ -18,7 +18,9 @@ api() { curl -s -o /dev/null -X "$1" -H "Authorization: Bearer $TOKEN" -H 'Conte
 secs() { ps -o time= -p "$PID" | awk -F: '{ s=0; for (i=1;i<=NF;i++) s=s*60+$i; print s }'; }
 FAIL=0
 measure() { # name budget%
-    sleep 3
+    # Let the change settle first: a transition (a peek, the island opening) is a moment's work,
+    # not the state's cost.
+    sleep 6
     local a b pct
     a=$(secs); sleep "$SECS"; b=$(secs)
     pct=$(python3 -c "print(round(($b-$a)/$SECS*100, 2))")
@@ -26,6 +28,8 @@ measure() { # name budget%
     [ "$ok" = ok ] || FAIL=1
     printf '  %-32s %6s%%   (budget %s%%) %s\n' "$1" "$pct" "$2" "$ok"
 }
+# Launch work (loading, the first drawing of blurs and glass) isn't the idle cost either.
+sleep 10
 echo "CPU over ${SECS}s per state:"
 measure "idle" 0.5
 ctl timer 5m --title Tea;                          measure "compact: live countdown" 1.5

@@ -269,6 +269,10 @@ private struct GlassBody: View {
     @Environment(\.shellClock) private var clock
     @Environment(\.islandMotion) private var motion
     @Environment(\.reduceMotionAnywhere) private var reduceMotion
+    /// The glass stays a moment after the island closes, so it fades while shrinking with the
+    /// shell, and then goes. Left in place, even at no opacity, a glass effect and the sheen keep
+    /// working behind the closed island.
+    @ViewState private var glassHeld = false
 
     var body: some View {
         // A glass pill has no black to come and go: it stays glass, closed or open.
@@ -287,9 +291,12 @@ private struct GlassBody: View {
             : expanded ? .easeOut(duration: GlassMelt.melt * k).delay(GlassMelt.meltDelay * k)
             : .easeIn(duration: GlassMelt.unmelt * k)
         let restyle: Animation? = off ? nil : .easeInOut(duration: Self.restyle * k)
+        let liveGlass = closedGlass || expanded || glassHeld || (clock != nil && l.glass > 0)
         ZStack {
-            GlassSurface(shape: shape, tint: Color.black.opacity(0.2), fallback: Color(white: 0.13).opacity(0.78))
-                .animation(glassFade) { $0.opacity(closedGlass ? 1 : l.glass) }
+            if liveGlass {
+                GlassSurface(shape: shape, tint: Color.black.opacity(0.2), fallback: Color(white: 0.13).opacity(0.78))
+                    .animation(glassFade) { $0.opacity(closedGlass ? 1 : l.glass) }
+            }
             if closedGlass {
                 // No hardware to match: glass under the same smoke, and no sheen on something
                 // that is always there.
@@ -318,7 +325,7 @@ private struct GlassBody: View {
                 .animation(restyle) { $0.opacity(stemmed ? 1 : 0) }
                 .animation(rowFade) { $0.opacity(l.row) }
             // An AppKit view, which offline snapshots can't draw. It drifts only while open.
-            if !snapshotMode {
+            if !snapshotMode && liveGlass {
                 GlassSheen(moving: expanded && !reduceMotion)
                     .clipShape(shape)
                     .allowsHitTesting(false)
@@ -326,6 +333,16 @@ private struct GlassBody: View {
             }
             shape.fill(Color.black)
                 .animation(blackFade) { $0.opacity(black) }
+        }
+        .task(id: expanded) {
+            if expanded {
+                glassHeld = true
+            } else if glassHeld {
+                // Opening again cancels this, and the glass stays.
+                let fade = (GlassMelt.unmelt + GlassMelt.glassOut) * Motion.pace + 0.2
+                guard (try? await Task.sleep(for: .seconds(fade))) != nil else { return }
+                glassHeld = false
+            }
         }
     }
 
