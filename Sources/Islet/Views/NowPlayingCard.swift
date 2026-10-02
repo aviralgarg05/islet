@@ -346,11 +346,13 @@ struct OtherAppHintView: View {
 
     var body: some View {
         HStack(spacing: Space.s) {
+            // A long name ("Google Chrome has the controls") takes a second line rather than
+            // being cut short beside the button.
             Text(hint.message)
                 .textStyle(.caption)
                 .foregroundStyle(Ink.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
             Button(action: open) {
                 HStack(spacing: Space.xs) {
                     Image(systemName: "arrow.up.forward.app").font(.system(size: 10, weight: .semibold))
