@@ -447,6 +447,40 @@ public enum IslandLoops {
         reduceMotion || animationOff || stale
     }
 
+    /// The same rule from the animation style. Minimal only turns the island's moves into short
+    /// fades: its loops keep going, as they do with every style but Off.
+    public static func holdStill(style: AnimationStyle, reduceMotion: Bool, stale: Bool = false) -> Bool {
+        holdStill(reduceMotion: reduceMotion, animationOff: style == .off, stale: stale)
+    }
+
+    /// How a looping decoration that is held still shows that it is live.
+    public enum StillPose: Equatable, Sendable {
+        /// It moves (not held still at all).
+        case moving
+        /// Reduce Motion: no movement, but a slow fade up and down, so a playing song never
+        /// looks paused.
+        case breathing
+        /// Animation Off or out-of-date content: nothing moves at all.
+        case still
+    }
+
+    public static func pose(reduceMotion: Bool, animationOff: Bool, stale: Bool = false) -> StillPose {
+        if animationOff || stale { return .still }
+        return reduceMotion ? .breathing : .moving
+    }
+
+    /// The breathing pose: from full opacity down to this and back, over `breathe` seconds
+    /// each way.
+    public static let breatheLow: Float = 0.6
+    public static let breathe: Double = 1.6
+
     /// Frames a second for a looping decoration: half as many in Low Power Mode.
     public static func frameRate(lowPower: Bool) -> Float { lowPower ? 15 : 30 }
+
+    /// A loop started again at a new frame rate carries on from where it was: its time into the
+    /// loop, `elapsed` seconds after it began `offset` seconds in. Never negative.
+    public static func resumeOffset(elapsed: Double, offset: Double = 0) -> Double {
+        let t = elapsed + offset
+        return t.isFinite ? max(0, t) : 0
+    }
 }

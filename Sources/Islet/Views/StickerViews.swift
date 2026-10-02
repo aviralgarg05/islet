@@ -70,10 +70,10 @@ private struct StickerLayer: NSViewRepresentable {
 }
 
 /// Plays a sticker's frames with one keyframe animation on a layer's contents, each frame for
-/// its own time, at no more than 30 frames a second. Paused, it freezes on the frame it had
-/// reached and dims, as the bars settle; playing again carries on from that frame. It stands
-/// still with Reduce Motion (on the first frame) and in Low Power Mode, and lets its frames go
-/// as soon as it leaves the window.
+/// its own time, at no more than 30 frames a second (15 in Low Power Mode). Paused, it freezes on
+/// the frame it had reached and dims, as the bars settle; playing again carries on from that
+/// frame. It stands still with Reduce Motion or Animation Off (on the first frame), and lets its
+/// frames go as soon as it leaves the window.
 final class StickerNSView: NSView {
     private let sprite = CALayer()
     private weak var library: StickerLibrary?
@@ -180,7 +180,8 @@ final class StickerNSView: NSView {
         apply()
     }
 
-    /// No loop: Reduce Motion, or a picture with one frame. Low Power Mode plays at a lower rate.
+    /// No loop: Reduce Motion (or Animation Off), or a picture with one frame. Low Power Mode
+    /// plays at a lower rate.
     private var still: Bool { reduceMotion || !(animation?.isAnimated ?? false) }
 
     private func apply() {
@@ -235,9 +236,10 @@ final class StickerNSView: NSView {
         loop.duration = a.duration
         loop.repeatCount = .infinity
         loop.timeOffset = offset
-        // As often as the quickest frame needs, and never more than 30 a second.
-        let rate = StickerTiming.frameRate(a.delays)
-        loop.preferredFrameRateRange = CAFrameRateRange(minimum: min(10, rate), maximum: 30, preferred: rate)
+        // As often as the quickest frame needs, and never more than the island's loops run at:
+        // 30 a second, or 15 in Low Power Mode.
+        let rate = StickerTiming.frameRate(a.delays, lowPower: lowPower)
+        loop.preferredFrameRateRange = CAFrameRateRange(minimum: min(10, rate), maximum: rate, preferred: rate)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         sprite.contents = a.frames[frozen]
@@ -254,6 +256,9 @@ final class StickerNSView: NSView {
                 let now = ProcessInfo.processInfo.isLowPowerModeEnabled
                 guard now != self.lowPower else { return }
                 self.lowPower = now
+                // Start the loop again from the frame it is on, at the new rate. The state the
+                // view applied doesn't include the power state, so forget it first.
+                self.appliedState = nil
                 self.apply()
             }
         }

@@ -17,8 +17,10 @@ enum PausedLook {
 }
 
 /// The "playing" indicator: bars, mirrored bars, dots, a wave or a pulse that move while music
-/// plays and settle when it pauses (Vinyl's still dot too). Moving between the two is animated too, so pausing never snaps.
-/// The loops stand still with Reduce Motion and in Low Power Mode.
+/// plays and settle when it pauses (Vinyl's still dot too). Moving between the two is animated
+/// too, so pausing never snaps. Reduce Motion holds the loops in a still pose that breathes
+/// slowly, so a playing song never looks paused; Animation Off holds them still. Low Power Mode
+/// runs them at a lower frame rate.
 struct EqualizerView: NSViewRepresentable {
     var color: NSColor
     var playing: Bool
@@ -29,13 +31,14 @@ struct EqualizerView: NSViewRepresentable {
     }
 
     func updateNSView(_ view: PlayingIndicatorNSView, context: Context) {
-        view.update(style: style, color: color, playing: playing, reduceMotion: context.environment.reduceMotionAnywhere)
+        let pose = context.environment.loopPose
+        view.update(style: style, color: color, playing: playing, reduceMotion: pose != .moving, breathing: pose == .breathing)
     }
 }
 
 /// Holds the drawing for the chosen look and swaps it when the look changes. It hears about
-/// Low Power Mode from the system (no checking) and starts the loop again at that mode's
-/// frame rate.
+/// Low Power Mode from the system (no checking) and carries the loop on at that mode's frame
+/// rate, from where it was.
 final class PlayingIndicatorNSView: NSView {
     private var style: VisualiserStyle
     private var drawing: IndicatorLayerView
@@ -89,7 +92,7 @@ final class PlayingIndicatorNSView: NSView {
         if drawing.frame != bounds { drawing.frame = bounds }
     }
 
-    func update(style: VisualiserStyle, color: NSColor, playing: Bool, reduceMotion: Bool) {
+    func update(style: VisualiserStyle, color: NSColor, playing: Bool, reduceMotion: Bool, breathing: Bool = false) {
         if style != self.style {
             self.style = style
             drawing.removeFromSuperview()
@@ -98,7 +101,7 @@ final class PlayingIndicatorNSView: NSView {
         }
         self.reduceMotion = reduceMotion
         last = (color, playing)
-        drawing.update(color: color, playing: playing, still: reduceMotion)
+        drawing.update(color: color, playing: playing, still: reduceMotion, breathing: breathing)
     }
 
     /// Posted on whichever thread changed the power state.
@@ -112,10 +115,8 @@ final class PlayingIndicatorNSView: NSView {
         let now = ProcessInfo.processInfo.isLowPowerModeEnabled
         guard now != lowPower else { return }
         lowPower = now
-        // The loop picks up the new frame rate when it starts again.
-        guard let last, last.playing, !reduceMotion else { return }
-        drawing.update(color: last.color, playing: last.playing, still: true)
-        drawing.update(color: last.color, playing: last.playing, still: false)
+        // The loop carries on from where it is at the new frame rate: no stop, no jump.
+        drawing.retimeLoops()
     }
 }
 
@@ -124,8 +125,10 @@ final class PlayingIndicatorNSView: NSView {
 class IndicatorLayerView: NSView {
     /// nil until the first update, so the first state is drawn without a transition.
     private(set) var playing: Bool?
-    /// No loop: Reduce Motion or Low Power Mode. Playing then holds a lively pose.
+    /// No loop: Reduce Motion or Animation Off. Playing then holds a lively pose.
     private(set) var still = false
+    /// Held still for Reduce Motion: playing, the pose breathes slowly (`IslandLoops.breathe`).
+    private(set) var breathing = false
     /// Bumped whenever the state changes, so a loop scheduled for an older state never starts.
     private(set) var generation = 0
     private var laidOutSize: CGSize = .zero
@@ -145,15 +148,103 @@ class IndicatorLayerView: NSView {
         needsLayout = true
     }
 
-    func update(color: NSColor, playing: Bool, still: Bool) {
+    func update(color: NSColor, playing: Bool, still: Bool, breathing: Bool = false) {
         apply(color: color)
         let changed = playing != self.playing || still != self.still
         let first = self.playing == nil
         self.playing = playing
         self.still = still
-        guard changed else { return }
+        self.breathing = breathing
+        if changed {
+            generation &+= 1
+            if first { settle() } else { transition() }
+        } else if lostLoop {
+            restart()
+        }
+        applyBreath()
+    }
+
+    // MARK: Keeping the loop alive
+
+    /// Whether this look loops while it plays (Vinyl's dot is always still).
+    var loops: Bool { true }
+    /// Whether the still pose breathes under Reduce Motion (not a turning record).
+    var breathes: Bool { true }
+
+    /// It should be moving or breathing, but no animation is left on any of its layers: the
+    /// window it was in was rebuilt or its layers were redrawn without them. Nothing would
+    /// start the loop again, since the state hasn't changed.
+    private var lostLoop: Bool {
+        guard isPlaying, loops, !still || (breathing && breathes) else { return false }
+        return !hasAnimations
+    }
+
+    private var hasAnimations: Bool {
+        var layers = layer.map { [$0] } ?? []
+        while let l = layers.popLast() {
+            if !(l.animationKeys() ?? []).isEmpty { return true }
+            layers += l.sublayers ?? []
+        }
+        return false
+    }
+
+    /// Draw the state again from its resting pose and start its loop.
+    private func restart() {
         generation &+= 1
-        if first { settle() } else { transition() }
+        settle()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // Back in a window (the panel brought back or rebuilt, after sleep): if the loop went
+        // missing on the way, start it again.
+        guard window != nil, playing != nil else { return }
+        if lostLoop { restart() }
+        applyBreath()
+    }
+
+    /// Under Reduce Motion a playing look holds its pose and fades slowly up and down, with
+    /// no movement; anything else has no breath.
+    private func applyBreath() {
+        guard let root = layer else { return }
+        let wanted = isPlaying && still && breathing && breathes
+        let running = root.animation(forKey: "breathe") != nil
+        if wanted, !running {
+            let a = CABasicAnimation(keyPath: "opacity")
+            a.fromValue = 1
+            a.toValue = IslandLoops.breatheLow
+            a.duration = IslandLoops.breathe
+            a.autoreverses = true
+            a.repeatCount = .infinity
+            a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            a.capFrameRate()
+            root.add(a, forKey: "breathe")
+        } else if !wanted, running {
+            let from = root.presentation()?.opacity ?? 1
+            root.removeAnimation(forKey: "breathe")
+            fade(root, "opacity", from: from)
+        }
+    }
+
+    /// Low Power Mode changed: every loop carries on from where it is, at the new frame rate.
+    /// Animations that end on their own (a rise, a spin-up) are left alone; the loop after
+    /// them asks for the new rate when it starts.
+    func retimeLoops() {
+        var layers = layer.map { [$0] } ?? []
+        while let l = layers.popLast() {
+            layers += l.sublayers ?? []
+            for key in l.animationKeys() ?? [] {
+                guard let old = l.animation(forKey: key), old.repeatCount == .infinity,
+                      let copy = old.copy() as? CAAnimation else { continue }
+                let now = l.convertTime(CACurrentMediaTime(), from: nil)
+                // The begin time Core Animation gave it when it was added; without one, from the top.
+                let elapsed = old.beginTime > 0 ? (now - old.beginTime) * Double(old.speed) : 0
+                copy.timeOffset = IslandLoops.resumeOffset(elapsed: elapsed, offset: old.timeOffset)
+                copy.beginTime = 0
+                copy.capFrameRate()
+                l.add(copy, forKey: key)
+            }
+        }
     }
 
     override func layout() {
@@ -614,6 +705,10 @@ final class DotNSView: IndicatorLayerView {
     static let diameter: CGFloat = 5
     private static let pausedScale: CGFloat = 0.8
 
+    /// Vinyl's mark is still whatever the motion settings: the record does the moving.
+    override var loops: Bool { false }
+    override var breathes: Bool { false }
+
     override init(frame: NSRect) {
         super.init(frame: frame)
         layer?.addSublayer(dot)
@@ -663,8 +758,12 @@ final class DotNSView: IndicatorLayerView {
 /// The closed artwork as a record for the Vinyl look: round, with a spindle hole and a couple
 /// of grooves, turning slowly while the song plays. It spins up when the music starts and
 /// coasts to a stop when it pauses, where it stays until the music plays again. Core Animation
-/// turns it; it holds still with Reduce Motion and in Low Power Mode.
+/// turns it; it holds still with Reduce Motion (or Animation Off), and in Low Power Mode it
+/// turns at a lower frame rate.
 final class VinylNSView: IndicatorLayerView {
+    /// The artwork itself never fades up and down.
+    override var breathes: Bool { false }
+
     private let disc = CALayer()
     /// Drawn instead of the artwork when there's none: a dark record with a label in the music colour.
     private let label = CALayer()
@@ -874,7 +973,6 @@ private struct VinylLayer: NSViewRepresentable {
     func updateNSView(_ view: VinylHostView, context: Context) {
         view.vinyl.setArtwork(image)
         view.vinyl.update(color: color, playing: playing, still: context.environment.reduceMotionAnywhere)
-        view.lastState = (color, playing, context.environment.reduceMotionAnywhere)
     }
 }
 
@@ -882,7 +980,6 @@ private struct VinylLayer: NSViewRepresentable {
 final class VinylHostView: NSView {
     let vinyl = VinylNSView()
     private(set) var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
-    var lastState: (color: NSColor, playing: Bool, reduceMotion: Bool)?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -904,12 +1001,12 @@ final class VinylHostView: NSView {
         DispatchQueue.main.async { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
-                // Start the turn again at the new frame rate.
-                if let s = self.lastState, s.playing, !s.reduceMotion {
-                    self.vinyl.update(color: s.color, playing: s.playing, still: true)
-                    self.vinyl.update(color: s.color, playing: s.playing, still: false)
-                }
+                let now = ProcessInfo.processInfo.isLowPowerModeEnabled
+                guard now != self.lowPower else { return }
+                self.lowPower = now
+                // The record keeps turning from where it is, at the new frame rate: it never
+                // stops and spins up again.
+                self.vinyl.retimeLoops()
             }
         }
     }

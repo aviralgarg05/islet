@@ -43,6 +43,7 @@ struct IndicatorStylePicker: View {
             .fixedSize()
             // Islet's own Reduce motion holds the previews still, as it does the island.
             .environment(\.islandReduceMotion, model.settings.reduceMotion || model.settings.animationStyle == .off)
+            .environment(\.islandLoopsFrozen, model.settings.animationStyle == .off)
         }
     }
 

@@ -524,6 +524,7 @@ struct IslandView: View {
         .fontDesign(model.settings.roundedFont ? .rounded : .default)
         .environment(\.islandReduceMotion, IslandLoops.holdStill(reduceMotion: model.settings.reduceMotion,
                                                                  animationOff: model.settings.animationStyle == .off))
+        .environment(\.islandLoopsFrozen, model.settings.animationStyle == .off)
         .environment(\.islandMotion, style)
         .environment(\.visualiserStyle, model.settings.visualiserStyle)
         .environment(\.hiddenFromCapture, model.settings.hideFromScreenCapture)
@@ -684,6 +685,7 @@ struct IslandView: View {
             .environment(\.islandReduceMotion, IslandLoops.holdStill(reduceMotion: model.settings.reduceMotion,
                                                                      animationOff: model.settings.animationStyle == .off,
                                                                      stale: stale))
+            .environment(\.islandLoopsFrozen, model.settings.animationStyle == .off || stale)
             .padding(.horizontal, g.top)
             .frame(width: g.outerWidth, height: g.size.height, alignment: .top)
             .clipShape(g.shape)

@@ -532,6 +532,11 @@ private struct IslandReduceMotionKey: EnvironmentKey {
     static let defaultValue = false
 }
 
+/// Loops are held completely still, not even breathing: animation Off or out-of-date content.
+private struct IslandLoopsFrozenKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 /// "Hide from screenshots" is on. A window kept out of captures can lose the backdrop Liquid
 /// Glass samples and draw it as a black slab, so glass surfaces use their solid fill instead.
 private struct HiddenFromCaptureKey: EnvironmentKey {
@@ -556,6 +561,12 @@ extension EnvironmentValues {
         set { self[IslandReduceMotionKey.self] = newValue }
     }
 
+    /// Animation Off or out-of-date content: looping decorations don't even breathe.
+    var islandLoopsFrozen: Bool {
+        get { self[IslandLoopsFrozenKey.self] }
+        set { self[IslandLoopsFrozenKey.self] = newValue }
+    }
+
     var wingRoom: CGFloat {
         get { self[WingRoomKey.self] }
         set { self[WingRoomKey.self] = newValue }
@@ -563,6 +574,12 @@ extension EnvironmentValues {
 
     /// Perpetual animations stop when either the system or Islet asks for less motion.
     var reduceMotionAnywhere: Bool { accessibilityReduceMotion || islandReduceMotion }
+
+    /// How a looping decoration shows it is live: moving, breathing under Reduce Motion, or
+    /// still with animation Off and on out-of-date content.
+    var loopPose: IslandLoops.StillPose {
+        IslandLoops.pose(reduceMotion: reduceMotionAnywhere, animationOff: islandLoopsFrozen)
+    }
 }
 
 extension CAAnimation {

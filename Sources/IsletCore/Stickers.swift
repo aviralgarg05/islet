@@ -222,10 +222,12 @@ public enum StickerTiming {
     public static func duration(_ delays: [Double]) -> Double { delays.reduce(0, +) }
 
     /// The frame rate the loop asks Core Animation for: as often as its quickest frame needs,
-    /// and never more than 30 a second.
-    public static func frameRate(_ delays: [Double]) -> Float {
-        guard let quickest = delays.filter({ $0.isFinite && $0 > 0 }).min() else { return 10 }
-        return Float(min(30, max(1, (1 / quickest).rounded(.up))))
+    /// and never more than the island's other loops run at (30 a second, 15 in Low Power Mode,
+    /// `IslandLoops.frameRate`).
+    public static func frameRate(_ delays: [Double], lowPower: Bool = false) -> Float {
+        let most = IslandLoops.frameRate(lowPower: lowPower)
+        guard let quickest = delays.filter({ $0.isFinite && $0 > 0 }).min() else { return min(10, most) }
+        return Float(min(Double(most), max(1, (1 / quickest).rounded(.up))))
     }
 
     /// Key times for a discrete keyframe animation over `delays`: one more than the frames,

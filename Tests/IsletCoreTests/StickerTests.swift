@@ -110,6 +110,15 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         }
     }
 
+    /// In Low Power Mode it plays on, at no more than the island's other loops run at.
+    @Test func lowPowerModeSlowsTheLoopInsteadOfStoppingIt() {
+        #expect(StickerTiming.frameRate([0.02, 0.05], lowPower: true) == 15)
+        #expect(StickerTiming.frameRate([0.1], lowPower: true) == 10)
+        #expect(StickerTiming.frameRate([4, 10], lowPower: true) == 1)
+        #expect(StickerTiming.frameRate([], lowPower: true) == 10)
+        #expect(StickerPlayback.plan(mode: .playing, animated: true, reduceMotion: false, current: 3) == .loop(from: 3))
+    }
+
     @Test func keyTimesStartEachFrameAtItsShare() {
         let d = [0.1, 0.3, 0.1]
         let k = StickerTiming.keyTimes(d)

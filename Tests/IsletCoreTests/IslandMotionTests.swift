@@ -477,3 +477,33 @@ private func times(to end: Double, step: Double = 1.0 / 240) -> [Double] {
         }
     }
 }
+
+@Suite struct LoopPoseTests {
+    /// Reduce Motion holds the playing indicator still but lets it breathe, so a playing song
+    /// never looks paused; Off and out-of-date content hold it completely still.
+    @Test func reduceMotionBreathesAndOffHoldsStill() {
+        #expect(IslandLoops.pose(reduceMotion: false, animationOff: false) == .moving)
+        #expect(IslandLoops.pose(reduceMotion: true, animationOff: false) == .breathing)
+        #expect(IslandLoops.pose(reduceMotion: true, animationOff: true) == .still)
+        #expect(IslandLoops.pose(reduceMotion: false, animationOff: true) == .still)
+        #expect(IslandLoops.pose(reduceMotion: true, animationOff: false, stale: true) == .still)
+        #expect(IslandLoops.breatheLow > 0.5 && IslandLoops.breatheLow < 1, "a gentle breath, never close to paused")
+    }
+
+    /// Minimal only turns moves into fades: loops keep going, as with every style but Off.
+    @Test func minimalKeepsTheLoopsGoing() {
+        for style in AnimationStyle.allCases {
+            #expect(IslandLoops.holdStill(style: style, reduceMotion: false) == (style == .off), "\(style)")
+            #expect(IslandLoops.holdStill(style: style, reduceMotion: true))
+            #expect(IslandLoops.holdStill(style: style, reduceMotion: false, stale: true))
+        }
+    }
+
+    /// A loop started again at a new frame rate carries on from where it was.
+    @Test func aRetimedLoopCarriesOnFromWhereItWas() {
+        #expect(IslandLoops.resumeOffset(elapsed: 2.5) == 2.5)
+        #expect(IslandLoops.resumeOffset(elapsed: 2.5, offset: 0.3) == 2.8)
+        #expect(IslandLoops.resumeOffset(elapsed: -1) == 0)
+        #expect(IslandLoops.resumeOffset(elapsed: .nan) == 0)
+    }
+}

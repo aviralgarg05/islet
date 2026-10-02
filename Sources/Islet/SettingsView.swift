@@ -600,6 +600,7 @@ struct IslandSketch: View {
             if open { openIsland(row: row) } else { closedIsland(row: row) }
         }
         .environment(\.islandReduceMotion, settings.reduceMotion || settings.animationStyle == .off)
+        .environment(\.islandLoopsFrozen, settings.animationStyle == .off)
     }
 
     /// The closed island with the sample song, sized like the real one: the notch with its fit,
