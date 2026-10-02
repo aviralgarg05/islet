@@ -81,6 +81,13 @@ public final class ShelfService {
         save()
     }
 
+    /// Takes off the shelf what has been there `keepFor` seconds or more (0 keeps everything).
+    /// The files themselves stay where they are.
+    public func expire(now: Date, keepFor: TimeInterval) {
+        guard !shelf.expire(now: now, keepFor: keepFor).isEmpty else { return }
+        save()
+    }
+
     public func urls(ids: [String]? = nil) -> [URL] {
         shelf.items.filter { ids == nil || ids!.contains($0.id) }.map { URL(fileURLWithPath: $0.path) }
     }

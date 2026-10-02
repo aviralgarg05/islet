@@ -420,11 +420,13 @@ struct ShelfSettings: View {
                     Text("Drop files on the island to keep them handy, then drag them out or AirDrop them.")
                 }
                 .settingsAnchor("shelf.enabled")
+                ShelfKeepPicker(model: model)
+                    .disabled(!model.settings.shelfEnabled)
             }
             Section("Clipboard") {
                 Toggle(isOn: $model.settings.clipboardEnabled) {
                     Text("Clipboard history")
-                    Text("What you copy, on the Clipboard page. It stays on this Mac and skips passwords. Turning it off clears it, pinned items too.")
+                    Text("What you copy, on the Clipboard page: text, links, colours, pictures and files, each shown as itself. It stays on this Mac and skips passwords. Turning it off clears it, pinned items too.")
                 }
                 .settingsAnchor("shelf.clipboard")
                 Group {

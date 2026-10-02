@@ -27,7 +27,10 @@ extension AppModel {
         syncToolPages()
     }
 
-    func toolsIslandClosed() { syncToolPages() }
+    func toolsIslandClosed() {
+        syncToolPages()
+        noteToolsIslandClosed()
+    }
 
     func toolsTabChanged(from previous: IslandTab) {
         guard previous != tab else { return }
@@ -47,9 +50,10 @@ extension AppModel {
         }
     }
 
-    /// The tools' next moments, for `reschedule()`.
+    /// The tools' next moments, for `reschedule()`, with the next file due off the shelf.
     func toolDeadlines(now: Date) -> [Date] {
-        [sales.nextRefresh(now: now), stocks.nextRefresh(now: now), teleprompter.endsAt(now: now)].compactMap { $0 }
+        let shelfDue = settings.shelfEnabled ? shelf.nextExpiry(keepFor: settings.shelfKeepFor) : nil
+        return [sales.nextRefresh(now: now), stocks.nextRefresh(now: now), teleprompter.endsAt(now: now), shelfDue].compactMap { $0 }
     }
 
     /// The deadline timer fired: whatever is due runs.
@@ -57,6 +61,14 @@ extension AppModel {
         sales.refreshIfDue(now: now)
         stocks.refreshIfDue(now: now)
         teleprompter.advance(now: now)
+        expireShelf(now: now)
+    }
+
+    /// Files that have been on the shelf longer than "Keep files on the shelf for" leave it
+    /// (the files themselves stay where they are).
+    func expireShelf(now: Date = Date()) {
+        guard settings.shelfEnabled else { return }
+        shelfService.expire(now: now, keepFor: settings.shelfKeepFor)
     }
 
     /// The teleprompter asks for clear glass while it shows ("See-through while reading").

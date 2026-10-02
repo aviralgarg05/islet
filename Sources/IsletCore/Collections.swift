@@ -4,18 +4,215 @@ import Foundation
 
 public struct ClipboardEntry: Codable, Equatable, Sendable, Identifiable {
     public var id: String
+    /// The text copied; for files, their names; for an image, a description ("Image 1440 × 900").
     public var text: String
     public var date: Date
     public var sourceBundleID: String?
     public var pinned: Bool
+    /// What it is, so the Clipboard page can show it as itself.
+    public var kind: ClipKind
+    /// Files copied in Finder (or anywhere that copies files): their paths, in order.
+    public var paths: [String]
+    /// An image copied on its own: a screenshot, a picture from a web page.
+    public var image: ClipImage?
 
-    public init(id: String = UUID().uuidString, text: String, date: Date, sourceBundleID: String? = nil, pinned: Bool = false) {
+    public init(id: String = UUID().uuidString, text: String, date: Date, sourceBundleID: String? = nil, pinned: Bool = false,
+                kind: ClipKind? = nil, paths: [String] = [], image: ClipImage? = nil) {
         self.id = id; self.text = text; self.date = date; self.sourceBundleID = sourceBundleID; self.pinned = pinned
+        self.kind = kind ?? ClipKind.classify(text)
+        self.paths = paths
+        self.image = image
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        text = try c.decode(String.self, forKey: .text)
+        date = try c.decode(Date.self, forKey: .date)
+        sourceBundleID = try c.decodeIfPresent(String.self, forKey: .sourceBundleID)
+        pinned = (try? c.decodeIfPresent(Bool.self, forKey: .pinned)) ?? false
+        paths = (try? c.decodeIfPresent([String].self, forKey: .paths)) ?? []
+        image = try? c.decodeIfPresent(ClipImage.self, forKey: .image)
+        kind = (try? c.decodeIfPresent(ClipKind.self, forKey: .kind)) ?? ClipKind.classify(text)
+    }
+
+    /// The colour a colour clip names.
+    public var colour: RGBA? { kind == .colour ? ClipColour.parse(text) : nil }
+
+    /// Bytes it holds: its text, or its image.
+    var bytes: Int { image?.data.count ?? text.utf8.count }
+
+    /// Whether every word of a search is in it: its text, its file names and paths, its kind.
+    public func matches(_ query: String) -> Bool {
+        let words = query.lowercased().split(whereSeparator: \.isWhitespace)
+        guard !words.isEmpty else { return true }
+        let haystack = ([text, kind.title] + paths).joined(separator: "\n").lowercased()
+        return words.allSatisfy { haystack.contains($0) }
     }
 }
 
-/// Text clipboard history that respects the nspasteboard.org privacy conventions, so
-/// passwords copied from password managers are never recorded.
+/// What a clip is.
+public enum ClipKind: String, Codable, Sendable, CaseIterable {
+    case text, link, colour, image, files
+
+    public var title: String {
+        switch self {
+        case .text: return "Text"
+        case .link: return "Links"
+        case .colour: return "Colours"
+        case .image: return "Images"
+        case .files: return "Files"
+        }
+    }
+
+    /// A web address on its own is a link, and a colour written as CSS writes it ("#0A84FF",
+    /// "rgb(10, 132, 255)", "hsl(211 100% 52%)") is a colour. Anything else is text.
+    public static func classify(_ text: String) -> ClipKind {
+        let s = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty, s.count <= 2048, !s.contains(where: \.isNewline) else { return .text }
+        if ClipLink.parts(s) != nil { return .link }
+        if ClipColour.parse(s) != nil { return .colour }
+        return .text
+    }
+}
+
+/// An image as it was copied, kept only in memory with the rest of clipboard history.
+public struct ClipImage: Codable, Equatable, Sendable {
+    public var data: Data
+    /// The pasteboard type it came as ("public.png", "public.tiff").
+    public var type: String
+    /// Its size in pixels.
+    public var width: Int
+    public var height: Int
+
+    public init(data: Data, type: String, width: Int, height: Int) {
+        self.data = data; self.type = type; self.width = width; self.height = height
+    }
+
+    /// "1440 × 900 PNG".
+    public var summary: String {
+        let format = type.split(separator: ".").last.map { $0.uppercased() } ?? "image"
+        return "\(width) × \(height) \(format)"
+    }
+}
+
+/// A link: where it goes, written plainly.
+public enum ClipLink {
+    /// ("example.com", "/islet/releases") for a web address on its own, or nil.
+    public static func parts(_ text: String) -> (host: String, rest: String)? {
+        let s = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.contains(where: \.isWhitespace) else { return nil }
+        let lower = s.lowercased()
+        let withScheme = lower.hasPrefix("http://") || lower.hasPrefix("https://") ? s : lower.hasPrefix("www.") ? "https://" + s : nil
+        guard let withScheme, let url = URL(string: withScheme), let host = url.host, host.contains("."), !host.hasPrefix("."),
+              !host.hasSuffix(".") else { return nil }
+        var rest = url.path
+        if let q = url.query { rest += "?" + q }
+        if rest == "/" { rest = "" }
+        return (host.hasPrefix("www.") ? String(host.dropFirst(4)) : host, rest)
+    }
+
+    /// The address to open: as copied, or with https:// in front of a bare "www." one.
+    public static func url(_ text: String) -> URL? {
+        let s = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard parts(s) != nil else { return nil }
+        return URL(string: s.lowercased().hasPrefix("www.") ? "https://" + s : s)
+    }
+}
+
+/// A colour written as CSS writes it.
+public enum ClipColour {
+    /// "#0A84FF", "#fff", "#0A84FF80", "rgb(10, 132, 255)", "rgba(10 132 255 / 50%)",
+    /// "hsl(211, 100%, 52%)". A bare "fff" or a colour's name is text.
+    public static func parse(_ text: String) -> RGBA? {
+        let s = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if s.hasPrefix("#") {
+            let hex = s.dropFirst()
+            guard [3, 4, 6, 8].contains(hex.count), hex.allSatisfy(\.isHexDigit) else { return nil }
+            // #RGBA is #RRGGBBAA written short.
+            if hex.count == 4 { return RGBA.parse(hex.map { "\($0)\($0)" }.joined()) }
+            return RGBA.parse(String(hex))
+        }
+        for (prefix, isHSL) in [("rgba(", false), ("rgb(", false), ("hsla(", true), ("hsl(", true)] where s.hasPrefix(prefix) {
+            guard s.hasSuffix(")") else { return nil }
+            let inner = s.dropFirst(prefix.count).dropLast()
+            let parts = inner.split(whereSeparator: { $0 == "," || $0 == " " || $0 == "/" }).map(String.init)
+            guard parts.count == 3 || parts.count == 4 else { return nil }
+            let alpha = parts.count == 4 ? component(parts[3], scale: 1) : 1
+            if isHSL {
+                guard let h = Double(parts[0].replacingOccurrences(of: "deg", with: "")), h.isFinite,
+                      let sat = percent(parts[1]), let light = percent(parts[2]), let alpha else { return nil }
+                return hsl(h, sat, light, alpha)
+            }
+            guard let r = component(parts[0], scale: 255), let g = component(parts[1], scale: 255),
+                  let b = component(parts[2], scale: 255), let alpha else { return nil }
+            return RGBA(r: r, g: g, b: b, a: alpha)
+        }
+        return nil
+    }
+
+    /// 0...1 from "128" (out of `scale`) or "50%".
+    static func component(_ raw: String, scale: Double) -> Double? {
+        if raw.hasSuffix("%") { return percent(raw) }
+        guard let v = Double(raw), v >= 0, v <= scale else { return nil }
+        return v / scale
+    }
+
+    static func percent(_ raw: String) -> Double? {
+        guard raw.hasSuffix("%"), let v = Double(raw.dropLast()), (0...100).contains(v) else { return nil }
+        return v / 100
+    }
+
+    static func hsl(_ hue: Double, _ s: Double, _ l: Double, _ a: Double) -> RGBA {
+        let h = (hue.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360) / 30
+        func f(_ n: Double) -> Double {
+            let k = (n + h).truncatingRemainder(dividingBy: 12)
+            return l - s * min(l, 1 - l) * max(-1, min(k - 3, 9 - k, 1))
+        }
+        return RGBA(r: f(0), g: f(8), b: f(4), a: a)
+    }
+
+    /// "#0A84FF", for showing beside the swatch.
+    public static func hex(_ c: RGBA) -> String {
+        func byte(_ v: Double) -> Int { Int((min(1, max(0, v)) * 255).rounded()) }
+        let base = String(format: "#%02X%02X%02X", byte(c.r), byte(c.g), byte(c.b))
+        return c.a < 1 ? base + String(format: "%02X", byte(c.a)) : base
+    }
+}
+
+/// What was on the pasteboard, as the clipboard monitor read it.
+public enum ClipboardContent: Equatable, Sendable {
+    case text(String)
+    case files([String])
+    case image(ClipImage)
+}
+
+/// The Clipboard page's filter.
+public enum ClipFilter: Hashable, Sendable {
+    case all
+    case pinned
+    case kind(ClipKind)
+
+    public var title: String {
+        switch self {
+        case .all: return "All"
+        case .pinned: return "Pinned"
+        case .kind(let k): return k.title
+        }
+    }
+
+    public func includes(_ e: ClipboardEntry) -> Bool {
+        switch self {
+        case .all: return true
+        case .pinned: return e.pinned
+        case .kind(let k): return e.kind == k
+        }
+    }
+}
+
+/// Clipboard history that respects the nspasteboard.org privacy conventions, so passwords
+/// copied from password managers are never recorded: text, links, colours, images and files,
+/// kept in memory only.
 public struct ClipboardHistory: Codable, Equatable, Sendable {
     public private(set) var entries: [ClipboardEntry] = []
     /// Lowering it drops the oldest unpinned entries straight away, not at the next copy.
@@ -89,6 +286,12 @@ public struct ClipboardHistory: Codable, Equatable, Sendable {
     /// The most text kept in all (bytes of UTF-8), whatever the count: 500 long copies would
     /// otherwise hold 50 MB. The oldest unpinned entries go first.
     public static let maxTotalBytes = 4_000_000
+    /// The largest image kept (a full-screen Retina screenshot is 2 to 8 MB), and all images
+    /// together: past that, the oldest unpinned images go first.
+    public static let maxImageBytes = 12_000_000
+    public static let maxTotalImageBytes = 36_000_000
+    /// More files than this copied at once aren't kept (a whole folder selected in Finder).
+    public static let maxFiles = 100
 
     public init(limit: Int = 30) { self.limit = max(1, limit) }
 
@@ -100,16 +303,73 @@ public struct ClipboardHistory: Codable, Equatable, Sendable {
     public mutating func add(_ text: String, types: [String], sourceBundleID: String?, sourceURL: String? = nil,
                              now: Date) -> Outcome {
         guard shouldKeep(text, types: types, sourceBundleID: sourceBundleID, sourceURL: sourceURL) else { return .ignored }
-        if let i = entries.firstIndex(where: { $0.text == text }) {
-            var e = entries.remove(at: i)
-            e.date = now
-            e.sourceBundleID = sourceBundleID ?? e.sourceBundleID
-            entries.insert(e, at: 0)
+        if let i = entries.firstIndex(where: { $0.paths.isEmpty && $0.image == nil && $0.text == text }) {
+            moveToFront(i, now: now, sourceBundleID: sourceBundleID)
             return .moved
         }
         entries.insert(ClipboardEntry(text: text, date: now, sourceBundleID: sourceBundleID), at: 0)
         trim()
         return .added
+    }
+
+    /// Whatever the monitor read: text, files or an image.
+    @discardableResult
+    public mutating func add(_ content: ClipboardContent, types: [String], sourceBundleID: String?, sourceURL: String? = nil,
+                             now: Date) -> Outcome {
+        switch content {
+        case .text(let text):
+            return add(text, types: types, sourceBundleID: sourceBundleID, sourceURL: sourceURL, now: now)
+        case .files(let paths):
+            guard !paths.isEmpty, paths.count <= Self.maxFiles, isAllowed(types: types, sourceBundleID: sourceBundleID) else {
+                return .ignored
+            }
+            if let i = entries.firstIndex(where: { $0.kind == .files && $0.paths == paths }) {
+                moveToFront(i, now: now, sourceBundleID: sourceBundleID)
+                return .moved
+            }
+            let names = paths.map { ($0 as NSString).lastPathComponent }.joined(separator: ", ")
+            entries.insert(ClipboardEntry(text: names, date: now, sourceBundleID: sourceBundleID, kind: .files, paths: paths), at: 0)
+            trim()
+            return .added
+        case .image(let image):
+            guard !image.data.isEmpty, image.data.count <= Self.maxImageBytes, isAllowed(types: types, sourceBundleID: sourceBundleID)
+            else { return .ignored }
+            if let i = entries.firstIndex(where: { $0.image?.data.count == image.data.count && $0.image?.data == image.data }) {
+                moveToFront(i, now: now, sourceBundleID: sourceBundleID)
+                return .moved
+            }
+            entries.insert(ClipboardEntry(text: "Image " + image.summary, date: now, sourceBundleID: sourceBundleID, kind: .image,
+                                          image: image), at: 0)
+            trim()
+            return .added
+        }
+    }
+
+    /// Copied again from the Clipboard page: it goes back to the top.
+    public mutating func touch(id: String, now: Date) {
+        guard let i = entries.firstIndex(where: { $0.id == id }) else { return }
+        moveToFront(i, now: now, sourceBundleID: nil)
+    }
+
+    private mutating func moveToFront(_ i: Int, now: Date, sourceBundleID: String?) {
+        var e = entries.remove(at: i)
+        e.date = now
+        e.sourceBundleID = sourceBundleID ?? e.sourceBundleID
+        entries.insert(e, at: 0)
+    }
+
+    /// What the Clipboard page lists for a search and a filter, newest first.
+    public func filtered(_ query: String, filter: ClipFilter = .all) -> [ClipboardEntry] {
+        entries.filter { filter.includes($0) && $0.matches(query) }
+    }
+
+    /// The filters worth offering: All, Pinned when something is pinned, and each kind there is.
+    public var filters: [ClipFilter] {
+        var out: [ClipFilter] = [.all]
+        if entries.contains(where: \.pinned) { out.append(.pinned) }
+        let kinds = Set(entries.map(\.kind))
+        out += ClipKind.allCases.filter(kinds.contains).map(ClipFilter.kind)
+        return out
     }
 
     public mutating func togglePin(id: String) {
@@ -121,8 +381,7 @@ public struct ClipboardHistory: Codable, Equatable, Sendable {
     /// managers' apps and extensions, apps the user ignored, likely passwords from a browser,
     /// blank text or text over `maxTextLength`.
     public func shouldKeep(_ text: String, types: [String], sourceBundleID: String?, sourceURL: String? = nil) -> Bool {
-        if types.contains(where: Self.ignoredTypes.contains) { return false }
-        if let b = sourceBundleID, Self.ignoredApps.contains(b) || ignoredApps.contains(b) { return false }
+        guard isAllowed(types: types, sourceBundleID: sourceBundleID) else { return false }
         if let id = sourceURL.flatMap(Self.extensionID), Self.passwordManagerExtensions.contains(id) { return false }
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= Self.maxTextLength else { return false }
         if skipsSecrets, let b = sourceBundleID, Browsers.browser(for: b) != nil {
@@ -130,6 +389,14 @@ public struct ClipboardHistory: Codable, Equatable, Sendable {
             let fromExtension = sourceURL.map(Self.isExtensionPage) ?? false
             if fromExtension ? Self.looksLikePassword(text) : Self.looksLikeGeneratedPassword(text) { return false }
         }
+        return true
+    }
+
+    /// Not secret or throwaway (nspasteboard.org), and not from a password manager or an app
+    /// the user ignored. Images and files are held to this; text to `shouldKeep`.
+    public func isAllowed(types: [String], sourceBundleID: String?) -> Bool {
+        if types.contains(where: Self.ignoredTypes.contains) { return false }
+        if let b = sourceBundleID, Self.ignoredApps.contains(b) || ignoredApps.contains(b) { return false }
         return true
     }
 
@@ -257,9 +524,14 @@ public struct ClipboardHistory: Codable, Equatable, Sendable {
         while entries.count > limit, let i = entries.lastIndex(where: { !$0.pinned }) {
             entries.remove(at: i)
         }
-        var total = entries.reduce(0) { $0 + $1.text.utf8.count }
-        while total > Self.maxTotalBytes, let i = entries.lastIndex(where: { !$0.pinned }) {
-            total -= entries[i].text.utf8.count
+        var total = entries.filter { $0.image == nil }.reduce(0) { $0 + $1.bytes }
+        while total > Self.maxTotalBytes, let i = entries.lastIndex(where: { !$0.pinned && $0.image == nil }) {
+            total -= entries[i].bytes
+            entries.remove(at: i)
+        }
+        var images = entries.compactMap(\.image).reduce(0) { $0 + $1.data.count }
+        while images > Self.maxTotalImageBytes, let i = entries.lastIndex(where: { !$0.pinned && $0.image != nil }) {
+            images -= entries[i].bytes
             entries.remove(at: i)
         }
     }
@@ -289,14 +561,16 @@ public struct Shelf: Codable, Equatable, Sendable {
 
     public init(limit: Int = 40) { self.limit = max(1, limit) }
 
-    /// Add paths (deduplicated, newest first). Returns the paths that were new.
+    /// Add paths (deduplicated, newest first). A file already on the shelf moves to the front
+    /// and its time on the shelf starts again. Returns the paths that were new.
     @discardableResult
     public mutating func add(paths: [String], now: Date, bookmark: (String) -> Data? = { _ in nil }) -> [String] {
         var added: [String] = []
         for p in paths.reversed() where !p.isEmpty {
             let std = (p as NSString).standardizingPath
             if let i = items.firstIndex(where: { $0.path == std }) {
-                let existing = items.remove(at: i)
+                var existing = items.remove(at: i)
+                existing.addedAt = now
                 items.insert(existing, at: 0)
                 continue
             }
@@ -309,6 +583,53 @@ public struct Shelf: Codable, Equatable, Sendable {
 
     public mutating func remove(id: String) { items.removeAll { $0.id == id } }
     public mutating func removeAll() { items.removeAll() }
+
+    // MARK: How long files stay
+
+    /// Takes off the shelf what has been there longer than `keepFor` seconds (0 keeps
+    /// everything). Only the shelf forgets them: the files themselves stay where they are.
+    /// Returns what was taken off.
+    @discardableResult
+    public mutating func expire(now: Date, keepFor: TimeInterval) -> [ShelfItem] {
+        guard keepFor > 0 else { return [] }
+        let gone = items.filter { now.timeIntervalSince($0.addedAt) >= keepFor }
+        guard !gone.isEmpty else { return [] }
+        let ids = Set(gone.map(\.id))
+        items.removeAll { ids.contains($0.id) }
+        return gone
+    }
+
+    /// When the next file is due to come off the shelf, for the one deadline timer.
+    public func nextExpiry(keepFor: TimeInterval) -> Date? {
+        guard keepFor > 0 else { return nil }
+        return items.map { $0.addedAt.addingTimeInterval(keepFor) }.min()
+    }
+
+    /// How long, as said in a sentence: "an hour", "a day", "a week", "3 days". Nil when files
+    /// are kept until they are removed.
+    public static func keepPhrase(_ seconds: TimeInterval) -> String? {
+        guard seconds > 0 else { return nil }
+        let title = keepTitle(seconds)
+        for (one, phrase) in [("1 minute", "a minute"), ("1 hour", "an hour"), ("1 day", "a day"), ("1 week", "a week")] where title == one {
+            return phrase
+        }
+        return title
+    }
+
+    /// "Until I remove them", "1 hour", "1 day", "1 week" (and "10 minutes" for a shorter
+    /// time set in config.json).
+    public static func keepTitle(_ seconds: TimeInterval) -> String {
+        if seconds <= 0 { return "Until I remove them" }
+        if seconds < 3600 {
+            let minutes = max(1, Int((seconds / 60).rounded()))
+            return minutes == 1 ? "1 minute" : "\(minutes) minutes"
+        }
+        let hours = Int((seconds / 3600).rounded())
+        if hours < 24 { return hours <= 1 ? "1 hour" : "\(hours) hours" }
+        let days = Int((seconds / 86400).rounded())
+        if days % 7 == 0 { return days == 7 ? "1 week" : "\(days / 7) weeks" }
+        return days == 1 ? "1 day" : "\(days) days"
+    }
 
     /// Drop entries whose file no longer exists. Files on a disk or share that isn't mounted
     /// right now stay (`isAvailable` dims them) until it comes back.

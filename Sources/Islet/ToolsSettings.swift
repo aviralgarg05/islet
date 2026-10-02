@@ -3,8 +3,9 @@ import IsletCore
 import IsletSystem
 import SwiftUI
 
-// Settings for the tools that start off. Shortcuts, Weather, Mirror, Teleprompter, Stocks and
-// Sales are pages of their own, set on the Tools page (the last four in ToolsSettingsView.swift);
+// Settings for the tools that start off. To-dos, the note, the converter, emoji, Shortcuts,
+// Weather, Mirror, Teleprompter, Stocks and Sales are pages of their own, set on the Tools page
+// (the first four in NoteToolsSettings.swift, the last four in ToolsSettingsView.swift);
 // lyrics, the month calendar, the stopwatch and focus sounds sit on the pages of the features
 // they belong to (Now Playing, Calendar & Reminders, Timers).
 
@@ -16,6 +17,7 @@ struct ToolsSettings: View {
     var body: some View {
         Form {
             Section { SettingsHero(page: .tools) }
+            NoteToolsSettingsSections(model: model)
             Section {
                 Toggle(isOn: $model.settings.shortcutsEnabled) {
                     Text("Run your shortcuts")

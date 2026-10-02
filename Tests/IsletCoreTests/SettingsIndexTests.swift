@@ -135,6 +135,15 @@ import Testing
         ("app priority", .apps),
         ("two HUDs", .notifications),
         ("ignore apps", .nowPlaying),
+        ("to-do", .tools),
+        ("quick note", .tools),
+        ("convert", .tools),
+        ("emoji", .tools),
+        ("reorder tabs", .general),
+        ("pages in the switcher", .general),
+        ("keep files", .shelf),
+        ("bug", .about),
+        ("feedback", .about),
     ])
     func queryFindsPage(query: String, page: SettingsPage) {
         let groups = SettingsIndex.search(query)

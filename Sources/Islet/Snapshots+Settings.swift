@@ -97,6 +97,17 @@ enum SettingsSnapshots {
         window.setContentSize(SettingsWindow.defaultSize)
         RunLoop.main.run(until: Date().addingTimeInterval(0.5))
 
+        // The note tools and the pages in the switcher, each opened at its row in a tall window.
+        // (How long the shelf keeps files and Send feedback show on their pages' own shots.)
+        window.setContentSize(NSSize(width: SettingsWindow.defaultSize.width, height: 1400))
+        for (name, page, anchor) in [("tools-note-tools", SettingsPage.tools, "tools.todos"),
+                                     ("general-island-pages", .general, "general.pages")] {
+            navigation.open(page, at: anchor)
+            shoot(name, dark: name == "general-island-pages")
+        }
+        window.setContentSize(SettingsWindow.defaultSize)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+
         // Opened from Downloads: General offers to move Islet to Applications, and the offer
         // itself, at launch and before connecting a coding agent.
         let installedAt = AppActions.bundleURL
@@ -223,6 +234,14 @@ enum SettingsSnapshots {
         s.sales = SalesSettings(enabled: true, stores: [.stripe, .shopify], shopifyStore: "example.myshopify.com")
         s.openRouterUsageEnabled = true
         s.copilotUsageEnabled = true
+        s.todosEnabled = true
+        s.noteEnabled = true
+        s.converterEnabled = true
+        s.emojiEnabled = true
+        s.emojiTypes = true
+        // To-dos moved into the capsule and Widgets left out, so the pages list shows both.
+        s.islandPages.move(.todos, onto: .shelf)
+        s.islandPages.setShown(.widgets, false)
         s.appRules = [
             // A colour from the colour panel shows as "Custom".
             AppRule(bundleID: "com.apple.Safari", tint: "#2F7CF6"),

@@ -77,6 +77,8 @@ private func writtenKeys(_ s: IsletSettings) throws -> Set<String> {
         // A file from before the HUDs started off, which doesn't mention them, keeps them on.
         expected.hudEnabled = true
         expected.brightnessHUDEnabled = true
+        // Nor the shelf's time, so what is on it stays until it is removed, as it did.
+        expected.shelfKeepFor = 0
         #expect(s == expected)
         let keys = try writtenKeys(IsletSettings())
         #expect(!keys.contains("launchAtLogin"))

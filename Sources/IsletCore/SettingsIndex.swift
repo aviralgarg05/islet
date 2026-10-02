@@ -46,10 +46,10 @@ public enum SettingsPage: String, CaseIterable, Sendable, Identifiable {
         case .downloads: return "Browser downloads with their progress, then Open and Show when they finish."
         case .ai: return "Ask a question from anywhere, answered on this Mac or by Claude or ChatGPT."
         case .agents: return "See what your coding agents are doing and answer their questions in the notch."
-        case .tools: return "Shortcuts, weather, a camera mirror, a teleprompter, stocks and sales, each a page under More. All start off."
+        case .tools: return "To-dos, a note, a converter, emoji, shortcuts, weather, a camera mirror, a teleprompter, stocks and sales, each a page under More. All start off."
         case .apps: return "Give an app a colour or a priority, hide the island for it, or mute its notifications."
         case .permissions: return "What Islet may use, and what uses it. None is needed to run."
-        case .about: return "Version and licence."
+        case .about: return "Version, licence and feedback."
         case .advanced: return "For scripts, other apps and troubleshooting. Nothing here is needed for everyday use."
         }
     }
@@ -243,6 +243,8 @@ public enum SettingsIndex {
         SettingsEntry("general.reverseSwipes", .general, "Reverse sideways swipes", section: "Gestures",
                       keywords: ["invert", "direction", "natural", "swap", "gesture"], anchor: "general.gestures"),
         SettingsEntry("general.stats", .general, "System stats", section: "Island pages", keywords: ["CPU", "memory", "RAM", "performance"]),
+        SettingsEntry("general.pages", .general, "Pages in the switcher", section: "Island pages",
+                      keywords: ["tabs", "order", "reorder", "drag", "arrange", "More", "hide", "show", "customise", "customize", "capsule"]),
     ]
 
     private static let appearance: [SettingsEntry] = [
@@ -400,6 +402,8 @@ public enum SettingsIndex {
                       keywords: ["mic", "privacy", "indicator"]),
 
         SettingsEntry("shelf.enabled", .shelf, "File shelf and AirDrop", section: "Shelf", keywords: ["drag", "drop", "files", "share"]),
+        SettingsEntry("shelf.keepFor", .shelf, "Keep files on the shelf for", section: "Shelf",
+                      keywords: ["remove", "clear", "expire", "hour", "day", "week", "forever", "how long"]),
         SettingsEntry("shelf.clipboard", .shelf, "Clipboard history", section: "Clipboard", keywords: ["copy", "paste", "pasteboard"]),
         SettingsEntry("shelf.clipboardLimit", .shelf, "Items kept", section: "Clipboard", keywords: ["history size", "clipboard"],
                       anchor: "shelf.clipboard"),
@@ -447,6 +451,18 @@ public enum SettingsIndex {
         SettingsEntry("tools.temperature", .tools, "Temperature in", section: "Weather",
                       keywords: ["Celsius", "Fahrenheit", "units", "degrees"]),
 
+        SettingsEntry("tools.todos", .tools, "To-dos", section: "To-dos and notes",
+                      keywords: ["todo", "to do", "tasks", "list", "tick", "star", "checklist"]),
+        SettingsEntry("tools.note", .tools, "Quick note", section: "To-dos and notes",
+                      keywords: ["scratch pad", "notes", "jot", "text", "memo", "write"]),
+        SettingsEntry("tools.converter", .tools, "Unit converter", section: "Converter and emoji",
+                      keywords: ["convert", "units", "length", "weight", "temperature", "volume", "speed", "metric", "imperial",
+                                 "feet", "kilograms", "Celsius", "miles"]),
+        SettingsEntry("tools.emoji", .tools, "Emoji", section: "Converter and emoji",
+                      keywords: ["emoticon", "smiley", "symbols", "picker", "search"]),
+        SettingsEntry("tools.emojiTypes", .tools, "Type emoji where you're typing", section: "Converter and emoji",
+                      keywords: ["insert", "emoji", "Accessibility"], anchor: "tools.emoji"),
+
         SettingsEntry("tools.mirror", .tools, "Camera mirror", section: "Mirror",
                       keywords: ["camera", "webcam", "video call", "look", "hair", "check", "selfie"]),
         SettingsEntry("tools.mirrorFlip", .tools, "Flip like a mirror", section: "Mirror",
@@ -484,6 +500,8 @@ public enum SettingsIndex {
     } + [
         SettingsEntry("about.version", .about, "Version", keywords: ["licence", "license", "open source"]),
         SettingsEntry("about.quit", .about, "Quit", keywords: ["exit", "close the app", "stop"]),
+        SettingsEntry("about.feedback", .about, "Send feedback",
+                      keywords: ["bug", "problem", "feature request", "idea", "suggest", "GitHub", "issue", "help", "contact"]),
     ]
 
     private static let advanced: [SettingsEntry] = [

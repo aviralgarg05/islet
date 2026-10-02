@@ -350,6 +350,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// Only meetings with a call link (Zoom, Google Meet, Teams, Webex, FaceTime and others).
     public var meetingRemindersNeedLink = true
     public var shelfEnabled = true
+    /// Seconds a file stays on the shelf before it is taken off (the file itself stays where it
+    /// is); 0 keeps files until they are removed. One of `shelfKeepChoices` in Settings.
+    public var shelfKeepFor: Double = IsletSettings.standardShelfKeepFor
     /// Off by default: clipboard history is sensitive.
     public var clipboardEnabled = false
     public var clipboardLimit = 30
@@ -393,6 +396,19 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var weatherUsesLocation = false
     public var weatherPlace: WeatherPlace?
     public var temperatureUnit: TemperatureUnit = .automatic
+    /// To-dos on a page under More: add a line, star it, tick it off. Kept in `todos.json`.
+    public var todosEnabled = false
+    /// A scratch pad under More that keeps its text (`note.txt`).
+    public var noteEnabled = false
+    /// A converter under More ("5 ft in cm"), which also answers in the Ask box.
+    public var converterEnabled = false
+    /// An emoji picker under More.
+    public var emojiEnabled = false
+    /// A click on an emoji types it into the app you were typing in instead of copying it.
+    /// Needs Accessibility, so it waits to be turned on.
+    public var emojiTypes = false
+    /// Where each page sits in the switcher: in the capsule, under More, or left out.
+    public var islandPages = IslandPageLayout.standard
 
     // Now Playing controls, gestures and battery alerts
     /// Show the time left (rather than the track length) right of the scrubber. Tap the label to switch.
@@ -502,6 +518,12 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// The choices Settings offers for `pausedMusicTimeout`, in order.
     public static let pausedMusicChoices: [Double] = [0, 5, 10, 30, 60, 300, neverHide]
     public static let clipboardLimitRange: ClosedRange<Int> = 1...500
+    /// The default `shelfKeepFor`: a day.
+    public static let standardShelfKeepFor: Double = 86400
+    /// The choices Settings offers for `shelfKeepFor`: an hour, a day, a week, or until removed.
+    public static let shelfKeepChoices: [Double] = [3600, 86400, 604_800, 0]
+    /// The longest `shelfKeepFor` short of keeping files for good: 30 days.
+    public static let shelfKeepRange: ClosedRange<Double> = 60...2_592_000
     /// The choices Settings offers for `meetingReminderMinutes`, Off first.
     public static let meetingReminderChoices = [0, 5, 10, 15, 30]
     /// Ports for the local API and the LAN bridge (unprivileged, and never the same one).
@@ -613,6 +635,8 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         s.openDelay = Self.clamp(s.openDelay, Self.openDelayRange)
         s.closeDelay = Self.clamp(s.closeDelay, Self.closeDelayRange)
         s.clipboardLimit = Self.clamp(s.clipboardLimit, Self.clipboardLimitRange)
+        // Nothing, or less than nothing, keeps files until they are removed.
+        s.shelfKeepFor = s.shelfKeepFor.isFinite && s.shelfKeepFor > 0 ? Self.clamp(s.shelfKeepFor.rounded(), Self.shelfKeepRange) : 0
         var seenApps: Set<String> = []
         s.clipboardIgnoredApps = s.clipboardIgnoredApps.map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty && seenApps.insert($0).inserted }
@@ -708,6 +732,9 @@ public struct IsletSettings: Codable, Equatable, Sendable {
             // The output card came and went with the volume HUD then: whoever switched that off
             // doesn't start getting cards now.
             if !applied.contains("outputChangeCard") { s.outputChangeCard = s.hudEnabled }
+            // The shelf kept files until they were removed before it could let them go after a
+            // while: what is on it now stays, until the time is chosen in Settings.
+            if !applied.contains("shelfKeepFor") { s.shelfKeepFor = 0 }
         }
         // Older configs kept two bundle id lists beside `appRules`. They are folded into the
         // rules and not written back. (`launchAtLogin` is gone too: Login Items is the truth.)

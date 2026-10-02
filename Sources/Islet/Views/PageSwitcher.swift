@@ -3,7 +3,8 @@ import IsletCore
 import SwiftUI
 
 /// The switcher that floats under the open island: a glass capsule with Home, Today and Shelf
-/// and a "more" menu for the rest, whose highlight slides to the selected page. Beside it, two
+/// (or up to four pages chosen in Settings) and a "more" menu for the rest, whose highlight
+/// slides to the selected page. Beside it, two
 /// discs for the things you start rather than visit: a timer on the left and Ask on the right.
 ///
 /// It sits over the desktop, not on the island, so it is the one place the island uses Liquid
@@ -136,8 +137,9 @@ struct PageSwitcher: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    /// Pages whose feature is on, split between the capsule and the "more" menu
-    /// (`IslandPage.switcher`). Clipboard is listed only while clipboard history is on.
+    /// Pages whose feature is on, split between the capsule and the "more" menu in the order
+    /// set in Settings → General (`IslandPage.switcher`). Clipboard is listed only while
+    /// clipboard history is on.
     static func pages(_ model: AppModel) -> (main: [IslandTab], more: [IslandTab]) {
         let split = IslandPage.switcher(model.settings, current: IslandPage(rawValue: model.tab.rawValue))
         func tabs(_ pages: [IslandPage]) -> [IslandTab] { pages.compactMap { IslandTab(rawValue: $0.rawValue) } }
@@ -165,6 +167,11 @@ struct PageSwitcher: View {
         // Also beside the notch in the Black and Graphite themes; the Glass theme's stem has no room.
         items.append(IslandMenu.Item(title: "Keep open", symbol: "pin", checked: model.pinned) { model.pinned.toggle() })
         items.append(IslandMenu.Item(title: "Settings…", symbol: "gearshape") { AppActions.openSettings() })
+        // Opens the issue form in the browser; nothing is sent from here.
+        items.append(IslandMenu.Item(title: "Send feedback", symbol: "bubble.left",
+                                     children: Feedback.Kind.allCases.map { kind in
+                                         IslandMenu.Item(title: kind.title) { AppActions.sendFeedback(kind) }
+                                     }))
         items.append(.separator)
         items.append(IslandMenu.Item(title: "Quit Islet", symbol: "power") { NSApp.terminate(nil) })
         IslandMenu.show(items, model: model)
