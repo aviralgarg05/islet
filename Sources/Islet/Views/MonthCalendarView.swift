@@ -46,12 +46,23 @@ struct MonthGridView: View {
 
     private static let header: CGFloat = 16
     private static let weekdayRow: CGFloat = 12
+    /// Rows closer than this and the digits touch, and today's circle meets the date below.
+    static let minimumCell: CGFloat = 13
+
+    /// The height of a row of days, and whether the weekday letters fit above them: they give
+    /// way first when the island is too short for every week at `minimumCell`.
+    static func layout(height: CGFloat, weeks: Int) -> (cell: CGFloat, weekdays: Bool) {
+        let rows = CGFloat(max(weeks, 1))
+        let full = (height - header - weekdayRow - Space.xs) / rows
+        if full >= minimumCell { return (min(20, full), true) }
+        return (max(10, min(20, (height - header) / rows)), false)
+    }
 
     var body: some View {
         let month = model.tools.month
         let grid = month.grid(model)
-        let rows = CGFloat(max(grid.weeks.count, 1))
-        let cell = max(10, min(20, (height - Self.header - Self.weekdayRow - Space.xs) / rows))
+        let layout = Self.layout(height: height, weeks: grid.weeks.count)
+        let cell = layout.cell
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 Button { month.today(model) } label: {
@@ -71,16 +82,18 @@ struct MonthGridView: View {
                 }
             }
             .frame(height: Self.header)
-            HStack(spacing: 0) {
-                ForEach(Array(grid.weekdays.enumerated()), id: \.offset) { _, symbol in
-                    Text(symbol)
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(Ink.quaternary)
-                        .frame(maxWidth: .infinity)
+            if layout.weekdays {
+                HStack(spacing: 0) {
+                    ForEach(Array(grid.weekdays.enumerated()), id: \.offset) { _, symbol in
+                        Text(symbol)
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(Ink.quaternary)
+                            .frame(maxWidth: .infinity)
+                    }
                 }
+                .frame(height: Self.weekdayRow)
+                .padding(.top, Space.xs)
             }
-            .frame(height: Self.weekdayRow)
-            .padding(.top, Space.xs)
             ForEach(Array(grid.weeks.enumerated()), id: \.offset) { _, week in
                 HStack(spacing: 0) {
                     ForEach(0..<7, id: \.self) { i in
@@ -108,7 +121,8 @@ private struct DayCell: View {
                 .font(.system(size: font, weight: day.isToday || day.hasEvents ? .semibold : .regular, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(day.isToday ? Color.white : day.hasEvents ? Ink.primary : Ink.tertiary)
-                .frame(width: size + 3, height: size + 1)
+                // No taller than the row, so today's circle never meets the date below.
+                .frame(width: size + 3, height: size)
                 .background {
                     if day.isToday {
                         Circle().fill(Color.red)
@@ -143,8 +157,9 @@ struct MonthDayColumn: View {
         // Snapshots can't scroll, so they show the lines that fit.
         let fit = Self.fitting(height: height, allDay: !allDay.isEmpty, timed: timed.count, reminders: reminders.count)
         VStack(alignment: .leading, spacing: Space.xs) {
-            SectionLabel(title: picked.map { $0.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)) } ?? "Today",
-                         count: timed.count)
+            // No count beside it: after a date ("Wed, 14 Oct"), or "Today" on the 2nd, a number
+            // reads as part of the date. The events are listed right under it.
+            SectionLabel(title: picked.map { $0.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)) } ?? "Today")
                 .frame(height: 16)
             if !(model.settings.calendarEnabled && model.calendarAccess.events.canRead) {
                 // Off, or macOS not letting Islet read it: what is wrong, and the button that helps.
