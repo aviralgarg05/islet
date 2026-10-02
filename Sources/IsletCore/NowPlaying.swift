@@ -776,35 +776,61 @@ public struct SongProgress: Equatable, Sendable {
     }
 }
 
-/// When the Now Playing helper is started again after it exits. It restarts after a growing
-/// delay; one that ran for a while earns a fresh set of tries, and one that keeps dying is given
-/// up on after `limit` tries until the user asks again (Try again) or the Mac wakes.
+/// When the Now Playing helper is started again after it exits, or after it fails to start. It
+/// restarts after a growing delay; one that ran for a while earns a fresh set of tries, and one
+/// that keeps dying is given up on after `limit` tries. Given up, it is tried again on its own
+/// after `slowRetry`, then twice as long each time up to `slowRetryLimit`, and at once when the
+/// user asks (Try again, or switching Now Playing off and on) or the Mac wakes.
 public struct HelperRestarts: Equatable, Sendable {
     /// Restarts in a row before giving up.
     public static let limit = 5
     /// A helper that ran this long before exiting wasn't failing: the count starts again.
     public static let healthyRun: TimeInterval = 60
+    /// The first wait after giving up.
+    public static let slowRetry: TimeInterval = 5 * 60
+    /// The longest wait after giving up.
+    public static let slowRetryLimit: TimeInterval = 30 * 60
 
     public private(set) var count = 0
     public private(set) var gaveUp = false
+    /// Times given up since the helper last ran well, or the user last asked.
+    public private(set) var giveUps = 0
 
     public init() {}
 
-    /// The helper exited after running `ranFor` seconds: the delay before starting it again, or
-    /// nil when it has been given up on.
+    /// The helper exited after running `ranFor` seconds (0 when it couldn't start): the delay
+    /// before starting it again, or nil when it has been given up on (`retryAfterGivingUp`).
     public mutating func exited(ranFor: TimeInterval) -> TimeInterval? {
-        if ranFor > Self.healthyRun { count = 0 }
+        if ranFor > Self.healthyRun {
+            count = 0
+            giveUps = 0
+        }
         count += 1
         guard count <= Self.limit else {
+            if !gaveUp { giveUps += 1 }
             gaveUp = true
             return nil
         }
         return TimeInterval(count * count)
     }
 
-    /// A fresh set of tries: the user pressed Try again, or the Mac woke.
+    /// Given up: how long to wait before trying again on its own. Nil while it hasn't given up.
+    public var retryAfterGivingUp: TimeInterval? {
+        guard gaveUp else { return nil }
+        let doublings = Double(max(0, giveUps - 1))
+        return min(Self.slowRetryLimit, Self.slowRetry * pow(2, doublings))
+    }
+
+    /// The wait after giving up is over: a fresh set of tries. The next give-up waits longer.
+    public mutating func tryAgainAfterGivingUp() {
+        count = 0
+        gaveUp = false
+    }
+
+    /// A fresh set of tries and the shortest wait: the user asked, or the Mac woke.
     public mutating func reset() {
         count = 0
         gaveUp = false
+        giveUps = 0
     }
 }

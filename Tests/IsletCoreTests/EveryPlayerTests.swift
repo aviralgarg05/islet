@@ -264,6 +264,24 @@ import Testing
         #expect(alone.available(now: t0.addingTimeInterval(61)).isEmpty)
     }
 
+    /// The bridge stopping for good (given up, or unable to start) reports nothing: the live
+    /// video it reported last doesn't stay "playing" with controls that reach nothing, and
+    /// Spotify's own paused song is what is left.
+    @Test func aBridgeThatStoppedLeavesNoVideoBehind() {
+        var m = MediaArbiter()
+        m.update(NowPlaying(source: .spotify, bundleID: Self.spotifyID, appName: "Spotify", title: "Song", artist: "Band",
+                            isPlaying: false, duration: 300, elapsed: 105, timestamp: t0))
+        m.updateFromBridge(Self.report([Self.chrome(at: t0.addingTimeInterval(10))], current: Self.chromeID))
+        #expect(m.current(now: t0.addingTimeInterval(11))?.bundleID == Self.chromeID)
+        m.updateFromBridge(Self.report([], current: nil))
+        let later = t0.addingTimeInterval(3600 * 5)
+        #expect(m.current(now: t0.addingTimeInterval(12))?.source == .spotify)
+        #expect(m.closedIsland(now: t0.addingTimeInterval(12))?.isPlaying == false)
+        #expect(!m.available(now: t0.addingTimeInterval(12)).contains { $0.bundleID == Self.chromeID })
+        #expect(m.bridgePlayer == nil)
+        #expect(m.current(now: later) == nil)
+    }
+
     /// The single-report convenience still replaces everything the bridge said.
     @Test func aSingleReportReplacesTheList() {
         var m = MediaArbiter()

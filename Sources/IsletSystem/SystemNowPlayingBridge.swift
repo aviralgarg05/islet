@@ -10,8 +10,12 @@ import IsletCore
 public final class SystemNowPlayingBridge {
     /// Every player macOS lists, and the one that has the controls.
     public var onUpdate: ((BridgeReport) -> Void)?
-    /// Called with a human-readable reason when the bridge can't run.
+    /// Called with a human-readable reason when the bridge can't run. When it has stopped for
+    /// good (given up, or it can't start), an empty report comes first: what it said last can't
+    /// be trusted, and a video must not stay "playing" with controls that reach nothing.
     public var onUnavailable: ((String) -> Void)?
+    /// Called when the helper says it is up, so a failure said before is over.
+    public var onRunning: (() -> Void)?
 
     private var process: Process?
     private var stdin: FileHandle?
@@ -22,6 +26,8 @@ public final class SystemNowPlayingBridge {
     private var artwork = BridgeArtwork()
     private var restarts = HelperRestarts()
     private var stopped = false
+    /// The next start after an exit or a failed start. Nothing is scheduled while the helper runs.
+    private var pendingStart: DispatchWorkItem?
 
     public private(set) var isRunning = false
 
@@ -60,17 +66,21 @@ public final class SystemNowPlayingBridge {
     /// Whether it gave up after the helper kept exiting (`HelperRestarts`).
     public var gaveUp: Bool { restarts.gaveUp }
 
-    /// Start again with a fresh set of tries: the user asked, or the Mac woke after it gave up.
+    /// Start with a fresh set of tries: Now Playing switched on, the user asked, or the Mac woke
+    /// after it gave up.
     public func retry() {
         restarts.reset()
+        cancelPendingStart()
         start()
     }
 
     public func start() {
         stopped = false
         guard process == nil else { return }
+        cancelPendingStart()
         guard let paths = Self.helperPaths() else {
-            onUnavailable?("MediaRemote helper not found; system-wide Now Playing is disabled.")
+            // Nothing would change by trying again.
+            unavailable("MediaRemote helper not found; system-wide Now Playing is disabled.")
             return
         }
         let p = Process()
@@ -97,7 +107,9 @@ public final class SystemNowPlayingBridge {
         do {
             try p.run()
         } catch {
-            onUnavailable?("Could not start MediaRemote helper: \(error.localizedDescription)")
+            // As if it exited at once (a busy Mac can refuse a new process for a moment).
+            out.fileHandleForReading.readabilityHandler = nil
+            failed("Could not start MediaRemote helper: \(error.localizedDescription)", ranFor: 0)
             return
         }
         process = p
@@ -109,6 +121,7 @@ public final class SystemNowPlayingBridge {
 
     public func stop() {
         stopped = true
+        cancelPendingStart()
         stdout?.readabilityHandler = nil
         try? stdin?.close()
         process?.terminate()
@@ -125,16 +138,47 @@ public final class SystemNowPlayingBridge {
         stdout = nil
         isRunning = false
         guard !stopped else { return }
-        // Restart with backoff if the helper crashed (e.g. mediaremoted restarted). A helper
-        // that ran for a while earns a fresh set of retries; one that keeps dying doesn't.
-        guard let delay = restarts.exited(ranFor: Date().timeIntervalSince(startedAt)) else {
-            onUnavailable?("MediaRemote helper keeps exiting (status \(status)).")
+        failed("MediaRemote helper keeps exiting (status \(status)).", ranFor: Date().timeIntervalSince(startedAt))
+    }
+
+    /// The helper exited, or couldn't start. Restart with backoff (it crashed, or mediaremoted
+    /// restarted): a helper that ran for a while earns a fresh set of retries, one that keeps
+    /// dying doesn't. Given up, its players go and it is tried again much later (`HelperRestarts`).
+    private func failed(_ reason: String, ranFor: TimeInterval) {
+        if let delay = restarts.exited(ranFor: ranFor) {
+            startLater(after: delay) { $0.start() }
             return
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self, !self.stopped else { return }
-            self.start()
+        unavailable(reason)
+        if let wait = restarts.retryAfterGivingUp {
+            startLater(after: wait) {
+                $0.restarts.tryAgainAfterGivingUp()
+                $0.start()
+            }
         }
+    }
+
+    /// Stopped for good: what it reported last goes, then the app hears why.
+    private func unavailable(_ reason: String) {
+        onUpdate?(BridgeReport(players: [], current: nil))
+        onUnavailable?(reason)
+    }
+
+    /// One timer for the next start, replaced by any newer one and dropped by `stop`.
+    private func startLater(after delay: TimeInterval, _ work: @escaping (SystemNowPlayingBridge) -> Void) {
+        cancelPendingStart()
+        let item = DispatchWorkItem { [weak self] in
+            guard let self, !self.stopped else { return }
+            self.pendingStart = nil
+            work(self)
+        }
+        pendingStart = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+    }
+
+    private func cancelPendingStart() {
+        pendingStart?.cancel()
+        pendingStart = nil
     }
 
     /// Send a transport command. Returns false when the helper isn't running.
@@ -200,6 +244,8 @@ public final class SystemNowPlayingBridge {
         guard let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { return }
         if let report = Self.report(from: obj, artwork: &artwork) {
             onUpdate?(report)
+        } else if obj["type"] as? String == "ready" {
+            onRunning?()
         } else if obj["type"] as? String == "error" {
             onUnavailable?(obj["message"] as? String ?? "MediaRemote error")
         }

@@ -396,6 +396,36 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         #expect(next == 1)
         #expect(!r.gaveUp)
     }
+
+    /// Given up, it is tried again on its own, less and less often: after 5 minutes, then 10, 20
+    /// and at most 30, with a fresh set of quick tries each time.
+    @Test func givenUpItIsTriedAgainLaterAndLessOften() {
+        var r = HelperRestarts()
+        #expect(r.retryAfterGivingUp == nil)
+        var waits: [TimeInterval?] = []
+        for _ in 1...5 {
+            while r.exited(ranFor: 1) != nil {}
+            #expect(r.gaveUp)
+            waits.append(r.retryAfterGivingUp)
+            r.tryAgainAfterGivingUp()
+            #expect(!r.gaveUp)
+            #expect(r.retryAfterGivingUp == nil)
+        }
+        #expect(waits == [300, 600, 1200, 1800, 1800])
+        // A helper that couldn't start counts as one that exited at once.
+        #expect(r.exited(ranFor: 0) == 1)
+        // One that then ran well starts the waits again.
+        #expect(r.exited(ranFor: HelperRestarts.healthyRun + 1) == 1)
+        while r.exited(ranFor: 1) != nil {}
+        #expect(r.retryAfterGivingUp == 300)
+        // So does asking (Try again, switching Now Playing on, the Mac waking).
+        while r.exited(ranFor: 1) != nil {}
+        r.tryAgainAfterGivingUp()
+        while r.exited(ranFor: 1) != nil {}
+        #expect(r.retryAfterGivingUp == 600)
+        r.reset()
+        #expect(!r.gaveUp && r.giveUps == 0 && r.retryAfterGivingUp == nil)
+    }
 }
 
 @Suite struct SwipeUnderHUDTests {

@@ -467,8 +467,16 @@ final class AppModel {
             self?.bridgeFailed = true
             self?.syncPlayers()
         }
+        // Back after a failure (tried again on its own after giving up): the bridge brings
+        // artwork and position again.
+        systemMedia.onRunning = { [weak self] in
+            guard let self, self.bridgeFailed else { return }
+            self.bridgeFailed = false
+            self.syncPlayers()
+        }
         bridgeFailed = false
-        systemMedia.start()
+        // Switched on, a fresh set of tries, even if it gave up before Now Playing went off.
+        systemMedia.retry()
         syncPlayers()
     }
 
@@ -482,8 +490,8 @@ final class AppModel {
     private(set) var lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
 
     /// The system bridge said it can't deliver (it may still be running), so the players fetch
-    /// their own details. Reset when media starts again. Settings → Now Playing says so, with
-    /// Try again.
+    /// their own details. Reset when media starts again or the helper comes back. Settings → Now
+    /// Playing says so, with Try again.
     private(set) var bridgeFailed = false
 
     /// Settings → Now Playing → Try again, and waking from sleep after the bridge gave up: a
