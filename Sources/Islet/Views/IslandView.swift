@@ -1016,7 +1016,7 @@ struct BubbleView: View {
             if glass {
                 // The same glass and smoke as the pill beside it.
                 GlassSurface(shape: Circle(), tint: Color.black.opacity(0.2), fallback: Color(white: 0.13).opacity(0.78))
-                Circle().fill(Color.black.opacity(GlassMelt.smokeFloor))
+                Circle().fill(Color.black.opacity(GlassMelt.standardSmoke))
             } else {
                 Circle().fill(Color.black)
             }

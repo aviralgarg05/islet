@@ -713,7 +713,8 @@ struct IslandSketch: View {
             // Black in the stem over the notch; the body is a tinted, see-through glass from the
             // bottom of the menu bar, darker towards the Black end of the level.
             let top = min(0.95, row / max(height, 1))
-            let smoke = 0.36 + 0.5 * max(0, (0.6 - settings.glassLevel) / 0.6)
+            // A touch darker than the island: the preview has no desktop showing through.
+            let smoke = min(0.92, GlassMelt.smoke(level: settings.glassLevel) + 0.06)
             shape.fill(Color.black.opacity(smoke))
                 .overlay(shape.fill(LinearGradient(stops: [
                     .init(color: .black, location: 0),

@@ -214,7 +214,7 @@ private struct GlassBody: View {
     var stem: CGFloat? = nil
 
     /// The least black left over the glass, so text always has a floor of contrast.
-    static let smoke = GlassMelt.smokeFloor
+    static let smoke = GlassMelt.standardSmoke
     @Environment(\.snapshotMode) private var snapshotMode
     @Environment(\.shellClock) private var clock
     @Environment(\.islandMotion) private var motion
