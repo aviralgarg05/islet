@@ -700,11 +700,30 @@ public struct MediaPick: Equatable, Sendable {
 /// nothing runs while the music stays paused.
 ///
 /// Only a pause counts: music that was already paused when it appeared (at launch, or a player
-/// reporting a paused track) isn't brought back, unless paused music is kept for good.
+/// reporting a paused track) isn't brought back, unless paused music is kept for good. Nor is
+/// another player's: when a playing video goes and a song paused long ago is left, the song
+/// wasn't paused just now.
 public struct PausedMusic: Equatable, Sendable {
     /// When the music last went from playing to paused; nil while it plays or after it went.
     public private(set) var since: Date?
-    private var wasPlaying = false
+    /// The player playing at the last change, if one was.
+    private var playing: Player?
+    /// The player whose pause `since` is.
+    private var paused: Player?
+
+    /// A player as `MediaArbiter.playerID` names it, and its track.
+    private struct Player: Equatable, Sendable {
+        var id: String
+        var track: String
+
+        init(_ np: NowPlaying) {
+            id = MediaArbiter.playerID(np)
+            track = np.trackKey
+        }
+
+        /// The same player: the same app, or the same track from a report that names no app.
+        func isSame(as other: Player) -> Bool { id == other.id || track == other.track }
+    }
 
     public init() {}
 
@@ -712,15 +731,24 @@ public struct PausedMusic: Equatable, Sendable {
     public mutating func ingest(_ np: NowPlaying?, now: Date) {
         guard let np else {
             since = nil
-            wasPlaying = false
+            playing = nil
+            paused = nil
             return
         }
+        let player = Player(np)
         if np.isPlaying {
             since = nil
-            wasPlaying = true
-        } else if wasPlaying {
-            since = now
-            wasPlaying = false
+            paused = nil
+            playing = player
+        } else if let was = playing {
+            // Paused just now only if it is the player that was playing.
+            since = player.isSame(as: was) ? now : nil
+            paused = since == nil ? nil : player
+            playing = nil
+        } else if let p = paused, !player.isSame(as: p) {
+            // Another player's paused track took its place: not a pause either.
+            since = nil
+            paused = nil
         }
     }
 
