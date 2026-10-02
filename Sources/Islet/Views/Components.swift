@@ -371,7 +371,8 @@ struct LevelBar: View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(Wash.track)
-                Capsule().fill(tint).frame(width: max(height, geo.size.width * min(1, max(0, value))))
+                // Nothing at all for an empty or muted level: a minimum fill would leave a dot.
+                Capsule().fill(tint).frame(width: value > 0 ? max(height, geo.size.width * min(1, value)) : 0)
             }
         }
         .frame(height: height)

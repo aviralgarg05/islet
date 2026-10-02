@@ -1433,12 +1433,14 @@ struct DetailedHUDContent: View {
                     .frame(width: 18)
                 LevelBar(value: hud.shownLevel, tint: tint, height: 5)
                     .animation(motion == .off ? nil : .snappy(duration: 0.18), value: hud.value)
-                Text("\(percent)%")
+                // Muted says so: "0%" would read as the level having been turned down.
+                Text(hud.muted ? "Muted" : "\(percent)%")
                     .textStyle(.caption, emphasized: true, numeric: true)
                     .foregroundStyle(Ink.secondary)
                     .contentTransition(motion.numberSwap(value: Double(percent)))
                     .animation(motion == .off ? nil : .snappy(duration: 0.18), value: percent)
-                    .frame(width: 34, alignment: .trailing)
+                    .fixedSize()
+                    .frame(minWidth: 34, alignment: .trailing)
             }
             .padding(.horizontal, Space.l)
             .frame(height: IslandLayout.hudBody)
