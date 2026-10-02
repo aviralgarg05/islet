@@ -80,7 +80,7 @@ private func spec(_ provider: String, _ json: String) throws -> ActivitySpec {
         #expect(shell.state == .running && shell.subtitle == "Running npm install left-pad")
 
         let mcp = try spec("cursor", #"{"conversation_id":"conv-1","hook_event_name":"afterMCPExecution","tool_name":"create_issue","workspace_roots":["/Users/me/web"]}"#)
-        #expect(mcp.id == shell.id && mcp.subtitle == "Using create_issue")
+        #expect(mcp.id == shell.id && mcp.subtitle == "Using create issue")
 
         let done = try spec("cursor", #"{"conversation_id":"conv-1","hook_event_name":"stop","status":"completed","workspace_roots":["/Users/me/web"]}"#)
         #expect(done.id == shell.id && done.state == .success && done.sneak == true && done.ttl == 30)

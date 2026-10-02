@@ -69,9 +69,70 @@ import Testing
     }
 
     @Test func mcpToolNamesAreReadable() {
-        #expect(AgentHooks.describeTool("mcp__github__create_issue", input: nil) == "Using github")
+        #expect(AgentHooks.describeTool("mcp__github__create_issue", input: nil) == "Using create issue")
         #expect(AgentHooks.describeTool("Grep", input: ["pattern": "TODO"]) == "Searching for TODO")
-        #expect(AgentHooks.describeTool("Frobnicate", input: nil) == "Using Frobnicate")
+        #expect(AgentHooks.describeTool("Frobnicate", input: nil) == "Using frobnicate")
+        // A connector's server is a UUID, and a single underscore is part of a name.
+        #expect(AgentHooks.describeTool("mcp__1a59c906-04da-521d-bda7-7f71b9f9e01c__batch", input: nil) == "Using batch")
+        #expect(AgentHooks.describeTool("mcp__my_server__tabs_context_mcp", input: nil) == "Using tabs context")
+        #expect(AgentHooks.describeTool("mcp__github", input: nil) == "Using a tool")
+    }
+
+    /// Claude Code's own tools read as what they do, never as their ids.
+    @Test func claudeToolsInWords() {
+        #expect(AgentHooks.describeTool("ExitPlanMode", input: nil) == "Finishing the plan")
+        #expect(AgentHooks.describeTool("AskUserQuestion", input: nil) == "Asking you a question")
+        #expect(AgentHooks.describeTool("Skill", input: ["skill": "pdf"]) == "Using a skill")
+        #expect(AgentHooks.describeTool("BashOutput", input: nil) == "Checking a command")
+        #expect(AgentHooks.describeTool("KillShell", input: nil) == "Stopping a command")
+        #expect(AgentHooks.describeTool("LS", input: nil) == "Listing files")
+        #expect(AgentHooks.describeTool("ToolSearch", input: nil) == "Looking for tools")
+        #expect(AgentHooks.describeTool("NewToolKind", input: nil) == "Using new tool kind")
+    }
+
+    @Test func identifiersAsWords() {
+        #expect(AgentHooks.words("create_issue") == "create issue")
+        #expect(AgentHooks.words("createIssue") == "create issue")
+        #expect(AgentHooks.words("Create-Issue") == "create issue")
+        #expect(AgentHooks.words("openURLInTab") == "open URL in tab")
+        #expect(AgentHooks.words("claude-in-chrome") == "claude in chrome")
+        #expect(AgentHooks.words("mcp") == "mcp")
+        #expect(AgentHooks.words("__") == "")
+        #expect(AgentHooks.serverWords("1a59c906-04da-521d-bda7-7f71b9f9e01c") == nil)
+        #expect(AgentHooks.serverWords("github") == "github")
+    }
+
+    /// A command reads as itself: no `cd` into the project first, no home folder with the
+    /// user's name in it, no project folder before every path.
+    @Test func commandsReadWithoutTheirFolders() {
+        let home = "/Users/me"
+        let cwd = "/Users/me/code/app"
+        func shown(_ c: String, cwd: String? = cwd) -> String { AgentHooks.displayCommand(c, cwd: cwd, home: home) }
+        #expect(shown(#"cd "$HOME/x" && swift build"#) == "swift build")
+        #expect(shown(#"cd "/Users/me/Library/Application Support/x" && make test"#) == "make test")
+        #expect(shown("cd /tmp; cd build && ninja") == "ninja")
+        #expect(shown("cat /Users/me/code/app/Sources/a.swift") == "cat Sources/a.swift")
+        #expect(shown("ls /Users/me/Downloads") == "ls ~/Downloads")
+        #expect(shown("ls /Users/me") == "ls ~")
+        #expect(shown("ls /Users/megan/x") == "ls /Users/megan/x")
+        #expect(shown("echo $HOMEBREW_PREFIX") == "echo $HOMEBREW_PREFIX")
+        #expect(shown("cd /Users/me/code/app") == "cd ~/code/app")
+        #expect(shown("swift test", cwd: nil) == "swift test")
+        #expect(shown(String(repeating: "x", count: 100)).count == 44)
+        // Secrets are hidden as before.
+        #expect(shown("cd /x && API_TOKEN=abcdefgh123 make") == "API_TOKEN=••• make")
+    }
+
+    @Test func claudeCommandsDropTheProjectFolder() throws {
+        let home = NSHomeDirectory()
+        let input = try JSONSerialization.data(withJSONObject: [
+            "session_id": "s1", "cwd": "\(home)/code/app", "hook_event_name": "PreToolUse", "tool_name": "Bash",
+            "tool_input": ["command": "cd \"\(home)/code/app\" && swift build"],
+        ])
+        let json = String(decoding: input, as: UTF8.self)
+        #expect(spec(try map("claude", json))?.subtitle == "Running swift build")
+        let asking = json.replacingOccurrences(of: "PreToolUse", with: "PermissionRequest")
+        #expect(spec(try map("claude", asking))?.subtitle == "Needs approval: Running swift build")
     }
 
     @Test func longCommandsAreTruncated() {

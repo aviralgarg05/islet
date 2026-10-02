@@ -92,15 +92,89 @@ public enum AgentHooks {
         return s
     }
 
+    /// A command as the island shows it, in at most `limit` characters: secrets hidden, a
+    /// leading `cd <folder> &&` left out (agents often start there, and it pushed the command
+    /// itself out of sight), the project's folder dropped from paths inside it and the home
+    /// folder written ~, so `cd "/Users/me/code/app" && swift build` reads "swift build".
+    public static func displayCommand(_ command: String, cwd: String?, home: String = NSHomeDirectory(), limit: Int = 44) -> String {
+        var s = redactSecrets(command).trimmingCharacters(in: .whitespacesAndNewlines)
+        let cdFirst = #"^cd\s+(?:"[^"]*"|'[^']*'|[^\s;&|]+)\s*(?:&&|;)\s*"#
+        while let r = s.range(of: cdFirst, options: .regularExpression), r.upperBound < s.endIndex {
+            s.removeSubrange(r)
+        }
+        var project = cwd?.trimmingCharacters(in: .whitespaces) ?? ""
+        while project.count > 1, project.hasSuffix("/") { project.removeLast() }
+        if project.count > 1 { s = s.replacingOccurrences(of: project + "/", with: "") }
+        var homes = [#"\$\{HOME\}"#, #"\$HOME(?![A-Za-z0-9_])"#]
+        if home.count > 1 { homes.append(NSRegularExpression.escapedPattern(for: home) + #"(?=/|$|[\s"';:)])"#) }
+        for pattern in homes {
+            guard let re = try? NSRegularExpression(pattern: pattern) else { continue }
+            s = re.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "~")
+        }
+        return truncate(s, limit)
+    }
+
+    /// The server and tool of an MCP tool's name, `mcp__<server>__<tool>`; nil for any other name.
+    static func mcpParts(_ name: String) -> (server: String, tool: String)? {
+        guard name.hasPrefix("mcp__") else { return nil }
+        let parts = name.dropFirst(5).components(separatedBy: "__")
+        return (parts[0], parts.dropFirst().joined(separator: "__"))
+    }
+
+    /// A tool's name in plain words, for a tool Islet has no phrase of its own for: the tool's
+    /// part of `mcp__github__create_issue` reads "create issue", `TabsContext` "tabs context".
+    /// Empty when there are no words in it.
+    static func toolWords(_ name: String) -> String {
+        words(mcpParts(name)?.tool ?? name)
+    }
+
+    /// An MCP server's name in words ("claude in chrome"), or nil when it is an id nobody
+    /// would know it by, such as a connector's UUID.
+    static func serverWords(_ server: String) -> String? {
+        guard server.range(of: "^[0-9a-fA-F-]{16,}$", options: .regularExpression) == nil else { return nil }
+        let w = words(server)
+        return w.isEmpty ? nil : w
+    }
+
+    /// An identifier as lower-case words: snake_case, kebab-case and CamelCase split apart
+    /// ("create_issue", "createIssue" and "Create-Issue" all read "create issue"). Acronyms
+    /// keep their capitals ("open URL"). "mcp" says nothing to a person, so it is left out.
+    static func words(_ identifier: String) -> String {
+        var found: [String] = []
+        var current = ""
+        let chars = Array(identifier)
+        for (i, c) in chars.enumerated() {
+            if !(c.isLetter || c.isNumber) {
+                if !current.isEmpty { found.append(current) }
+                current = ""
+                continue
+            }
+            if c.isUppercase, let prev = current.last {
+                let next = i + 1 < chars.count ? chars[i + 1] : nil
+                if prev.isLowercase || prev.isNumber || (prev.isUppercase && next?.isLowercase == true) {
+                    found.append(current)
+                    current = ""
+                }
+            }
+            current.append(c)
+        }
+        if !current.isEmpty { found.append(current) }
+        let said = found.filter { $0.lowercased() != "mcp" }
+        return (said.isEmpty ? found : said).map { w in
+            w.count > 1 && w.allSatisfy { $0.isUppercase || $0.isNumber } ? w : w.lowercased()
+        }.joined(separator: " ")
+    }
+
     /// Describe a tool call in a few words ("Editing App.swift", "Running swift test").
-    static func describeTool(_ name: String, input: [String: Any]?) -> String {
+    /// `cwd` is the agent's folder, which commands are shown relative to.
+    static func describeTool(_ name: String, input: [String: Any]?, cwd: String? = nil) -> String {
         let input = input ?? [:]
         func file(_ key: String) -> String? {
             (input[key] as? String).map { URL(fileURLWithPath: $0).lastPathComponent }
         }
         switch name {
         case "Bash":
-            if let cmd = input["command"] as? String { return "Running " + truncate(redactSecrets(cmd), 44) }
+            if let cmd = input["command"] as? String { return "Running " + displayCommand(cmd, cwd: cwd) }
             return "Running a command"
         case "Edit", "MultiEdit", "NotebookEdit": return "Editing " + (file("file_path") ?? file("notebook_path") ?? "a file")
         case "Write": return "Writing " + (file("file_path") ?? "a file")
@@ -109,12 +183,16 @@ public enum AgentHooks {
         case "WebFetch", "WebSearch": return "Browsing the web"
         case "Task", "Agent": return "Running a subagent"
         case "TodoWrite": return "Updating the plan"
+        case "ExitPlanMode": return "Finishing the plan"
+        case "AskUserQuestion": return "Asking you a question"
+        case "Skill": return "Using a skill"
+        case "BashOutput": return "Checking a command"
+        case "KillShell", "KillBash": return "Stopping a command"
+        case "LS": return "Listing files"
+        case "ToolSearch": return "Looking for tools"
         default:
-            if name.hasPrefix("mcp__") {
-                let parts = name.split(separator: "_", omittingEmptySubsequences: true)
-                return "Using " + (parts.dropFirst().first.map(String.init) ?? "a tool")
-            }
-            return "Using \(name)"
+            let words = toolWords(name)
+            return words.isEmpty ? "Using a tool" : "Using " + truncate(words, 40)
         }
     }
 
@@ -143,7 +221,7 @@ public enum AgentHooks {
         case "PreToolUse":
             spec.state = .running
             spec.progress = -1
-            spec.subtitle = describeTool(o["tool_name"] as? String ?? "tool", input: o["tool_input"] as? [String: Any])
+            spec.subtitle = describeTool(o["tool_name"] as? String ?? "tool", input: o["tool_input"] as? [String: Any], cwd: o["cwd"] as? String)
             spec.priority = .normal
             spec.sneak = false
             spec.ttl = 0
@@ -152,7 +230,8 @@ public enum AgentHooks {
         case "PermissionRequest":
             // The approval card (or, later, the Notification event) gets attention; this only marks the wait.
             spec.state = .waiting
-            spec.subtitle = "Needs approval: " + describeTool(o["tool_name"] as? String ?? "tool", input: o["tool_input"] as? [String: Any])
+            spec.subtitle = "Needs approval: " + describeTool(o["tool_name"] as? String ?? "tool", input: o["tool_input"] as? [String: Any],
+                                                              cwd: o["cwd"] as? String)
             spec.progress = 0
             spec.trailing = "Waiting"
             spec.priority = .high
@@ -236,6 +315,7 @@ public enum AgentHooks {
         var spec = ActivitySpec(id: id, source: "codex", title: proj.map { "Codex · \($0)" } ?? "Codex",
                                 icon: .symbol("terminal.fill"), tint: "#10A37F")
         let tool = o["tool_name"] as? String ?? "tool"
+        let cwd = o["cwd"] as? String
         switch event {
         case "SessionStart":
             spec.state = .info; spec.subtitle = "Session started"; spec.priority = .low; spec.sneak = false; spec.ttl = 0
@@ -244,11 +324,11 @@ public enum AgentHooks {
             spec.priority = .normal; spec.sneak = false; spec.ttl = 0; spec.trailing = ""
         case "PreToolUse", "PostToolUse":
             // After a tool the turn goes on, so it still reads as working on that step.
-            spec.state = .running; spec.subtitle = describeCodexTool(tool, input: o["tool_input"]); spec.progress = -1
+            spec.state = .running; spec.subtitle = describeCodexTool(tool, input: o["tool_input"], cwd: cwd); spec.progress = -1
             spec.priority = .normal; spec.sneak = false; spec.ttl = 0; spec.trailing = ""
         case "PermissionRequest":
             // The approval card gets attention; this only marks the wait.
-            spec.state = .waiting; spec.subtitle = "Needs approval: " + describeCodexTool(tool, input: o["tool_input"])
+            spec.state = .waiting; spec.subtitle = "Needs approval: " + describeCodexTool(tool, input: o["tool_input"], cwd: cwd)
             spec.progress = 0; spec.trailing = "Waiting"; spec.priority = .high; spec.sneak = false; spec.ttl = 0
         case "Stop":
             let last = (o["last_assistant_message"] as? String).map { truncate(redactSecrets($0), 70) }
@@ -264,12 +344,12 @@ public enum AgentHooks {
 
     /// A Codex tool call in a few words. Its shell tool takes the command as a list
     /// (`["bash", "-lc", "git status"]`), and `apply_patch` names the files in the patch.
-    static func describeCodexTool(_ name: String, input: Any?) -> String {
+    static func describeCodexTool(_ name: String, input: Any?, cwd: String? = nil) -> String {
         let object = input as? [String: Any] ?? [:]
         switch name {
         case "shell", "local_shell", "exec_command", "container.exec", "Bash":
             guard let command = commandLine(object["command"] ?? object["cmd"] ?? input) else { return "Running a command" }
-            return "Running " + truncate(redactSecrets(command), 44)
+            return "Running " + displayCommand(command, cwd: cwd)
         case "apply_patch":
             let patch = object["input"] as? String ?? object["patch"] as? String ?? input as? String ?? ""
             if let r = patch.range(of: #"\*\*\* (?:Add|Update|Delete) File: \S+"#, options: .regularExpression) {
@@ -280,7 +360,7 @@ public enum AgentHooks {
         case "update_plan": return "Updating the plan"
         case "web_search": return "Browsing the web"
         case "view_image": return "Looking at an image"
-        default: return describeTool(name, input: object)
+        default: return describeTool(name, input: object, cwd: cwd)
         }
     }
 
@@ -299,7 +379,8 @@ public enum AgentHooks {
     static func mapCursor(_ o: [String: Any]) -> Result {
         guard let event = o["hook_event_name"] as? String else { return mapGeneric(o, provider: "cursor") }
         let id = "cursor-" + shortID(o["conversation_id"] as? String)
-        let proj = project((o["workspace_roots"] as? [String])?.first ?? o["cwd"] as? String)
+        let folder = (o["workspace_roots"] as? [String])?.first ?? o["cwd"] as? String
+        let proj = project(folder)
         var spec = ActivitySpec(id: id, source: "cursor", title: proj.map { "Cursor · \($0)" } ?? "Cursor",
                                 icon: .symbol("cursorarrow"), tint: "#C8C8C8")
         func working(_ subtitle: String) {
@@ -310,9 +391,10 @@ public enum AgentHooks {
         case "beforeSubmitPrompt":
             working("Thinking…")
         case "beforeShellExecution", "afterShellExecution":
-            working((o["command"] as? String).map { "Running " + truncate(redactSecrets($0), 44) } ?? "Running a command")
+            working((o["command"] as? String).map { "Running " + displayCommand($0, cwd: folder) } ?? "Running a command")
         case "beforeMCPExecution", "afterMCPExecution":
-            working((o["tool_name"] as? String).map { "Using " + truncate($0, 40) } ?? "Using a tool")
+            let words = (o["tool_name"] as? String).map(toolWords) ?? ""
+            working(words.isEmpty ? "Using a tool" : "Using " + truncate(words, 40))
         case "afterFileEdit":
             working((o["file_path"] as? String).map { "Editing " + URL(fileURLWithPath: $0).lastPathComponent } ?? "Editing a file")
         case "stop":
