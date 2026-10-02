@@ -155,5 +155,24 @@ import Testing
         #expect(r.updatedText(now: fetched.addingTimeInterval(60 * 60), calendar: c, locale: gb) == "As of 09:12")
         #expect(r.updatedText(now: fetched.addingTimeInterval(86_400), calendar: c, locale: gb) == "As of yesterday")
         #expect(r.updatedText(now: fetched.addingTimeInterval(3 * 86_400), calendar: c, locale: gb) == "As of Thu")
+        // In a word, to follow the place when the line is short.
+        #expect(r.age(now: fetched.addingTimeInterval(59 * 60), calendar: c, locale: gb) == nil)
+        #expect(r.age(now: fetched.addingTimeInterval(86_400), calendar: c, locale: gb) == "yesterday")
+    }
+
+    @Test func aKeptReportShowsTodaysSky() {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "UTC")!
+        let fetched = c.date(from: DateComponents(year: 2026, month: 10, day: 1, hour: 9, minute: 12))!
+        let days = [WeatherReport.Day(date: "2026-10-01", code: 61, high: 16, low: 10),
+                    WeatherReport.Day(date: "2026-10-02", code: 3, high: 17, low: 10)]
+        let r = WeatherReport(current: .init(temperature: 14, code: 61, isDay: true), days: days, fetchedAt: fetched, utcOffset: 0)
+        // The same day, a reading from this morning still stands.
+        #expect(r.sky(now: fetched.addingTimeInterval(3 * 3600)).code == 61)
+        // The next day, today's forecast replaces yesterday's rain.
+        #expect(r.sky(now: fetched.addingTimeInterval(86_400)).code == 3)
+        // With no today left in it, the reading is all there is.
+        #expect(r.sky(now: fetched.addingTimeInterval(3 * 86_400)).code == 61)
+        #expect(WeatherCode.symbol(1) == WeatherCode.symbol(0))
     }
 }

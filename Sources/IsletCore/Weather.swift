@@ -87,7 +87,8 @@ public enum WeatherCode {
     public static func symbol(_ code: Int, isDay: Bool = true) -> String {
         switch code {
         case 0: return isDay ? "sun.max.fill" : "moon.stars.fill"
-        case 1: return isDay ? "sun.min.fill" : "moon.fill"
+        // The same sun as a clear sky: one forecast row shouldn't show two suns in two colours.
+        case 1: return isDay ? "sun.max.fill" : "moon.fill"
         case 2: return isDay ? "cloud.sun.fill" : "cloud.moon.fill"
         case 3: return "cloud.fill"
         case 45, 48: return "cloud.fog.fill"
@@ -197,19 +198,33 @@ public struct WeatherReport: Codable, Equatable, Sendable {
     /// When a stale report is from, short enough for the line under the sky: "As of 09:12"
     /// today, "As of yesterday", or "As of Mon" before that. Nil while it is fresh.
     public func updatedText(now: Date, calendar: Calendar = .current, locale: Locale = .current) -> String? {
+        age(now: now, calendar: calendar, locale: locale).map { "As of " + $0 }
+    }
+
+    /// The same, in a word, to follow the place when the line is short: "09:12", "yesterday",
+    /// "Mon". Nil while it is fresh.
+    public func age(now: Date, calendar: Calendar = .current, locale: Locale = .current) -> String? {
         guard isStale(now: now) else { return nil }
         if calendar.isDate(fetchedAt, inSameDayAs: now) {
-            return "As of " + UsageFormat.clockTime(fetchedAt, now: now, calendar: calendar, locale: locale)
+            return UsageFormat.clockTime(fetchedAt, now: now, calendar: calendar, locale: locale)
         }
         if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(fetchedAt, inSameDayAs: yesterday) {
-            return "As of yesterday"
+            return "yesterday"
         }
         let f = DateFormatter()
         f.calendar = calendar
         f.timeZone = calendar.timeZone
         f.locale = locale
         f.setLocalizedDateFormatFromTemplate("EEE")
-        return "As of " + f.string(from: fetchedAt)
+        return f.string(from: fetchedAt)
+    }
+
+    /// The sky to draw beside the temperature: the reading itself, unless it was taken on an
+    /// earlier day where the place is; then today's forecast, when the report still has it, so
+    /// yesterday's rain doesn't sit beside today's cloud.
+    public func sky(now: Date) -> (code: Int, isDay: Bool) {
+        if placeDate(fetchedAt) != placeDate(now), let today = today(now: now) { return (today.code, true) }
+        return (current.code, current.isDay)
     }
 }
 

@@ -45,15 +45,16 @@ struct WeatherTab: View {
                     .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
             }
         case .locationDenied:
-            EmptyHint(symbol: "location.slash", text: "Islet isn't allowed to know where this Mac is. Allow Location, or choose a city instead.") {
+            EmptyHint(symbol: "location.slash", text: "Islet isn’t allowed to know where this Mac is. Allow Location, or choose a city instead.") {
                 Button("Open System Settings") { NSWorkspace.shared.open(PermissionKind.location.settingsURL) }
                     .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
                 Button("Choose a city…") { AppActions.openSettings(.tools, at: "tools.weatherLocation") }
                     .buttonStyle(CapsuleButtonStyle())
             }
         case .failed:
-            EmptyHint(symbol: "cloud", text: "The weather couldn't be reached.") {
-                Button("Try again") { model.tools.weather.retry() }.buttonStyle(CapsuleButtonStyle())
+            EmptyHint(symbol: "cloud", text: "Couldn’t get the weather. Check the internet connection, then try again.") {
+                Button("Try again") { model.tools.weather.retry() }
+                    .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
             }
         case .loading, .idle:
             HStack(spacing: Space.s) {
@@ -92,8 +93,12 @@ struct WeatherReportView: View {
 
     private var conditions: some View {
         let c = report.current
+        // A kept report: the reading is old, so its temperature is quieter, and the sky is
+        // today's forecast once the reading is from an earlier day.
+        let kept = report.updatedText(now: now) != nil
+        let sky = report.sky(now: now)
         return HStack(alignment: .center, spacing: Space.m) {
-            Image(systemName: WeatherCode.symbol(c.code, isDay: c.isDay))
+            Image(systemName: WeatherCode.symbol(sky.code, isDay: sky.isDay))
                 .symbolRenderingMode(.multicolor)
                 .font(.system(size: 28))
                 .frame(width: 36)
@@ -101,22 +106,29 @@ struct WeatherReportView: View {
             VStack(alignment: .leading, spacing: Space.hair) {
                 Text(unit.format(c.temperature))
                     .textStyle(.display)
-                    .foregroundStyle(Ink.primary)
-                Text(WeatherCode.text(c.code))
+                    .foregroundStyle(kept ? Ink.secondary : Ink.primary)
+                Text(WeatherCode.text(sky.code))
                     .textStyle(.body)
                     .foregroundStyle(Ink.secondary)
                     .lineLimit(1)
                 // The place and how it feels, or just the place when that is all that fits. An
-                // old report says when it is from instead of how it feels.
+                // old report says when it is from instead of how it feels, and keeps the place.
                 ViewThatFits(in: .horizontal) {
                     Text(detail).lineLimit(1).fixedSize()
-                    Text(report.updatedText(now: now) ?? place ?? detail).lineLimit(1).minimumScaleFactor(0.85)
+                    Text(short).lineLimit(1).minimumScaleFactor(0.85)
                 }
                 .textStyle(.caption)
                 .foregroundStyle(Ink.tertiary)
             }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    /// "London · yesterday" for an old report, "London" for a fresh one, when `detail` is too long.
+    private var short: String {
+        let age = report.age(now: now)
+        guard let place else { return report.updatedText(now: now) ?? detail }
+        return age.map { "\(place) · \($0)" } ?? place
     }
 
     /// "London · feels like 13°", or the day's high and low when it feels as it is, or
