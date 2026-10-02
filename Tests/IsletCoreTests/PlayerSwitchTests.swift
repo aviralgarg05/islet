@@ -100,6 +100,69 @@ import Testing
         #expect(timeout.pick == nil)
     }
 
+    // MARK: The closed island
+
+    /// Picking a paused video while a song plays: the open island and the controls follow the
+    /// pick, and the closed island keeps showing the song.
+    @Test func theClosedIslandShowsWhatPlays() {
+        var m = MediaArbiter()
+        m.updateFromBridge(Self.chrome(false, at: t0))
+        m.update(Self.spotify(true, at: t0.addingTimeInterval(5)))
+        let now = t0.addingTimeInterval(10)
+        #expect(m.closedIsland(now: now)?.bundleID == Self.spotifyID)
+        m.pick(player: Self.chromeID, at: now)
+        #expect(m.current(now: now)?.bundleID == Self.chromeID)
+        #expect(m.closedIsland(now: now)?.bundleID == Self.spotifyID)
+        // The song moving on is still the song.
+        m.update(Self.spotify(true, at: now.addingTimeInterval(60), title: "Next song"))
+        #expect(m.closedIsland(now: now.addingTimeInterval(61))?.title == "Next song")
+        #expect(m.current(now: now.addingTimeInterval(61))?.bundleID == Self.chromeID)
+        // Played, the pick shows closed too, even with the song still on.
+        m.updateFromBridge(Self.chrome(true, at: now.addingTimeInterval(70)))
+        #expect(m.closedIsland(now: now.addingTimeInterval(71))?.bundleID == Self.chromeID)
+        #expect(m.pick?.player == Self.chromeID)
+        // Paused again: back to the song.
+        m.updateFromBridge(Self.chrome(false, at: now.addingTimeInterval(80)))
+        #expect(m.closedIsland(now: now.addingTimeInterval(81))?.bundleID == Self.spotifyID)
+        #expect(m.current(now: now.addingTimeInterval(81))?.bundleID == Self.chromeID)
+    }
+
+    /// With nothing playing, the closed island shows what it would have without the pick: the
+    /// player paused last, which is what "Hide paused music after" then hides.
+    @Test func withNothingPlayingThePickChangesNothingClosed() {
+        var m = MediaArbiter()
+        m.updateFromBridge(Self.chrome(false, at: t0))
+        m.update(Self.spotify(true, at: t0.addingTimeInterval(5)))
+        m.pick(player: Self.chromeID, at: t0.addingTimeInterval(10))
+        m.update(Self.spotify(false, at: t0.addingTimeInterval(20)))
+        let now = t0.addingTimeInterval(21)
+        #expect(m.closedIsland(now: now)?.bundleID == Self.spotifyID)
+        #expect(m.closedIsland(now: now)?.isPlaying == false)
+        #expect(m.current(now: now)?.bundleID == Self.chromeID)
+        // Without a pick both agree.
+        m.clearPick()
+        #expect(m.closedIsland(now: now) == m.current(now: now))
+    }
+
+    /// The owner's report: a song that keeps playing never went from beside the notch because a
+    /// paused video was picked. Fed to `PausedMusic` as the app does, the song stays in view
+    /// however long "Hide paused music after" is.
+    @Test func aSongPlayingOnStaysBesideTheNotch() {
+        var m = MediaArbiter()
+        let radio = NowPlaying(source: .spotify, bundleID: Self.spotifyID, appName: "Spotify", title: "Radio", isPlaying: true,
+                               timestamp: t0)
+        m.update(radio)
+        m.updateFromBridge(Self.chrome(false, at: t0.addingTimeInterval(1)))
+        var paused = PausedMusic()
+        paused.ingest(m.closedIsland(now: t0.addingTimeInterval(2)), now: t0.addingTimeInterval(2))
+        m.pick(player: Self.chromeID, at: t0.addingTimeInterval(3))
+        paused.ingest(m.closedIsland(now: t0.addingTimeInterval(3)), now: t0.addingTimeInterval(3))
+        let later = t0.addingTimeInterval(3600)
+        let shown = Presenter.mediaInView(m.closedIsland(now: later), pausedMedia: paused.show(timeout: 60, now: later))
+        #expect(shown?.title == "Radio")
+        #expect(paused.nextDeadline(timeout: 60, now: later) == nil)
+    }
+
     @Test func aPlayerThatIsNotLiveCantBePicked() {
         var m = MediaArbiter()
         m.update(Self.spotify(true, at: t0))

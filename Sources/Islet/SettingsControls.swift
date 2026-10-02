@@ -10,12 +10,11 @@ struct LaunchAtLoginToggle: View {
     @ViewState private var status = SMAppService.mainApp.status
     /// Why the last change didn't take, in macOS's words.
     @ViewState private var problem: String?
-    @Environment(\.snapshotMode) private var snapshotMode
 
     /// Running from Downloads or a translocated copy (only checked for the real app bundle).
     private var unsettled: Bool {
-        guard !snapshotMode, Bundle.main.bundleIdentifier != nil else { return false }
-        return !AppLocation.isSettled(bundlePath: Bundle.main.bundlePath, home: NSHomeDirectory())
+        AppLocation.offersMove(bundlePath: AppActions.bundleURL.path, home: NSHomeDirectory(), isAppBundle: AppActions.runsAsApp,
+                               moment: .asked)
     }
 
     var body: some View {
@@ -35,8 +34,8 @@ struct LaunchAtLoginToggle: View {
             Text(problem).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
         }
         if unsettled {
-            AccessRow(text: "Move Islet to Applications so it opens at login.", button: "Show in Finder") {
-                NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
+            AccessRow(text: "Move Islet to Applications so it opens at login.", button: "Move to Applications…") {
+                AppActions.offerMoveToApplications(.asked)
             }
         }
     }

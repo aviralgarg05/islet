@@ -99,6 +99,17 @@ struct UsageLimitsSection: View {
 
     private func plan(install: Bool) {
         message = nil
+        // The status line names isletctl inside Islet: from a temporary copy of a download it
+        // would point nowhere after the next launch, so offer to move to Applications first.
+        if install {
+            switch AppActions.offerMoveToApplications(.connecting("Claude Code")) {
+            case .moving: return
+            case .declined:
+                message = "Move Islet to Applications first, so Claude Code can keep finding it."
+                return
+            case .notNeeded: break
+            }
+        }
         let current = try? Data(contentsOf: claudeSettingsFile)
         do {
             let edit = install ? try ClaudeStatusLineSetup.install(into: current, cli: AppActions.cliPath)

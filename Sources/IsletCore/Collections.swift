@@ -30,8 +30,10 @@ public struct ClipboardHistory: Codable, Equatable, Sendable {
     public var ignoredApps: Set<String> = [] {
         didSet { entries.removeAll { $0.sourceBundleID.map(ignoredApps.contains) ?? false } }
     }
-    /// Skip what looks like a password copied in a browser (`looksLikeSecret`), where password
-    /// manager extensions copy as the browser itself.
+    /// Skip what looks like a password copied in a browser, where password manager extensions
+    /// copy as the browser itself: text shaped like a generated password from a web page
+    /// (`looksLikeGeneratedPassword`), anything shaped like a password from an extension's own
+    /// page (`looksLikePassword`).
     public var skipsSecrets = true
 
     enum CodingKeys: String, CodingKey { case entries, limit }
@@ -64,6 +66,25 @@ public struct ClipboardHistory: Codable, Equatable, Sendable {
     /// Browsers, whose password manager extensions copy passwords as the browser.
     public static var browsers: Set<String> { Browsers.bundleIDs }
 
+    /// The pasteboard type where Chrome, Edge, Brave, Arc and other Chromium browsers put the
+    /// address of the page or extension a copy came from. Islet reads it to decide, never keeps it.
+    public static let sourceURLType = "org.chromium.source-url"
+
+    /// Chrome Web Store ids of password manager extensions (identifiers, not credentials). A
+    /// copy from one of their pages is never kept, like a copy from their apps.
+    public static let passwordManagerExtensions: Set<String> = [
+        "aeblfdkhhhdcdjpifhhbdiojplfjncoa", // 1Password
+        "nngceckbapebfimnlniiiahkandclblb", // Bitwarden
+        "hdokiejnpimakedhajhdlcegeplioahd", // LastPass
+        "fdjamakpfbbddfjaooikfcpapjohcfmg", // Dashlane
+        "pejdijmoenmkgeppbflobdenhhabjlaj", // iCloud Passwords
+        "ghmbeldphafepmbegfdlkpapadhbakde", // Proton Pass
+        "bfogiafebfohielmmehodmfbbebbbpei", // Keeper
+        "oboonakemofpalcgghocfoadofidjkkk", // KeePassXC-Browser
+        "fooolghllnmhmmndgjiamiiodkpenpbb", // NordPass
+        "pnlccmojcmeohlpggmfnbbiapkmbliob", // RoboForm
+    ]
+
     public static let maxTextLength = 100_000
     /// The most text kept in all (bytes of UTF-8), whatever the count: 500 long copies would
     /// otherwise hold 50 MB. The oldest unpinned entries go first.
@@ -73,9 +94,12 @@ public struct ClipboardHistory: Codable, Equatable, Sendable {
 
     public enum Outcome: Equatable, Sendable { case added, moved, ignored }
 
+    /// - Parameter sourceURL: the page or extension a browser says the copy came from
+    ///   (`sourceURLType`), used for the decision only.
     @discardableResult
-    public mutating func add(_ text: String, types: [String], sourceBundleID: String?, now: Date) -> Outcome {
-        guard shouldKeep(text, types: types, sourceBundleID: sourceBundleID) else { return .ignored }
+    public mutating func add(_ text: String, types: [String], sourceBundleID: String?, sourceURL: String? = nil,
+                             now: Date) -> Outcome {
+        guard shouldKeep(text, types: types, sourceBundleID: sourceBundleID, sourceURL: sourceURL) else { return .ignored }
         if let i = entries.firstIndex(where: { $0.text == text }) {
             var e = entries.remove(at: i)
             e.date = now
@@ -94,20 +118,115 @@ public struct ClipboardHistory: Codable, Equatable, Sendable {
     }
 
     /// Whether a copy is kept: never secret or throwaway types (nspasteboard.org), password
-    /// managers, apps the user ignored, likely passwords from a browser, blank text or text
-    /// over `maxTextLength`.
-    public func shouldKeep(_ text: String, types: [String], sourceBundleID: String?) -> Bool {
+    /// managers' apps and extensions, apps the user ignored, likely passwords from a browser,
+    /// blank text or text over `maxTextLength`.
+    public func shouldKeep(_ text: String, types: [String], sourceBundleID: String?, sourceURL: String? = nil) -> Bool {
         if types.contains(where: Self.ignoredTypes.contains) { return false }
         if let b = sourceBundleID, Self.ignoredApps.contains(b) || ignoredApps.contains(b) { return false }
+        if let id = sourceURL.flatMap(Self.extensionID), Self.passwordManagerExtensions.contains(id) { return false }
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= Self.maxTextLength else { return false }
-        if skipsSecrets, let b = sourceBundleID, Self.browsers.contains(b), Self.looksLikeSecret(text) { return false }
+        if skipsSecrets, let b = sourceBundleID, Browsers.browser(for: b) != nil {
+            // An extension's own page copies little but what it holds; a web page copies all sorts.
+            let fromExtension = sourceURL.map(Self.isExtensionPage) ?? false
+            if fromExtension ? Self.looksLikePassword(text) : Self.looksLikeGeneratedPassword(text) { return false }
+        }
         return true
     }
 
+    // MARK: What a password looks like
+
+    /// The extension a browser's source address names (`chrome-extension://<id>/…`), if any.
+    static func extensionID(_ sourceURL: String) -> String? {
+        let prefix = "chrome-extension://"
+        guard sourceURL.lowercased().hasPrefix(prefix) else { return nil }
+        let id = sourceURL.dropFirst(prefix.count).prefix { $0 != "/" && $0 != "?" && $0 != "#" }
+        return id.isEmpty ? nil : id.lowercased()
+    }
+
+    /// Whether a browser's source address is one of its extensions' own pages.
+    static func isExtensionPage(_ sourceURL: String) -> Bool {
+        let s = sourceURL.lowercased()
+        return ["chrome-extension://", "moz-extension://", "safari-web-extension://", "extension://"].contains { s.hasPrefix($0) }
+    }
+
+    /// Safari's (and the Passwords app's) strong password: three groups of six letters and
+    /// digits joined by hyphens, with a capital and a digit ("fujvy7-Bezkah-doqnij").
+    static func isSafariStrongPassword(_ text: String) -> Bool {
+        let groups = text.split(separator: "-", omittingEmptySubsequences: false)
+        guard groups.count == 3,
+              groups.allSatisfy({ $0.count == 6 && $0.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) } }) else { return false }
+        return text.contains(where: \.isUppercase) && text.contains(where: \.isLowercase) && text.contains(where: \.isNumber)
+    }
+
+    /// How a generated password looks, which text copied from a web page almost never does:
+    /// Safari's strong passwords, or plain ASCII mixing both cases with digits or symbols where
+    /// the letters don't make words. "xT3!kP9#qr" falls apart into x, T, k, P and qr, while
+    /// "Windows11", "COVID-19", "iPhone15Pro", "Report_Q3-2026.pdf" and UUIDs keep their words
+    /// (or use one case) and are kept. Some generated passwords read wordy enough to be kept:
+    /// the rule would rather keep a password on this Mac than lose ordinary text.
+    public static func looksLikeGeneratedPassword(_ text: String) -> Bool {
+        guard looksLikePassword(text), text.unicodeScalars.allSatisfy({ $0.value > 32 && $0.value < 127 }) else { return false }
+        if isSafariStrongPassword(text) { return true }
+        let letters = text.filter(\.isLetter)
+        guard letters.contains(where: \.isLowercase), letters.contains(where: \.isUppercase) else { return false }
+        // Hexadecimal: hashes, colours, UUIDs.
+        if letters.allSatisfy({ "abcdefABCDEF".contains($0) }) { return false }
+        let all = words(in: text)
+        let scraps = all.filter(isScrap).count
+        return scraps >= 3 && scraps * 2 >= all.count
+    }
+
+    /// Units written in mixed case, each a word of its own ("3.2GHz", "5000mAh").
+    static let units: Set<String> = [
+        "Hz", "kHz", "MHz", "GHz", "THz", "Wh", "kWh", "MWh", "Ah", "mAh", "dB", "dBm", "kB", "KiB", "MiB", "GiB", "TiB",
+        "kbps", "Mbps", "Gbps", "MBps", "GBps", "mL", "mW", "kW", "MW",
+    ]
+
+    /// The words in a text's letters, split the way names and code are written: "getHUDValue"
+    /// is get, HUD and Value; "iOS" is i and OS. Digits and symbols separate words.
+    static func words(in text: String) -> [String] {
+        var out: [String] = []
+        for run in text.split(whereSeparator: { !($0.isASCII && $0.isLetter) }) {
+            if units.contains(String(run)) {
+                out.append(String(run))
+                continue
+            }
+            let c = Array(run)
+            var i = 0
+            while i < c.count {
+                var j = i
+                if c[i].isUppercase {
+                    while j < c.count, c[j].isUppercase { j += 1 }
+                    if j - i == 1 {
+                        // A capital and the lower case after it: a capitalised word.
+                        while j < c.count, c[j].isLowercase { j += 1 }
+                    } else if j < c.count {
+                        // Capitals, then lower case ("HTTPServer"): the last capital starts the next word.
+                        j -= 1
+                    }
+                } else {
+                    while j < c.count, c[j].isLowercase { j += 1 }
+                }
+                out.append(String(c[i..<j]))
+                i = j
+            }
+        }
+        return out
+    }
+
+    /// A scrap rather than a word: a lone letter, or letters without a vowel that aren't all
+    /// capitals ("Hv", "qr", "Bzk"). Capitals alone ("HUD", "OS") read as an abbreviation.
+    static func isScrap(_ word: String) -> Bool {
+        if word.count == 1 { return true }
+        if units.contains(word) || word.allSatisfy(\.isUppercase) { return false }
+        return !word.contains { "aeiouyAEIOUY".contains($0) }
+    }
+
     /// One line with no spaces, 8 to 128 characters, mixing at least three of lower case,
-    /// upper case, digits and symbols: how a generated password looks. Links, paths, email
-    /// addresses and domain names don't count, however mixed.
-    public static func looksLikeSecret(_ text: String) -> Bool {
+    /// upper case, digits and symbols. Links, paths, email addresses and domain names don't
+    /// count, however mixed. Broad on purpose: only a copy from a browser extension's own page
+    /// is held to it.
+    public static func looksLikePassword(_ text: String) -> Bool {
         guard (8...128).contains(text.count), !text.contains(where: { $0.isWhitespace }) else { return false }
         if text.contains("://") || text.hasPrefix("www.") || text.hasPrefix("/") || text.hasPrefix("~/") { return false }
         if text.range(of: #"^[^@]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[a-z]{2,24}$"#, options: .regularExpression) != nil { return false }

@@ -33,7 +33,7 @@
 Islet is free and needs macOS 14 or later (Live Activity mirroring needs macOS 26, and is built for 27).
 
 1. Download the zip from the [latest release](https://github.com/aviralgarg05/islet/releases/latest) and double-click it in Finder to unzip it.
-2. Move `Islet.app` to Applications.
+2. Move `Islet.app` to Applications. If you open it straight from Downloads, Islet offers to move itself there.
 3. To use `isletctl` from Terminal, link it onto your `PATH`:
 
    ```bash

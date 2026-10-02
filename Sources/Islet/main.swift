@@ -106,6 +106,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleURL(_:reply:)),
                                                      forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
+        // Opened straight from Downloads, so macOS runs a temporary copy: offer to move to
+        // Applications once the island is up.
+        if !demo {
+            DispatchQueue.main.async { MainActor.assumeIsolated { _ = AppActions.offerMoveToApplications(.launch) } }
+        }
     }
 
     /// The island's ink follows Increase Contrast. SwiftUI doesn't redraw colours for it, so the

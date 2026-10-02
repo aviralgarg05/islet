@@ -10,17 +10,17 @@ extension AppModel {
     /// Routes the commands that need more than a pass-through: ±15 s become a seek from the
     /// shown position, and shuffle/repeat are set explicitly when the state is known and the
     /// command goes through the bridge (`bridge`). Returns nil to let `send` route the command.
-    func sendControl(_ command: PlaybackCommand, position: Double?, bridge: Bool) -> Bool? {
+    func sendControl(_ command: PlaybackCommand, position: Double?, bridge: Bool, on np: NowPlaying) -> Bool? {
         switch command {
         case .skipForward, .skipBackward:
             let delta = command == .skipForward ? MediaSeek.skipInterval : -MediaSeek.skipInterval
             // Position unknown: fall back to the player's own skip command.
-            return skip(by: delta) ? true : nil
+            return skip(by: delta, on: np) ? true : nil
         case .toggleShuffle:
-            guard bridge, systemMedia.isRunning, let on = nowPlaying?.shuffle else { return nil }
+            guard bridge, systemMedia.isRunning, let on = np.shuffle else { return nil }
             return systemMedia.setShuffle(!on)
         case .toggleRepeat:
-            guard bridge, systemMedia.isRunning, let mode = nowPlaying?.repeatMode else { return nil }
+            guard bridge, systemMedia.isRunning, let mode = np.repeatMode else { return nil }
             return systemMedia.setRepeat(MediaModes.next(after: mode))
         default:
             return nil
@@ -28,19 +28,20 @@ extension AppModel {
     }
 
     /// Jump relative to the position on screen. False when the position is unknown.
+    /// - Parameter player: the player to move (`send(_:position:to:)`); the one on show if nil.
     @discardableResult
-    func skip(by delta: Double) -> Bool {
-        guard let np = nowPlaying,
+    func skip(by delta: Double, on player: NowPlaying? = nil) -> Bool {
+        guard let np = player ?? nowPlaying,
               let target = MediaSeek.target(from: displayPosition(np, now: Date()), by: delta, duration: np.duration) else { return false }
-        return seek(to: target)
+        return seek(to: target, on: np)
     }
 
     /// Seek and hold the scrubber at the new position until the player reports it.
     @discardableResult
-    func seek(to position: Double) -> Bool {
-        guard let np = nowPlaying else { return false }
+    func seek(to position: Double, on player: NowPlaying? = nil) -> Bool {
+        guard let np = player ?? nowPlaying else { return false }
         controls.seekGrace = SeekGrace(target: position, at: Date(), track: np.trackKey)
-        let ok = send(.seek, position: position)
+        let ok = send(.seek, position: position, to: np)
         if !ok { controls.seekGrace = nil }
         return ok
     }
@@ -120,6 +121,13 @@ extension AppModel {
             return
         }
         guard let action = GestureMap.action(for: direction, on: surface, settings: settings) else { return }
+        // Over the closed island a swipe moves the song it shows, which isn't always the player
+        // picked in the open island (a song plays on while a paused video is picked there).
+        let shown: NowPlaying?
+        switch p {
+        case .compact(.nowPlaying(let np)), .songPeek(let np): shown = np
+        default: shown = nil
+        }
         if action != .expand { Haptics.play(.snap) }
         switch action {
         case .expand:
@@ -129,11 +137,11 @@ extension AppModel {
             controls.hoverOpenBlocked = true
             setExpanded(nil)
         case .nextTrack:
-            send(.next)
+            send(.next, to: shown)
         case .previousTrack:
-            send(.previous)
+            send(.previous, to: shown)
         case .seek(let delta):
-            skip(by: delta)
+            skip(by: delta, on: shown)
         case .cycle(let forward):
             let current = focusedActivity(for: p)?.id
             if let next = CompactCycle.next(after: current, in: activities, forward: forward) {

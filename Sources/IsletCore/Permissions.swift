@@ -217,9 +217,90 @@ public enum PermissionPrompt {
 public enum AppLocation {
     public static func isSettled(bundlePath: String, home: String) -> Bool {
         let path = (bundlePath as NSString).standardizingPath
-        if path.contains("/AppTranslocation/") { return false }
+        if isTranslocated(bundlePath: path) { return false }
         let homeApps = (home as NSString).appendingPathComponent("Applications")
         return path.hasPrefix("/Applications/") || path.hasPrefix(homeApps + "/")
+    }
+
+    /// macOS opened a downloaded copy that was never moved, from a random read-only place (App
+    /// Translocation). The place changes at every launch, so whatever remembers where Islet is
+    /// (coding agents' hooks, Login Items) loses it.
+    public static func isTranslocated(bundlePath: String) -> Bool {
+        bundlePath.contains("/AppTranslocation/")
+    }
+
+    /// When Islet offers to move itself to Applications.
+    public enum MoveMoment: Equatable, Sendable {
+        /// Just opened.
+        case launch
+        /// Before connecting this coding agent (its title).
+        case connecting(String)
+        /// Move to Applications… in Settings.
+        case asked
+    }
+
+    /// Whether Islet offers to move itself: never for a build run from the command line; at launch
+    /// and before connecting a coding agent only when macOS runs a translocated copy (that is when
+    /// things break); when asked in Settings, whenever it is outside Applications.
+    public static func offersMove(bundlePath: String, home: String, isAppBundle: Bool, moment: MoveMoment) -> Bool {
+        guard isAppBundle else { return false }
+        switch moment {
+        case .launch, .connecting: return isTranslocated(bundlePath: bundlePath)
+        case .asked: return !isSettled(bundlePath: bundlePath, home: home)
+        }
+    }
+
+    /// Where the move puts Islet: the shared Applications folder when Islet may write there,
+    /// otherwise Applications in the home folder.
+    public static func destination(appName: String, home: String, canWriteSharedApplications: Bool) -> String {
+        let folder = canWriteSharedApplications ? "/Applications" : (home as NSString).appendingPathComponent("Applications")
+        return (folder as NSString).appendingPathComponent(appName)
+    }
+
+    /// What the offer says, in plain words.
+    public struct MovePrompt: Equatable, Sendable {
+        public var title: String
+        public var message: String
+        public var confirm: String
+        public var cancel: String
+    }
+
+    /// - Parameters:
+    ///   - folder: the folder Islet was opened from ("Downloads"), when known.
+    ///   - translocated: macOS runs a temporary copy (`isTranslocated`).
+    ///   - destination: where it goes (`destination`).
+    ///   - replacing: a copy of Islet is already there.
+    public static func prompt(for moment: MoveMoment, folder: String?, translocated: Bool, destination: String,
+                              home: String, replacing: Bool) -> MovePrompt {
+        let place = (destination as NSString).deletingLastPathComponent.hasPrefix(home + "/")
+            ? "Applications in your home folder" : "Applications"
+        let why: String
+        if translocated {
+            let opened = folder.map { "Islet is still in \($0)" } ?? "Islet hasn't been moved to Applications"
+            why = "\(opened), so macOS runs it from a temporary copy that changes every time it opens."
+        } else {
+            why = "Islet runs from \(folder ?? "outside Applications"). From Applications it opens reliably at login, and connected coding agents keep finding it."
+        }
+        var title = "Move Islet to Applications?"
+        var consequence = translocated ? " Connected coding agents would lose track of it, and it may not open at login." : ""
+        var offer = " Islet can move itself to \(place) and open again from there."
+        var cancel = moment == .launch ? "Not now" : "Cancel"
+        if case .connecting(let agent) = moment {
+            title = "Move Islet to Applications first?"
+            consequence = " If you connect \(agent) now, it loses track of Islet the next time Islet opens."
+            offer = " Islet can move itself to \(place) and open again, and then you can connect."
+            cancel = "Cancel"
+        }
+        let replaced = replacing ? " The copy of Islet already there goes to the Bin." : ""
+        return MovePrompt(title: title, message: why + consequence + offer + replaced, confirm: "Move to Applications", cancel: cancel)
+    }
+
+    /// The command that opens Islet from its new place once this copy has quit: it waits up to
+    /// 20 seconds for `pid` to end, then opens `appPath` (passed as an argument, never spliced
+    /// into the script).
+    public static func reopenArguments(pid: Int32, appPath: String) -> [String] {
+        let script = "i=0; while /bin/kill -0 \(pid) 2>/dev/null && [ $i -lt 100 ]; do /bin/sleep 0.2; i=$((i+1)); done; /usr/bin/open \"$0\""
+        return ["/bin/sh", "-c", script, appPath]
     }
 }
 

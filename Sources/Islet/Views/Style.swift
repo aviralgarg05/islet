@@ -501,7 +501,7 @@ extension AppModel {
             return .white
         case .accent:
             if settings.accentColor != "auto" { return Color(tint: settings.accentColor).readableOnBlack }
-            guard let np = nowPlaying, np.artworkData != nil else { return Color.accentColor.readableOnBlack }
+            guard let np = closedNowPlaying, np.artworkData != nil else { return Color.accentColor.readableOnBlack }
             return ArtworkCache.accent(for: np).readableOnBlack
         case .colourful:
             return Color(tint: HUDColour.colourful(kind)).readableOnBlack

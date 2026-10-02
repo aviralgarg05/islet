@@ -431,7 +431,7 @@ struct ShelfSettings: View {
                     ClipboardLimitPicker(model: model)
                     Toggle(isOn: $model.settings.clipboardSkipSecrets) {
                         Text("Skip passwords copied in a browser")
-                        Text("Password manager extensions copy as the browser, so text that looks like a password is left out.")
+                        Text("Password manager extensions copy as the browser, so their copies, and text shaped like a generated password, are left out. Words, names, codes and version numbers are kept.")
                     }
                     .settingsAnchor("shelf.clipboardSecrets")
                     ClipboardIgnoredApps(model: model)
