@@ -283,7 +283,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setUpHUD()
         // Only geometry changes need fresh panels; everything else updates in place.
         let panels = PanelSettings(model.settings)
-        guard panels != panelSettings else { return }
+        guard panels != panelSettings else {
+            // Bubbles moved to the other side of the notch: the area that takes the pointer and
+            // clicks follows at once, not when the island next changes shape.
+            controllers.forEach { $0.updateTrigger() }
+            return
+        }
         // A measurement made for "Always full width" doesn't fit "Fit the menu bar", nor the other
         // way round: the wings start narrow until the menu bar is measured again.
         if panelSettings?.layout != panels.layout { model.closedPlacements = [:] }
