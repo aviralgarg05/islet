@@ -130,6 +130,51 @@ private func at(_ t: Double) -> Date { t0.addingTimeInterval(t) }
         #expect(p.show(timeout: 10, now: at(4)) == .hidden)
     }
 
+    /// Only the player that was playing can have been paused just now. A video going (its tab
+    /// closed) and leaving a song paused minutes ago doesn't bring the song back as if paused.
+    @Test func anotherPlayersPausedTrackIsNotAPause() {
+        let video = NowPlaying(source: .browser, bundleID: "com.google.Chrome", title: "Live", artist: "Channel",
+                               isPlaying: true, timestamp: at(0))
+        var pausedVideo = video
+        pausedVideo.isPlaying = false
+        let song = NowPlaying(source: .system, bundleID: "com.spotify.client", title: "Song", artist: "Band",
+                              isPlaying: false, duration: 300, elapsed: 105, timestamp: at(-480))
+        var playingSong = song
+        playingSong.isPlaying = true
+
+        var p = PausedMusic()
+        p.ingest(video, now: at(0))
+        p.ingest(song, now: at(5))
+        #expect(p.since == nil)
+        #expect(p.show(timeout: 10, now: at(6)) == .hidden)
+        #expect(p.nextDeadline(timeout: 10, now: at(6)) == nil)
+
+        // The other way round: the song playing goes, and a video paused a while ago is left.
+        var q = PausedMusic()
+        q.ingest(playingSong, now: at(0))
+        q.ingest(pausedVideo, now: at(5))
+        #expect(q.show(timeout: 10, now: at(6)) == .hidden)
+
+        // The video's own pause still counts, until another player's paused track replaces it.
+        var r = PausedMusic()
+        r.ingest(video, now: at(0))
+        r.ingest(pausedVideo, now: at(3))
+        #expect(r.since == at(3))
+        #expect(r.show(timeout: 10, now: at(4)) == .recent)
+        r.ingest(song, now: at(5))
+        #expect(r.since == nil)
+        #expect(r.show(timeout: 10, now: at(6)) == .hidden)
+    }
+
+    /// A report that names no app is the same player when it is the same track.
+    @Test func aPauseReportedWithoutTheAppStillCounts() {
+        var p = PausedMusic()
+        p.ingest(NowPlaying(source: .spotify, bundleID: "com.spotify.client", title: "Song", artist: "Band",
+                            isPlaying: true, timestamp: at(0)), now: at(0))
+        p.ingest(NowPlaying(source: .system, title: "Song", artist: "Band", isPlaying: false, timestamp: at(2)), now: at(2))
+        #expect(p.since == at(2))
+    }
+
     @Test func thePresenterFollowsIt() {
         var p = PausedMusic()
         let paused = track(playing: false, at: 1)

@@ -4,6 +4,17 @@
 
 ### Fixes
 - Music and videos playing in a browser show on the island again. A live stream, or a video whose length the browser doesn’t know, used to stop Now Playing for every app until the Mac slept and woke.
+- The app icons beside the song now offer every player macOS lists, such as Spotify paused a while ago beside a video playing in Chrome. For a player macOS hasn’t given the controls to, a press says which app has them and offers to open the player, instead of doing nothing.
+- A video’s artwork from Chrome no longer blinks off and on while it plays, and the next video no longer keeps the last one’s picture.
+- If Islet stops seeing what other apps play, the video it last showed no longer stays on the island as playing with controls that do nothing. Islet tries again on its own a few minutes later, and switching Now Playing off and on starts it afresh.
+- A browser video playing beside a song in Spotify or Music no longer takes the island back every few seconds after the next song starts.
+- Closing a video that was playing no longer brings back a song paused minutes earlier as if you had just paused it.
+- Next and previous are faint for a browser video without a next track, rather than doing nothing when pressed.
+- With nothing on the island, play or pause from a link, a script or **Your music** goes only to a player the island would offer, never to an app in **Ignore apps** or a source you switched off, and a seek goes nowhere.
+- At the end of a focus round, **Your music** pauses only the player it started, so a video you started during the round keeps playing.
+- Swiping to move through a live stream, or skipping 15 s from a script, no longer takes it back to its start.
+- Lyrics for a song in a browser show even when the browser sends the video’s length a moment after its title.
+- Opera Beta, Opera Developer, Opera Air, Helium, SigmaOS, Waterfox, LibreWolf, Tor Browser, Mullvad Browser, Yandex Browser and DuckDuckGo from the App Store count as web browsers, for Now Playing’s **Web browsers** switch, lyrics and calls in a browser.
 - Settings changed from the island (time left, a Pomodoro length, a tool's **Turn on**, Lyrics, Mute, turning on the calendar) are saved and applied at once, and Settings shows them straight away.
 - A change made just after Islet saved something else, such as a slider still moving in Settings, is no longer undone a moment later.
 - Switching to a busy app no longer makes the island hitch while Islet starts following that app's windows for full screen.

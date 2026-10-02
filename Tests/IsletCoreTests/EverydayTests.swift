@@ -321,6 +321,13 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         #expect(Browsers.browser(for: "com.google.Chrome.beta.helper")?.name == "Chrome Beta")
         #expect(Browsers.browser(for: "com.google.Chrome.helper.renderer")?.name == "Chrome")
         #expect(Browsers.browser(for: "com.spotify.client") == nil)
+        // Opera's other editions have no dot after "Opera", so Opera's own id doesn't cover them.
+        #expect(Browsers.browser(for: "com.operasoftware.OperaNext")?.name == "Opera Beta")
+        #expect(Browsers.browser(for: "com.operasoftware.OperaGX")?.name == "Opera GX")
+        #expect(Browsers.browser(for: "net.imput.helium")?.name == "Helium")
+        #expect(Browsers.browser(for: "net.imput.helium.helper")?.name == "Helium")
+        // DuckDuckGo from the App Store has another id than the one from its website.
+        #expect(Browsers.browser(for: "com.duckduckgo.mobile.ios")?.name == "DuckDuckGo")
         // A call held in Dia is a browser call, and so is one in Safari's GPU process.
         #expect(CallDetector.classify("company.thebrowser.dia.helper")?.app == CallDetector.App(name: "Dia", isBrowser: true))
         #expect(CallDetector.classify("com.apple.WebKit.GPU")?.app.name == "Safari")
@@ -395,6 +402,36 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         let next = r.exited(ranFor: HelperRestarts.healthyRun + 1)
         #expect(next == 1)
         #expect(!r.gaveUp)
+    }
+
+    /// Given up, it is tried again on its own, less and less often: after 5 minutes, then 10, 20
+    /// and at most 30, with a fresh set of quick tries each time.
+    @Test func givenUpItIsTriedAgainLaterAndLessOften() {
+        var r = HelperRestarts()
+        #expect(r.retryAfterGivingUp == nil)
+        var waits: [TimeInterval?] = []
+        for _ in 1...5 {
+            while r.exited(ranFor: 1) != nil {}
+            #expect(r.gaveUp)
+            waits.append(r.retryAfterGivingUp)
+            r.tryAgainAfterGivingUp()
+            #expect(!r.gaveUp)
+            #expect(r.retryAfterGivingUp == nil)
+        }
+        #expect(waits == [300, 600, 1200, 1800, 1800])
+        // A helper that couldn't start counts as one that exited at once.
+        #expect(r.exited(ranFor: 0) == 1)
+        // One that then ran well starts the waits again.
+        #expect(r.exited(ranFor: HelperRestarts.healthyRun + 1) == 1)
+        while r.exited(ranFor: 1) != nil {}
+        #expect(r.retryAfterGivingUp == 300)
+        // So does asking (Try again, switching Now Playing on, the Mac waking).
+        while r.exited(ranFor: 1) != nil {}
+        r.tryAgainAfterGivingUp()
+        while r.exited(ranFor: 1) != nil {}
+        #expect(r.retryAfterGivingUp == 600)
+        r.reset()
+        #expect(!r.gaveUp && r.giveUps == 0 && r.retryAfterGivingUp == nil)
     }
 }
 

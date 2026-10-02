@@ -77,9 +77,16 @@ struct NowPlayingHero: View {
             if media.duration != nil {
                 MediaScrubber(model: model, media: media, accent: tint)
             }
-            if let player = model.controlHint {
-                ControlPermissionHint(player: player) { model.openControlPermission() }
-                    .frame(height: TransportControls.height)
+            if let hint = model.controlHint {
+                Group {
+                    switch hint {
+                    case .allowControl(let player):
+                        ControlPermissionHint(player: player) { model.openControlPermission() }
+                    case .otherApp(let other):
+                        OtherAppHintView(hint: other) { model.openPlayer(bundleID: other.bundleID) }
+                    }
+                }
+                .frame(height: TransportControls.height)
             } else if showsSound {
                 SoundControls(model: model).frame(height: TransportControls.height)
             } else {
@@ -93,14 +100,17 @@ struct NowPlayingHero: View {
         // Lyrics are looked up while Now Playing is on show, once per song.
         .onAppear { if !snapshotMode { model.tools.lyrics.want(media) } }
         .onChange(of: media.trackKey) { _, _ in if !snapshotMode { model.tools.lyrics.want(media) } }
+        // A browser can send a video's length a moment after its title (`LyricsQuery.isSameLookup`).
+        .onChange(of: media.duration) { _, _ in if !snapshotMode { model.tools.lyrics.want(media) } }
         // Lyrics just turned on in Settings (or browsers switched): this song, not the next.
         .onChange(of: model.tools.lyrics.resets) { _, _ in if !snapshotMode { model.tools.lyrics.want(media) } }
     }
 }
 
-/// The other players live now (a video in Chrome beside a song in Spotify), as small app icons
-/// beside the title, as many as `NowPlayingTitleRow` leaves room for. Clicking one shows and
-/// controls that player instead; the closed island keeps showing what plays. When there are more
+/// The other players (a video in Chrome beside a song in Spotify, and every other player macOS
+/// lists, however long ago it paused), as small app icons beside the title, as many as
+/// `NowPlayingTitleRow` leaves room for. Clicking one shows and controls that player instead; the
+/// closed island keeps showing what plays. When there are more
 /// players than chips, the last chip counts the rest ("+3") and offers them in a menu. Nothing
 /// shows while there is only one player.
 struct PlayerChips: View {
@@ -329,6 +339,91 @@ struct ControlPermissionHint: View {
     }
 }
 
+/// In place of the transport after a press went nowhere because macOS gives the controls to
+/// another app (a command would reach that one instead): who has them, and a button that brings
+/// this player's app forward, to control it there. The words come first: where "Open Google
+/// Chrome" would leave them too little room, the button says Open beside the app's icon.
+struct OtherAppHintView: View {
+    let hint: OtherAppHint
+    let open: () -> Void
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            row(compact: false)
+            row(compact: true)
+        }
+        .accessibilityElement(children: .contain)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func row(compact: Bool) -> some View {
+        HintRow(spacing: Space.s) {
+            // A long name ("Google Chrome has the controls") takes a second line.
+            Text(hint.message)
+                .textStyle(.caption)
+                .foregroundStyle(Ink.secondary)
+            Button(action: open) {
+                HStack(spacing: Space.xs) {
+                    if compact {
+                        AppIconView(bundleID: hint.bundleID, size: 14)
+                        Text("Open")
+                    } else {
+                        Image(systemName: "arrow.up.forward.app").font(.system(size: 10, weight: .semibold))
+                        Text(hint.button)
+                    }
+                }
+                .lineLimit(1)
+            }
+            .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
+            .help("Brings \(hint.app) to the front, to control it there")
+            .accessibilityLabel(hint.button)
+            .accessibilityHint("Brings \(hint.app) to the front, to control it there")
+        }
+    }
+}
+
+/// The hint's words and its button: the button at its own width, the words in the room left
+/// beside it, on up to two lines. Its ideal width is the least that keeps every word whole on two
+/// lines, so `ViewThatFits` takes the long button only where the words still fit beside it.
+private struct HintRow: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard subviews.count == 2 else { return .zero }
+        let button = subviews[1].sizeThatFits(.unspecified)
+        let room = proposal.width.map { max(0, $0 - spacing - button.width) } ?? Self.twoLineWidth(of: subviews[0])
+        let words = subviews[0].sizeThatFits(Self.proposal(for: subviews[0], width: room))
+        return CGSize(width: proposal.width == nil ? room + spacing + button.width : words.width + spacing + button.width,
+                      height: max(button.height, words.height))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 2 else { return }
+        let button = subviews[1].sizeThatFits(.unspecified)
+        let words = Self.proposal(for: subviews[0], width: max(0, bounds.width - spacing - button.width))
+        let used = subviews[0].sizeThatFits(words)
+        subviews[0].place(at: CGPoint(x: bounds.minX, y: bounds.midY), anchor: .leading, proposal: words)
+        subviews[1].place(at: CGPoint(x: bounds.minX + used.width + spacing, y: bounds.midY), anchor: .leading,
+                          proposal: ProposedViewSize(button))
+    }
+
+    /// The words at `width`, no taller than two lines (a third is cut short).
+    private static func proposal(for words: LayoutSubview, width: CGFloat) -> ProposedViewSize {
+        ProposedViewSize(width: width, height: words.sizeThatFits(.unspecified).height * 2.5)
+    }
+
+    /// The least width at which the words take two lines at most, every word whole.
+    private static func twoLineWidth(of words: LayoutSubview) -> CGFloat {
+        let line = words.sizeThatFits(.unspecified)
+        var (low, high) = (CGFloat(0), line.width.rounded(.up))
+        while high - low > 1 {
+            let mid = ((low + high) / 2).rounded()
+            if words.sizeThatFits(ProposedViewSize(width: mid, height: nil)).height < line.height * 2.5 { high = mid } else { low = mid }
+        }
+        return high
+    }
+}
+
 /// Previous, play/pause and next in the middle; shuffle and repeat at the edges when the player
 /// reports them; ±15 s beside the middle only when there is room (the scrubber seeks too).
 struct TransportControls: View {
@@ -346,10 +441,13 @@ struct TransportControls: View {
                 if canSkip {
                     IconButton(symbol: "gobackward.15", help: "Back 15 seconds", size: 28, glyph: 12, ink: Ink.secondary) { model.send(.skipBackward) }
                 }
-                IconButton(symbol: "backward.fill", help: "Previous track", size: 30, glyph: 14, ink: Ink.primary) { model.send(.previous) }
+                // Faint for a player that says it has none (a video in Chrome outside a playlist).
+                IconButton(symbol: "backward.fill", help: media.takes(.previous) ? "Previous track" : "No previous track",
+                           size: 30, glyph: 14, ink: Ink.primary, enabled: media.takes(.previous)) { model.send(.previous) }
                 IconButton(symbol: media.isPlaying ? "pause.fill" : "play.fill", help: media.isPlaying ? "Pause" : "Play",
                            size: 32, glyph: 18, ink: Ink.primary) { model.send(.togglePlayPause) }
-                IconButton(symbol: "forward.fill", help: "Next track", size: 30, glyph: 14, ink: Ink.primary) { model.send(.next) }
+                IconButton(symbol: "forward.fill", help: media.takes(.next) ? "Next track" : "No next track",
+                           size: 30, glyph: 14, ink: Ink.primary, enabled: media.takes(.next)) { model.send(.next) }
                 if canSkip {
                     IconButton(symbol: "goforward.15", help: "Forward 15 seconds", size: 28, glyph: 12, ink: Ink.secondary) { model.send(.skipForward) }
                 }

@@ -229,7 +229,9 @@ import Testing
         a.update(np(.spotify, "song", playing: false, at: 0))
         a.updateFromBridge(np(.browser, "video", playing: true, at: 1))
         a.updateFromBridge(np(.system, "podcast", playing: true, at: 2))
-        #expect(a.snapshots[.browser] == nil)
+        // The report replaces what the bridge said: the video is gone, not kept beside the podcast.
+        #expect(a.bridge.values.map(\.title) == ["podcast"])
+        #expect(Set(a.available(now: t0.addingTimeInterval(3)).map(\.title)) == ["podcast", "song"])
         #expect(a.current(now: t0.addingTimeInterval(3))?.title == "podcast")
         // Other providers are not the bridge's to replace.
         #expect(a.snapshots[.spotify]?.title == "song")

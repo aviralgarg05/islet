@@ -16,6 +16,14 @@ public enum MediaSeek {
         return t
     }
 
+    /// Where a relative jump on `np` lands from `position`. Nil without a length too: a player
+    /// that doesn't know how long it is (a live stream) doesn't reliably know where it is either
+    /// (Chrome says 0 again every quarter of a minute), so the jump is left to the player.
+    public static func target(for np: NowPlaying, from position: Double?, by delta: Double) -> Double? {
+        guard let duration = np.duration, duration > 0 else { return nil }
+        return target(from: position, by: delta, duration: duration)
+    }
+
     /// Track position for a point on the scrubber.
     public static func position(fraction: Double, duration: Double) -> Double {
         guard fraction.isFinite, duration.isFinite, duration > 0 else { return 0 }

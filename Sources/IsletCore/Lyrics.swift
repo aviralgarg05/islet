@@ -169,6 +169,26 @@ public struct LyricsQuery: Equatable, Sendable {
         case browser
     }
 
+    /// Whether `np` is the song a lookup was made for, with the `trackKey` and `length` it had
+    /// then. For a browser the length counts too: Chrome can send a new video's title a moment
+    /// before its length, or with the last video's, so a length that arrives or changes after
+    /// the title is looked up again.
+    public static func isSameLookup(_ np: NowPlaying, trackKey: String?, length: Double?) -> Bool {
+        guard np.trackKey == trackKey else { return false }
+        guard origin(of: np) == .browser else { return true }
+        switch (np.duration, length) {
+        case (nil, nil): return true
+        case let (now?, then?): return abs(now - then) < 2
+        default: return false
+        }
+    }
+
+    /// A browser's track whose length hasn't come yet: not settled as having no lyrics on its
+    /// own, since the length usually follows a moment later.
+    public static func awaitsLength(_ np: NowPlaying, includeBrowsers: Bool) -> Bool {
+        includeBrowsers && origin(of: np) == .browser && np.duration == nil
+    }
+
     /// Music and Spotify, or a web browser; nil for every other app (a podcast app, a video call).
     public static func origin(of np: NowPlaying) -> Origin? {
         if np.source == .appleMusic || np.source == .spotify || np.bundleID.map(players.contains) == true { return .player }

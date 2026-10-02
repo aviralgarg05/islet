@@ -191,9 +191,10 @@ import Testing
         // Bridge down: only Music and Spotify can still be reached.
         #expect(MediaRoute.route(for: Self.spotify(), bridgeRunning: false, bridgePlayer: nil) == .player(.spotify))
         #expect(MediaRoute.route(for: Self.chrome(), bridgeRunning: false, bridgePlayer: Self.chromeID) == .none)
-        // A player pushed through the API: the bridge, unless it is reporting another app.
+        // A player pushed through the API isn't the one macOS gives the controls to, so the bridge
+        // would reach another app (or, with none, start Music): nothing is sent.
         let pushed = NowPlaying(source: .external, title: "Radio", isPlaying: true, timestamp: t0)
-        #expect(MediaRoute.route(for: pushed, bridgeRunning: true, bridgePlayer: nil) == .bridge)
+        #expect(MediaRoute.route(for: pushed, bridgeRunning: true, bridgePlayer: nil) == .none)
         #expect(MediaRoute.route(for: pushed, bridgeRunning: true, bridgePlayer: Self.chromeID) == .none)
     }
 

@@ -459,7 +459,7 @@ final class AppModel {
     }
 
     private func startMedia() {
-        systemMedia.onUpdate = { [weak self] np in self?.mediaUpdate(np, source: .system) }
+        systemMedia.onUpdate = { [weak self] report in self?.bridgeUpdate(report) }
         systemMedia.onUnavailable = { [weak self] reason in
             // Fall back to per-player enrichment. It uses AppleScript only where Automation is
             // already allowed, so this never brings up the prompt; Settings → Permissions does.
@@ -467,8 +467,21 @@ final class AppModel {
             self?.bridgeFailed = true
             self?.syncPlayers()
         }
+        // Back after a failure (tried again on its own after giving up): the bridge brings
+        // artwork and position again.
+        systemMedia.onRunning = { [weak self] in
+            guard let self, self.bridgeFailed else { return }
+            self.bridgeFailed = false
+            self.syncPlayers()
+        }
+        // The helper exited and starts again: until it reports, no command goes through it.
+        systemMedia.onInterrupted = { [weak self] in
+            self?.media.bridgeInterrupted()
+            self?.mediaChanged()
+        }
         bridgeFailed = false
-        systemMedia.start()
+        // Switched on, a fresh set of tries, even if it gave up before Now Playing went off.
+        systemMedia.retry()
         syncPlayers()
     }
 
@@ -482,8 +495,8 @@ final class AppModel {
     private(set) var lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
 
     /// The system bridge said it can't deliver (it may still be running), so the players fetch
-    /// their own details. Reset when media starts again. Settings → Now Playing says so, with
-    /// Try again.
+    /// their own details. Reset when media starts again or the helper comes back. Settings → Now
+    /// Playing says so, with Try again.
     private(set) var bridgeFailed = false
 
     /// Settings → Now Playing → Try again, and waking from sleep after the bridge gave up: a
@@ -1207,7 +1220,7 @@ final class AppModel {
         // A paused player timed out: show whatever is left, or nothing. A track that ran past
         // its end shows as stopped, and a click the player never confirmed shows its real state.
         // (With no player reporting there is nothing to work out, and the demo's song stays.)
-        if media.expire(now: now) || !media.snapshots.isEmpty {
+        if media.expire(now: now) || !media.isEmpty {
             setNowPlaying(media.current(now: now), now: now)
         }
         // A click whose window has ended never arms the timer again, even if the player went.
@@ -1322,12 +1335,20 @@ final class AppModel {
     }
 
     private func mediaUpdate(_ np: NowPlaying?, source: MediaSourceKind) {
-        if source == .system {
-            // The bridge files browsers under .browser; each report replaces both kinds.
-            media.updateFromBridge(np)
-        } else if let np { media.update(np) } else { media.clear(source) }
+        if let np { media.update(np) } else { media.clear(source) }
+        mediaChanged()
+    }
+
+    /// The system bridge's report: every player macOS lists, replacing what it said before.
+    private func bridgeUpdate(_ report: BridgeReport) {
+        media.updateFromBridge(report)
+        mediaChanged()
+    }
+
+    private func mediaChanged() {
         let now = Date()
         setNowPlaying(media.current(now: now), now: now)
+        dropStaleControlHint()
         reschedule()
     }
 
@@ -1592,58 +1613,109 @@ final class AppModel {
 
     /// Send a command to the player. Play and pause show at once (`PlaybackIntent`), then
     /// follow what the player reports.
-    /// - Parameter target: the player to send it to: the one on show (`nowPlaying`) if nil, or
-    ///   the song a swipe on the closed island moved (`closedNowPlaying`).
+    /// - Parameter target: the player to send it to: if nil, the one on show (`nowPlaying`) or,
+    ///   with nothing on show, the one macOS gives the controls to while Islet offers it
+    ///   (`commandTarget`); or the song a swipe on the closed island moved (`closedNowPlaying`).
     @discardableResult
     func send(_ command: PlaybackCommand, position: Double? = nil, to target: NowPlaying? = nil) -> Bool {
         let now = Date()
-        let np = target ?? nowPlaying
+        let np = target ?? commandTarget(for: command, now: now)
         // Only a press on the player on show shows at once.
         let onShow = np.map(MediaArbiter.playerID) == nowPlaying.map(MediaArbiter.playerID)
         let intent = onShow ? nowPlaying.flatMap { PlaybackIntent.intended(command, on: $0, at: now) } : nil
         let sent = route(command, position: position, to: np)
         // Only for a player that reports back (not the demo's made-up song).
-        if sent, let intent, !media.snapshots.isEmpty {
+        if sent, let intent, !media.isEmpty {
             playbackIntent = intent
             setNowPlaying(media.current(now: now), now: now)
             reschedule()
         }
-        // A press that went nowhere because macOS hasn't allowed Islet to control the player
-        // says so, instead of doing nothing.
-        let hint = np.flatMap { np -> String? in
+        // A press in the open island that went nowhere says why, instead of doing nothing: macOS
+        // hasn't allowed Islet to control Music or Spotify, or another app has the controls. Only
+        // while the island is open, where it shows: said of a link, a script or a swipe beside the
+        // notch, it would wait there and take the transport's place at the next open.
+        guard expandedScreen != nil else { return sent }
+        let hint = np.flatMap { np -> ControlHint? in
             let r = mediaRoute(for: np)
-            return PlayerIntegration.controlHint(route: r, sent: sent, canScript: r == .player(.spotify) ? spotify.canScript : music.canScript)
+            return PlayerIntegration.hint(
+                for: np, route: r, sent: sent, canScript: r == .player(.spotify) ? spotify.canScript : music.canScript,
+                bridgeRunning: systemMedia.isRunning, appName: np.bundleID.flatMap(Self.appName(bundleID:)),
+                holder: controlsHolderName)
         }
         if controlHint != hint { controlHint = hint }
         return sent
     }
 
-    /// "Allow Islet to control Music": the player whose controls just went nowhere, until a
-    /// control works or the island closes.
-    private(set) var controlHint: String?
+    /// What the open island says after a press there on the player on show went nowhere, until a
+    /// control works, another player is picked, that player gets the controls, another app takes
+    /// them or the island closes.
+    private(set) var controlHint: ControlHint?
 
     /// `--snapshot` draws the hint.
-    func setControlHintForSnapshot(_ player: String?) { controlHint = player }
+    func setControlHintForSnapshot(_ hint: ControlHint?) { controlHint = hint }
+
+    /// The name of the app macOS gives the controls to, if any.
+    private var controlsHolderName: String? {
+        guard systemMedia.isRunning, let id = media.bridgePlayer else { return nil }
+        return media.bridge[id]?.appName ?? media.available(now: Date()).first { MediaArbiter.playerID($0) == id }?.appName
+            ?? Self.appName(bundleID: id)
+    }
+
+    /// "… has the controls" is said only of the player it was said of, while it still has no way
+    /// to be controlled from here and the app it names still has the controls.
+    private func dropStaleControlHint() {
+        guard case .otherApp(let h)? = controlHint,
+              !h.holds(onShow: nowPlaying, route: nowPlaying.map(mediaRoute(for:)), holder: controlsHolderName) else { return }
+        controlHint = nil
+    }
 
     /// The hint's Allow button: Settings → Permissions, at that player's row.
     func openControlPermission() {
-        let kind: PermissionKind = controlHint == "Spotify" ? .automationSpotify : .automationMusic
+        let kind: PermissionKind = controlHint == .allowControl(player: "Spotify") ? .automationSpotify : .automationMusic
         controlHint = nil
         AppActions.openSettings(.permissions, at: "permissions.\(kind.rawValue)")
     }
 
+    /// Focus sounds' "Your music": play the music a command reaches now (`commandTarget`).
+    /// Returns the player the press reached (`MediaArbiter.playerID`), or nil when it went nowhere.
+    func playMusic() -> String? {
+        guard let target = commandTarget(for: .play, now: Date()), send(.play, to: target) else { return nil }
+        return MediaArbiter.playerID(target)
+    }
+
+    /// Focus sounds: pause `player` (`MediaArbiter.playerID`), the one a focus round started, if
+    /// it is still offered and playing. Nothing otherwise.
+    func pauseMusic(player: String) {
+        guard let np = players.first(where: { MediaArbiter.playerID($0) == player && $0.isPlaying }) else { return }
+        send(.pause, to: np)
+    }
+
+    /// The player a command with no target goes to: the one on show or, with nothing on show,
+    /// the one macOS gives the controls to while Islet offers it (Spotify paused an hour ago).
+    /// Never one Islet keeps out of the island, and with no player at all nothing, rather than
+    /// the system's Now Playing, which could start Music. A seek or a 15 s jump goes only to the
+    /// player on show: it moves a place in the track, and a player out of sight has none on show.
+    private func commandTarget(for command: PlaybackCommand, now: Date) -> NowPlaying? {
+        if let nowPlaying { return nowPlaying }
+        guard systemMedia.isRunning, !command.movesPosition else { return nil }
+        return media.controlsHolder(now: now)
+    }
+
     /// Commands go to the player on show (the one picked in the island, or the newest): the
-    /// bridge only when it is that app's, Music and Spotify otherwise through their own
-    /// integration, so a press on Spotify never pauses a video in Chrome.
+    /// bridge only when macOS gives that app the controls, Music and Spotify otherwise through
+    /// their own integration, and any other player nothing at all, since the bridge would reach
+    /// the app with the controls instead. So a press on Spotify never pauses a video in Chrome.
     private func route(_ command: PlaybackCommand, position: Double?, to target: NowPlaying?) -> Bool {
-        guard let np = target else {
-            // Nothing on show: the bridge controls whatever macOS considers "now playing".
-            return systemMedia.isRunning && systemMedia.send(command, position: position)
-        }
+        // Nothing on show and no player to take it (`commandTarget`): nowhere to send it.
+        guard let np = target else { return false }
         let r = mediaRoute(for: np)
         if let routed = sendControl(command, position: position, bridge: r == .bridge, on: np) { return routed }
         switch r {
-        case .bridge: return systemMedia.send(command, position: position)
+        case .bridge:
+            // A command the player says it doesn't take (next in a video outside a playlist) would
+            // do nothing: it isn't sent, so the press and the API say it went nowhere.
+            guard np.takes(command) else { return false }
+            return systemMedia.send(command, position: position)
         case .player(.spotify): return spotify.send(command, position: position)
         case .player(.appleMusic): return music.send(command, position: position)
         case .player, .none: return false
@@ -1656,11 +1728,15 @@ final class AppModel {
 
     // MARK: Players
 
-    /// The players live now, one per app, newest first. More than one shows as chips in the open island.
+    /// The players to offer, one per app, newest first: every player macOS lists, and Music's,
+    /// Spotify's and the API's while live. More than one shows as chips in the open island.
     var players: [NowPlaying] {
         _ = tick
         return settings.mediaEnabled ? media.available(now: Date()) : []
     }
+
+    /// The players offered that play now (`MediaArbiter.playerID`).
+    var playingPlayers: Set<String> { Set(players.filter(\.isPlaying).map(MediaArbiter.playerID)) }
 
     /// A player chip: show and control that player. The closed island keeps showing what plays,
     /// and follows the pick once it plays.
@@ -1677,17 +1753,27 @@ final class AppModel {
     /// `--snapshot`: several players at once (a Chrome video and a Spotify song), or, with
     /// none, back to the demo's song alone.
     func loadPlayersForSnapshot(_ list: [NowPlaying], bridge: NowPlaying?, now: Date, song: NowPlaying? = nil) {
+        loadPlayersForSnapshot(list, bridge: BridgeReport(bridge), now: now, song: song)
+    }
+
+    /// `--snapshot`: every player macOS lists (`bridge`), with Music's and Spotify's own reports.
+    func loadPlayersForSnapshot(_ list: [NowPlaying], bridge: BridgeReport, now: Date, song: NowPlaying? = nil) {
         media = MediaArbiter(disabled: media.disabled)
         media.hidden = Set(settings.hiddenMediaApps)
         for np in list { media.update(np) }
         media.updateFromBridge(bridge)
         nowPlaying = song ?? media.current(now: now)
-        playingElsewhere = nil
+        playingElsewhere = media.closedIsland(now: now).flatMap { closed in
+            nowPlaying.map(MediaArbiter.playerID) == MediaArbiter.playerID(closed) || nowPlaying?.isPlaying == true ? nil : closed
+        }
+        controlHint = nil
     }
 
-    func openPlayer() {
-        guard let bundle = nowPlaying?.bundleID,
+    /// Brings the player on show forward, or the app with `bundleID` (the hint's Open button).
+    func openPlayer(bundleID: String? = nil) {
+        guard let bundle = bundleID ?? nowPlaying?.bundleID,
               let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) else { return }
+        controlHint = nil
         NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
     }
 

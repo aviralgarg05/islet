@@ -5,21 +5,34 @@ import IsletCore
 ///
 /// macOS 15.4+ refuses MediaRemote to non-Apple processes, so the helper library runs inside
 /// `/usr/bin/perl` (an Apple platform binary) and streams JSON lines back over a pipe.
-/// Transport commands are written to its stdin. The helper exits when the pipe closes.
+/// Transport commands are written to its stdin, and reach only the player macOS gives the
+/// controls to. The helper exits when the pipe closes.
 public final class SystemNowPlayingBridge {
-    public var onUpdate: ((NowPlaying?) -> Void)?
-    /// Called with a human-readable reason when the bridge can't run.
+    /// Every player macOS lists, and the one that has the controls.
+    public var onUpdate: ((BridgeReport) -> Void)?
+    /// Called with a human-readable reason when the bridge can't run. When it has stopped for
+    /// good (given up, or it can't start), an empty report comes first: what it said last can't
+    /// be trusted, and a video must not stay "playing" with controls that reach nothing.
     public var onUnavailable: ((String) -> Void)?
+    /// Called when the helper says it is up, so a failure said before is over.
+    public var onRunning: (() -> Void)?
+    /// Called when the helper exits and is to be started again. Until the new one reports, nobody
+    /// is known to have the controls: a command written to it would reach whichever app macOS has
+    /// given them to meanwhile.
+    public var onInterrupted: (() -> Void)?
 
     private var process: Process?
     private var stdin: FileHandle?
     private var stdout: FileHandle?
     private var startedAt = Date.distantPast
-    private var buffer = Data()
-    private var lastArtwork: Data?
-    private var lastArtworkHash: Int?
+    /// Its output, cut into lines.
+    private var lines = HelperLines()
+    /// The artwork the helper sent, for the players in its last report.
+    private var artwork = BridgeArtwork()
     private var restarts = HelperRestarts()
     private var stopped = false
+    /// The next start after an exit or a failed start. Nothing is scheduled while the helper runs.
+    private var pendingStart: DispatchWorkItem?
 
     public private(set) var isRunning = false
 
@@ -58,19 +71,25 @@ public final class SystemNowPlayingBridge {
     /// Whether it gave up after the helper kept exiting (`HelperRestarts`).
     public var gaveUp: Bool { restarts.gaveUp }
 
-    /// Start again with a fresh set of tries: the user asked, or the Mac woke after it gave up.
+    /// Start with a fresh set of tries: Now Playing switched on, the user asked, or the Mac woke
+    /// after it gave up.
     public func retry() {
         restarts.reset()
+        cancelPendingStart()
         start()
     }
 
     public func start() {
         stopped = false
         guard process == nil else { return }
+        cancelPendingStart()
         guard let paths = Self.helperPaths() else {
-            onUnavailable?("MediaRemote helper not found; system-wide Now Playing is disabled.")
+            // Nothing would change by trying again.
+            unavailable("MediaRemote helper not found; system-wide Now Playing is disabled.")
             return
         }
+        // A line the last helper left unfinished would swallow this one's first, which says it is up.
+        lines.reset()
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
         p.arguments = [paths.script.path, paths.library.path]
@@ -95,7 +114,9 @@ public final class SystemNowPlayingBridge {
         do {
             try p.run()
         } catch {
-            onUnavailable?("Could not start MediaRemote helper: \(error.localizedDescription)")
+            // As if it exited at once (a busy Mac can refuse a new process for a moment).
+            out.fileHandleForReading.readabilityHandler = nil
+            failed("Could not start MediaRemote helper: \(error.localizedDescription)", ranFor: 0)
             return
         }
         process = p
@@ -107,6 +128,7 @@ public final class SystemNowPlayingBridge {
 
     public func stop() {
         stopped = true
+        cancelPendingStart()
         stdout?.readabilityHandler = nil
         try? stdin?.close()
         process?.terminate()
@@ -114,6 +136,7 @@ public final class SystemNowPlayingBridge {
         stdin = nil
         stdout = nil
         isRunning = false
+        lines.reset()
     }
 
     private func helperExited(status: Int32) {
@@ -122,17 +145,51 @@ public final class SystemNowPlayingBridge {
         stdin = nil
         stdout = nil
         isRunning = false
+        // What it left unfinished can't be finished now.
+        lines.reset()
         guard !stopped else { return }
-        // Restart with backoff if the helper crashed (e.g. mediaremoted restarted). A helper
-        // that ran for a while earns a fresh set of retries; one that keeps dying doesn't.
-        guard let delay = restarts.exited(ranFor: Date().timeIntervalSince(startedAt)) else {
-            onUnavailable?("MediaRemote helper keeps exiting (status \(status)).")
+        onInterrupted?()
+        failed("MediaRemote helper keeps exiting (status \(status)).", ranFor: Date().timeIntervalSince(startedAt))
+    }
+
+    /// The helper exited, or couldn't start. Restart with backoff (it crashed, or mediaremoted
+    /// restarted): a helper that ran for a while earns a fresh set of retries, one that keeps
+    /// dying doesn't. Given up, its players go and it is tried again much later (`HelperRestarts`).
+    private func failed(_ reason: String, ranFor: TimeInterval) {
+        if let delay = restarts.exited(ranFor: ranFor) {
+            startLater(after: delay) { $0.start() }
             return
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self, !self.stopped else { return }
-            self.start()
+        unavailable(reason)
+        if let wait = restarts.retryAfterGivingUp {
+            startLater(after: wait) {
+                $0.restarts.tryAgainAfterGivingUp()
+                $0.start()
+            }
         }
+    }
+
+    /// Stopped for good: what it reported last goes, then the app hears why.
+    private func unavailable(_ reason: String) {
+        onUpdate?(BridgeReport(players: [], current: nil))
+        onUnavailable?(reason)
+    }
+
+    /// One timer for the next start, replaced by any newer one and dropped by `stop`.
+    private func startLater(after delay: TimeInterval, _ work: @escaping (SystemNowPlayingBridge) -> Void) {
+        cancelPendingStart()
+        let item = DispatchWorkItem { [weak self] in
+            guard let self, !self.stopped else { return }
+            self.pendingStart = nil
+            work(self)
+        }
+        pendingStart = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+    }
+
+    private func cancelPendingStart() {
+        pendingStart?.cancel()
+        pendingStart = nil
     }
 
     /// Send a transport command. Returns false when the helper isn't running.
@@ -184,40 +241,51 @@ public final class SystemNowPlayingBridge {
     }
 
     private func ingest(_ data: Data) {
-        guard !data.isEmpty else { return }
-        buffer.append(data)
-        while let nl = buffer.firstIndex(of: 0x0A) {
-            let line = buffer[buffer.startIndex..<nl]
-            buffer.removeSubrange(buffer.startIndex...nl)
-            handle(line: Data(line))
-        }
-        if buffer.count > 8 * 1024 * 1024 { buffer.removeAll() }
+        for line in lines.append(data) { handle(line: line) }
     }
 
     private func handle(line: Data) {
         guard let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { return }
-        switch obj["type"] as? String {
-        case "nowPlaying":
-            let (np, artHash, art) = Self.parse(obj)
-            if let art { lastArtwork = art; lastArtworkHash = artHash }
-            guard var np else { onUpdate?(nil); return }
-            if artHash != nil, artHash == lastArtworkHash { np.artworkData = lastArtwork }
-            onUpdate?(np)
-        case "error":
+        if let report = Self.report(from: obj, artwork: &artwork) {
+            onUpdate?(report)
+        } else if obj["type"] as? String == "ready" {
+            onRunning?()
+        } else if obj["type"] as? String == "error" {
             onUnavailable?(obj["message"] as? String ?? "MediaRemote error")
-        default:
-            break
         }
     }
 
-    /// Parse one helper line. Pure, for tests. Returns the snapshot, the artwork hash and any new artwork bytes.
+    /// A `players` line (every player macOS lists) or a `nowPlaying` line (the current player
+    /// alone, from a helper on a macOS that can't list them) as a report. Artwork the helper sent
+    /// before comes from `artwork` (`BridgeArtwork`), which is left holding what this report uses.
+    /// Nil for any other line. Pure, for tests.
+    public static func report(from o: [String: Any], artwork: inout BridgeArtwork) -> BridgeReport? {
+        let lines: [[String: Any]]
+        switch o["type"] as? String {
+        case "players": lines = (o["players"] as? [Any] ?? []).compactMap { $0 as? [String: Any] }
+        case "nowPlaying": lines = [o.merging(["current": true]) { _, new in new }]
+        default: return nil
+        }
+        var entries: [BridgeArtwork.Entry] = []
+        var current: String?
+        for line in lines {
+            let (parsed, hash, bytes) = parse(line)
+            guard let np = parsed else { continue }
+            if line["current"] as? Bool == true { current = MediaArbiter.playerID(np) }
+            entries.append(BridgeArtwork.Entry(player: np, hash: hash, bytes: bytes))
+        }
+        return BridgeReport(players: artwork.resolve(entries), current: current)
+    }
+
+    /// Parse one player from a helper line. Pure, for tests. Returns the snapshot, the artwork
+    /// hash and any new artwork bytes.
     public static func parse(_ o: [String: Any]) -> (NowPlaying?, Int?, Data?) {
         if o["empty"] as? Bool == true { return (nil, nil, nil) }
         guard let title = o["title"] as? String, !title.isEmpty else { return (nil, nil, nil) }
-        let bundle = o["bundleID"] as? String
+        let bundle = (o["bundleID"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let source: MediaSourceKind = bundle.flatMap(Browsers.browser(for:)) != nil ? .browser : .system
         // The helper drops numbers JSON can't hold; a live stream has no duration at all.
-        func finite(_ key: String) -> Double? { (o[key] as? Double).flatMap { $0.isFinite ? $0 : nil } }
+        func finite(_ key: String) -> Double? { number(o[key]).flatMap { $0.isFinite ? $0 : nil } }
         let rate = finite("rate") ?? 1
         let playing = (o["playing"] as? Bool) ?? (rate > 0)
         let np = NowPlaying(
@@ -226,11 +294,25 @@ public final class SystemNowPlayingBridge {
             duration: finite("duration").flatMap { $0 > 0 ? $0 : nil },
             elapsed: finite("elapsed"), playbackRate: rate > 0 ? rate : 1,
             timestamp: finite("timestamp").map(Date.init(timeIntervalSince1970:)) ?? Date(),
-            shuffle: MediaModes.shuffle(mediaRemote: o["shuffleMode"] as? Int),
-            repeatMode: MediaModes.repeatMode(mediaRemote: o["repeatMode"] as? Int)
+            shuffle: MediaModes.shuffle(mediaRemote: finite("shuffleMode").flatMap { Int(exactly: $0) }),
+            repeatMode: MediaModes.repeatMode(mediaRemote: finite("repeatMode").flatMap { Int(exactly: $0) }),
+            // What the player says it takes, when macOS says.
+            commands: (o["commands"] as? [Any]).map { list in
+                PlaybackCommand.taken(mediaRemote: list.compactMap { number($0).flatMap { Int(exactly: $0) } })
+            }
         )
         let art = (o["artwork"] as? String).flatMap { Data(base64Encoded: $0) }
-        return (np, o["artworkHash"] as? Int, art)
+        let hash = (o["artworkHash"] as? Int) ?? finite("artworkHash").flatMap { Int(exactly: $0) }
+        return (np, hash, art)
     }
 
+    /// A JSON number, whichever way it was read.
+    private static func number(_ value: Any?) -> Double? {
+        switch value {
+        case let d as Double: return d
+        case let i as Int: return Double(i)
+        case let n as NSNumber: return n.doubleValue
+        default: return nil
+        }
+    }
 }

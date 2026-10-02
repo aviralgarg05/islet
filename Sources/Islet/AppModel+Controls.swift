@@ -32,7 +32,7 @@ extension AppModel {
     @discardableResult
     func skip(by delta: Double, on player: NowPlaying? = nil) -> Bool {
         guard let np = player ?? nowPlaying,
-              let target = MediaSeek.target(from: displayPosition(np, now: Date()), by: delta, duration: np.duration) else { return false }
+              let target = MediaSeek.target(for: np, from: displayPosition(np, now: Date()), by: delta) else { return false }
         return seek(to: target, on: np)
     }
 
@@ -128,21 +128,25 @@ extension AppModel {
         case .compact(.nowPlaying(let np)), .songPeek(let np): shown = np
         default: shown = nil
         }
-        if action != .expand { Haptics.play(.snap) }
+        // The music moves snap only once sent: not for a move the player can't make (next in a
+        // video outside a playlist), one nothing would reach (another app has the controls), or a
+        // jump in a live stream.
         switch action {
         case .expand:
             setExpanded(display)
         case .collapse:
+            Haptics.play(.snap)
             pinned = false
             controls.hoverOpenBlocked = true
             setExpanded(nil)
         case .nextTrack:
-            send(.next, to: shown)
+            if send(.next, to: shown) { Haptics.play(.snap) }
         case .previousTrack:
-            send(.previous, to: shown)
+            if send(.previous, to: shown) { Haptics.play(.snap) }
         case .seek(let delta):
-            skip(by: delta, on: shown)
+            if skip(by: delta, on: shown) { Haptics.play(.snap) }
         case .cycle(let forward):
+            Haptics.play(.snap)
             let current = focusedActivity(for: p)?.id
             if let next = CompactCycle.next(after: current, in: activities, forward: forward) {
                 controls.focusedActivityID = next

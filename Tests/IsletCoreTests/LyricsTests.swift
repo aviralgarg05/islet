@@ -274,6 +274,41 @@ import Testing
     }
 }
 
+/// Chrome can send a new video's title a moment before its length, or with the last video's
+/// length: the length arriving or changing is another lookup, and until it comes the song isn't
+/// settled as having no lyrics.
+@Suite struct BrowserLyricsLengthTests {
+    func video(duration: Double? = nil) -> NowPlaying {
+        NowPlaying(source: .browser, bundleID: "com.google.Chrome", title: "Song (Official Video)", artist: "Band",
+                   isPlaying: true, duration: duration, timestamp: t0)
+    }
+
+    @Test func aLengthThatArrivesOrChangesIsLookedUpAgain() {
+        let waiting = video()
+        #expect(LyricsQuery.awaitsLength(waiting, includeBrowsers: true))
+        #expect(!LyricsQuery.awaitsLength(waiting, includeBrowsers: false))
+        #expect(LyricsQuery.isSameLookup(waiting, trackKey: waiting.trackKey, length: nil))
+        let arrived = video(duration: 213)
+        #expect(!LyricsQuery.awaitsLength(arrived, includeBrowsers: true))
+        #expect(!LyricsQuery.isSameLookup(arrived, trackKey: arrived.trackKey, length: nil))
+        // The last video's length, then its own.
+        #expect(!LyricsQuery.isSameLookup(arrived, trackKey: arrived.trackKey, length: 301))
+        // The same length read again a little differently is the same lookup.
+        #expect(LyricsQuery.isSameLookup(arrived, trackKey: arrived.trackKey, length: 213.4))
+        #expect(!LyricsQuery.isSameLookup(arrived, trackKey: "another song", length: 213))
+    }
+
+    /// Music and Spotify: the song alone, whatever the length does.
+    @Test func aPlayersSongIsTheSongAlone() {
+        let song = NowPlaying(source: .spotify, title: "Song", artist: "Band", isPlaying: true, duration: 200, timestamp: t0)
+        #expect(LyricsQuery.isSameLookup(song, trackKey: song.trackKey, length: nil))
+        #expect(LyricsQuery.isSameLookup(song, trackKey: song.trackKey, length: 180))
+        var noLength = song
+        noLength.duration = nil
+        #expect(!LyricsQuery.awaitsLength(noLength, includeBrowsers: true))
+    }
+}
+
 /// Moving the lyrics switches in Settings applies to the song on show at once.
 @Suite struct LyricsSwitchesTests {
     func at(_ enabled: Bool, _ browsers: Bool = false) -> LyricsSwitches { LyricsSwitches(enabled: enabled, browsers: browsers) }
