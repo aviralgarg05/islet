@@ -94,7 +94,7 @@ struct NowPlayingSettings: View {
             } header: {
                 Text("Look")
             } footer: {
-                HStack(spacing: 4) {
+                HStack(spacing: 0) {
                     SettingsFooter(model.settings.visualiserStyle == .gif
                                    ? "The sticker plays with the music and stops, dimmed, when you pause. It stays still with Reduce Motion or Low Power Mode."
                                    : "The indicator settles and dims when you pause, and springs back when you play.")

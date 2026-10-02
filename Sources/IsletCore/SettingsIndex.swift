@@ -180,6 +180,13 @@ public enum SettingsIndex {
         }.map(\.element.group)
     }
 
+    /// The section a search result shows under its title, unless the title already starts with
+    /// it ("Local API port" in Local API).
+    public static func subtitle(for entry: SettingsEntry) -> String? {
+        guard let section = entry.section else { return nil }
+        return tokens(entry.title).starts(with: tokens(section)) ? nil : section
+    }
+
     /// nil when a word matches nothing in the entry.
     static func score(_ entry: SettingsEntry, words: [String], phrase: String) -> Int? {
         let title = tokens(entry.title)

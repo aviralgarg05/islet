@@ -199,6 +199,33 @@ import Testing
         #expect(SettingsIndex.search("xyzzy").isEmpty)
     }
 
+    /// A result's section shows under it only when the title doesn't already say it.
+    @Test func subtitlesDontRepeatTheTitle() {
+        let port = SettingsEntry("x.port", .advanced, "Local API port", section: "Local API")
+        #expect(SettingsIndex.subtitle(for: port) == nil)
+        let same = SettingsEntry("x.same", .ai, "Apple Intelligence", section: "Apple Intelligence")
+        #expect(SettingsIndex.subtitle(for: same) == nil)
+        let other = SettingsEntry("x.other", .shelf, "Items kept", section: "Clipboard")
+        #expect(SettingsIndex.subtitle(for: other) == "Clipboard")
+        // A word that only starts the same isn't the section.
+        let partial = SettingsEntry("x.partial", .timers, "Timers list", section: "Timer")
+        #expect(SettingsIndex.subtitle(for: partial) == "Timer")
+        #expect(SettingsIndex.subtitle(for: SettingsEntry("x.none", .about, "Version")) == nil)
+    }
+
+    /// The keyboard page and the Shortcuts tool have different names, and the island is "the
+    /// island" on every page.
+    @Test func pagesNameThingsOneWay() {
+        #expect(SettingsPage.shortcuts.title == "Keyboard shortcuts")
+        #expect(SettingsIndex.search("keyboard shortcuts").first?.page == .shortcuts)
+        for page in SettingsPage.allCases {
+            #expect(!page.summary.contains("in the notch"), "\(page)")
+        }
+        for entry in SettingsIndex.entries {
+            #expect(!entry.title.contains("in the notch"), "\(entry.id)")
+        }
+    }
+
     @Test func tiedPagesKeepSidebarOrder() {
         #expect(SettingsIndex.search("frontmost").map(\.page) == [.apps])
         // "colour" is a whole title word on four pages: they come in sidebar order.

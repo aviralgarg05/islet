@@ -161,12 +161,22 @@ struct SettingsSidebar: View {
                             .focused($listFocused)
                     }
                 }
-                // A page opened from a search result or from elsewhere in Islet may be out of view.
+                // A page opened from a search result or from elsewhere in Islet may be out of view:
+                // once the list has laid out, bring it to the middle, clear of the search field.
                 .onAppear {
-                    proxy.scrollTo(navigation.page)
+                    let page = navigation.page
+                    DispatchQueue.main.async { proxy.scrollTo(page, anchor: .center) }
                     if !snapshotMode { DispatchQueue.main.async { listFocused = true } }
                 }
-                .onChange(of: navigation.page) { _, page in proxy.scrollTo(page) }
+                .onChange(of: navigation.page) { _, page in
+                    DispatchQueue.main.async { proxy.scrollTo(page, anchor: .center) }
+                }
+                // A search that finds nothing says so here too, not just in the page.
+                .overlay {
+                    if navigation.isSearching && navigation.results.isEmpty {
+                        Text("No results").font(.callout).foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .listStyle(.sidebar)
@@ -432,20 +442,38 @@ struct SettingsSearchResults: View {
                     Section {
                         ForEach(group.entries) { entry in
                             Button { navigation.open(entry) } label: {
+                                let first = entry == groups.first?.entries.first
                                 HStack(spacing: 8) {
                                     VStack(alignment: .leading, spacing: 1) {
                                         Text(entry.title).foregroundStyle(.primary)
-                                        if let section = entry.section, section != entry.title {
+                                        if let section = SettingsIndex.subtitle(for: entry) {
                                             Text(section).font(.caption).foregroundStyle(.secondary)
                                         }
                                     }
                                     Spacer(minLength: 8)
-                                    if entry == groups.first?.entries.first {
-                                        Text("Return").font(.caption).foregroundStyle(.tertiary)
+                                    if first {
+                                        // Return opens the first result.
+                                        Text("\u{21A9}")
+                                            .font(.caption.weight(.medium))
+                                            .foregroundStyle(.secondary)
+                                            .padding(.horizontal, 5)
+                                            .padding(.vertical, 1)
+                                            .background(RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                                .strokeBorder(Color.primary.opacity(0.2), lineWidth: 1))
+                                            .help("Press Return to open")
+                                            .accessibilityLabel("Press Return to open")
                                     }
                                     Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
                                 }
                                 .contentShape(Rectangle())
+                                .background {
+                                    if first {
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .fill(Color.accentColor.opacity(0.1))
+                                            .padding(.horizontal, -6)
+                                            .padding(.vertical, -4)
+                                    }
+                                }
                             }
                             .buttonStyle(.plain)
                         }
@@ -576,7 +604,11 @@ struct SettingsFooter: View {
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
+            // In line with the section headers and the text in the rows, not the card's edge.
+            .padding(.leading, SettingsFooter.inset)
     }
+
+    static let inset: CGFloat = 10
 }
 
 /// A quiet line that sends the user to another page ("Set up your own scripts in Advanced").
@@ -596,6 +628,8 @@ struct SettingsLink: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.link)
+        // It sits in a section's footer, so it starts where the footer's text does.
+        .padding(.leading, SettingsFooter.inset)
     }
 }
 
