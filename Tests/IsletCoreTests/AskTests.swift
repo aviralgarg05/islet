@@ -108,7 +108,7 @@ func joinedText(_ events: [AskEvent]) -> String {
 
     @Test func streamErrorIsFriendly() {
         let events = decodeSSE(AskFixtures.anthropicOverloaded, AnthropicStreamDecoder())
-        #expect(events == [.error("Claude is overloaded right now. Try again in a moment.")])
+        #expect(events == [.error("Anthropic is overloaded right now. Try again in a moment.")])
     }
 
     @Test func maxTokensIsReported() {
@@ -226,17 +226,31 @@ func joinedText(_ events: [AskEvent]) -> String {
         // A new key may fix these, so the island offers the button to it.
         #expect(AskErrorText.isKeyProblem(status: 401) && AskErrorText.isKeyProblem(status: 403))
         #expect(!AskErrorText.isKeyProblem(status: 429) && !AskErrorText.isKeyProblem(status: 500))
-        #expect(AskErrorText.http(status: 429, body: empty, retryAfter: "12", provider: .anthropic) == "Rate limited. Try again in 12 s.")
+        #expect(AskErrorText.http(status: 429, body: empty, retryAfter: "12", provider: .anthropic)
+                == "Too many questions at once. Try again in 12 seconds.")
+        #expect(AskErrorText.http(status: 429, body: empty, retryAfter: "1", provider: .anthropic)
+                == "Too many questions at once. Try again in 1 second.")
         #expect(AskErrorText.http(status: 429, body: empty, retryAfter: "Wed, 21 Oct 2026 07:28:00 GMT", provider: .openai)
-                == "Rate limited. Try again shortly.")
+                == "Too many questions at once. Try again shortly.")
         #expect(AskErrorText.http(status: 529, body: empty, retryAfter: nil, provider: .anthropic)
-                == "Claude is overloaded right now. Try again in a moment.")
+                == "Anthropic is overloaded right now. Try again in a moment.")
         let quota = Data(#"{"error":{"message":"You exceeded your current quota.","type":"insufficient_quota","code":"insufficient_quota"}}"#.utf8)
         #expect(AskErrorText.http(status: 429, body: quota, retryAfter: nil, provider: .openai) == "Your OpenAI account has run out of credit.")
         let bad = Data(#"{"type":"error","error":{"type":"invalid_request_error","message":"max_tokens: must be positive"}}"#.utf8)
         #expect(AskErrorText.http(status: 400, body: bad, retryAfter: nil, provider: .anthropic)
                 == "Anthropic rejected the request: max_tokens: must be positive")
-        #expect(AskErrorText.http(status: 503, body: empty, retryAfter: nil, provider: .openai).contains("HTTP 503"))
+        // Statuses go to the log; the island says what happened in words.
+        #expect(AskErrorText.http(status: 503, body: empty, retryAfter: nil, provider: .openai)
+                == "OpenAI is having problems right now. Try again in a moment.")
+        #expect(AskErrorText.http(status: 418, body: Data(#"{"error":{"message":"I'm a teapot"}}"#.utf8), retryAfter: nil, provider: .openai)
+                == "OpenAI couldn\u{2019}t answer: I'm a teapot")
+        #expect(AskErrorText.http(status: 418, body: empty, retryAfter: nil, provider: .anthropic) == "Anthropic couldn\u{2019}t answer.")
+        for status in [418, 500, 502, 503, 529] {
+            #expect(!AskErrorText.http(status: status, body: empty, retryAfter: nil, provider: .anthropic).contains { $0.isNumber })
+        }
+        #expect(AskErrorText.stream(type: "rate_limit_error", message: nil, provider: .openai) == "Too many questions at once. Try again shortly.")
+        #expect(AskErrorText.stream(type: "overloaded_error", message: nil, provider: .anthropic)
+                == "Anthropic is overloaded right now. Try again in a moment.")
         let overloaded = Data(#"{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}"#.utf8)
         #expect(AskErrorText.isOverloaded(status: 529, body: empty))
         #expect(AskErrorText.isOverloaded(status: 500, body: overloaded))
@@ -249,7 +263,7 @@ func joinedText(_ events: [AskEvent]) -> String {
         #expect(AskErrorText.retrySeconds("9223372036854775807") == nil)
         #expect(AskErrorText.retrySeconds("-3") == nil)
         #expect(AskErrorText.retrySeconds("2.5") == 3)
-        #expect(AskErrorText.http(status: 429, body: Data(), retryAfter: "1e300", provider: .anthropic) == "Rate limited. Try again shortly.")
+        #expect(AskErrorText.http(status: 429, body: Data(), retryAfter: "1e300", provider: .anthropic) == "Too many questions at once. Try again shortly.")
         #expect(AskJSON.int(1e300) == nil)
         #expect(AskJSON.int(Double.nan) == nil)
         #expect(AskJSON.int(42.0) == 42)
@@ -328,7 +342,7 @@ func joinedText(_ events: [AskEvent]) -> String {
 
     @Test func claudeNotLoggedIn() {
         let events = decodeLines(AskFixtures.claudeCLINotLoggedIn, ClaudeCLIDecoder())
-        #expect(events.last == .error("Claude Code isn't signed in. Run claude in Terminal and sign in."))
+        #expect(events.last == .error("Claude Code isn’t signed in. Run claude in Terminal and sign in."))
         #expect(events.filter(\.isTerminal).count == 1)
     }
 
@@ -353,7 +367,7 @@ func joinedText(_ events: [AskEvent]) -> String {
 
     @Test func codexFailure() {
         let events = decodeLines(AskFixtures.codexFailed, CodexDecoder())
-        #expect(events == [.error("Codex isn't signed in. Run codex in Terminal and sign in.")])
+        #expect(events == [.error("Codex isn’t signed in. Run codex in Terminal and sign in.")])
         var d = CodexDecoder()
         _ = d.decode(line: #"{"type":"error","message":"model overloaded"}"#)
         #expect(d.finish() == [.error("Codex: model overloaded")])
@@ -361,9 +375,11 @@ func joinedText(_ events: [AskEvent]) -> String {
 
     @Test func failureText() {
         #expect(AskCLI.failureText(kind: .claudeCode, status: 1, stderr: "error: unknown option '--no-session-persistence'\n")
-                == "Claude Code is too old for Islet (error: unknown option '--no-session-persistence'). Update it and try again.")
+                == "Claude Code is too old for Islet. Update it and try again.")
         #expect(AskCLI.failureText(kind: .codex, status: 2, stderr: "\n  boom  \nmore") == "Codex: boom")
-        #expect(AskCLI.failureText(kind: .codex, status: 9, stderr: "") == "Codex stopped (exit 9).")
+        #expect(AskCLI.failureText(kind: .codex, status: 9, stderr: "") == "Codex stopped before answering. Try again.")
+        #expect(AskCLI.firstLine("\n  boom  \nmore") == "boom")
+        #expect(ClaudeCLIDecoder.errorText(result: nil, subtype: "error_during_execution") == "Claude Code stopped with an error. Try again.")
     }
 }
 

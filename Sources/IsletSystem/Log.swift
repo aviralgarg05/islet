@@ -11,4 +11,6 @@ public enum Log {
     public static let media = Logger(subsystem: subsystem, category: "media")
     public static let files = Logger(subsystem: subsystem, category: "files")
     public static let api = Logger(subsystem: subsystem, category: "api")
+    /// Ask's failures in full (a status, an exit code), which the island puts in plain words.
+    public static let ask = Logger(subsystem: subsystem, category: "ask")
 }

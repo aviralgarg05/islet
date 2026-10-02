@@ -290,14 +290,11 @@ struct AskAnswerView: View {
         }
     }
 
-    /// "Claude Opus 5.5" from "claude-opus-5-5"; other ids as they are.
+    /// The model as Settings names it: "Claude Opus 5.5" from "claude-opus-5-5", "GPT-6.1 Sol"
+    /// from "gpt-6.1-sol". The provider when the answer didn't say.
     static func modelLabel(_ id: String?, provider: AskProviderKind) -> String {
         guard let id, !id.isEmpty else { return provider.title }
-        guard id.hasPrefix("claude-") else { return id }
-        let parts: [String] = id.components(separatedBy: "-").dropFirst().filter { $0.count < 8 }
-        guard let family = parts.first else { return id }
-        let version = parts.dropFirst().joined(separator: ".")
-        return "Claude \(family.capitalized)" + (version.isEmpty ? "" : " \(version)")
+        return AskModelName.title(id)
     }
 
     /// Inline Markdown (bold, italics, code, links) as models tend to write it. Links may only

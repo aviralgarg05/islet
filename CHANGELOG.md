@@ -45,7 +45,8 @@ Islet now shows the Live Activities your iPhone sends to the Mac, lets you answe
 ### Ask
 - An Ask box answered by Apple Intelligence on the Mac, by Claude or ChatGPT with your own API key (kept in the Keychain), or by the Claude Code and Codex command-line tools with the login you already have. ⌃⌥A opens it from anywhere.
 - Answers stream in and stop when the island closes, and nothing is kept on disk. A missing or refused key gets a plain hint with **Add a key…** or **Change the key…**, and the box says so when Claude Code or Codex isn't installed.
-- Ask & AI names models as people say them ("Claude Opus 5.5") and checks for new ones.
+- Models are named as people say them ("Claude Opus 5.5") in Ask & AI and under each answer, and Ask & AI checks for new ones.
+- When Ask can't answer it says why in words, such as a service having problems or too many questions at once, never a status code.
 
 ### Timers and Siri
 - Timers from the island, the API, the URL scheme or `isletctl`, with phrases like "tea 4m" or "in 20 minutes to check the oven", and a Pomodoro cycle (25/5, 50/10 or 90/20 minutes). They survive a relaunch and ring with a sound you choose.

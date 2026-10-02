@@ -519,16 +519,24 @@ public enum AskErrorText {
             return "The question is too long."
         case 429:
             if apiType == "insufficient_quota" { return "Your OpenAI account has run out of credit." }
-            if let s = retrySeconds(retryAfter) { return "Rate limited. Try again in \(s) s." }
-            return "Rate limited. Try again shortly."
+            return tooMany(retrySeconds(retryAfter))
         case 529:
-            return "\(provider.title) is overloaded right now. Try again in a moment."
+            return overloaded(vendor)
         case 500...599:
-            return "\(vendor) had a server error (HTTP \(status)). Try again."
+            return "\(vendor) is having problems right now. Try again in a moment."
         default:
-            return "\(vendor) returned HTTP \(status)" + (apiMessage.map { ": \($0)" } ?? ".")
+            // The status itself is for the log, not the island.
+            return "\(vendor) couldn\u{2019}t answer" + (apiMessage.map { ": \($0)" } ?? ".")
         }
     }
+
+    /// Asked too often: when to try again, in plain words.
+    static func tooMany(_ seconds: Int?) -> String {
+        guard let seconds else { return "Too many questions at once. Try again shortly." }
+        return "Too many questions at once. Try again in \(seconds) " + (seconds == 1 ? "second." : "seconds.")
+    }
+
+    static func overloaded(_ vendor: String) -> String { "\(vendor) is overloaded right now. Try again in a moment." }
 
     /// Statuses a new key may fix: the key wasn't accepted (401), or isn't allowed to do this (403).
     public static func isKeyProblem(status: Int) -> Bool { status == 401 || status == 403 }
@@ -536,8 +544,8 @@ public enum AskErrorText {
     /// An `error` record inside an otherwise successful stream.
     public static func stream(type: String?, message: String?, provider: AskProviderKind) -> String {
         switch type {
-        case "overloaded_error": return "\(provider.title) is overloaded right now. Try again in a moment."
-        case "rate_limit_error": return "Rate limited. Try again shortly."
+        case "overloaded_error": return overloaded(provider.recipient ?? provider.title)
+        case "rate_limit_error": return tooMany(nil)
         default:
             let m = message.map { String($0.prefix(200)) }
             return m.map { "\(provider.recipient ?? provider.title): \($0)" } ?? "The answer stopped with an error."

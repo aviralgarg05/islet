@@ -226,7 +226,7 @@ private let sk = "s" + "k-"
         defer { cleanUp(service) }
         let request = AskRequest(provider: .anthropic, turns: [.user("x")])
         #expect(await collect(service, request) == [.needsKey("Anthropic didn’t accept your key.")])
-        #expect(await collect(service, request) == [.error("Rate limited. Try again in 7 s.")])
+        #expect(await collect(service, request) == [.error("Too many questions at once. Try again in 7 seconds.")])
     }
 
     @Test func overloadIsRetriedOnce() async {
@@ -238,7 +238,7 @@ private let sk = "s" + "k-"
         let request = AskRequest(provider: .anthropic, turns: [.user("x")])
         #expect(text(await collect(service, request)) == "Paris is the capital of France.")
         #expect(MockAPI.requests(key).count == 2)
-        #expect(await collect(service, request) == [.error("Claude is overloaded right now. Try again in a moment.")])
+        #expect(await collect(service, request) == [.error("Anthropic is overloaded right now. Try again in a moment.")])
         #expect(MockAPI.requests(key).count == 4)
     }
 
@@ -421,7 +421,7 @@ private let sk = "s" + "k-"
         let service = makeService { $0.binaryOverrides = [.claudeCode: exe] }
         defer { cleanUp(service); try? FileManager.default.removeItem(at: bin) }
         let events = await collect(service, AskRequest(provider: .claudeCode, turns: [.user("x")]))
-        #expect(events == [.error("Claude Code is too old for Islet (error: unknown option '--no-session-persistence'). Update it and try again.")])
+        #expect(events == [.error("Claude Code is too old for Islet. Update it and try again.")])
     }
 
     @Test func cancelKillsAProcessThatIgnoresTERM() async throws {

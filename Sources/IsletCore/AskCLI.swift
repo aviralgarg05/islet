@@ -69,13 +69,19 @@ public enum AskCLI {
     public static let killGrace: TimeInterval = 2
 
     /// A one-line reason from a CLI's stderr, for when it exits without saying why on stdout.
+    /// The exit status and an option it didn't know are for the log (`AskService`), not the island.
     public static func failureText(kind: AskProviderKind, status: Int32, stderr: String) -> String {
-        let line = stderr.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty }
+        let line = firstLine(stderr)
         if let line, line.contains("unknown option") || line.contains("unexpected argument") {
-            return "\(kind.title) is too old for Islet (\(line.prefix(120))). Update it and try again."
+            return "\(kind.title) is too old for Islet. Update it and try again."
         }
         if let line { return "\(kind.title): \(line.prefix(200))" }
-        return "\(kind.title) stopped (exit \(status))."
+        return "\(kind.title) stopped before answering. Try again."
+    }
+
+    /// The first line of a CLI's stderr with something on it.
+    public static func firstLine(_ stderr: String) -> String? {
+        stderr.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty }
     }
 }
 
@@ -151,11 +157,11 @@ public struct ClaudeCLIDecoder: AskLineDecoder {
     static func errorText(result: String?, subtype: String?) -> String {
         let r = result?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if r.contains("/login") || r.lowercased().contains("not logged in") || r.lowercased().contains("invalid api key") {
-            return "Claude Code isn't signed in. Run claude in Terminal and sign in."
+            return "Claude Code isn’t signed in. Run claude in Terminal and sign in."
         }
         if subtype == "error_max_turns" { return "Claude Code wanted more than one step. Ask a simpler question." }
         if !r.isEmpty { return "Claude Code: \(r.prefix(200))" }
-        return "Claude Code stopped with an error\(subtype.map { " (\($0))" } ?? "")."
+        return "Claude Code stopped with an error. Try again."
     }
 }
 
@@ -206,7 +212,7 @@ public struct CodexDecoder: AskLineDecoder {
 
     static func errorText(_ message: String?) -> String {
         guard let m = message?.trimmingCharacters(in: .whitespacesAndNewlines), !m.isEmpty else { return "Codex stopped with an error." }
-        if m.lowercased().contains("login") || m.contains("401") { return "Codex isn't signed in. Run codex in Terminal and sign in." }
+        if m.lowercased().contains("login") || m.contains("401") { return "Codex isn’t signed in. Run codex in Terminal and sign in." }
         return "Codex: \(m.prefix(200))"
     }
 }

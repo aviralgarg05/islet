@@ -1,5 +1,6 @@
 import Foundation
 import IsletCore
+import os
 
 public struct AskServiceError: Error, LocalizedError, Equatable {
     public var message: String
@@ -143,6 +144,7 @@ public final class AskService: NSObject, @unchecked Sendable {
             let (data, response) = try await session.data(for: request, delegate: self)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             guard status == 200 else {
+                Log.ask.error("\(kind.rawValue, privacy: .public) model list: HTTP \(status, privacy: .public)")
                 throw AskServiceError(AskErrorText.http(status: status, body: data, retryAfter: (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "retry-after"), provider: kind))
             }
             return kind == .anthropic ? AnthropicAPI.modelIDs(from: data) : OpenAIAPI.modelIDs(from: data)
@@ -155,10 +157,10 @@ public final class AskService: NSObject, @unchecked Sendable {
     /// Returns the models the key can use.
     public func validateAndStore(key raw: String, for kind: AskProviderKind) async throws -> [String] {
         let key = AskKeys.normalized(raw)
-        guard let account = kind.keyAccount else { throw AskServiceError("\(kind.title) doesn't use an API key.") }
+        guard let account = kind.keyAccount else { throw AskServiceError("\(kind.title) doesn’t use an API key.") }
         guard AskKeys.looksValid(key, for: kind) else {
-            throw AskServiceError(kind == .anthropic ? "That doesn't look like an Anthropic key. It starts with sk-ant-."
-                                                     : "That doesn't look like an OpenAI key. It starts with sk-.")
+            throw AskServiceError(kind == .anthropic ? "That doesn’t look like an Anthropic key. It starts with sk-ant-."
+                                                     : "That doesn’t look like an OpenAI key. It starts with sk-.")
         }
         let models = try await models(for: kind, key: key)
         try secrets.save(key, account: account)
@@ -212,6 +214,7 @@ public final class AskService: NSObject, @unchecked Sendable {
                     try? await Task.sleep(nanoseconds: UInt64(Double.random(in: 0.6...1.6) * 1_000_000_000))
                     continue
                 }
+                Log.ask.error("\(kind.rawValue, privacy: .public) answer: HTTP \(status, privacy: .public)")
                 let message = AskErrorText.http(status: status, body: body, retryAfter: retryAfter, provider: kind)
                 emit(AskErrorText.isKeyProblem(status: status) ? .needsKey(message) : .error(message))
                 return
@@ -292,17 +295,25 @@ public final class AskService: NSObject, @unchecked Sendable {
 
     static func describe(_ e: URLError, host: String?) -> String {
         switch e.code {
-        case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed: return "You're offline."
+        case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed: return "You’re offline."
         case .timedOut: return "The request timed out."
-        case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed: return "Couldn't reach \(host ?? "the server")."
+        case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed: return "Couldn’t reach \(host ?? "the server")."
         case .secureConnectionFailed, .serverCertificateUntrusted, .serverCertificateHasBadDate,
              .serverCertificateNotYetValid, .serverCertificateHasUnknownRoot, .clientCertificateRejected:
-            return "Couldn't make a secure connection to \(host ?? "the server")."
+            return "Couldn’t make a secure connection to \(host ?? "the server")."
         default: return e.localizedDescription
         }
     }
 
     // MARK: CLIs
+
+    /// The kind of failure a CLI reported (Claude Code's `subtype`, Codex's `type`), for the
+    /// log; the island says it in words. Never the answer or the question.
+    private static func logFailure(kind: AskProviderKind, line: String) {
+        let record = (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any]
+        let what = record?["subtype"] as? String ?? record?["type"] as? String ?? "unknown"
+        Log.ask.error("\(kind.title, privacy: .public) stopped with an error: \(what, privacy: .public)")
+    }
 
     private func runCLI(_ request: AskRequest, emit: @escaping @Sendable (AskEvent) -> Void) async {
         let kind = request.provider
@@ -330,13 +341,14 @@ public final class AskService: NSObject, @unchecked Sendable {
             do {
                 try child.start()
             } catch {
-                emit(.error("Couldn't start \(kind.title): \(error.localizedDescription)"))
+                emit(.error("Couldn’t start \(kind.title): \(error.localizedDescription)"))
                 return
             }
             var ended = false
             // Keep draining after the answer ends, so a chatty CLI never blocks on a full pipe.
             for await line in child.lines where !ended {
                 for event in decoder.decode(line: line) {
+                    if case .error = event { Self.logFailure(kind: kind, line: line) }
                     emit(event)
                     if event.isTerminal {
                         ended = true
@@ -355,6 +367,7 @@ public final class AskService: NSObject, @unchecked Sendable {
             } else if status == 0 {
                 emit(.done(AskUsage()))
             } else {
+                Log.ask.error("\(kind.title, privacy: .public) exited with \(status, privacy: .public): \(AskCLI.firstLine(child.stderrText) ?? "", privacy: .private)")
                 emit(.error(AskCLI.failureText(kind: kind, status: status, stderr: child.stderrText)))
             }
         } onCancel: {
