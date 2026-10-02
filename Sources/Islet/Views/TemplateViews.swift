@@ -17,11 +17,16 @@ extension AppModel {
 
 extension Color {
     /// This colour, lifted in lightness (hue kept) until it has 3:1 contrast on black.
-    var readableOnBlack: Color {
+    var readableOnBlack: Color { lifted(to: 3) }
+
+    /// The same for small text, which needs 4.5:1 (`RGBA.textContrast`).
+    var readableTextOnBlack: Color { lifted(to: RGBA.textContrast) }
+
+    private func lifted(to contrast: Double) -> Color {
         guard let c = NSColor(self).usingColorSpace(.sRGB) else { return self }
         let rgba = RGBA(r: Double(c.redComponent), g: Double(c.greenComponent), b: Double(c.blueComponent), a: Double(c.alphaComponent))
-        guard rgba.contrastOnBlack < 3 else { return self }
-        let lifted = rgba.readableOnBlack()
+        guard rgba.contrastOnBlack < contrast else { return self }
+        let lifted = rgba.readableOnBlack(minContrast: contrast)
         return Color(.sRGB, red: lifted.r, green: lifted.g, blue: lifted.b, opacity: lifted.a)
     }
 
@@ -84,7 +89,8 @@ struct TemplateClock<Content: View>: View {
 struct TemplateValueText: View {
     let activity: Activity
     let model: AppModel
-    var size: CGFloat = TextStyle.body.size
+    /// Rows outside the wings give their own size; in a wing the wing's class decides.
+    var size: CGFloat? = nil
     var tint: Color?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.wingRoom) private var room
@@ -92,26 +98,109 @@ struct TemplateValueText: View {
     var body: some View {
         let motion = TemplateMotion(model, systemReduceMotion: reduceMotion)
         let perSecond = activity.templateRefresh(now: Date())?.interval == 1
-        let narrow = room < NarrowValue.wordRoom
+        let tint = (self.tint ?? model.tint(for: activity)).readableTextOnBlack
         TemplateClock(activity: activity) { now in
-            let text = activity.templateTrailing(now: now) ?? ""
-            if narrow, let glyph = NarrowValue.glyph(for: text, state: activity.state) {
-                Image(systemName: glyph)
-                    .font(.system(size: min(size, room * 0.6), weight: .semibold))
-                    .foregroundStyle(tint ?? model.tint(for: activity))
-                    .spokenValue(SpokenText.value(activity, now: now))
-            } else {
-                Text(narrow ? activity.minimalText(now: now) ?? text : text)
-                    .font(.system(size: size, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(tint ?? model.tint(for: activity))
-                    .lineLimit(1)
-                    .minimumScaleFactor(narrow ? 0.5 : 0.7)
-                    .contentTransition(.numericText(countsDown: activity.endsAt != nil))
-                    .animation(perSecond ? nil : motion.value, value: text)
-                    .spokenValue(SpokenText.value(activity, now: now))
-            }
+            let plan = activity.wingPlan(text: activity.templateTrailing(now: now) ?? "", narrow: room < NarrowValue.wordRoom,
+                                         leading: model.leadingSymbol(for: activity), now: now)
+            WingValue(plan: plan, size: size, tint: tint, transition: .numericText(countsDown: activity.endsAt != nil),
+                      animation: perSecond ? nil : motion.value)
+                .spokenValue(SpokenText.value(activity, now: now))
         }
+    }
+}
+
+/// A value in a wing, in one fixed style for the wing's class (body where the wing has room
+/// for a word, caption below that) and never shrunk or cut: the full text when it fits, else
+/// its short form ("18m"), else a glyph or nothing (`WingPlan`). Rows outside the wings give
+/// their own `size`.
+struct WingValue<Fallback: View>: View {
+    let plan: WingPlan
+    var size: CGFloat? = nil
+    var tint: Color
+    var transition: ContentTransition = .numericText()
+    var animation: Animation? = nil
+    /// What the wing shows when no text fits.
+    @ViewBuilder var fallback: Fallback
+    @Environment(\.wingRoom) private var room
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            if let full = plan.full { label(full) }
+            if let short = plan.short { label(short) }
+            fallback
+        }
+    }
+
+    private func label(_ text: String) -> some View {
+        WingText(text: text, size: size, tint: tint)
+            .contentTransition(transition)
+            .animation(animation, value: text)
+    }
+}
+
+extension WingValue where Fallback == WingGlyph {
+    init(plan: WingPlan, size: CGFloat? = nil, tint: Color, transition: ContentTransition = .numericText(),
+         animation: Animation? = nil) {
+        self.init(plan: plan, size: size, tint: tint, transition: transition, animation: animation) {
+            WingGlyph(glyph: plan.glyph, tint: tint)
+        }
+    }
+}
+
+/// Text in a wing's one style for values: body where the wing has room for a word, caption
+/// below that; rows outside the wings give their own `size`. Never shrunk, never wrapped.
+struct WingText: View {
+    let text: String
+    var size: CGFloat? = nil
+    var tint: Color
+    @Environment(\.wingRoom) private var room
+
+    static func font(room: CGFloat) -> Font {
+        (room < NarrowValue.wordRoom ? TextStyle.caption : .body).font(emphasized: true, numeric: true)
+    }
+
+    var body: some View {
+        Text(text)
+            .font(size.map { .system(size: $0, weight: .semibold, design: .rounded) } ?? Self.font(room: room))
+            .monospacedDigit()
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .fixedSize()
+    }
+}
+
+/// A status glyph in a wing; work under way is a small spinner, since three dots read as text
+/// that was cut short.
+struct WingGlyph: View {
+    let glyph: String?
+    var tint: Color
+    @Environment(\.wingRoom) private var room
+    @Environment(\.islandMotion) private var motion
+
+    var body: some View {
+        if glyph == NarrowValue.working {
+            SpinnerArc(tint: tint, lineWidth: 1.8)
+                .frame(width: 12, height: 12)
+        } else if let glyph {
+            Image(systemName: glyph)
+                .font(.system(size: min(TextStyle.body.size, room * 0.6), weight: .semibold))
+                .foregroundStyle(tint)
+                .contentTransition(motion.symbolSwap)
+                .animation(motion.inPlace, value: glyph)
+        } else {
+            // Nothing, but a view all the same: `ViewThatFits` skips an empty one and would
+            // fall back to the text that didn't fit.
+            Color.clear.frame(width: 0, height: 0)
+        }
+    }
+}
+
+extension AppModel {
+    /// The symbol the activity shows beside the notch, so the other wing doesn't repeat it.
+    func leadingSymbol(for a: Activity) -> String? {
+        let icon = visualTemplate(for: a) == .stages ? a.currentStageSymbol ?? self.icon(for: a) : self.icon(for: a)
+        if case .symbol(let name) = icon { return name }
+        return nil
     }
 }
 
@@ -163,38 +252,95 @@ struct TeamBadge: View {
     }
 }
 
-/// A team's badge and score for the wings: side by side when there is room, the abbreviation
-/// stacked over the score in the narrow wings.
-struct TeamScore: View {
+/// A team's badge and score for the wings: side by side when there is room, else the score
+/// alone in the team's colour, else `fallback` (an icon-only wing). Both wings decide alike,
+/// from the same room and the wider of the two teams (`TeamScoreFit`), so one island never
+/// shows a badge on one side and a bare score on the other.
+struct TeamScore<Fallback: View>: View {
     let team: ActivityTeam
+    /// The team on the other side of the notch.
+    let other: ActivityTeam
     var height: CGFloat
     /// Team B, on the right: score first.
     var trailing = false
+    /// At most this much room (a Home glance keeps the score to a narrow column).
+    var limit: CGFloat = .infinity
     var animation: Animation?
+    @ViewBuilder var fallback: Fallback
+    @Environment(\.wingRoom) private var room
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 4) {
-                if trailing {
-                    score(height * 0.9)
-                    TeamBadge(team: team, height: height)
-                } else {
-                    TeamBadge(team: team, height: height)
-                    score(height * 0.9)
-                }
-            }
-            VStack(alignment: trailing ? .trailing : .leading, spacing: -1) {
-                Text(team.badge)
-                    .font(.system(size: 7.5, weight: .heavy, design: .rounded))
-                    .foregroundStyle(Color(readable: team.tint, fallback: .white))
-                    .lineLimit(1)
-                score(height * 0.8)
-            }
+        switch TeamScoreFit.fit([team, other], room: min(room, limit)) {
+        case .inline: inline(team)
+        case .bare: bare(team)
+        case .none: fallback
         }
     }
 
-    private func score(_ size: CGFloat) -> some View {
-        RollingNumber(text: team.score ?? "0", size: size, animation: animation).fixedSize()
+    /// The score alone, in the wing's value style and the team's colour.
+    private func bare(_ t: ActivityTeam) -> some View {
+        WingText(text: t.score ?? "0", tint: Color(readable: t.tint, fallback: .white).readableTextOnBlack)
+            .contentTransition(.numericText())
+            .animation(animation, value: t.score)
+    }
+
+    private func inline(_ t: ActivityTeam) -> some View {
+        HStack(spacing: Space.xs) {
+            if trailing {
+                score(t, color: .white)
+                TeamBadge(team: t, height: height)
+            } else {
+                TeamBadge(team: t, height: height)
+                score(t, color: .white)
+            }
+        }
+        .fixedSize()
+    }
+
+    private func score(_ t: ActivityTeam, color: Color) -> some View {
+        Text(t.score ?? "0")
+            .textStyle(.headline, numeric: true)
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .fixedSize()
+            .contentTransition(.numericText())
+            .animation(animation, value: t.score)
+    }
+}
+
+/// How a score fits a wing of some room, measured for both teams at once so the two wings
+/// always agree: badge and score, the score alone, or neither.
+enum TeamScoreFit {
+    case inline, bare, none
+
+    /// The badge height the wings decide with, whatever each draws at.
+    static let badge: CGFloat = 15
+
+    @MainActor
+    static func fit(_ teams: [ActivityTeam], room: CGFloat) -> TeamScoreFit {
+        let scores = teams.map { $0.score ?? "0" }
+        let inline = teams.map { t in
+            let code = width(t.badge, size: badge * 0.56, weight: .heavy) + 6
+            return min(max(code, badge), badge * 2.2) + Space.xs + width(t.score ?? "0", size: TextStyle.headline.size, weight: .semibold)
+        }.max() ?? 0
+        if inline <= room { return .inline }
+        let size = room < NarrowValue.wordRoom ? TextStyle.caption.size : TextStyle.body.size
+        let bare = scores.map { width($0, size: size, weight: .semibold) }.max() ?? 0
+        return bare <= room ? .bare : .none
+    }
+
+    @MainActor private static var widths: [String: CGFloat] = [:]
+
+    /// The width of `text` in the rounded system font with tabular digits, as the wings draw it.
+    @MainActor
+    private static func width(_ text: String, size: CGFloat, weight: NSFont.Weight) -> CGFloat {
+        let key = "\(text)|\(size)|\(weight.rawValue)"
+        if let w = widths[key] { return w }
+        let base = NSFont.monospacedDigitSystemFont(ofSize: size, weight: weight)
+        let font = base.fontDescriptor.withDesign(.rounded).flatMap { NSFont(descriptor: $0, size: size) } ?? base
+        let w = ceil((text as NSString).size(withAttributes: [.font: font]).width)
+        widths[key] = w
+        return w
     }
 }
 
@@ -301,7 +447,7 @@ struct MilestoneBar: View {
                 HStack(spacing: 0) {
                     ForEach(0..<n, id: \.self) { i in
                         Text(i < labels.count ? labels[i] : "")
-                            .font(.system(size: 8.5, weight: i + 1 == shown ? .bold : .medium))
+                            .textStyle(.caption, emphasized: i + 1 == shown)
                             .foregroundStyle(i + 1 == shown ? Color.white : Color.islandTertiary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
@@ -362,8 +508,7 @@ struct AirportColumn: View {
                 .foregroundStyle(.white)
             if let time {
                 Text(time.formatted(date: .omitted, time: .shortened))
-                    .font(.system(size: size * 0.7, weight: .medium, design: .rounded))
-                    .monospacedDigit()
+                    .textStyle(.caption, numeric: true)
                     .foregroundStyle(delayed ? Color.orange : Color.islandSecondary)
                     .contentTransition(.numericText())
             }
@@ -383,7 +528,7 @@ struct FlightLine: View {
         VStack(spacing: 1) {
             if let number {
                 Text(number)
-                    .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                    .textStyle(.caption, numeric: true)
                     .foregroundStyle(Color.islandTertiary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -414,7 +559,7 @@ struct StatusChip: View {
     var body: some View {
         let c: Color = kind == .cancelled ? .red : kind == .delayed ? .orange : .green
         Text(text)
-            .font(.system(size: 9.5, weight: .semibold))
+            .textStyle(.caption, emphasized: true)
             .foregroundStyle(c)
             .lineLimit(1)
             .minimumScaleFactor(0.75)
@@ -533,17 +678,21 @@ struct TemplateLeading: View {
         case .flight?:
             TemplateClock(activity: a) { now in
                 let phase = a.flightPhase(now: now)
-                HStack(spacing: 3) {
-                    Image(systemName: phase == "airborne" ? "airplane" : phase == "landed" ? "airplane.arrival" : "airplane.departure")
-                        .font(.system(size: size * 0.8, weight: .semibold))
-                        .foregroundStyle(tint)
-                    if phase == nil || phase == "predeparture" || phase == "boarding", let gate = a.flight?.gate {
-                        Text(gate)
-                            .font(.system(size: size * 0.75, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
+                let plane = Image(systemName: phase == "airborne" ? "airplane" : phase == "landed" ? "airplane.arrival" : "airplane.departure")
+                    .font(.system(size: size * 0.8, weight: .semibold))
+                    .foregroundStyle(tint)
+                if phase == nil || phase == "predeparture" || phase == "boarding", let gate = a.flight?.gate {
+                    // The gate beside the plane when it fits whole, else the plane alone: never "B…".
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: Space.xs) {
+                            plane
+                            Text(gate).textStyle(.caption, emphasized: true, numeric: true).foregroundStyle(Ink.primary)
+                                .lineLimit(1).fixedSize()
+                        }
+                        plane
                     }
+                } else {
+                    plane
                 }
             }
         case .route?:
@@ -554,22 +703,43 @@ struct TemplateLeading: View {
             }
         case .score?:
             if let teams = a.teams, teams.count == 2 {
-                TeamScore(team: teams[0], height: size, animation: motion.value)
-                    .frame(minWidth: 0, maxWidth: compact ? 58 : .infinity, alignment: .leading)
+                TeamScore(team: teams[0], other: teams[1], height: size, limit: compact ? 58 : .infinity, animation: motion.value) {
+                    IconView(icon: model.icon(for: a), size: size, tint: tint)
+                }
+                .frame(minWidth: 0, maxWidth: compact ? 58 : .infinity, alignment: .leading)
             } else {
                 IconView(icon: model.icon(for: a), size: size, tint: tint)
             }
+        case .timer? where a.endsAt == nil && model.icon(for: a).isDial:
+            // A count-up's ring never moves: the stopwatch face says it alone.
+            IconView(icon: model.icon(for: a), size: size, tint: tint)
         case .timer? where a.endsAt != nil || a.startedAt != nil:
             ZStack {
                 TimerRing(activity: a, tint: tint, size: size + 4, lineWidth: 1.8, motion: motion)
-                IconView(icon: model.icon(for: a), size: size - 6, tint: tint)
+                ringFace(a, size: size, tint: tint)
             }
         case .gauge? where a.clampedProgress != nil:
             GaugeRing(level: a.clampedProgress, tint: tint, size: size + 5, lineWidth: 2, showsValue: size + 5 >= 19, animation: motion.value)
+        case nil where a.source == TimerEngine.source && a.clampedProgress != nil:
+            // A paused timer keeps its ring, stopped where it was, so the timer has one shape.
+            ZStack {
+                ProgressRing(progress: a.clampedProgress, tint: base, size: size + 4, lineWidth: 1.8)
+                ringFace(a, size: size, tint: base)
+            }
         case nil:
             IconView(icon: model.icon(for: a), size: size, tint: base)
         default:
             IconView(icon: model.icon(for: a), size: size, tint: tint)
+        }
+    }
+
+    /// The glyph inside a timer's ring, large enough to read; none for a dial (a timer or
+    /// clock face), which inside the ring would be a circle in a circle.
+    @ViewBuilder
+    private func ringFace(_ a: Activity, size: CGFloat, tint: Color) -> some View {
+        let icon = model.icon(for: a)
+        if !icon.isDial {
+            IconView(icon: icon, size: size - 4, tint: tint)
         }
     }
 }
@@ -583,7 +753,8 @@ struct TemplateTrailing: View {
     var compact = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var size: CGFloat { compact ? TextStyle.caption.size : TextStyle.body.size }
+    /// Text size for the Home glance; nil in a wing, whose class decides.
+    private var textSize: CGFloat? { compact ? TextStyle.caption.size : nil }
 
     var body: some View {
         let a = activity
@@ -592,21 +763,32 @@ struct TemplateTrailing: View {
         let motion = TemplateMotion(model, systemReduceMotion: reduceMotion)
         switch model.visualTemplate(for: a) {
         case nil:
-            ActivityTrailing(activity: a, tint: base, compact: compact)
+            ActivityTrailing(activity: a, tint: base, compact: compact, leading: model.leadingSymbol(for: a))
         case .eta? where a.trailing == nil && a.phase == "arrived":
-            let here = Text("Here").font(.system(size: size, weight: .semibold, design: .rounded)).foregroundStyle(tint)
-                .lineLimit(1).fixedSize()
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 3) {
-                    IconView(icon: a.trackerIcon ?? model.icon(for: a), size: size, tint: tint)
-                    here
+            // Just the word, the car being beside the notch already; a pin where even that
+            // doesn't fit.
+            WingValue(plan: WingPlan(full: "Here", short: nil, glyph: "mappin.and.ellipse"), size: textSize,
+                      tint: base.readableTextOnBlack)
+                .spokenValue(SpokenText.value(a, now: Date()))
+        case .route? where a.trailing == nil && a.route?.stopsLeft != nil:
+            // "3 stops", else the count beside a stop glyph: never a bare number.
+            let n = a.route?.stopsLeft ?? 0
+            WingValue(plan: WingPlan(full: n == 1 ? "1 stop" : "\(n) stops", short: nil, glyph: nil), size: textSize, tint: base.readableTextOnBlack,
+                      animation: motion.value) {
+                HStack(spacing: Space.xs) {
+                    Image(systemName: "smallcircle.filled.circle")
+                        .font(.system(size: TextStyle.caption.size, weight: .semibold))
+                    WingText(text: "\(n)", size: textSize, tint: base.readableTextOnBlack)
                 }
-                here
+                .foregroundStyle(tint)
             }
             .spokenValue(SpokenText.value(a, now: Date()))
         case .score? where a.trailing == nil && a.teams?.count == 2:
-            TeamScore(team: a.teams![1], height: compact ? 14 : 15, trailing: true, animation: motion.value)
-                .frame(minWidth: 0, maxWidth: compact ? 58 : .infinity, alignment: .trailing)
+            TeamScore(team: a.teams![1], other: a.teams![0], height: compact ? 14 : 15, trailing: true, limit: compact ? 58 : .infinity,
+                      animation: motion.value) {
+                EmptyView()
+            }
+            .frame(minWidth: 0, maxWidth: compact ? 58 : .infinity, alignment: .trailing)
                 .spokenValue(SpokenText.value(a, now: Date()))
         case .liveAudio? where a.templateTrailing(now: Date()) == nil:
             VoiceWave(tint: tint, active: a.state == .running && motion.perpetual, width: 18, height: 13)
@@ -615,7 +797,7 @@ struct TemplateTrailing: View {
             PlayingIndicator(tint: tint, playing: a.state == .running)
                 .scaleEffect(compact ? 0.85 : 1)
         default:
-            TemplateValueText(activity: a, model: model, size: size, tint: tint)
+            TemplateValueText(activity: a, model: model, size: textSize, tint: tint)
         }
     }
 }
@@ -633,26 +815,27 @@ struct TemplateBubble: View {
         let a = activity
         let tint = model.tint(for: a)
         let motion = TemplateMotion(model, systemReduceMotion: reduceMotion)
-        let ring = diameter - 8
-        let glyph = diameter - 17
-        let plain = IconView(icon: model.icon(for: a), size: diameter - 13, tint: tint)
+        let sizes = BubbleView.Sizes(diameter: diameter)
+        let ring = sizes.ring, line = sizes.line
+        let glyph = sizes.ringed
+        let plain = IconView(icon: model.icon(for: a), size: sizes.plain, tint: tint)
         TemplateClock(activity: a, speaks: true) { now in
             let text = a.minimalText(now: now)
             switch model.visualTemplate(for: a) {
             case .eta? where a.trackProgress(now: now) != nil:
                 ZStack {
-                    ProgressRing(progress: a.trackProgress(now: now), tint: tint, size: ring, lineWidth: 2.2)
+                    ProgressRing(progress: a.trackProgress(now: now), tint: tint, size: ring, lineWidth: line)
                         .animation(motion.value, value: a.trackProgress(now: now))
                     if let text { label(text, color: .white) } else { IconView(icon: a.trackerIcon ?? model.icon(for: a), size: glyph, tint: tint) }
                 }
             case .stages? where a.stageCount != nil:
                 ZStack {
-                    ProgressRing(progress: stageFraction(a), tint: tint, size: ring, lineWidth: 2.2)
+                    ProgressRing(progress: stageFraction(a), tint: tint, size: ring, lineWidth: line)
                     IconView(icon: a.currentStageSymbol ?? model.icon(for: a), size: glyph, tint: tint)
                 }
             case .flight? where a.flight != nil:
                 ZStack {
-                    ProgressRing(progress: a.flight?.progress(now: now) ?? 0, tint: tint, size: ring, lineWidth: 2.2)
+                    ProgressRing(progress: a.flight?.progress(now: now) ?? 0, tint: tint, size: ring, lineWidth: line)
                     Image(systemName: "airplane").font(.system(size: glyph * 0.8, weight: .semibold)).foregroundStyle(tint)
                 }
             case .route?:
@@ -673,13 +856,13 @@ struct TemplateBubble: View {
                 }
             case .timer? where a.endsAt != nil || a.startedAt != nil:
                 ZStack {
-                    TimerRing(activity: a, tint: tint, size: ring, lineWidth: 2.2, motion: motion)
+                    TimerRing(activity: a, tint: tint, size: ring, lineWidth: line, motion: motion)
                     if let text { label(text, color: .white) }
                 }
             case .workout?:
                 if let end = a.endsAt, end > now {
                     ZStack {
-                        TimerRing(activity: a, tint: tint, size: ring, lineWidth: 2.2, motion: motion)
+                        TimerRing(activity: a, tint: tint, size: ring, lineWidth: line, motion: motion)
                         if let text { label(text, color: .white) }
                     }
                 } else if let text {
@@ -688,7 +871,7 @@ struct TemplateBubble: View {
                     plain
                 }
             case .gauge? where a.clampedProgress != nil:
-                GaugeRing(level: a.clampedProgress, tint: tint, size: ring, lineWidth: 2.2, animation: motion.value)
+                GaugeRing(level: a.clampedProgress, tint: tint, size: ring, lineWidth: line, animation: motion.value)
             case .liveAudio?:
                 if let text {
                     label(text, color: tint)
@@ -696,7 +879,7 @@ struct TemplateBubble: View {
                     VoiceWave(tint: tint, active: a.state == .running && motion.perpetual, width: diameter * 0.5, height: diameter * 0.4)
                 }
             case .agent?:
-                IconView(icon: model.icon(for: a), size: diameter - 13, tint: tint)
+                IconView(icon: model.icon(for: a), size: sizes.plain, tint: tint)
                     .overlay(alignment: .bottomTrailing) {
                         Circle().fill(stateColor(a.state, tint: tint)).frame(width: 6, height: 6)
                             .overlay(Circle().stroke(Color.black, lineWidth: 1.2))
@@ -770,7 +953,7 @@ struct TemplateDetail<Fallback: View>: View {
                              dot: 6, animate: motion.perpetual)
             }
         case .flight? where a.flight != nil:
-            FlightBoard(activity: a, tint: tint, size: TextStyle.body.size)
+            FlightBoard(activity: a, tint: tint, size: TextStyle.body.size, showsNumber: false)
         case .route? where a.route != nil:
             HStack(spacing: 6) {
                 if a.route?.line != nil { Image(systemName: a.route!.symbol).font(.system(size: 10, weight: .semibold)).foregroundStyle(tint) }
@@ -781,7 +964,7 @@ struct TemplateDetail<Fallback: View>: View {
                 let clock = a.endsAt != nil || a.startedAt != nil ? a.trailingText(now: now) : nil
                 HStack(spacing: 6) {
                     if let head = [a.period, clock].compactMap({ $0 }).joined(separator: " ").nilIfEmpty {
-                        Text(head).font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit().foregroundStyle(.white)
+                        Text(head).textStyle(.caption, emphasized: true, numeric: true).foregroundStyle(.white)
                             .lineLimit(1).fixedSize()
                     }
                     if let sub = a.subtitle { secondary(sub) }
@@ -828,6 +1011,8 @@ struct FlightBoard: View {
     var size: CGFloat
     /// Carries the flight's spoken value (where nothing else beside it does).
     var speaks = false
+    /// The flight number over the line. A sneak peek leaves it out: its title already says it.
+    var showsNumber = true
 
     var body: some View {
         let f = activity.flight ?? ActivityFlight()
@@ -835,7 +1020,7 @@ struct FlightBoard: View {
         TemplateClock(activity: activity, speaks: speaks) { now in
             HStack(spacing: 6) {
                 if let from = f.from { AirportColumn(code: from, time: f.departs, delayed: delayed, alignment: .leading, size: size) }
-                FlightLine(progress: f.progress(now: now), tint: tint, number: f.number)
+                FlightLine(progress: f.progress(now: now), tint: tint, number: showsNumber ? f.number : nil)
                 if let to = f.to { AirportColumn(code: to, time: f.arrives, delayed: delayed, alignment: .trailing, size: size) }
                 if let status = f.status { StatusChip(text: status, kind: f.statusKind).fixedSize() }
             }
@@ -863,12 +1048,12 @@ struct ScoreLine: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 VStack(spacing: 0) {
                     if let period = activity.period {
-                        Text(period).font(.system(size: 10.5, weight: .semibold, design: .rounded)).foregroundStyle(.white)
+                        Text(period).textStyle(.caption, emphasized: true, numeric: true).foregroundStyle(.white)
                     }
                     if activity.endsAt != nil || activity.startedAt != nil {
                         TemplateClock(activity: activity) { now in
                             Text(activity.trailingText(now: now) ?? "")
-                                .font(.system(size: 9.5, weight: .medium, design: .rounded)).monospacedDigit()
+                                .textStyle(.caption, numeric: true)
                                 .foregroundStyle(Color.islandSecondary)
                                 .spokenValue(SpokenText.time(activity, now: now))
                         }
@@ -998,12 +1183,12 @@ struct TemplateRow: View {
                         ViewThatFits(in: .horizontal) {
                             HStack(spacing: 5) {
                                 title.fixedSize()
-                                Text(label).font(.system(size: 11)).foregroundStyle(Color.islandSecondary).lineLimit(1).fixedSize()
+                                Text(label).textStyle(.caption).foregroundStyle(Ink.secondary).lineLimit(1).fixedSize()
                             }
                             title
                         }
                     } else {
-                        title
+                        RowTitle(text: rowTitle(t))
                     }
                     secondLine(t, tint: tint, motion: motion)
                 }
@@ -1044,7 +1229,7 @@ struct TemplateRow: View {
                 if let p = a.trackProgress(now: now) {
                     EtaTrack(progress: p, tint: tint, tracker: a.trackerIcon ?? model.icon(for: a), glyph: 10, animation: motion.value)
                 } else if let sub = a.subtitle {
-                    Text(sub).font(.system(size: 11)).foregroundStyle(Color.islandSecondary).lineLimit(1)
+                    Text(sub).textStyle(.caption).foregroundStyle(Ink.secondary).lineLimit(1)
                 }
             }
         case .stages:
@@ -1058,14 +1243,19 @@ struct TemplateRow: View {
                     }
                 }
             } else if let sub = a.subtitle {
-                Text(sub).font(.system(size: 11)).foregroundStyle(Color.islandSecondary).lineLimit(1)
+                Text(sub).textStyle(.caption).foregroundStyle(Ink.secondary).lineLimit(1)
             }
         case .route:
-            let line = [a.subtitle, a.route?.instruction != nil ? a.title : nil].compactMap { $0 }.first
-            if let line { Text(line).font(.system(size: 11)).foregroundStyle(Color.islandSecondary).lineLimit(1) }
+            // The stops lead the line ("3 stops · N Judah to Ocean Beach") rather than taking a
+            // column of their own beside the title.
+            let stops = a.trailing == nil ? a.route?.stopsLeft.map { $0 == 1 ? "1 stop" : "\($0) stops" } : nil
+            let about = [a.subtitle, a.route?.instruction != nil ? a.title : nil].compactMap { $0 }.first
+            if let line = [stops, about].compactMap({ $0 }).joined(separator: " · ").nilIfEmpty {
+                Text(line).textStyle(.caption).foregroundStyle(Ink.secondary).lineLimit(1)
+            }
         default:
             if let sub = a.subtitle {
-                Text(sub).font(.system(size: 11)).foregroundStyle(Color.islandSecondary).lineLimit(1)
+                Text(sub).textStyle(.caption).foregroundStyle(Ink.secondary).lineLimit(1)
             }
         }
     }
@@ -1080,14 +1270,33 @@ struct TemplateRow: View {
             }
         case .eta where activity.trailing == nil && activity.phase == "arrived":
             TemplateTrailing(activity: activity, model: model, tint: tint)
-        case .eta where activity.subtitle != nil && activity.trackProgress(now: Date()) != nil:
-            VStack(alignment: .trailing, spacing: 1) {
-                TemplateValueText(activity: activity, model: model, size: 13, tint: tint)
-                Text(activity.subtitle ?? "").font(.system(size: 10.5)).foregroundStyle(Color.islandSecondary).lineLimit(1)
-            }
+        case .route where activity.trailing == nil && activity.route?.stopsLeft != nil:
+            // The stops are on the second line.
+            EmptyView()
         default:
             TemplateValueText(activity: activity, model: model, size: 13, tint: tint)
         }
+    }
+}
+
+/// A row's title. One that ends in a detail after " · " (a plate, a gate) keeps that detail
+/// whole and lets only the part before it shorten: "Grey Pri… · 7ABC123", never "Grey Prius · 7AB…".
+struct RowTitle: View {
+    let text: String
+
+    var body: some View {
+        Group {
+            if let cut = text.range(of: " · ", options: .backwards), cut.lowerBound > text.startIndex {
+                HStack(spacing: 0) {
+                    Text(text[..<cut.lowerBound]).lineLimit(1)
+                    Text(text[cut.lowerBound...]).lineLimit(1).fixedSize()
+                }
+            } else {
+                Text(text).lineLimit(1)
+            }
+        }
+        .textStyle(.body, emphasized: true)
+        .foregroundStyle(Ink.primary)
     }
 }
 

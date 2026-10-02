@@ -36,9 +36,10 @@ public enum MediaSeek {
         return old > 0 && old < 1 || (old <= 0) != (new <= 0)
     }
 
-    /// The right-hand time label: time remaining ("-2:51") or the track length ("4:03").
+    /// The right-hand time label: time remaining ("−2:51", with a real minus sign, as other
+    /// negative figures have) or the track length ("4:03").
     public static func trailingLabel(position: Double, duration: Double, remaining: Bool) -> String {
-        remaining ? "-" + Format.clock(max(0, duration - position)) : Format.clock(duration)
+        remaining ? "\u{2212}" + Format.clock(max(0, duration - position)) : Format.clock(duration)
     }
 }
 
@@ -114,11 +115,12 @@ public enum MediaModes {
 }
 
 /// The row beside Now Playing's artwork on Home: the title, the other players' chips and the
-/// volume button. The title keeps `titleRoom` points, about a dozen characters, and what
-/// doesn't fit beside it goes: the volume button first, then chips past the first, so another
-/// player can always be picked. At the compact size, with other things beside the music, that
-/// leaves the volume row off Home; the volume keys still work. A card tall enough for the
-/// volume row has no button at all.
+/// volume button. The title keeps `titleRoom` points, about a dozen characters, and what doesn't
+/// fit beside it gives way in order: the other players fold into one chip that counts them
+/// (a menu picks one), then the volume button goes, so another player can always be picked.
+/// At the compact size beside the glances, one chip and the button together would cut
+/// "Midnight City" to "Midnight…", so there the button makes way; the volume keys still work,
+/// and a card tall enough for the volume row has no button at all.
 public enum NowPlayingTitleRow {
     public static let titleRoom: Double = 96
     public static let chip: Double = 22
@@ -129,6 +131,8 @@ public enum NowPlayingTitleRow {
     public static let maxChips = 3
 
     public struct Layout: Equatable, Sendable {
+        /// Chips shown. When there are more players than chips, the last chip stands for the
+        /// rest (`folded`).
         public var chips: Int
         public var showsVolume: Bool
 
@@ -139,6 +143,13 @@ public enum NowPlayingTitleRow {
 
         /// Whether anything sits beside the title.
         public var isEmpty: Bool { chips == 0 && !showsVolume }
+
+        /// How many players the last chip stands for when `otherPlayers` are live: 1 when
+        /// every player has a chip of its own, more when the rest are folded into it.
+        public func folded(otherPlayers: Int) -> Int {
+            guard chips > 0 else { return 0 }
+            return max(1, otherPlayers - (chips - 1))
+        }
     }
 
     /// - Parameters:
@@ -149,10 +160,11 @@ public enum NowPlayingTitleRow {
     public static func layout(width: Double, spacing: Double, otherPlayers: Int, volumeRow: Bool) -> Layout {
         let wanted = Layout(chips: min(max(otherPlayers, 0), maxChips), showsVolume: !volumeRow)
         func fits(_ l: Layout) -> Bool { l.isEmpty || width - spacing - beside(l) >= titleRoom }
-        if fits(wanted) { return wanted }
         var l = wanted
-        l.showsVolume = false
+        // Players fold into one chip before the volume button goes.
         while l.chips > 1, !fits(l) { l.chips -= 1 }
+        if fits(l) { return l }
+        l.showsVolume = false
         return l
     }
 

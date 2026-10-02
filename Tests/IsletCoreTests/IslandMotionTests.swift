@@ -77,6 +77,14 @@ private func times(to end: Double, step: Double = 1.0 / 240) -> [Double] {
         #expect(IslandMotion.shellProgress(at: IslandMotion.contentDelay, opening: true) > 0.3)
     }
 
+    @Test func contentWaitsForTheShellToMakeRoom() {
+        // Opening, the shell is most of the way out before text starts to show, so a word is
+        // never cut by the edge still growing round it.
+        #expect(IslandMotion.shellProgress(at: IslandMotion.contentDelay, opening: true) >= 0.6)
+        // Closing, the smaller shape's row waits until the body has nearly gone back into it.
+        #expect(IslandMotion.shellProgress(at: IslandMotion.contentDelayClosing, opening: false) >= 0.85)
+    }
+
     @Test func closingClearsTheContentBeforeTheShellMoves() {
         #expect(IslandMotion.contentLeft(at: IslandMotion.contentExit) == 0)
         #expect(IslandMotion.shellProgress(at: IslandMotion.closeDelay, opening: false) == 0)

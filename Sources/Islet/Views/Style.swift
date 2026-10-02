@@ -147,13 +147,24 @@ extension IslandTheme {
                     closedGlass: Bool = false, stem: CGFloat? = nil) -> some View {
         switch self {
         case .graphite where expanded:
-            shape.fill(Color(white: 0.105)).overlay(shape.stroke(Color.white.opacity(0.08), lineWidth: 1))
+            // The menu bar row stays black, so the hardware notch never shows as a dark bite
+            // in a grey bar; the grey starts just below it. The edge leaves out the top, at the
+            // top of the screen.
+            let h = max(height, row + Space.m, 1)
+            shape.fill(LinearGradient(stops: [.init(color: .black, location: 0),
+                                              .init(color: .black, location: row / h),
+                                              .init(color: Self.graphite, location: (row + Space.m) / h)],
+                                      startPoint: .top, endPoint: .bottom))
+                .overlay(IslandEdge(shape: shape).stroke(Color.white.opacity(0.08), lineWidth: 1))
         case .glass:
             GlassBody(shape: shape, expanded: expanded, row: row, height: height, level: glassLevel, closedGlass: closedGlass, stem: stem)
         default:
             shape.fill(Color.black)
         }
     }
+
+    /// The open Graphite surface below the menu bar row.
+    static let graphite = Color(white: 0.105)
 }
 
 /// "Subtle outline": a faint edge round the island so black shows on a dark wallpaper. The
@@ -167,12 +178,15 @@ struct IslandOutline: View {
     /// The edge with Increase Contrast, which bubbles share.
     static let increasedEdge = Color.white.opacity(0.25)
     static let increasedWidth: CGFloat = 1
+    /// "Subtle outline": faint, but firm enough to find on a busy wallpaper. Bubbles share it.
+    static let edge = Color.white.opacity(0.22)
+    static let width: CGFloat = 1
 
     var body: some View {
         let increased = contrast == .increased
         if on || increased {
             IslandEdge(shape: shape)
-                .stroke(increased ? Self.increasedEdge : Color.white.opacity(0.14), lineWidth: increased ? Self.increasedWidth : 0.75)
+                .stroke(increased ? Self.increasedEdge : Self.edge, lineWidth: increased ? Self.increasedWidth : Self.width)
                 .allowsHitTesting(false)
         }
     }
@@ -200,7 +214,7 @@ private struct GlassBody: View {
     var stem: CGFloat? = nil
 
     /// The least black left over the glass, so text always has a floor of contrast.
-    static let smoke = GlassMelt.smokeFloor
+    static let smoke = GlassMelt.standardSmoke
     @Environment(\.snapshotMode) private var snapshotMode
     @Environment(\.shellClock) private var clock
     @Environment(\.islandMotion) private var motion
@@ -389,6 +403,37 @@ struct GlassSurface<S: Shape>: View {
 }
 
 // MARK: - Urgent glow
+
+/// The urgent glow on the closed island: a soft rim just inside its sides and bottom, so it
+/// stays in the menu bar row and never tints the status items beside it. It pulses a few times
+/// to catch the eye, then holds; with less motion it simply holds.
+struct InnerGlow: View {
+    let shape: IslandShape
+    let color: Color
+    @Environment(\.reduceMotionAnywhere) private var reduceMotion
+    @Environment(\.snapshotMode) private var snapshotMode
+    @ViewState private var bright = false
+
+    var body: some View {
+        // A lit edge with a soft haze inside it: bright where it meets the edge, so it reads
+        // as light rather than as a dull border.
+        ZStack {
+            IslandEdge(shape: shape).stroke(color.opacity(0.55), lineWidth: 10).blur(radius: 4)
+            IslandEdge(shape: shape).stroke(color, lineWidth: 2).blur(radius: 0.5)
+        }
+        .clipShape(shape)
+        .opacity(bright || snapshotMode ? 1 : 0.55)
+            .allowsHitTesting(false)
+            .onAppear {
+                guard !reduceMotion, !snapshotMode else {
+                    bright = true
+                    return
+                }
+                // An odd count, so the last swing lands on the steady glow.
+                withAnimation(.easeInOut(duration: 0.9).repeatCount(5, autoreverses: true)) { bright = true }
+            }
+    }
+}
 
 /// Soft pulsing glow behind the island while something needs attention. Animated by
 /// Core Animation (shadow opacity), so it costs the app no CPU per frame.

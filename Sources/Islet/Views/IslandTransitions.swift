@@ -313,8 +313,10 @@ struct GooCanvas: View {
     /// How far the goo reaches under a see-through island's edge, so no hairline shows between.
     static let seam: CGFloat = 0.5
 
-    /// How soft the goo is: how far apart two edges can be and still flow together.
-    static func blur(_ diameter: CGFloat) -> CGFloat { max(2, diameter * 0.11) }
+    /// How soft the goo is: how far apart two edges can be and still flow together. Kept
+    /// small, since the cut leaves a soft rim about as wide as the blur, and a crisp edge reads
+    /// as the same liquid as the island and the bubble beside it.
+    static func blur(_ diameter: CGFloat) -> CGFloat { max(1.5, diameter * 0.06) }
 
     var body: some View {
         let m = Self.margin
@@ -338,6 +340,16 @@ struct GooCanvas: View {
             }
         }
         .frame(width: 2 * (rest + diameter + m), height: diameter + 2 * m)
+        // Flattened, so the cut makes a hard edge like the island's and the bubble's own.
+        .drawingGroup()
+        // Beside glass the black goo would be the only opaque thing there: it fades in and out
+        // with the bubble's glyph instead of standing out.
+        .opacity(seeThrough ? pose.icon : 1)
+    }
+
+    private var seeThrough: Bool {
+        if case .island(let cap) = anchor { return cap.seeThrough }
+        return false
     }
 
     /// The anchor, the bubble and the bridge, in black.

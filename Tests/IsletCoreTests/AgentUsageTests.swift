@@ -249,6 +249,9 @@ private func tempDir() -> URL {
         #expect(spec.state == .warning)
         #expect(spec.sneak == true)
         #expect(spec.priority == .normal)
+        // The wing says how much is used, and the mark keeps Claude's own colour until the limit is reached.
+        #expect(spec.trailing == "90%")
+        #expect(spec.tint == UsageProvider.claude.tint)
 
         let week = UsageAlert(provider: .codex, window: UsageWindow(id: "secondary", usedPercent: 100, windowMinutes: 10080,
                                                                     resetsAt: morning.addingTimeInterval(2 * 86400)), threshold: 100)
@@ -256,6 +259,7 @@ private func tempDir() -> URL {
         #expect(s.title == "Codex weekly limit reached")
         #expect(s.subtitle == "Resets Fri 09:20")
         #expect(s.priority == .high)
+        #expect(s.trailing == "100%" && s.tint == "red")
     }
 }
 

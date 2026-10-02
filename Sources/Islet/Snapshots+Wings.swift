@@ -30,7 +30,9 @@ extension Snapshots {
         for wing in [MenuBarLayoutEngine.iconOnlyWing, 36, 42.5, 52] as [CGFloat] {
             let metrics = NotchGeometry.metrics(for: screen, expandedSize: CGSize(width: settings.expandedSize.width, height: settings.expandedSize.height),
                                                 wingWidth: wing)
-            model.closedPlacements[1] = ClosedPlacement(wing: wing, slack: .infinity)
+            // The room the 440 pt sheet leaves beside the wings, as a measured menu bar would:
+            // bubbles that don't fit are counted in the wing rather than clipped by the sheet.
+            model.closedPlacements[1] = ClosedPlacement(wing: wing, slack: (440 - metrics.notch.width - 2 * wing) / 2)
             for (label, presentation, height) in states {
                 model.forcedPresentation = presentation
                 let view = IslandView(model: model, display: 1, metrics: metrics)

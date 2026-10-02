@@ -53,9 +53,10 @@ struct UsageWindowRow: View {
         let reset = window.hasReset(at: now)
         let used = reset ? 0 : window.usedPercent
         HStack(spacing: Space.s) {
+            // Centred under the provider's mark, which is centred in the same 18 points.
             Text(window.shortLabel)
                 .foregroundStyle(Ink.tertiary)
-                .frame(width: 18, alignment: .leading)
+                .frame(width: 18, alignment: .center)
             LevelBar(value: used / 100, tint: color(for: used), height: 4)
                 .frame(minWidth: 24)
             Text(UsageFormat.percent(used))
@@ -121,7 +122,7 @@ struct ClaudeUsageHintRow: View {
                     dismissButton
                 }
                 .frame(height: 16)
-                // Under the mark, like the bars of a usage card.
+                // Under the name, as every glance's detail is.
                 Group {
                     Text("Waiting for Claude Code").foregroundStyle(Ink.secondary).lineLimit(1)
                     Text("Updates as it runs in a terminal")
@@ -130,11 +131,15 @@ struct ClaudeUsageHintRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .textStyle(.caption)
+                .padding(.leading, Self.textIndent)
                 .help("Claude Code hands its usage to its status line, which it shows while it runs in a terminal.")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
+
+    /// Where the name starts: past the 18-point mark and the gap after it.
+    static let textIndent: CGFloat = 18 + Space.s
 
     private var dismissButton: some View {
         Button { model.dismissClaudeUsageHint() } label: {

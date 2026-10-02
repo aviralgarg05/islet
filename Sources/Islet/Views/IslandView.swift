@@ -83,11 +83,22 @@ enum IslandLayout {
         case .hidden, .idle:
             if m.floats { return grown(pill(width: n.width, metrics: m, wing: 0), by: look.hoverGrow) }
             return grown(IslandGeometry(size: n, top: 6, bottom: small, stemWidth: n.width, stemHeight: n.height), by: look.hoverGrow)
+        case .compact(.sticker):
+            // The resting sticker alone: the island hugs the notch with one small wing for it,
+            // rather than a long bar with an empty left wing.
+            let w = min(wing, MenuBarLayoutEngine.iconOnlyWing)
+            let hug = n.width + 2 * w
+            if m.floats { return grown(pill(width: hug, metrics: m, wing: w), by: look.hoverGrow) }
+            return grown(IslandGeometry(size: CGSize(width: hug, height: n.height), top: 6, bottom: small,
+                                        stemWidth: hug, stemHeight: n.height, wing: w), by: look.hoverGrow)
         case .compact where m.floats, .hud where m.floats && !look.detailedHUD:
             return grown(pill(width: row, metrics: m, wing: wing), by: look.hoverGrow)
         case .expanded where look.stemmedOpen:
+            // Over a notch the stem is the notch's width. Without one there is no notch to
+            // match: the stem keeps the pill's width, so opening never pinches it.
             return IslandGeometry(size: m.expanded, top: stemFlare, bottom: Radius.shell,
-                                  stemWidth: n.width, stemHeight: ExpandedLayout(metrics: m).row)
+                                  stemWidth: m.floats ? min(row, m.expanded.width) : n.width,
+                                  stemHeight: ExpandedLayout(metrics: m).row)
         case .expanded:
             return IslandGeometry(size: m.expanded, top: Radius.flare, bottom: Radius.shell,
                                   stemWidth: m.expanded.width, stemHeight: n.height)
@@ -109,6 +120,13 @@ enum IslandLayout {
         let n = m.notch
         let row = n.width + 2 * wing
         let width = max(row + 32, 276)
+        if m.floats {
+            // Without a notch the row part floats like the pill it grows from: inside the
+            // row's top edge, its top corners rounded, and the body below it as tall as ever.
+            let inset = NotchGeometry.pillInset
+            return IslandGeometry(size: CGSize(width: width, height: n.height + 46 + extra + inset), top: 0, bottom: 18,
+                                  stemWidth: min(row, width), stemHeight: n.height, wing: wing, inset: inset)
+        }
         return IslandGeometry(size: CGSize(width: width, height: n.height + 46 + extra), top: 8, bottom: 18,
                               stemWidth: min(row, width), stemHeight: n.height, wing: wing)
     }
@@ -149,10 +167,16 @@ enum IslandLayout {
     /// Height of the detailed HUD's line below the notch: no more than the line needs.
     static let hudBody: CGFloat = 30
 
-    /// A sneak peek with a bar under its text gets a little more height, so the bar clears the
-    /// rounded bottom edge.
+    /// A sneak peek whose detail takes a second line gets a little more height, so it clears
+    /// the rounded bottom edge: a bar on its own line, or the flight board's codes over their
+    /// times. Bars that sit beside their text (ETA, gauge) need none.
     static func sneakBar(_ a: Activity) -> CGFloat {
-        a.state == .running && (a.clampedProgress != nil || a.steps != nil) ? Space.s : 0
+        switch a.resolvedTemplate {
+        case .flight where a.flight != nil: return Space.m
+        case .eta, .gauge: return 0
+        case .stages where a.stageCount != nil: return Space.s
+        default: return a.state == .running && (a.clampedProgress != nil || a.steps != nil) ? Space.s : 0
+        }
     }
 
     /// The panel: room for the widest and tallest island, its shadow, and the page switcher
@@ -283,7 +307,8 @@ extension AppModel {
         let left = settings.bubblePlacement == .left
         let fit = IslandLayout.bubblesThatFit(all.items.count, slack: left ? placement.leftSlack : placement.rightSlack,
                                               diameter: metrics.notch.height)
-        guard fit < all.items.count else { return (all, 0) }
+        // Every activity without a bubble is counted once, in the wing: those past "Show up to"
+        // as well as those the row has no room for.
         return (BubbleSet(items: Array(all.items.prefix(fit)), overflow: 0), all.items.count - fit + all.overflow)
     }
 
@@ -444,9 +469,12 @@ struct IslandView: View {
                         bubbleViews(slots, diameter: bp.diameter, top: bp.top, geometry: g, shift: shift)
                     }
                     .fixedSize()
-                    // The row's inner edge sits one gap outside the island's edge.
+                    // The row's inner edge sits one gap outside the island's body, measured from
+                    // its side rather than from the flare at the top of the screen, so the first
+                    // bubble is as far from the island as the next is from it.
                     .alignmentGuide(left ? HorizontalAlignment.leading : HorizontalAlignment.trailing) { d in
-                        left ? d[HorizontalAlignment.trailing] + IslandLayout.bubbleGap : d[HorizontalAlignment.leading] - IslandLayout.bubbleGap
+                        left ? d[HorizontalAlignment.trailing] + IslandLayout.bubbleGap - g.top
+                             : d[HorizontalAlignment.leading] - IslandLayout.bubbleGap + g.top
                     }
                 }
             switcher(p)
@@ -519,14 +547,28 @@ struct IslandView: View {
     @ViewBuilder
     private func island(_ p: IslandPresentation, geometry g: IslandGeometry, from fromG: IslandGeometry?, move: ShellMove,
                         counted: Int) -> some View {
-        let glow = model.urgentGlow(for: p)
+        // In a frozen frame the glow comes and goes with the content it belongs to: the old
+        // one fading as its content leaves, the new one arriving with its content.
+        let glows: [(color: Color, presentation: IslandPresentation, opacity: Double)] = {
+            guard let frame else { return model.urgentGlow(for: p).map { [($0, p, 1)] } ?? [] }
+            let delay = move.opening ? IslandMotion.contentDelay : IslandMotion.contentDelayClosing
+            var list: [(Color, IslandPresentation, Double)] = []
+            if let old = model.urgentGlow(for: frame.from) { list.append((old, frame.from, IslandMotion.contentLeft(at: frame.t))) }
+            if let new = model.urgentGlow(for: p) { list.append((new, p, IslandMotion.contentReveal(at: frame.t, delay: delay))) }
+            return list
+        }()
         ZStack(alignment: .top) {
-            if let glow {
-                if snapshotMode {
-                    g.shape.fill(Color.black).shadow(color: glow.opacity(0.8), radius: 9)
-                } else {
-                    GlowPulse(color: NSColor(glow), cornerRadius: g.bottom)
-                        .frame(width: g.outerWidth, height: g.size.height)
+            // A peek's glow spreads round it; the closed island's stays inside its edge (below).
+            ForEach(Array(glows.enumerated()), id: \.offset) { _, glow in
+                if !Self.glowsInside(glow.presentation) {
+                    if snapshotMode {
+                        // As the live glow draws it (`GlowNSView`).
+                        g.shape.fill(Color.black).shadow(color: glow.color.opacity(0.5), radius: 9)
+                            .opacity(glow.opacity)
+                    } else {
+                        GlowPulse(color: NSColor(glow.color), cornerRadius: g.bottom)
+                            .frame(width: g.outerWidth, height: g.size.height)
+                    }
                 }
             }
             if let frame {
@@ -535,6 +577,13 @@ struct IslandView: View {
                     .environment(\.shellClock, ShellClock(t: frame.t, wasExpanded: frame.from == .expanded))
             } else {
                 ShellStretch(move: move) { stretch in shell(p, geometry: g, stretch: stretch) }
+            }
+            ForEach(Array(glows.enumerated()), id: \.offset) { _, glow in
+                if Self.glowsInside(glow.presentation) {
+                    InnerGlow(shape: g.shape, color: glow.color)
+                        .frame(width: g.outerWidth, height: g.size.height)
+                        .opacity(glow.opacity)
+                }
             }
             contentLayer(p, geometry: g, from: fromG, opening: move.opening, counted: counted)
         }
@@ -558,18 +607,29 @@ struct IslandView: View {
         .contextMenu { islandMenu(p) }
     }
 
+    /// The closed island (compact, a HUD in the row) keeps its urgent glow inside its edge, so
+    /// nothing spills below the menu bar row or over the status items beside it.
+    static func glowsInside(_ p: IslandPresentation) -> Bool { IslandLayout.rank(p) <= 1 }
+
     /// The island's surface and outline, `stretch` points wider on each side while it squashes.
     private func shell(_ p: IslandPresentation, geometry g: IslandGeometry, stretch: CGFloat) -> some View {
         let shape = g.stretched(by: stretch)
         // The teleprompter's "See-through while reading" turns the open island to clear glass.
         let seeThrough = p == .expanded && model.seeThroughPage
+        // The open island's shadow. In a frozen frame it grows and goes with the shell, so a
+        // closing island doesn't lose it at once nor an opening one wear it while still small.
+        var shadow = p == .expanded ? 0.45 : 0
+        if let frame, (frame.from == .expanded) != (p == .expanded) {
+            let k = IslandMotion.shellProgress(at: frame.t, opening: p == .expanded)
+            shadow = 0.45 * (p == .expanded ? k : 1 - k)
+        }
         return ZStack {
             (seeThrough ? IslandTheme.glass : model.settings.theme)
                 .background(expanded: p == .expanded, shape: shape, row: g.stemHeight, height: g.size.height,
                             glassLevel: seeThrough ? 1 : model.settings.glassLevel,
                             closedGlass: closedGlass,
                             stem: p == .expanded && model.look(for: display).stemmedOpen ? g.stemWidth : nil)
-                .shadow(color: .black.opacity(p == .expanded ? 0.45 : 0), radius: 14, y: 6)
+                .shadow(color: .black.opacity(shadow), radius: 14, y: 6)
             IslandOutline(shape: shape, on: model.settings.outline)
         }
         .frame(width: max(0, g.outerWidth + 2 * stretch), height: g.size.height)
@@ -640,7 +700,6 @@ struct IslandView: View {
     struct BubbleSlot: Identifiable {
         var bubble: IslandBubble
         var index: Int
-        var overflow: Int
         /// It buds from, and is absorbed into, the bubble nearer the island rather than the
         /// island itself (that bubble stays put while it moves).
         var fromNeighbour = false
@@ -678,7 +737,7 @@ struct IslandView: View {
         for (i, b) in items.enumerated() {
             let arriving = !had.contains(b.key), leaving = !has.contains(b.key)
             let neighbourLeaving = i > 0 && !has.contains(items[i - 1].key)
-            var slot = BubbleSlot(bubble: b, index: i, overflow: b == drawn.items.last ? drawn.overflow : 0)
+            var slot = BubbleSlot(bubble: b, index: i)
             slot.fromNeighbour = i > 0 && !neighbourLeaving
             slot.delay = closingDelay + Double(arrivingNearer) * Self.budStagger * k
             slot.fades = reshaping
@@ -708,10 +767,11 @@ struct IslandView: View {
         let seeThrough = closedGlass && model.settings.theme == .glass
         let cap = metrics.floats ? GooCap(top: diameter / 2, bottom: diameter / 2, seeThrough: seeThrough)
                                  : GooCap(top: 0, bottom: min(g.bottom, diameter / 2), seeThrough: seeThrough)
-        // Nearest the island first on both sides, so the farthest bubble carries the "+N".
+        // Nearest the island first on both sides. Activities without a bubble are counted in
+        // the island's wing ("+2"), never on a bubble.
         ForEach(left ? Array(slots.reversed()) : slots) { slot in
             let goo = gooShape(slot, diameter: diameter, geometry: g, left: left, cap: cap)
-            BubbleView(bubble: slot.bubble, model: model, diameter: diameter, overflow: slot.overflow)
+            BubbleView(bubble: slot.bubble, model: model, diameter: diameter, glass: seeThrough)
                 .modifier(frozenGoo(slot, shape: goo))
                 .modifier(CrossMorph(progress: 1 - (slot.fade ?? 0)))
                 // Fading with the shell, it stays where it was while the island grows away from
@@ -728,7 +788,7 @@ struct IslandView: View {
                         Button("Mute “\(AppModel.mutedName(a.source))”") { model.mute(source: a.source) }
                     }
                 }
-                .spokenButton(slot.bubble.spokenLabel(overflow: slot.overflow), value: slot.bubble.spokenValue,
+                .spokenButton(slot.bubble.spokenLabel, value: slot.bubble.spokenValue,
                               hint: "Opens the island") { model.setExpanded(display) }
                 .modifier(DismissAction(activity: slot.bubble.activity, model: model))
                 // A bubble on its way out is gone as far as VoiceOver is concerned.
@@ -736,12 +796,12 @@ struct IslandView: View {
         }
     }
 
-    /// Where a bubble's goo runs: from the island's side (inside its top flare) or from the
+    /// Where a bubble's goo runs: from the island's side (below its top flare) or from the
     /// edge of the bubble nearer the island, out to the bubble's resting centre.
     private func gooShape(_ slot: BubbleSlot, diameter: CGFloat, geometry g: IslandGeometry, left: Bool, cap: GooCap) -> GooBud {
         let gap = IslandLayout.bubbleGap
         let rest = slot.fromNeighbour ? gap + diameter / 2
-            : g.top + gap + CGFloat(slot.index) * (diameter + gap) + diameter / 2
+            : gap + CGFloat(slot.index) * (diameter + gap) + diameter / 2
         return GooBud(progress: 1, kind: .split, diameter: diameter, rest: rest, left: left,
                       anchor: slot.fromNeighbour ? .bubble : .island(cap))
     }
@@ -912,8 +972,7 @@ struct MoreCount: View {
     var body: some View {
         if count > 0 {
             Text("+\(count)")
-                .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                .monospacedDigit()
+                .textStyle(.caption, emphasized: true, numeric: true)
                 .foregroundStyle(Color.islandSecondary)
                 .fixedSize()
                 .contentTransition(motion.numberSwap(value: Double(count)))
@@ -927,46 +986,72 @@ struct BubbleView: View {
     let bubble: IslandBubble
     let model: AppModel
     let diameter: CGFloat
-    var overflow = 0
+    /// The island beside it is see-through glass (a display without a notch), so the bubble is too.
+    var glass = false
     @Environment(\.islandMotion) private var motion
     @Environment(\.colorSchemeContrast) private var contrast
 
+    /// What sits inside a bubble, in proportion to it, so the notch's bubble and the smaller
+    /// pill's bubble look the same: a ring with clear space inside, a glyph in the ring, a
+    /// glyph on its own, artwork.
+    struct Sizes: Equatable {
+        var ring: CGFloat
+        var line: CGFloat
+        var ringed: CGFloat
+        var plain: CGFloat
+        var appIcon: CGFloat
+
+        init(diameter d: CGFloat) {
+            ring = d * 0.8
+            line = max(1.5, d * 0.07)
+            ringed = d * 0.44
+            plain = d * 0.6
+            appIcon = d * 0.62
+        }
+    }
+
     var body: some View {
+        let s = Sizes(diameter: diameter)
         ZStack {
-            Circle().fill(Color.black)
-            // Increase Contrast edges a bubble as it does the island (`IslandOutline`).
+            if glass {
+                // The same glass and smoke as the pill beside it.
+                GlassSurface(shape: Circle(), tint: Color.black.opacity(0.2), fallback: Color(white: 0.13).opacity(0.78))
+                Circle().fill(Color.black.opacity(GlassMelt.standardSmoke))
+            } else {
+                Circle().fill(Color.black)
+            }
+            // Increase Contrast or "Subtle outline" edges a bubble as it does the island.
             if contrast == .increased {
                 Circle().strokeBorder(IslandOutline.increasedEdge, lineWidth: IslandOutline.increasedWidth)
+            } else if model.settings.outline {
+                Circle().strokeBorder(IslandOutline.edge, lineWidth: IslandOutline.width)
             }
             switch bubble {
             case .media(let np):
-                TrackArtwork(media: np, size: diameter - 8, corner: (diameter - 8) / 2)
-                    .opacity(np.isPlaying ? 1 : PausedLook.artworkOpacity)
-                    .animation(motion == .off ? nil : .easeInOut(duration: PausedLook.fade), value: np.isPlaying)
+                Group {
+                    if np.artworkData == nil, np.artworkURL == nil, let bundle = np.bundleID, AppIconView.isInstalled(bundle) {
+                        // No artwork: the player's own icon, which carries its own shape.
+                        AppIconView(bundleID: bundle, size: s.appIcon)
+                    } else {
+                        TrackArtwork(media: np, size: s.ring, corner: s.ring / 2)
+                    }
+                }
+                .opacity(np.isPlaying ? 1 : PausedLook.artworkOpacity)
+                .animation(motion == .off ? nil : .easeInOut(duration: PausedLook.fade), value: np.isPlaying)
             case .activity(let a):
                 if model.visualTemplate(for: a) != nil {
                     TemplateBubble(activity: a, model: model, diameter: diameter)
                 } else if a.clampedProgress != nil, a.endsAt == nil, a.startedAt == nil {
                     // A ring only for real progress; a bubble that is just "working" stays a clean icon.
-                    ProgressRing(progress: a.clampedProgress, tint: model.tint(for: a), size: diameter - 8, lineWidth: 2.2)
+                    ProgressRing(progress: a.clampedProgress, tint: model.tint(for: a), size: s.ring, lineWidth: s.line)
                         .spokenValue(SpokenText.value(a, now: Date()))
-                    IconView(icon: model.icon(for: a), size: diameter - 17, tint: model.tint(for: a))
+                    IconView(icon: model.icon(for: a), size: s.ringed, tint: model.tint(for: a))
                 } else {
-                    IconView(icon: model.icon(for: a), size: diameter - 13, tint: model.tint(for: a))
+                    IconView(icon: model.icon(for: a), size: s.plain, tint: model.tint(for: a))
                 }
             }
         }
         .frame(width: diameter, height: diameter)
-        .overlay(alignment: .bottomTrailing) {
-            if overflow > 0 {
-                Text("+\(overflow)")
-                    .font(.system(size: 8, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.black)
-                    .padding(.horizontal, 3)
-                    .background(Capsule().fill(Color.white))
-                    .offset(x: 3, y: 2)
-            }
-        }
         .contentShape(Circle())
     }
 }
@@ -998,9 +1083,16 @@ struct Wings<Leading: View, Trailing: View>: View {
     @ViewBuilder var leading: Leading
     @ViewBuilder var trailing: Trailing
 
-    /// Space between the island's edge and the wing's content. Narrow wings (a crowded menu
-    /// bar) give the content more of their width.
-    static func inset(for wing: CGFloat) -> CGFloat { wing < 46 ? max(5, (wing * 0.18).rounded()) : 11 }
+    /// Space between the island's edge and the wing's content: clear of the rounded bottom
+    /// corner even in an icon-only wing, a little more in a roomy one.
+    static func inset(for wing: CGFloat) -> CGFloat { wing < 46 ? Space.s : 11 }
+
+    /// The room a wing leaves its content, from the inset to the notch's edge.
+    static func room(for wing: CGFloat) -> CGFloat { max(0, wing - inset(for: wing)) }
+
+    /// The leading glyph's size: 15 points where it fits, smaller in an icon-only wing so it,
+    /// and a timer's ring round it, stay inside the room.
+    static func glyph(for wing: CGFloat) -> CGFloat { max(8, min(15, room(for: wing) - Space.xs)) }
 
     var body: some View {
         let inset = Self.inset(for: wing)
@@ -1008,11 +1100,12 @@ struct Wings<Leading: View, Trailing: View>: View {
             leading
                 .padding(.leading, inset)
                 .frame(width: wing, height: metrics.notch.height, alignment: .leading)
+                .environment(\.wingRoom, Self.room(for: wing))
             Spacer(minLength: 0)
             trailing
                 .padding(.trailing, inset)
                 .frame(width: wing, height: metrics.notch.height, alignment: .trailing)
-                .environment(\.wingRoom, wing - inset)
+                .environment(\.wingRoom, Self.room(for: wing))
         }
         .frame(width: metrics.notch.width + 2 * wing, height: metrics.notch.height)
     }
@@ -1167,16 +1260,15 @@ struct IslandRow: View {
         switch p {
         case .compact(.nowPlaying(let np)), .songPeek(let np):
             // A new song swaps the artwork; the equaliser beside it keeps running.
-            HStack(spacing: 4) {
-                ClosedArtwork(media: np, model: model, size: ClosedArtwork.size(metrics))
-                MoreCount(count: Self.bodyKey(p) == nil ? counted : 0)
+            counting(Self.bodyKey(p) == nil ? counted : 0,
+                     size: min(ClosedArtwork.size(metrics), Wings<EmptyView, EmptyView>.room(for: geometry.wing) - Space.xs)) { size in
+                ClosedArtwork(media: np, model: model, size: size)
             }
         case .compact(.activity(let a, _)), .sneak(let a):
-            HStack(spacing: 4) {
-                TemplateLeading(activity: a, model: model, tint: model.tint(for: a))
-                // With bubbles off, or no room for them in the menu bar row, count the other
-                // activities here instead.
-                MoreCount(count: activityCount(p))
+            // With bubbles off, or no room for them in the menu bar row, count the other
+            // activities here instead.
+            counting(activityCount(p), size: Wings<EmptyView, EmptyView>.glyph(for: geometry.wing)) { size in
+                TemplateLeading(activity: a, model: model, tint: model.tint(for: a), size: size)
             }
         case .compact(.battery(let ev)):
             Image(systemName: BatteryGlyph.symbol(ev.state))
@@ -1192,6 +1284,35 @@ struct IslandRow: View {
                 .animation(motion.inPlace, value: hud.symbol)
         default:
             EmptyView()
+        }
+    }
+
+    /// The leading glyph with the count of other activities beside it ("+2") when both fit
+    /// before the notch: at `size`, then a little smaller and closer in a narrow wing, else the
+    /// glyph alone. Nothing goes under the notch, where it can't be seen. VoiceOver says the
+    /// count either way.
+    private func counting<Lead: View>(_ count: Int, size: CGFloat, @ViewBuilder lead: (CGFloat) -> Lead) -> some View {
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: Space.xs) {
+                lead(size)
+                MoreCount(count: count)
+            }
+            if count > 0 {
+                HStack(spacing: Space.hair) {
+                    lead(max(8, size - 3))
+                    MoreCount(count: count)
+                }
+                HStack(spacing: Space.hair) {
+                    lead(max(8, size - 5))
+                    MoreCount(count: count)
+                }
+                // A timer's ring is wider than its glyph.
+                HStack(spacing: Space.hair) {
+                    lead(max(8, size - 8))
+                    MoreCount(count: count)
+                }
+            }
+            lead(size)
         }
     }
 
@@ -1214,15 +1335,11 @@ struct IslandRow: View {
         case .compact(.activity(let a, _)), .sneak(let a):
             TemplateTrailing(activity: a, model: model, tint: model.tint(for: a))
         case .compact(.battery(let ev)):
-            Text("\(ev.state.level)%")
-                .textStyle(.body, emphasized: true, numeric: true)
-                .foregroundStyle(BatteryGlyph.tint(ev))
-                .monospacedDigit()
-                // Icon-only wings are too narrow for "100%" at full size; never wrap it.
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .contentTransition(motion.numberSwap(value: Double(ev.state.level)))
-                .animation(motion.inPlace, value: ev.state.level)
+            // Icon-only wings may have no room for "100%": the number alone beside the battery
+            // glyph, never a shrunken one.
+            WingValue(plan: WingPlan(full: "\(ev.state.level)%", short: "\(ev.state.level)", glyph: nil),
+                      tint: BatteryGlyph.tint(ev), transition: motion.numberSwap(value: Double(ev.state.level)),
+                      animation: motion.inPlace)
         case .hud(let hud):
             LevelBar(value: hud.muted ? 0 : hud.value, tint: model.hudTint(hud.kind), height: 4)
                 .frame(width: max(22, geometry.wing - 20))
@@ -1327,42 +1444,20 @@ struct ActivityTrailing: View {
     let tint: Color
     /// Slightly smaller type for sneak peeks.
     var compact = false
+    /// The symbol beside the notch, which the value's glyph never repeats.
+    var leading: String? = nil
     @Environment(\.wingRoom) private var room
     @Environment(\.islandMotion) private var motion
 
-    private var size: CGFloat { compact ? TextStyle.caption.size : TextStyle.body.size }
-
     var body: some View {
-        if room < NarrowValue.wordRoom, activity.endsAt == nil, activity.startedAt == nil,
-           let text = activity.trailingText(now: Date()), activity.trailing != nil || activity.progress == nil,
-           let glyph = NarrowValue.glyph(for: text, state: activity.state) {
-            Image(systemName: glyph)
-                .font(.system(size: min(size, room * 0.6), weight: .semibold))
-                .foregroundStyle(tint)
-                .contentTransition(motion.symbolSwap)
-                .animation(motion.inPlace, value: glyph)
-                .spokenValue(SpokenText.value(activity, now: Date()))
-        } else if activity.endsAt != nil || activity.startedAt != nil {
+        if activity.endsAt != nil || activity.startedAt != nil {
             TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                Text(activity.trailingText(now: ctx.date) ?? "")
-                    .font(.system(size: size, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(tint)
-                    .lineLimit(1)
-                    .minimumScaleFactor(room < NarrowValue.wordRoom ? 0.5 : 0.7)
-                    .contentTransition(.numericText(countsDown: activity.endsAt != nil))
+                value(now: ctx.date, transition: .numericText(countsDown: activity.endsAt != nil), animation: nil)
                     .spokenValue(SpokenText.value(activity, now: ctx.date))
             }
-        } else if let text = activity.trailingText(now: Date()), activity.trailing != nil || activity.progress == nil {
-            Text(text)
-                .font(.system(size: size, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(tint)
-                .lineLimit(1)
-                .minimumScaleFactor(room < NarrowValue.wordRoom ? 0.5 : 0.75)
-                // A changed value rolls to the new one rather than popping.
-                .contentTransition(motion.numberSwap())
-                .animation(motion.inPlace, value: text)
+        } else if activity.trailing != nil || activity.progress == nil, activity.trailingText(now: Date()) != nil {
+            // A changed value rolls to the new one rather than popping.
+            value(now: Date(), transition: motion.numberSwap(), animation: motion.inPlace)
                 .spokenValue(SpokenText.value(activity, now: Date()))
         } else if activity.progress != nil {
             ProgressRing(progress: activity.clampedProgress, tint: tint, size: compact ? 13 : 15, lineWidth: 2.2)
@@ -1370,6 +1465,13 @@ struct ActivityTrailing: View {
         } else {
             EmptyView()
         }
+    }
+
+    private func value(now: Date, transition: ContentTransition, animation: Animation?) -> some View {
+        let plan = activity.wingPlan(text: activity.trailingText(now: now) ?? "", narrow: room < NarrowValue.wordRoom,
+                                     leading: leading, now: now)
+        return WingValue(plan: plan, size: compact ? TextStyle.caption.size : nil, tint: tint, transition: transition,
+                         animation: animation)
     }
 }
 
@@ -1433,12 +1535,14 @@ struct DetailedHUDContent: View {
                     .frame(width: 18)
                 LevelBar(value: hud.shownLevel, tint: tint, height: 5)
                     .animation(motion == .off ? nil : .snappy(duration: 0.18), value: hud.value)
-                Text("\(percent)%")
+                // Muted says so: "0%" would read as the level having been turned down.
+                Text(hud.muted ? "Muted" : "\(percent)%")
                     .textStyle(.caption, emphasized: true, numeric: true)
                     .foregroundStyle(Ink.secondary)
                     .contentTransition(motion.numberSwap(value: Double(percent)))
                     .animation(motion == .off ? nil : .snappy(duration: 0.18), value: percent)
-                    .frame(width: 34, alignment: .trailing)
+                    .fixedSize()
+                    .frame(minWidth: 34, alignment: .trailing)
             }
             .padding(.horizontal, Space.l)
             .frame(height: IslandLayout.hudBody)

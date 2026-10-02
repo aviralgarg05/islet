@@ -37,9 +37,11 @@ extension Snapshots {
         let timer = activity(ActivitySpec(id: "tea", source: "timer", title: "Tea", icon: .symbol("timer"), tint: "orange",
                                           endsAt: now.addingTimeInterval(272)))
         let plan = activity(ActivitySpec(id: "plan", source: "claude-code", title: "Claude · islet", subtitle: "Writing tests",
-                                         icon: .symbol("sparkles"), state: .running, tint: "#D97757", steps: 5, step: 3))
-        let usage = activity(ActivitySpec(id: "usage", source: "agent-usage", title: "Claude 5-hour limit at 90%",
-                                          subtitle: "Resets 16:40", icon: .symbol("sparkle"), state: .warning, tint: "#FF9F0A"))
+                                         icon: .symbol("sparkle"), state: .running, tint: "#D97757", steps: 5, step: 3))
+        // The alert as the app makes it: Claude's mark in its own colour, the share used in the wing.
+        let alert = UsageAlert(provider: .claude, window: UsageWindow(id: "five_hour", usedPercent: 90, windowMinutes: 300,
+                                                                      resetsAt: now.addingTimeInterval(72 * 60)), threshold: 90)
+        let usage = activity(alert.activity(now: now))
 
         let rows: [(String, IslandPresentation, CGFloat)] = [
             ("Music playing, with other activities in bubbles", .compact(.nowPlaying(model.nowPlaying!)), 42),

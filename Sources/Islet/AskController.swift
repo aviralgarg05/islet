@@ -15,7 +15,8 @@ final class AskController {
         case done
         case stopped
         case refused(String?)
-        case failed(String)
+        /// `needsKey`: no key, or the provider didn't accept it; the answer offers the key.
+        case failed(String, needsKey: Bool = false)
     }
 
     var draft = ""
@@ -118,12 +119,14 @@ final class AskController {
             phase = .refused(why)
         case .error(let message):
             fail(message)
+        case .needsKey(let message):
+            fail(message, needsKey: true)
         }
     }
 
-    private func fail(_ message: String) {
+    private func fail(_ message: String, needsKey: Bool = false) {
         flush()
-        phase = .failed(message)
+        phase = .failed(message, needsKey: needsKey)
     }
 
     private func scheduleFlush() {

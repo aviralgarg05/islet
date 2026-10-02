@@ -189,7 +189,7 @@ public final class AskService: NSObject, @unchecked Sendable {
     private func runHTTP(_ request: AskRequest, emit: @Sendable (AskEvent) -> Void) async {
         let kind = request.provider
         guard let account = kind.keyAccount, let key = secrets.read(account) else {
-            emit(.error(AskProviderStatus.needsKey.message(for: kind)))
+            emit(.needsKey(AskProviderStatus.needsKey.message(for: kind)))
             return
         }
         let model = request.model ?? kind.defaultModel ?? ""
@@ -212,7 +212,8 @@ public final class AskService: NSObject, @unchecked Sendable {
                     try? await Task.sleep(nanoseconds: UInt64(Double.random(in: 0.6...1.6) * 1_000_000_000))
                     continue
                 }
-                emit(.error(AskErrorText.http(status: status, body: body, retryAfter: retryAfter, provider: kind)))
+                let message = AskErrorText.http(status: status, body: body, retryAfter: retryAfter, provider: kind)
+                emit(AskErrorText.isKeyProblem(status: status) ? .needsKey(message) : .error(message))
                 return
             }
         }

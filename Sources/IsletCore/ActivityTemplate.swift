@@ -507,8 +507,9 @@ extension Activity {
             guard let f = flight else { break }
             switch flightPhase(now: now) {
             case "landed": return f.carousel.map { "Belt \($0)" } ?? "Landed"
-            case "airborne": if let a = f.arrives { return TemplateFormat.hoursMinutes(until: a, now: now) }
-            default: if let d = f.departs { return TemplateFormat.hoursMinutes(until: d, now: now) }
+            // In minutes like every other countdown in the wings: "0:42" reads as seconds.
+            case "airborne": if let a = f.arrives { return TemplateFormat.minutes(until: a, now: now) }
+            default: if let d = f.departs { return TemplateFormat.minutes(until: d, now: now) }
             }
         case .route:
             if let n = route?.stopsLeft { return n == 1 ? "1 stop" : "\(n) stops" }
@@ -598,6 +599,99 @@ extension Activity {
         }
         return nil
     }
+
+    /// The wing's value in a few characters, for a wing too narrow for the full one ("18m"
+    /// for "18 min", "2h" for "1:59:54", "3/7" for an agent's "Testing"): `compactShort`, else
+    /// a short form of the changing value. Nil when there is none, and the wing shows a glyph
+    /// or nothing rather than a shrunken or cut value. A route's stops are drawn beside a stop
+    /// glyph instead.
+    public func wingShort(now: Date) -> String? {
+        if let compactShort { return compactShort }
+        // A value sent in words ("4 min", a mirrored Live Activity's) shortens the same way.
+        if let trailing, let short = TemplateFormat.compactUnits(trailing) { return short }
+        return templateShort(now: now)
+    }
+
+    private func templateShort(now: Date) -> String? {
+        func until(_ date: Date?) -> String? {
+            guard let date, date > now else { return nil }
+            return TemplateFormat.shortDuration(until: date, now: now)
+        }
+        func since(_ date: Date?) -> String? { date.map { TemplateFormat.shortDuration(since: $0, now: now) } }
+        switch resolvedTemplate {
+        case .eta:
+            if phase == "arrived" || phase == "delivered" { return nil }
+            return until(endsAt)
+        case .stages:
+            if let short = until(endsAt) { return short }
+            if let count = stageCount, let i = currentStage { return "\(i)/\(count)" }
+        case .flight:
+            guard let f = flight else { break }
+            switch flightPhase(now: now) {
+            case "landed": return nil
+            case "airborne": return until(f.arrives)
+            default: return until(f.departs)
+            }
+        case .route:
+            if route?.stopsLeft != nil || route?.distance != nil { return nil }
+            return until(endsAt)
+        case .score:
+            if let text = templateTrailing(now: now), text.count <= TemplateLimits.compactShort { return text }
+        case .gauge:
+            if let short = until(endsAt) { return short }
+            if let p = clampedProgress { return "\(Int((p * 100).rounded()))%" }
+        case .liveAudio, .media:
+            return since(startedAt)
+        case .agent:
+            if let steps, steps > 0, let step { return "\(min(step, steps))/\(steps)" }
+        case .timer, .workout, .progress:
+            return until(endsAt) ?? since(startedAt)
+        }
+        return nil
+    }
+
+    /// What the wing tries for the value `text`, in order: the full text, its short form, then
+    /// a glyph (or nothing), each in the wing's one type size.
+    /// - Parameters:
+    ///   - narrow: the wing is narrower than `NarrowValue.wordRoom`, where a status word goes
+    ///     straight to its glyph.
+    ///   - leading: the symbol on the other side of the notch; a glyph that repeats it is left out.
+    public func wingPlan(text: String, narrow: Bool, leading: String?, now: Date) -> WingPlan {
+        let news = state == .waiting || state == .warning || state == .failure || state == .success
+        // A status word ("Waiting", "Failed"), or no value at all where the state is news.
+        // Work under way or plain information with no value shows nothing, at every width.
+        let word = text.isEmpty && !news ? nil : NarrowValue.glyph(for: text, state: state)
+        // A status word says more as its glyph than as a count would; only work under way
+        // falls back to its count ("3/7") first.
+        let statusWord = word != nil && state != .running && compactShort == nil
+        let short = statusWord ? nil : wingShort(now: now)
+        // Last of all an urgent value that fits in no form ("100%" in an icon-only wing) gives
+        // way to its state's glyph rather than to nothing.
+        let urgent = news && state != .success ? NarrowValue.glyph(for: "", state: state) : nil
+        // The glyph that repeats the mark beside the notch ("Done" beside a checkmark) is left
+        // out; the word is tried instead, even in a narrow wing.
+        func shown(_ g: String?) -> String? { g.flatMap { NarrowValue.repeats($0, leading: leading) ? nil : $0 } }
+        let glyph = shown(word)
+        return WingPlan(full: text.isEmpty || (narrow && glyph != nil) ? nil : text,
+                        short: short == text ? nil : short,
+                        glyph: glyph ?? shown(urgent))
+    }
+}
+
+/// The forms a wing's value can take, tried in order until one fits (`Activity.wingPlan`).
+public struct WingPlan: Equatable, Sendable {
+    /// The full value, unless the wing skips it.
+    public var full: String?
+    /// The short form ("18m") to try when the full value doesn't fit.
+    public var short: String?
+    /// The glyph to draw when neither fits; nil leaves the wing empty.
+    public var glyph: String?
+
+    public init(full: String?, short: String?, glyph: String?) {
+        self.full = full
+        self.short = short
+        self.glyph = glyph
+    }
 }
 
 /// Text formats used by the templates.
@@ -640,7 +734,27 @@ public enum TemplateFormat {
     static func short(_ seconds: Double, roundUp: Bool) -> String {
         let round: FloatingPointRoundingRule = roundUp ? .up : .down
         if seconds < 60 { return "\(Int(seconds.rounded(round)))s" }
-        if seconds < 3600 { return "\(Int((seconds / 60).rounded(round)))m" }
+        // Minutes up to 99, as `minutes(until:)` counts them: 72 minutes is "72m", not a
+        // rounded-up "2h".
+        let minutes = Int((seconds / 60).rounded(round))
+        if minutes < 100 { return "\(minutes)m" }
         return "\(Int((seconds / 3600).rounded(round)))h"
+    }
+
+    /// A value sent in words, in the same few characters: "4 min" → "4m", "2 hours" → "2h",
+    /// "45 sec" → "45s". Nil for anything else.
+    public static func compactUnits(_ text: String) -> String? {
+        let parts = text.split(separator: " ")
+        guard parts.count == 2, Double(parts[0]) != nil else { return nil }
+        let unit = parts[1].lowercased()
+        let short: String
+        switch unit {
+        case "min", "mins", "minute", "minutes": short = "m"
+        case "h", "hr", "hrs", "hour", "hours": short = "h"
+        case "s", "sec", "secs", "second", "seconds": short = "s"
+        default: return nil
+        }
+        let shortened = String(parts[0]) + short
+        return shortened.count <= TemplateLimits.compactShort ? shortened : nil
     }
 }

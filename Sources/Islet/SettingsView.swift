@@ -739,7 +739,9 @@ struct IslandSketch: View {
             // as the island does (`GlassMelt`).
             let top = min(0.95, row / max(height, 1))
             let melt = GlassMelt.depth(body: (height - row) / max(scale, 0.01), level: settings.glassLevel) * scale
-            shape.fill(Color.black.opacity(GlassMelt.smoke(level: settings.glassLevel)))
+            // A touch darker than the island: the preview has no desktop showing through.
+            let smoke = min(0.92, GlassMelt.smoke(level: settings.glassLevel) + 0.06)
+            shape.fill(Color.black.opacity(smoke))
                 .overlay(shape.fill(LinearGradient(stops: [
                     .init(color: .black, location: 0),
                     .init(color: .black, location: top),

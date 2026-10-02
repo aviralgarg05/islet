@@ -116,8 +116,9 @@ struct IconView: View {
         switch icon {
         case .symbol(let name):
             // A new symbol (one stage giving way to the next) morphs into place.
-            Image(systemName: NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil ? name : "questionmark.circle")
-                .font(.system(size: size * 0.9, weight: .semibold))
+            let known = NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil ? name : "questionmark.circle"
+            Image(systemName: known)
+                .font(.system(size: Self.pointSize(known, size: size), weight: .semibold))
                 .foregroundStyle(tint)
                 .contentTransition(motion.symbolSwap)
                 .animation(motion.inPlace, value: name)
@@ -134,6 +135,22 @@ struct IconView: View {
                 .frame(width: size, height: size)
                 .clipShape(RoundedRectangle(cornerRadius: size * 0.22))
         }
+    }
+
+    @MainActor private static var widths: [String: CGFloat] = [:]
+
+    /// The symbol's point size: 90% of `size`, less for a wide symbol ("video.fill") so it
+    /// stays inside its square instead of crowding what sits beside it.
+    @MainActor static func pointSize(_ name: String, size: CGFloat) -> CGFloat {
+        let base = size * 0.9
+        let key = "\(name)@\(base)"
+        let width = widths[key] ?? {
+            let config = NSImage.SymbolConfiguration(pointSize: base, weight: .semibold)
+            let w = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(config)?.size.width ?? 0
+            widths[key] = w
+            return w
+        }()
+        return width > size ? base * size / width : base
     }
 }
 
@@ -213,6 +230,10 @@ struct AppIconView: View {
             Image(systemName: "app.fill").font(.system(size: size * 0.8)).foregroundStyle(Color.islandSecondary).frame(width: size, height: size)
         }
     }
+
+    static func isInstalled(_ bundleID: String) -> Bool {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil
+    }
 }
 
 /// Album art with sensible fallbacks.
@@ -222,21 +243,23 @@ struct ArtworkView: View {
     var corner: CGFloat
 
     var body: some View {
-        Group {
-            if let data = media.artworkData, let img = ArtworkCache.image(for: data) {
-                Image(nsImage: img).resizable().scaledToFill()
-            } else if let url = media.artworkURL {
-                AsyncImage(url: url) { img in img.resizable().scaledToFill() } placeholder: { placeholder }
-            } else if let bundle = media.bundleID, NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) != nil {
-                AppIconView(bundleID: bundle, size: size * 0.8)
-                    .frame(width: size, height: size)
-                    .background(Color.islandFill)
-            } else {
-                placeholder
+        if media.artworkData == nil, media.artworkURL == nil, let bundle = media.bundleID, AppIconView.isInstalled(bundle) {
+            // No artwork: the player's own icon at full size. It carries its own shape, so no
+            // tile behind it and no clip (a box in a box).
+            AppIconView(bundleID: bundle, size: size)
+        } else {
+            Group {
+                if let data = media.artworkData, let img = ArtworkCache.image(for: data) {
+                    Image(nsImage: img).resizable().scaledToFill()
+                } else if let url = media.artworkURL {
+                    AsyncImage(url: url) { img in img.resizable().scaledToFill() } placeholder: { placeholder }
+                } else {
+                    placeholder
+                }
             }
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
         }
-        .frame(width: size, height: size)
-        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
     }
 
     private var placeholder: some View {
@@ -324,9 +347,13 @@ struct SpinnerArc: View {
 
     var body: some View {
         if snapshotMode {
+            // A still can't spin, and a lone arc reads as a ring filled to a share. So the arc
+            // trails off behind its head the way a turning one does.
             Circle()
-                .trim(from: 0, to: 0.28)
-                .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .trim(from: 0, to: 0.7)
+                .stroke(AngularGradient(colors: [tint.opacity(0), tint], center: .center,
+                                        startAngle: .degrees(0), endAngle: .degrees(252)),
+                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
         } else {
             LayerSpinner(color: NSColor(tint), lineWidth: lineWidth)
@@ -344,7 +371,8 @@ struct LevelBar: View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(Wash.track)
-                Capsule().fill(tint).frame(width: max(height, geo.size.width * min(1, max(0, value))))
+                // Nothing at all for an empty or muted level: a minimum fill would leave a dot.
+                Capsule().fill(tint).frame(width: value > 0 ? max(height, geo.size.width * min(1, value)) : 0)
             }
         }
         .frame(height: height)
@@ -401,9 +429,10 @@ struct PlayingIndicator: View {
             EmptyView()
         } else if snapshotMode {
             // Snapshots can't host the layer view: draw the resting pose of the same look.
+            // Paused, every look settles on the middle line.
             still
                 .opacity(playing ? 1 : Double(PausedLook.indicatorOpacity))
-                .frame(width: width, height: height, alignment: .bottom)
+                .frame(width: width, height: height, alignment: playing ? .bottom : .center)
         } else {
             EqualizerView(color: NSColor(tint), playing: playing, style: style).frame(width: width, height: height)
         }
@@ -427,9 +456,10 @@ struct PlayingIndicator: View {
                     .frame(width: height / 2, height: height / 2)
                     .scaleEffect(playing ? 1 : 0.8)
             }
-            .frame(width: width, height: height)
+            .frame(width: height, height: height)
+            .frame(width: width, height: height, alignment: .trailing)
         case .dots:
-            HStack(alignment: .bottom, spacing: 3 * k) {
+            HStack(alignment: playing ? .bottom : .center, spacing: 3 * k) {
                 ForEach(0..<3, id: \.self) { i in
                     Circle().fill(tint).frame(width: 4 * k, height: 4 * k).offset(y: playing ? -CGFloat([3, 6, 2][i]) * k : 0)
                 }
@@ -448,7 +478,7 @@ struct PlayingIndicator: View {
             Circle().fill(tint)
                 .frame(width: DotNSView.diameter * k, height: DotNSView.diameter * k)
                 .scaleEffect(playing ? 1 : 0.8)
-                .frame(width: width, height: height)
+                .frame(width: width, height: height, alignment: .trailing)
         default:
             // Bars, slim bars, and the bars that stand in for a sticker outside the closed island.
             let heights: [CGFloat] = style == .slim ? [0.55, 0.9, 0.45, 0.75, 0.6, 0.8] : [0.45, 0.8, 0.35, 0.65]

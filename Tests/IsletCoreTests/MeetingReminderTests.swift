@@ -250,6 +250,8 @@ import Testing
         #expect(spec.title == "Standup")
         #expect(spec.subtitle == "At 10:00 · Zoom")
         #expect(spec.trailing == "9 min")
+        // A narrow wing says "9m"; once the meeting starts the short form is cleared.
+        #expect(spec.compactShort == "9m")
         #expect(spec.state == .info && spec.priority == .high && spec.sneak == true)
         #expect(spec.actions == [ActivityAction(title: "Join", url: Self.zoom)])
         // No link to open on a click: the click opens the island on the meeting.
@@ -259,6 +261,7 @@ import Testing
         let now = try #require(MeetingReminders().live([item], now: at(1), options: options).first)
         let urgent = MeetingReminders.activity(for: now, now: at(1), icon: .symbol("video.fill"), sneak: false) { _ in "10:30" }
         #expect(urgent.state == .waiting && urgent.trailing == "Now" && urgent.subtitle == "Now · until 10:30")
+        #expect(urgent.compactShort == "")
         // High, not critical: a full screen app or an app rule still hides it.
         #expect(urgent.priority == .high)
 
@@ -347,23 +350,41 @@ import Testing
         #expect(full.isAllowed && full.status == "Allowed" && full.button == nil)
 
         let ask = CalendarAccessAdvice.advice(.notDetermined, kind: .calendars)
-        #expect(ask.action == .ask && ask.button == "Allow…")
+        #expect(ask.action == .ask && ask.button == "Allow…" && ask.islandButton == "Allow…")
 
         let settings = CalendarAccessAdvice.Action.openSettings(PermissionKind.calendars.settingsURL)
         for access in [CalendarAccess.denied, .restricted] {
             let a = CalendarAccessAdvice.advice(access, kind: .calendars)
-            #expect(a.status == "Turned off in System Settings")
+            #expect(a.status == "Turned off")
             #expect(a.action == settings && a.button == "Open System Settings")
+            #expect(a.islandButton == "Settings…")
             #expect(a.detail != nil)
         }
         let writeOnly = CalendarAccessAdvice.advice(.writeOnly, kind: .calendars)
-        #expect(writeOnly.status == "Islet can only add events")
-        #expect(writeOnly.detail?.contains("Full Access") == true)
+        #expect(writeOnly.status == "Add events only")
+        #expect(writeOnly.detail == "Choose Full Access for Islet in Privacy & Security → Calendars.")
         #expect(writeOnly.action == settings)
 
-        // "Allow…" pressed and macOS said no without asking: System Settings, not another Allow.
+        // "Allow…" pressed and macOS said no without asking: System Settings, not another Allow,
+        // and a status that says what is wrong rather than what macOS did.
         let refused = CalendarAccessAdvice.advice(.notDetermined, kind: .calendars, refused: true)
         #expect(refused.action == settings && refused.button == "Open System Settings")
+        #expect(refused.status == "Not allowed")
+        #expect(refused.detail == "Switch on Islet in Privacy & Security → Calendars.")
+        #expect(full.islandButton == nil)
+    }
+
+    /// On the Today page the status shares a line with the island's button, in a column a
+    /// little under 200 points wide at the compact size: a few words each.
+    @Test func statusAndButtonShareALine() {
+        for access in CalendarAccess.allCases {
+            for kind in [PermissionKind.calendars, .reminders] {
+                for refused in [false, true] {
+                    let a = CalendarAccessAdvice.advice(access, kind: kind, refused: refused)
+                    #expect(a.status.count + (a.islandButton?.count ?? 0) <= 26, "\(a.status) \(a.islandButton ?? "")")
+                }
+            }
+        }
     }
 
     @Test func remindersOpenTheirOwnPage() {
@@ -378,8 +399,9 @@ import Testing
             for kind in [PermissionKind.calendars, .reminders] {
                 for refused in [false, true] {
                     let a = CalendarAccessAdvice.advice(access, kind: kind, refused: refused)
-                    for text in [a.status, a.detail ?? "", a.button ?? ""] {
+                    for text in [a.status, a.detail ?? "", a.button ?? "", a.islandButton ?? ""] {
                         #expect(!text.contains("—"), "\(text)")
+                        #expect(!text.contains("'"), "\(text)")
                     }
                 }
             }

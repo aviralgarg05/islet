@@ -1546,8 +1546,12 @@ final class AppModel {
         _ = try? center.apply(ActivitySpec(id: "claude-demo", source: "claude-code", title: "Claude · islet", subtitle: "Running swift test",
                                            icon: .symbol("sparkle"), progress: -1, state: .running, tint: "#D97757", sneak: false), now: now)
         }
+        // Demo files stay in memory: whatever folder the shelf is kept in, they never reach it.
+        shelfService.savesToDisk = false
         shelfService.add(urls: [URL(fileURLWithPath: "/System/Library/CoreServices/Finder.app"),
                                 URL(fileURLWithPath: "/etc/hosts")])
+        // Snapshots never call start(), which keeps `shelf` in step with the service.
+        shelf = shelfService.shelf
         clipboard.add("https://example.com/islet", types: [], sourceBundleID: "com.apple.Safari", now: now)
         clipboard.add("swift test --parallel", types: [], sourceBundleID: "com.apple.Terminal", now: now)
         stats = SystemStats(cpu: 0.23, memoryUsed: 11_800_000_000, memoryTotal: 18_000_000_000)

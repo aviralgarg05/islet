@@ -149,76 +149,133 @@ struct AskView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Space.xs)
     }
 }
 
-/// The streamed answer, question first, with a one-line footer.
+/// The streamed answer, question first, with a one-line footer. The answer shows whole lines:
+/// its window ends on a line, and when more follows, the last line fades over its bottom few
+/// points instead of being cut through. Longer answers scroll.
 struct AskAnswerView: View {
     let model: AppModel
     @Environment(\.snapshotMode) private var snapshotMode
+    /// The answer's full height, to fade the last line only when more follows it.
+    @ViewState private var contentHeight: CGFloat = 0
+
+    /// The space between the answer's lines.
+    static let leading: CGFloat = 2
+    /// One line of the answer (`TextStyle.body`, as Text lays it out: 15 points at 12) and the
+    /// space under it.
+    static let pitch: CGFloat = NSLayoutManager().defaultLineHeight(for: NSFont.systemFont(ofSize: TextStyle.body.size)) + leading
+    /// How much of the last line fades when more follows, and how faint its foot gets: its
+    /// descenders stay in sight, so it reads as more to come rather than as cut off.
+    static let fade: CGFloat = 6
+    static let faintest: Double = 0.2
+
+    /// The tallest window of whole lines in `height` points.
+    static func window(in height: CGFloat) -> CGFloat {
+        let lines = max(1, ((height + leading) / pitch).rounded(.down))
+        return min(height, lines * pitch - leading)
+    }
 
     var body: some View {
         let ask = model.ask
-        ScrollViewReader { proxy in
-            AdaptiveScroll(scrolls: !snapshotMode) {
-                VStack(alignment: .leading, spacing: Space.xs) {
-                    if !ask.question.isEmpty {
-                        Text(ask.question)
-                            .textStyle(.caption, emphasized: true)
-                            .foregroundStyle(Ink.tertiary)
-                            .lineLimit(2)
-                    }
-                    if case .refused(let why) = ask.phase {
-                        Text("\(ask.answeredBy?.title ?? "The model") declined to answer this." + (why.map { " \($0)" } ?? ""))
-                            .textStyle(.body)
-                            .foregroundStyle(Ink.secondary)
-                    } else if ask.answer.isEmpty && ask.isStreaming {
-                        HStack(spacing: Space.s) {
-                            SpinnerArc(tint: Ink.secondary, lineWidth: 1.5).frame(width: 10, height: 10)
-                            Text("Thinking").textStyle(.body).foregroundStyle(Ink.secondary)
-                        }
-                    } else if !ask.answer.isEmpty {
-                        Text(Self.render(ask.answer.shown))
-                            .font(.system(size: TextStyle.headline.size))
-                            .foregroundStyle(Ink.primary)
-                            .lineSpacing(2)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    if let footer = footer(ask) {
-                        Text(footer.text)
-                            .textStyle(.caption)
-                            .foregroundStyle(footer.warning ? Color.orange : Ink.tertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .padding(.top, Space.xs)
-                    }
-                    Color.clear.frame(height: 1).id(Self.end)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, Space.xs)
+        if case .failed(let message, needsKey: true) = ask.phase {
+            // A missing or refused key: what happened, and the button to the key, as the hint
+            // says it before anything is sent.
+            VStack(alignment: .leading, spacing: Space.s) {
+                Text(message)
+                    .textStyle(.body)
+                    .foregroundStyle(Ink.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                keyButton(ask)
             }
-            // Follow the answer while it streams (at most 20 times a second, like the text).
-            .onChange(of: ask.answer.shown.utf8.count) { _, _ in
-                if ask.isStreaming { proxy.scrollTo(Self.end, anchor: .bottom) }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        } else {
+            answer(ask)
+        }
+    }
+
+    private func answer(_ ask: AskController) -> some View {
+        VStack(alignment: .leading, spacing: Space.xs) {
+            if !ask.question.isEmpty {
+                Text(ask.question)
+                    .textStyle(.caption, emphasized: true)
+                    .foregroundStyle(Ink.tertiary)
+                    .lineLimit(1)
+            }
+            GeometryReader { geo in
+                let window = Self.window(in: geo.size.height)
+                let overflows = snapshotMode || contentHeight > window + 0.5
+                ScrollViewReader { proxy in
+                    AdaptiveScroll(scrolls: !snapshotMode) {
+                        content(ask)
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+                    }
+                    // Follow the answer while it streams (at most 20 times a second, like the text).
+                    .onChange(of: ask.answer.shown.utf8.count) { _, _ in
+                        if ask.isStreaming { proxy.scrollTo(Self.end, anchor: .bottom) }
+                    }
+                }
+                .frame(width: geo.size.width, height: window, alignment: .topLeading)
+                .clipped()
+                .mask {
+                    VStack(spacing: 0) {
+                        Color.black
+                        LinearGradient(colors: [.black, .black.opacity(overflows ? Self.faintest : 1)], startPoint: .top, endPoint: .bottom)
+                            .frame(height: Self.fade)
+                    }
+                }
             }
         }
         .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
-        .clipped()
-        // Long answers fade out at the bottom edge instead of being cut through a line.
-        .mask {
-            VStack(spacing: 0) {
-                Color.black
-                LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom).frame(height: Space.m)
+    }
+
+    private func content(_ ask: AskController) -> some View {
+        VStack(alignment: .leading, spacing: Space.xs) {
+            if case .refused(let why) = ask.phase {
+                Text("\(ask.answeredBy?.title ?? "The model") declined to answer this." + (why.map { " \($0)" } ?? ""))
+                    .textStyle(.body)
+                    .foregroundStyle(Ink.secondary)
+            } else if ask.answer.isEmpty && ask.isStreaming {
+                HStack(spacing: Space.s) {
+                    SpinnerArc(tint: Ink.secondary, lineWidth: 1.5).frame(width: 10, height: 10)
+                    Text("Thinking").textStyle(.body).foregroundStyle(Ink.secondary)
+                }
+            } else if !ask.answer.isEmpty {
+                Text(Self.render(ask.answer.shown))
+                    .textStyle(.body)
+                    .foregroundStyle(Ink.primary)
+                    .lineSpacing(Self.leading)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            if let footer = footer(ask) {
+                Text(footer.text)
+                    .textStyle(.caption)
+                    .foregroundStyle(footer.warning ? Color.orange : Ink.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, Space.xs)
+            }
+            Color.clear.frame(height: 1).id(Self.end)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Straight to the key's row on Ask & AI: "Add a key…" when there is none, else to change it.
+    private func keyButton(_ ask: AskController) -> some View {
+        let kind = ask.answeredBy ?? .anthropic
+        return Button(ask.status(of: kind) == .needsKey ? "Add a key…" : "Change the key…") {
+            AppActions.openSettings(.ai, at: kind == .openai ? "ai.openai" : "ai.anthropic")
+        }
+        .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
     }
 
     private static let end = "ask-end"
 
     private func footer(_ ask: AskController) -> (text: String, warning: Bool)? {
         switch ask.phase {
-        case .failed(let message): return (message, true)
+        case .failed(_, needsKey: true): return nil
+        case .failed(let message, needsKey: false): return (message, true)
         case .stopped: return ("Stopped", false)
         case .done:
             var parts: [String] = []

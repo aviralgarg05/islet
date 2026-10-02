@@ -95,8 +95,17 @@ public struct MeetingReminder: Equatable, Sendable, Identifiable {
     /// The wing: "9 min" before the start, then "Now".
     public func trailing(now: Date) -> String {
         guard phase == .soon else { return "Now" }
-        let minutes = max(1, Int((item.start.timeIntervalSince(now) / 60).rounded(.up)))
-        return "\(minutes) min"
+        return "\(minutesLeft(now: now)) min"
+    }
+
+    /// The wing's value where "9 min" doesn't fit: "9m" before the start, nothing after it
+    /// ("Now" fits as it is).
+    public func shortTrailing(now: Date) -> String? {
+        phase == .soon ? "\(minutesLeft(now: now))m" : nil
+    }
+
+    private func minutesLeft(now: Date) -> Int {
+        max(1, Int((item.start.timeIntervalSince(now) / 60).rounded(.up)))
     }
 }
 
@@ -275,7 +284,7 @@ public struct MeetingReminders: Codable, Equatable, Sendable {
     public static func activity(for r: MeetingReminder, now: Date, icon: ActivityIcon, sneak: Bool,
                                 time: (Date) -> String) -> ActivitySpec {
         let via = r.app.map { $0 == .other ? "" : " · \($0.name)" } ?? ""
-        return ActivitySpec(
+        var spec = ActivitySpec(
             id: r.id, source: source, title: r.item.title,
             subtitle: r.phase == .soon ? "At \(time(r.item.start))\(via)" : "Now · until \(time(r.item.end))",
             icon: icon, trailing: r.trailing(now: now),
@@ -284,6 +293,10 @@ public struct MeetingReminders: Codable, Equatable, Sendable {
             actions: r.item.meetingURL.map { [ActivityAction(title: "Join", url: $0)] } ?? [],
             sneak: sneak
         )
+        // A narrow wing says "9m" rather than a shrunken "9 min"; "Now" fits as it is ("" clears
+        // the short form an earlier update set).
+        spec.compactShort = r.shortTrailing(now: now) ?? ""
+        return spec
     }
 
     // MARK: File

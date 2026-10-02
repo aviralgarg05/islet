@@ -385,10 +385,30 @@ private func song(playing: Bool, elapsed: Double? = 60, duration: Double? = 240,
         for step in 0...10 {
             #expect(GlassMelt.smoke(level: Double(step) / 10) >= GlassMelt.smokeFloor)
         }
-        #expect(GlassMelt.smoke(level: IsletSettings().glassLevel) == GlassMelt.smokeFloor)
+        #expect(GlassMelt.smoke(level: IsletSettings().glassLevel) == GlassMelt.standardSmoke)
         #expect(GlassMelt.smoke(level: 0) > 0.8)
+        #expect(GlassMelt.smoke(level: 1) == GlassMelt.smokeFloor)
         #expect(GlassMelt.smoke(level: -3) == GlassMelt.smoke(level: 0))
         #expect(GlassMelt.smoke(level: .infinity) == GlassMelt.smokeFloor)
+    }
+
+    /// The whole slider does something: past the default, towards Glass, the smoke and the
+    /// melt keep thinning, so the Glass end never looks the same as the default.
+    @Test func everyPartOfTheGlassLevelChangesTheLook() {
+        let body: CGFloat = 118
+        var smoke = GlassMelt.smoke(level: 0)
+        var depth = GlassMelt.depth(body: body, level: 0)
+        for step in 1...10 {
+            let level = Double(step) / 10
+            let s = GlassMelt.smoke(level: level), d = GlassMelt.depth(body: body, level: level)
+            #expect(s < smoke, "smoke at \(level)")
+            #expect(d < depth, "melt at \(level)")
+            smoke = s
+            depth = d
+        }
+        let standard = IsletSettings().glassLevel
+        #expect(GlassMelt.smoke(level: standard) - GlassMelt.smoke(level: 1) >= 0.1)
+        #expect(GlassMelt.depth(body: body, level: standard) - GlassMelt.depth(body: body, level: 1) >= 4)
     }
 }
 

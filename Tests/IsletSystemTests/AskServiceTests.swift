@@ -225,7 +225,7 @@ private let sk = "s" + "k-"
         let service = makeService(keys: ["anthropic": key])
         defer { cleanUp(service) }
         let request = AskRequest(provider: .anthropic, turns: [.user("x")])
-        #expect(await collect(service, request) == [.error("Anthropic rejected the API key. Enter it again in Settings → Ask & AI.")])
+        #expect(await collect(service, request) == [.needsKey("Anthropic didn’t accept your key.")])
         #expect(await collect(service, request) == [.error("Rate limited. Try again in 7 s.")])
     }
 
@@ -262,7 +262,7 @@ private let sk = "s" + "k-"
         let service = makeService()
         defer { cleanUp(service) }
         #expect(await collect(service, AskRequest(provider: .anthropic, turns: [.user("x")]))
-                == [.error("Add an Anthropic API key in Settings → Ask & AI to ask Claude.")])
+                == [.needsKey("Claude needs your Anthropic key.")])
         #expect(service.status(of: .anthropic) == .needsKey)
         #expect(service.status(of: .openai) == .needsKey)
     }
@@ -301,7 +301,7 @@ private let sk = "s" + "k-"
 
         let bad = (sk + "ant-api03-test-\(UUID().uuidString)")
         MockAPI.script(bad, [MockAPI.Reply(status: 401, headers: [:], body: #"{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}"#)])
-        await #expect(throws: AskServiceError("Anthropic rejected the API key. Enter it again in Settings → Ask & AI.")) {
+        await #expect(throws: AskServiceError("Anthropic didn’t accept your key.")) {
             try await service.validateAndStore(key: bad, for: .anthropic)
         }
         #expect(service.secrets.read("anthropic") == key)
@@ -487,7 +487,7 @@ private let sk = "s" + "k-"
         defer { cleanUp(service) }
         #expect(service.status(of: .codex) == .notInstalled)
         #expect(await collect(service, AskRequest(provider: .codex, turns: [.user("x")]))
-                == [.error("Codex isn't installed. Install it, then try again.")])
+                == [.error("Codex isn’t installed. Install it, then try again.")])
     }
 }
 

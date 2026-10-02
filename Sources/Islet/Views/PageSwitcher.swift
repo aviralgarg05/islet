@@ -12,6 +12,10 @@ import SwiftUI
 ///
 /// When the island opens, the capsule and then the discs rise into place after the content
 /// (`SwitcherReveal`, `RiseIn`).
+///
+/// The capsule keeps one width whichever page is showing: the highlight is as wide as the
+/// longest name it may hold, and with no page of its own selected (Ask, a new timer) the
+/// segments share that width. So the discs never move out from under the pointer.
 struct PageSwitcher: View {
     let model: AppModel
     @Namespace private var highlight
@@ -25,10 +29,25 @@ struct PageSwitcher: View {
     static let band: CGFloat = gap + height + Space.m
     /// The capsule's padding around the selected page's highlight (concentric: 16 − 3 = 13).
     private static let inset: CGFloat = 3
+    /// A page's glyph, the same width for every page so the highlight's width is the name's.
+    private static let glyph: CGFloat = 16
+    /// An unselected segment.
+    private static let segmentWidth: CGFloat = 36
 
     var body: some View {
         let pages = Self.pages(model)
         let moreSelected = pages.more.contains(model.tab)
+        // The highlight fits the longest name it may hold: the capsule's pages and the page
+        // the "more" segment shows now.
+        let highlight = Self.highlightWidth(for: pages.main.map(\.title) + (moreSelected ? [model.tab.title] : []))
+        // The capsule's pages and More, which is always there.
+        let segments = pages.main.count + 1
+        let capsule = highlight + CGFloat(max(0, segments - 1)) * Self.segmentWidth
+        let anySelected = moreSelected || pages.main.contains(model.tab) && !model.timers.isEntering
+        // With none of its pages selected, the segments share the capsule's width.
+        let shared = anySelected ? nil : capsule / CGFloat(max(1, segments))
+        let selectedWidth = shared ?? highlight
+        let otherWidth = shared ?? Self.segmentWidth
         GlassGroup(spacing: Space.s) {
             HStack(spacing: Space.s) {
                 disc(symbol: "timer", help: "New timer", selected: model.tab == .home && model.timers.isEntering) {
@@ -41,7 +60,8 @@ struct PageSwitcher: View {
                 }
                 HStack(spacing: 0) {
                     ForEach(pages.main) { tab in
-                        segment(symbol: tab.symbol, title: tab.title, selected: model.tab == tab && !model.timers.isEntering) {
+                        let selected = model.tab == tab && !model.timers.isEntering
+                        segment(symbol: tab.symbol, title: tab.title, selected: selected, width: selected ? selectedWidth : otherWidth) {
                             model.timers.isEntering = false
                             model.select(tab: tab)
                         }
@@ -51,11 +71,13 @@ struct PageSwitcher: View {
                     // Send feedback and Quit.
                     segment(symbol: moreSelected ? model.tab.symbol : "ellipsis",
                             title: moreSelected ? model.tab.title : nil, selected: moreSelected,
+                            width: moreSelected ? selectedWidth : otherWidth,
                             spoken: (label: "More pages", value: moreSelected ? model.tab.title : "",
                                      hint: "Shows the other pages, keep awake, keep open and Settings")) {
                         showMore(pages.more)
                     }
                 }
+                .frame(width: capsule)
                 .padding(Self.inset)
                 .floatingGlass(Capsule())
                 .accessibilityElement(children: .contain)
@@ -78,9 +100,16 @@ struct PageSwitcher: View {
         .animation(motion.inPlace, value: model.timers.isEntering)
     }
 
+    /// The highlight's width for the longest of `titles`: its glyph, the name and the padding.
+    static func highlightWidth(for titles: [String]) -> CGFloat {
+        let font = NSFont.systemFont(ofSize: TextStyle.body.size, weight: .semibold)
+        let name = titles.map { ceil(($0 as NSString).size(withAttributes: [.font: font]).width) }.max() ?? 0
+        return max(segmentWidth, glyph + Space.xs + name + 2 * Space.m)
+    }
+
     /// One page in the capsule. The selected one shows its name on the sliding highlight.
     /// - Parameter spoken: what VoiceOver says in place of the title, for the "more" menu.
-    private func segment(symbol: String, title: String?, selected: Bool,
+    private func segment(symbol: String, title: String?, selected: Bool, width: CGFloat,
                          spoken: (label: String, value: String, hint: String)? = nil,
                          action: @escaping () -> Void) -> some View {
         Button {
@@ -90,6 +119,7 @@ struct PageSwitcher: View {
             HStack(spacing: Space.xs) {
                 Image(systemName: symbol)
                     .font(.system(size: 12, weight: .semibold))
+                    .frame(width: Self.glyph)
                 if selected, let title {
                     Text(title)
                         .textStyle(.body, emphasized: true)
@@ -99,8 +129,7 @@ struct PageSwitcher: View {
                 }
             }
             .foregroundStyle(selected ? Ink.primary : Ink.secondary)
-            .padding(.horizontal, selected && title != nil ? Space.m : 0)
-            .frame(minWidth: 36, minHeight: Self.height - 2 * Self.inset)
+            .frame(width: width, height: Self.height - 2 * Self.inset)
             .background {
                 if selected {
                     Capsule().fill(Wash.strong).contrastEdge(Capsule()).matchedGeometryEffect(id: "highlight", in: highlight)

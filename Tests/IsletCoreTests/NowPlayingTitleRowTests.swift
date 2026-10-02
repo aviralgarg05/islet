@@ -3,10 +3,11 @@ import Testing
 @testable import IsletCore
 
 /// The title beside Now Playing's artwork keeps its room: at the compact size the player chip
-/// and the volume button used to cut "Midnight City" to "Midnight…".
+/// and the volume button used to cut "Midnight City" to "Midnight…". Other players fold into
+/// one chip that counts them before the volume button goes.
 @Suite struct NowPlayingTitleRowTests {
-    /// The row's spacing on either side of the gap between title and buttons (two of `Space.m`).
-    static let spacing = 24.0
+    /// The row's spacing between the title and what sits beside it (`Space.m`).
+    static let spacing = 12.0
 
     /// The width beside the artwork for a card `hero` points wide with `art`-point artwork.
     static func width(hero: Double, art: Double) -> Double { hero - art - 12 }
@@ -18,7 +19,7 @@ import Testing
         (0, Layout(chips: 0, showsVolume: true)),
         // Room for the title takes the volume button away, not the chip.
         (1, Layout(chips: 1, showsVolume: false)),
-        // Several other players: one chip, so another player can still be picked.
+        // Several other players: one chip that counts them, so any of them can still be picked.
         (3, Layout(chips: 1, showsVolume: false)),
         (5, Layout(chips: 1, showsVolume: false)),
     ])
@@ -35,8 +36,25 @@ import Testing
                 == Layout(chips: 1, showsVolume: true))
         #expect(NowPlayingTitleRow.layout(width: width, spacing: Self.spacing, otherPlayers: 3, volumeRow: false)
                 == Layout(chips: 3, showsVolume: true))
-        // Never more than three chips.
-        #expect(NowPlayingTitleRow.layout(width: width, spacing: Self.spacing, otherPlayers: 7, volumeRow: false).chips == 3)
+        // Never more than three chips: the third stands for the other five.
+        let seven = NowPlayingTitleRow.layout(width: width, spacing: Self.spacing, otherPlayers: 7, volumeRow: false)
+        #expect(seven.chips == 3)
+        #expect(seven.folded(otherPlayers: 7) == 5)
+    }
+
+    @Test func aFoldedChipCountsThePlayersItStandsFor() {
+        #expect(Layout(chips: 1, showsVolume: true).folded(otherPlayers: 1) == 1)
+        #expect(Layout(chips: 1, showsVolume: true).folded(otherPlayers: 3) == 3)
+        #expect(Layout(chips: 2, showsVolume: true).folded(otherPlayers: 2) == 1)
+        #expect(Layout(chips: 0, showsVolume: true).folded(otherPlayers: 0) == 0)
+    }
+
+    /// Players fold into one chip before the volume button goes: on a card with room for one
+    /// chip and the button, both stay.
+    @Test func playersFoldBeforeTheVolumeButtonGoes() {
+        let width = Self.width(hero: 200, art: 40) + 22
+        #expect(NowPlayingTitleRow.layout(width: width, spacing: Self.spacing, otherPlayers: 3, volumeRow: false)
+                == Layout(chips: 1, showsVolume: true))
     }
 
     @Test func compactWithTheWholeWidth() {

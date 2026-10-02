@@ -164,7 +164,7 @@ extension PermissionKind {
         case .appNotRunning: return "\(appName ?? "The app") isn\u{2019}t open"
         case .appNotInstalled: return "Not installed"
         case .unknown: return "Asked on first use"
-        case .writeOnly: return "Islet can only add events"
+        case .writeOnly: return "Add events only"
         case .restricted: return "Turned off by this Mac\u{2019}s restrictions"
         }
     }

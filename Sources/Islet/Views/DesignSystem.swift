@@ -203,33 +203,51 @@ struct IconButton: View {
 
 /// A small text capsule. Without a tint it is a quiet white wash. With one it is a wash of that
 /// colour with tinted text (0.18 at rest, 0.24 under the pointer, 0.30 pressed); `filled` makes
-/// it solid, for the one primary action in a view.
+/// it solid, for the one primary action in a view. Disabled, it is a faint wash with quiet text
+/// whatever its tint, and doesn't answer the pointer. `compact` is the size for a glance's row:
+/// 20 points tall, so beside a title it starts on the row's top line and leaves the detail
+/// under the title its width.
 struct CapsuleButtonStyle: ButtonStyle {
     var tint: Color? = nil
     var filled = false
-    @ViewState private var hovering = false
+    var compact = false
 
     func makeBody(configuration: Configuration) -> some View {
+        CapsuleButtonBody(configuration: configuration, tint: tint, filled: filled, compact: compact)
+    }
+}
+
+private struct CapsuleButtonBody: View {
+    let configuration: ButtonStyleConfiguration
+    let tint: Color?
+    let filled: Bool
+    let compact: Bool
+    @Environment(\.isEnabled) private var isEnabled
+    @ViewState private var hovering = false
+
+    var body: some View {
         configuration.label
             .font(TextStyle.caption.font(emphasized: true))
             .foregroundStyle(ink)
             .lineLimit(1)
-            .padding(.horizontal, Space.m)
-            .frame(height: 24)
+            .padding(.horizontal, compact ? Space.s : Space.m)
+            .frame(height: compact ? 20 : 24)
             .background(Capsule().fill(fill(pressed: configuration.isPressed)))
             .contrastEdge(Capsule())
             .contentShape(Capsule())
-            .scaleEffect(configuration.isPressed ? Motion.pressScale : 1)
+            .scaleEffect(configuration.isPressed && isEnabled ? Motion.pressScale : 1)
             .animation(Motion.settle, value: configuration.isPressed)
-            .onHover { hovering = $0 }
+            .onHover { hovering = $0 && isEnabled }
     }
 
     private var ink: Color {
+        guard isEnabled else { return Ink.tertiary }
         guard let tint else { return Ink.primary }
         return filled ? .white : tint.readableOnBlack
     }
 
     private func fill(pressed: Bool) -> Color {
+        guard isEnabled else { return Wash.subtle }
         guard let tint else { return pressed || hovering ? Wash.strong : Wash.regular }
         if filled { return tint.opacity(pressed ? 0.62 : hovering ? 0.95 : 0.82) }
         return tint.opacity(pressed ? 0.30 : hovering ? 0.24 : 0.18)
