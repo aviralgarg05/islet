@@ -1260,16 +1260,15 @@ struct IslandRow: View {
         switch p {
         case .compact(.nowPlaying(let np)), .songPeek(let np):
             // A new song swaps the artwork; the equaliser beside it keeps running.
-            counting(Self.bodyKey(p) == nil ? counted : 0) {
-                ClosedArtwork(media: np, model: model,
-                              size: min(ClosedArtwork.size(metrics), Wings<EmptyView, EmptyView>.room(for: geometry.wing) - Space.xs))
+            counting(Self.bodyKey(p) == nil ? counted : 0,
+                     size: min(ClosedArtwork.size(metrics), Wings<EmptyView, EmptyView>.room(for: geometry.wing) - Space.xs)) { size in
+                ClosedArtwork(media: np, model: model, size: size)
             }
         case .compact(.activity(let a, _)), .sneak(let a):
             // With bubbles off, or no room for them in the menu bar row, count the other
             // activities here instead.
-            counting(activityCount(p)) {
-                TemplateLeading(activity: a, model: model, tint: model.tint(for: a),
-                                size: Wings<EmptyView, EmptyView>.glyph(for: geometry.wing))
+            counting(activityCount(p), size: Wings<EmptyView, EmptyView>.glyph(for: geometry.wing)) { size in
+                TemplateLeading(activity: a, model: model, tint: model.tint(for: a), size: size)
             }
         case .compact(.battery(let ev)):
             Image(systemName: BatteryGlyph.symbol(ev.state))
@@ -1289,16 +1288,31 @@ struct IslandRow: View {
     }
 
     /// The leading glyph with the count of other activities beside it ("+2") when both fit
-    /// before the notch, else the glyph alone: nothing goes under the notch, where it can't be
-    /// seen. VoiceOver says the count either way.
-    private func counting<Lead: View>(_ count: Int, @ViewBuilder lead: () -> Lead) -> some View {
-        let lead = lead()
+    /// before the notch: at `size`, then a little smaller and closer in a narrow wing, else the
+    /// glyph alone. Nothing goes under the notch, where it can't be seen. VoiceOver says the
+    /// count either way.
+    private func counting<Lead: View>(_ count: Int, size: CGFloat, @ViewBuilder lead: (CGFloat) -> Lead) -> some View {
         return ViewThatFits(in: .horizontal) {
             HStack(spacing: Space.xs) {
-                lead
+                lead(size)
                 MoreCount(count: count)
             }
-            lead
+            if count > 0 {
+                HStack(spacing: Space.hair) {
+                    lead(max(8, size - 3))
+                    MoreCount(count: count)
+                }
+                HStack(spacing: Space.hair) {
+                    lead(max(8, size - 5))
+                    MoreCount(count: count)
+                }
+                // A timer's ring is wider than its glyph.
+                HStack(spacing: Space.hair) {
+                    lead(max(8, size - 8))
+                    MoreCount(count: count)
+                }
+            }
+            lead(size)
         }
     }
 
