@@ -666,7 +666,9 @@ private struct OpenAction: ViewModifier {
 
 struct TodayTab: View {
     let model: AppModel
-    @Environment(\.snapshotMode) private var snapshotMode
+    /// "+N more" was clicked under the events or the reminders: that list shows everything.
+    @ViewState private var allEvents = false
+    @ViewState private var allReminders = false
 
     /// Height of one event or reminder line, and of the shared all-day line.
     static let rowHeight: CGFloat = 30
@@ -692,23 +694,34 @@ struct TodayTab: View {
         let reminders = model.dueReminders
         return GeometryReader { geo in
             let h = geo.size.height
-            let events = Self.rows(in: h, taken: rest.allDay.isEmpty ? 0 : Self.allDayHeight + Space.s)
-            let todos = Self.rows(in: h)
+            // The room under the label for each list, and what fits in it: a list with more
+            // than fits says how many more, in place of its last line if it must.
+            let listRoom = Double(h - Self.labelHeight - Space.xs)
+            let events = ListFit.fit(Array(repeating: Double(Self.rowHeight), count: min(rest.timed.count, 20)), spacing: Double(Space.s),
+                                     in: listRoom - (rest.allDay.isEmpty ? 0 : Double(Self.allDayHeight + Space.s)))
+            let todos = ListFit.fit(Array(repeating: Double(Self.rowHeight), count: min(reminders.count, 30)), spacing: Double(Space.s),
+                                    in: listRoom)
             HStack(alignment: .top, spacing: 0) {
                 VStack(alignment: .leading, spacing: Space.xs) {
                     let calendarOn = model.settings.calendarEnabled && model.calendarAccess.events.canRead
                     SectionLabel(title: "Calendar", count: calendarOn ? rest.timed.count : 0).frame(height: Self.labelHeight)
                     if !calendarOn {
-                        accessHint(.calendars, text: "Today's events, with a Join button for calls.")
+                        accessHint(.calendars, text: "Today’s events, with a Join button for calls.")
                     } else if rest.timed.isEmpty && rest.allDay.isEmpty {
                         quiet("Nothing else today")
                     } else {
-                        // Snapshots can't scroll, so they show the lines that fit.
-                        AdaptiveScroll(scrolls: rest.timed.count > events) {
-                            VStack(alignment: .leading, spacing: Space.s) {
-                                if !rest.allDay.isEmpty { allDay(rest.allDay) }
-                                ForEach(rest.timed.prefix(snapshotMode ? events : 20)) { e in
-                                    AgendaLine(item: e, now: now) { model.join(e) }
+                        let all = allEvents || events.more == 0
+                        AdaptiveScroll(scrolls: allEvents && events.more > 0) {
+                            VStack(alignment: .leading, spacing: 0) {
+                                VStack(alignment: .leading, spacing: Space.s) {
+                                    if !rest.allDay.isEmpty { allDay(rest.allDay) }
+                                    ForEach(rest.timed.prefix(all ? 20 : events.shown)) { e in
+                                        AgendaLine(item: e, now: now) { model.join(e) }
+                                    }
+                                }
+                                if !all {
+                                    MoreLine(count: rest.timed.count - events.shown) { allEvents = true }
+                                        .padding(.top, ListFit.moreGap)
                                 }
                             }
                         }
@@ -720,13 +733,22 @@ struct TodayTab: View {
                     let remindersOn = model.settings.remindersEnabled && model.calendarAccess.reminders.canRead
                     SectionLabel(title: "Reminders", count: remindersOn ? reminders.count : 0).frame(height: Self.labelHeight)
                     if !remindersOn {
-                        accessHint(.reminders, text: "Reminders due today, with an alert when they're due.")
+                        accessHint(.reminders, text: "Reminders due today, with an alert when they’re due.")
                     } else if reminders.isEmpty {
                         quiet("All done")
                     } else {
-                        AdaptiveScroll(scrolls: reminders.count > todos) {
-                            VStack(alignment: .leading, spacing: Space.s) {
-                                ForEach(reminders.prefix(snapshotMode ? todos : 30)) { r in ReminderLine(item: r, now: now) { model.completeReminder(r.id) } }
+                        let all = allReminders || todos.more == 0
+                        AdaptiveScroll(scrolls: allReminders && todos.more > 0) {
+                            VStack(alignment: .leading, spacing: 0) {
+                                VStack(alignment: .leading, spacing: Space.s) {
+                                    ForEach(reminders.prefix(all ? 30 : todos.shown)) { r in
+                                        ReminderLine(item: r, now: now) { model.completeReminder(r.id) }
+                                    }
+                                }
+                                if !all {
+                                    MoreLine(count: reminders.count - todos.shown) { allReminders = true }
+                                        .padding(.top, ListFit.moreGap)
+                                }
                             }
                         }
                     }
@@ -763,16 +785,25 @@ struct TodayTab: View {
                 Button(advice.isAllowed ? "Turn on" : "Allow \(noun)") { model.requestCalendarAccess(kind) }
                     .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
             } else {
-                VStack(alignment: .leading, spacing: Space.hair) {
-                    Text(advice.status).textStyle(.body, emphasized: true).foregroundStyle(Ink.primary)
+                // What is wrong and the one button that helps, on one line; what to switch under it.
+                VStack(alignment: .leading, spacing: Space.xs) {
+                    HStack(spacing: Space.s) {
+                        Text(advice.status).textStyle(.body, emphasized: true).foregroundStyle(Ink.primary).lineLimit(1)
+                        Spacer(minLength: 0)
+                        Button(advice.islandButton ?? "Settings…") { model.requestCalendarAccess(kind) }
+                            .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: true))
+                            .help(advice.button ?? "")
+                            .fixedSize()
+                    }
                     if let detail = advice.detail {
                         Text(detail).textStyle(.caption).foregroundStyle(Ink.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                Button(advice.button ?? "Open System Settings") { model.requestCalendarAccess(kind) }
-                    .buttonStyle(CapsuleButtonStyle(tint: .blue, filled: advice.action == .ask))
             }
         }
+        // Never past the column: whatever doesn't fit is cut at its foot.
+        .frame(maxHeight: .infinity, alignment: .top)
+        .clipped()
     }
 }
 
