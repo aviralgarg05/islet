@@ -232,10 +232,10 @@ Live Activities mirrored from the menu bar (ids starting with `live-`, sources `
 |---|---|
 | `play`, `pause`, `togglePlayPause`, `next`, `previous` | The usual transport controls. |
 | `seek` | Jump to `position` (seconds). |
-| `skipForward`, `skipBackward` | 15 s forward or back, worked out from the current position so it works with any player. If Islet doesn't know the position, the player's own 15 s skip is used. |
+| `skipForward`, `skipBackward` | 15 s forward or back, worked out from the current position so it works with any player. If Islet doesn't know the position, or the player doesn't know its length (a live stream), the player's own 15 s skip is used. |
 | `toggleShuffle`, `toggleRepeat` | Shuffle on or off; repeat cycles off → all → one. Players that don't report shuffle or repeat may ignore them, and the island only shows these buttons for players that do. |
 
-A `503` means no player is available for the command. With several players at once, commands go to the one the island shows: through the system's Now Playing when macOS gives that app the controls, otherwise to Music or Spotify directly (which needs Automation for that player, allowed in Settings → Permissions). Any other player that macOS hasn't given the controls to (a paused Safari tab while a Chrome video has them) can't be reached, so the command isn't sent and you get a `503`: sending it through the system's Now Playing would reach the other app instead.
+A `503` means no player is available for the command. With several players at once, commands go to the one the island shows: through the system's Now Playing when macOS gives that app the controls, otherwise to Music or Spotify directly (which needs Automation for that player, allowed in Settings → Permissions). Any other player that macOS hasn't given the controls to (a paused Safari tab while a Chrome video has them) can't be reached, so the command isn't sent and you get a `503`: sending it through the system's Now Playing would reach the other app instead. A command the player says it doesn't take also gets a `503` without being sent: `next` or `previous` in a browser video outside a playlist, or a 15 s skip the player has no way to make.
 
 ### Keep awake
 
