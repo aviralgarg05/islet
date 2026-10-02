@@ -39,6 +39,7 @@ Islet now shows the Live Activities your iPhone sends to the Mac, lets you answe
 - **Usage limits.** Claude Code's and Codex's 5-hour and weekly limits appear on Home, with a short alert beside the notch at 90% and again at 100%. They are read on this Mac: no sign-in is read, and nothing goes over the network.
 - Claude Code shares its limits only with its status line, so Home offers **Show usage** to add Islet's. Nothing is written until you confirm; then only the status line changes, and a backup is kept.
 - **More usage on Home**, each off until you switch it on under Coding agents → Usage limits: OpenRouter spending, Copilot premium requests (with a read-only GitHub key) and the models Ollama has loaded. They are fetched only when the island opens, and keys are kept in the Keychain.
+- A Claude Code session that has finished stays Done: the reminder Claude Code sends a minute later, while it waits at the prompt, no longer brings it back to the notch as Waiting.
 
 ### Ask
 - An Ask box answered by Apple Intelligence on the Mac, by Claude or ChatGPT with your own API key (kept in the Keychain), or by the Claude Code and Codex command-line tools with the login you already have. ⌃⌥A opens it from anywhere.

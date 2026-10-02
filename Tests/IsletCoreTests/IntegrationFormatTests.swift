@@ -105,6 +105,37 @@ import Testing
         #expect(spec(try map("lively", #"{"event":"start","session":"s1"}"#))?.id == "lively-s1")
     }
 
+    /// Only a question waits: the idle reminder a minute after a turn ends doesn't bring a finished
+    /// session back as Waiting.
+    @Test func onlyClaudeNotificationsThatAskWait() throws {
+        func waits(_ fields: String) throws -> Bool {
+            let r = try map("claude", "{\"hook_event_name\":\"Notification\",\"session_id\":\"s1\"\(fields)}")
+            guard let s = spec(r) else { return false }
+            #expect(s.state == .waiting)
+            #expect(s.sneak == true)
+            return true
+        }
+        #expect(try waits(#","notification_type":"permission_prompt","message":"Claude needs your permission to use Bash""#))
+        #expect(try waits(#","notification_type":"elicitation_dialog","message":"An MCP server has a question""#))
+        #expect(try !waits(#","notification_type":"idle_prompt","message":"Claude is waiting for your input""#))
+        #expect(try !waits(#","notification_type":"auth_success","message":"Signed in""#))
+        // Older Claude Code sends no type: the idle reminder is known by its words.
+        #expect(try !waits(#","message":"Claude is waiting for your input""#))
+        #expect(try waits(#","message":"Claude needs your permission to use Bash""#))
+        // A kind added later counts as asking.
+        #expect(try waits(#","notification_type":"something_new","message":"Look""#))
+    }
+
+    @Test func aFinishedSessionStaysDoneThroughTheIdleReminder() throws {
+        var c = ActivityCenter()
+        for json in [#"{"session_id":"abc","hook_event_name":"UserPromptSubmit"}"#,
+                     #"{"session_id":"abc","hook_event_name":"Stop"}"#,
+                     #"{"session_id":"abc","hook_event_name":"Notification","notification_type":"idle_prompt","message":"Claude is waiting for your input"}"#] {
+            if case .upsert(let s) = try map("claude", json) { try c.apply(s, now: t0) }
+        }
+        #expect(c.activities["claude-abc"]?.state == .success)
+    }
+
     @Test func rejectsNonObjects() {
         #expect(throws: (any Error).self) { try map("claude", "[1,2]") }
         #expect(throws: (any Error).self) { try map("claude", "not json") }
