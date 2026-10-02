@@ -86,13 +86,17 @@ final class LyricsController {
     /// "No lyrics for this song" for a moment when there are none. Lookups on their own (a new
     /// song) stay quiet and leave the glances until lyrics are found.
     private(set) var askedTrack: String?
+    /// Bumped when the switches in Settings ask for the song on show to be looked up again
+    /// (lyrics turned on, or browsers switched while on). Home's card looks it up then, without
+    /// waiting for the next song.
+    private(set) var resets = 0
 
     @ObservationIgnored private unowned let model: AppModel
     @ObservationIgnored private lazy var service = LyricsService(
         cache: LyricsCache(directory: IsletPaths.supportDirectory.appendingPathComponent("lyrics")), version: AppModel.version)
     @ObservationIgnored private var failedAt: Date?
-    /// Whether `state` was worked out with browsers' songs included.
-    @ObservationIgnored private var withBrowsers = false
+    /// The switches in Settings as last applied (`settingsChanged`), nil before the first look.
+    @ObservationIgnored private var switches: LyricsSwitches?
     /// How long "No lyrics for this song" stays before the glances come back.
     static let noteSeconds: Double = 4
 
@@ -193,7 +197,6 @@ final class LyricsController {
         if askedTrack != np.trackKey { askedTrack = nil }
         if offerTrack != np.trackKey { offerTrack = nil }
         trackKey = np.trackKey
-        withBrowsers = s.lyricsIncludeBrowsers
         guard let query = LyricsQuery(np, includeBrowsers: s.lyricsIncludeBrowsers) else {
             state = .missing
             settled(np.trackKey)
@@ -241,11 +244,19 @@ final class LyricsController {
         return lyrics
     }
 
-    /// Settings changed: lyrics turned off forget what they had, and turning browsers on or off
-    /// works the song out again next time.
+    /// Settings changed: lyrics turned off forget what they had. Turned on, or with browsers
+    /// switched while on, the song on show is looked up again at once (`resets`). Either way,
+    /// lyrics hidden with × show again, and an open offer closes.
     func settingsChanged() {
         let s = model.settings
-        if !s.lyricsEnabled || s.lyricsIncludeBrowsers != withBrowsers { clear() }
+        let now = LyricsSwitches(enabled: s.lyricsEnabled, browsers: s.lyricsIncludeBrowsers)
+        let change = LyricsSwitches.change(from: switches, to: now)
+        switches = now
+        guard change != .none else { return }
+        clear()
+        hiddenTrack = nil
+        offerTrack = nil
+        if change == .lookAgain { resets &+= 1 }
     }
 
     func clear() {
@@ -260,7 +271,7 @@ final class LyricsController {
         hiddenTrack = hidden ? np.trackKey : nil
         offerTrack = nil
         askedTrack = nil
-        withBrowsers = model.settings.lyricsIncludeBrowsers
+        switches = LyricsSwitches(enabled: model.settings.lyricsEnabled, browsers: model.settings.lyricsIncludeBrowsers)
     }
 
     /// The offer, a lookup under way or its note, for snapshots.
@@ -270,7 +281,7 @@ final class LyricsController {
         hiddenTrack = nil
         offerTrack = offer ? np.trackKey : nil
         askedTrack = asked ? np.trackKey : nil
-        withBrowsers = model.settings.lyricsIncludeBrowsers
+        switches = LyricsSwitches(enabled: model.settings.lyricsEnabled, browsers: model.settings.lyricsIncludeBrowsers)
     }
 }
 

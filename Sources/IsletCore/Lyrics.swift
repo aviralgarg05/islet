@@ -377,6 +377,36 @@ public enum LyricsState: Equatable, Sendable {
     }
 }
 
+/// The two lyrics switches in Settings ("Show lyrics" and "Also for music in a web browser"),
+/// as the island last applied them.
+public struct LyricsSwitches: Equatable, Sendable {
+    public var enabled: Bool
+    public var browsers: Bool
+
+    public init(enabled: Bool, browsers: Bool) {
+        self.enabled = enabled
+        self.browsers = browsers
+    }
+
+    public enum Change: Equatable, Sendable {
+        /// Nothing the lyrics on show depend on.
+        case none
+        /// Lyrics went off: forget them, and which song's were hidden.
+        case off
+        /// Lyrics came on, or the browsers switch moved while they are on: forget what was
+        /// worked out and look the song on show up again, without waiting for the next song.
+        case lookAgain
+    }
+
+    /// What moving the switches from `old` (nil before the first look) to `new` asks of the
+    /// lyrics on show.
+    public static func change(from old: LyricsSwitches?, to new: LyricsSwitches) -> Change {
+        guard let old, old != new else { return .none }
+        if !new.enabled { return old.enabled ? .off : .none }
+        return .lookAgain
+    }
+}
+
 /// What a lookup found: lyrics, or that LRCLIB has none for the song.
 public enum LyricsLookup: Equatable, Sendable {
     case found(SongLyrics)

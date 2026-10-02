@@ -273,3 +273,31 @@ import Testing
         #expect(LyricsState.failed.needsLookUp(sameSong: true, force: true, sinceFailure: 5))
     }
 }
+
+/// Moving the lyrics switches in Settings applies to the song on show at once.
+@Suite struct LyricsSwitchesTests {
+    func at(_ enabled: Bool, _ browsers: Bool = false) -> LyricsSwitches { LyricsSwitches(enabled: enabled, browsers: browsers) }
+
+    @Test func turningLyricsOnLooksTheSongUpNow() {
+        #expect(LyricsSwitches.change(from: at(false), to: at(true)) == .lookAgain)
+        #expect(LyricsSwitches.change(from: at(false, true), to: at(true, true)) == .lookAgain)
+    }
+
+    @Test func browsersSwitchedWhileOnLooksAgain() {
+        #expect(LyricsSwitches.change(from: at(true, false), to: at(true, true)) == .lookAgain)
+        #expect(LyricsSwitches.change(from: at(true, true), to: at(true, false)) == .lookAgain)
+    }
+
+    @Test func turningLyricsOffForgetsThem() {
+        #expect(LyricsSwitches.change(from: at(true), to: at(false)) == .off)
+        #expect(LyricsSwitches.change(from: at(true, true), to: at(false, false)) == .off)
+    }
+
+    /// Nothing moved, the browsers switch moved while lyrics are off, or the first look at launch.
+    @Test func nothingElseTouchesTheLyrics() {
+        #expect(LyricsSwitches.change(from: at(true), to: at(true)) == .none)
+        #expect(LyricsSwitches.change(from: at(false, false), to: at(false, true)) == .none)
+        #expect(LyricsSwitches.change(from: nil, to: at(true)) == .none)
+        #expect(LyricsSwitches.change(from: nil, to: at(false)) == .none)
+    }
+}
