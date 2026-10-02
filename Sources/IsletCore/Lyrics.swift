@@ -353,6 +353,30 @@ public enum LRCLIB {
     }
 }
 
+/// Where the lookup for the song on show stands.
+public enum LyricsState: Equatable, Sendable {
+    case idle
+    case loading
+    case found(SongLyrics)
+    /// LRCLIB has nothing for the song, or it doesn't read as a song.
+    case missing
+    /// The network failed; asked again a minute later at the soonest.
+    case failed
+
+    /// Seconds before a failed lookup is tried again on its own.
+    public static let retryAfter: Double = 60
+
+    /// Whether to look the song up, with this state for the song shown before (`sameSong`).
+    /// Another song always; the same one never while its lookup is on its way, so a click on the
+    /// lyrics button then sends nothing more; when the button asks (`force`, answered from the
+    /// cache when it can be); or on its own a minute after a failure.
+    public func needsLookUp(sameSong: Bool, force: Bool, sinceFailure: Double) -> Bool {
+        guard sameSong else { return true }
+        if self == .loading { return false }
+        return force || self == .failed && sinceFailure > Self.retryAfter
+    }
+}
+
 /// What a lookup found: lyrics, or that LRCLIB has none for the song.
 public enum LyricsLookup: Equatable, Sendable {
     case found(SongLyrics)
@@ -465,4 +489,8 @@ public enum LyricsPlacement {
 
     /// One glance above the lyrics on a short island, two on a taller one.
     public static func room(height: Double) -> Int { height >= 140 ? 2 : 1 }
+
+    /// The lyrics button's offer takes the whole column, but never over something that needs
+    /// you (an approval, a loud failure): it waits until that is answered.
+    public static func offerFits(_ glances: [Glance]) -> Bool { !glances.contains(.needsYou) }
 }

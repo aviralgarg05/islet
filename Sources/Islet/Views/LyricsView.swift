@@ -23,11 +23,10 @@ struct LyricsColumn: View {
     /// found for the song on show and not hidden for it), or a lookup the lyrics button asked
     /// for, under any timer or stopwatch that is counting; nil too when something needs you or
     /// more is counting than fits (`LyricsPlacement`). The offer to turn lyrics on, opened with
-    /// the button, takes the whole column until it is answered.
+    /// the button, takes the whole column until it is answered, unless something needs you.
     static func side(for plan: HomePlan, model: AppModel, height: CGFloat)
         -> (media: NowPlaying, content: LyricsController.Column, kept: [HomePlan.Glance])? {
         guard case .media(let np) = plan.primary, let content = model.tools.lyrics.column(for: np) else { return nil }
-        if case .offer = content { return (np, content, []) }
         let kinds = plan.glances.map { g -> LyricsPlacement.Glance in
             switch g {
             case .activity(let a) where HomePlan.needsYou(a): return .needsYou
@@ -35,6 +34,7 @@ struct LyricsColumn: View {
             default: return .quiet
             }
         }
+        if case .offer = content { return LyricsPlacement.offerFits(kinds) ? (np, content, []) : nil }
         guard case .lyrics(let keeping) = LyricsPlacement.column(kinds, room: LyricsPlacement.room(height: Double(height))) else {
             return nil
         }
@@ -225,9 +225,9 @@ struct LyricsButton: View {
         let lyrics = model.tools.lyrics
         let on = lyrics.isOn(for: media)
         let lit = lyrics.isShowing(media)
-        let label = !on ? (lit ? "Close the lyrics offer" : "Show lyrics")
-            : lit ? "Hide lyrics for this song"
-            : lyrics.state(for: media) == .missing ? "No lyrics for this song" : "Show lyrics"
+        // VoiceOver hears what a click does; the pointer's tooltip also says when none were found.
+        let label = !on ? (lit ? "Close the lyrics offer" : "Show lyrics") : lit ? "Hide lyrics for this song" : "Show lyrics"
+        let help = on && !lit && lyrics.state(for: media) == .missing ? "No lyrics for this song" : label
         Button {
             Haptics.play(.tap)
             lyrics.toggle(media)
@@ -241,7 +241,8 @@ struct LyricsButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(label)
+        .help(help)
         .accessibilityLabel(label)
+        .accessibilityAddTraits(lit ? .isSelected : [])
     }
 }

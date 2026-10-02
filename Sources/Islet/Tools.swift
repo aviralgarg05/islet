@@ -60,15 +60,7 @@ extension AppModel {
 @MainActor
 @Observable
 final class LyricsController {
-    enum State: Equatable {
-        case idle
-        case loading
-        case found(SongLyrics)
-        /// LRCLIB has nothing for the song, or it doesn't read as a song.
-        case missing
-        /// The network failed; asked again a minute later at the soonest.
-        case failed
-    }
+    typealias State = LyricsState
 
     /// What Home's column shows for the song instead of the glances.
     enum Column: Equatable {
@@ -195,10 +187,9 @@ final class LyricsController {
     /// (the button) asks again for a song already settled, from the cache when it is there.
     func want(_ np: NowPlaying, force: Bool = false) {
         let s = model.settings
-        guard s.lyricsEnabled else { return }
-        if !force, np.trackKey == trackKey {
-            guard state == .failed, Date().timeIntervalSince(failedAt ?? .distantPast) > 60 else { return }
-        }
+        guard s.lyricsEnabled,
+              state.needsLookUp(sameSong: np.trackKey == trackKey, force: force,
+                                sinceFailure: Date().timeIntervalSince(failedAt ?? .distantPast)) else { return }
         if askedTrack != np.trackKey { askedTrack = nil }
         if offerTrack != np.trackKey { offerTrack = nil }
         trackKey = np.trackKey

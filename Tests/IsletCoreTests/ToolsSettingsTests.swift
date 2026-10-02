@@ -62,6 +62,12 @@ import Testing
         #expect(groups.first?.page == page, "\(query) → \(groups.map(\.page.title))")
     }
 
+    /// The browser switch is the first thing these searches find, not just a row on its page.
+    @Test(arguments: ["lyrics browser", "YouTube lyrics", "lyrics Chrome"])
+    func browserLyricsAreFoundByName(query: String) {
+        #expect(SettingsIndex.search(query).first?.entries.first?.id == "nowPlaying.lyricsBrowsers", "\(query)")
+    }
+
     @Test func toolsPageIsAFeatureWithItsOwnEntries() {
         #expect(SettingsPage.tools.group == .features)
         let ids = Set(SettingsIndex.entries.filter { $0.page == .tools }.map(\.id))

@@ -237,4 +237,39 @@ import Testing
         #expect(LyricsPlacement.room(height: 90) == 1)
         #expect(LyricsPlacement.room(height: 160) == 2)
     }
+
+    /// The lyrics button's offer takes the column from quiet glances and timers, never from an
+    /// approval or a loud failure.
+    @Test func theOfferWaitsForWhatNeedsYou() {
+        #expect(LyricsPlacement.offerFits([]))
+        #expect(LyricsPlacement.offerFits([.quiet, .counting]))
+        #expect(!LyricsPlacement.offerFits([.quiet, .needsYou]))
+    }
+}
+
+@Suite struct LyricsLookUpTests {
+    @Test func aNewSongIsAlwaysLookedUp() {
+        for state in [LyricsState.idle, .loading, .found(SongLyrics(plain: "x")), .missing, .failed] {
+            #expect(state.needsLookUp(sameSong: false, force: false, sinceFailure: 0))
+        }
+    }
+
+    /// The lyrics button clicked while the song's lookup is on its way sends nothing more: one
+    /// lookup per song.
+    @Test func aLookupOnItsWayIsNeverDoubled() {
+        #expect(!LyricsState.loading.needsLookUp(sameSong: true, force: true, sinceFailure: 1000))
+        #expect(!LyricsState.loading.needsLookUp(sameSong: true, force: false, sinceFailure: 1000))
+    }
+
+    @Test func aSettledSongIsAskedAgainOnlyByTheButton() {
+        #expect(!LyricsState.missing.needsLookUp(sameSong: true, force: false, sinceFailure: 1000))
+        #expect(LyricsState.missing.needsLookUp(sameSong: true, force: true, sinceFailure: 0))
+        #expect(!LyricsState.found(SongLyrics(plain: "x")).needsLookUp(sameSong: true, force: false, sinceFailure: 1000))
+    }
+
+    @Test func aFailureIsTriedAgainAfterAMinute() {
+        #expect(!LyricsState.failed.needsLookUp(sameSong: true, force: false, sinceFailure: 30))
+        #expect(LyricsState.failed.needsLookUp(sameSong: true, force: false, sinceFailure: 61))
+        #expect(LyricsState.failed.needsLookUp(sameSong: true, force: true, sinceFailure: 5))
+    }
 }
