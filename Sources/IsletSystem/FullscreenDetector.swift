@@ -24,6 +24,13 @@ public final class FullscreenDetector {
     private var windowObserver: AXObserver?
     private var watchedPID: pid_t = 0
     private var windowLooks: [DispatchWorkItem] = []
+    /// The app being set up to follow, while its notifications are added off the main thread.
+    private var pendingPID: pid_t = 0
+    /// Bumped each time the app to follow changes, so a setup that finishes late is dropped.
+    private var watchGeneration = 0
+    /// Adding an observer's notifications asks the app itself, once per notification; a busy app
+    /// takes a while to answer, so that happens here and not on the main thread.
+    private let axQueue = DispatchQueue(label: "dev.islet.fullscreen.ax", qos: .utility)
 
     public init() {}
     deinit { stop() }
@@ -76,22 +83,35 @@ public final class FullscreenDetector {
             unwatchFrontApp()
             return
         }
-        guard pid != watchedPID || windowObserver == nil else { return }
+        guard pid != watchedPID && pid != pendingPID else { return }
         unwatchFrontApp()
-        var obs: AXObserver?
-        let callback: AXObserverCallback = { _, _, _, refcon in
-            guard let refcon else { return }
-            Unmanaged<FullscreenDetector>.fromOpaque(refcon).takeUnretainedValue().windowChanged()
-        }
-        guard AXObserverCreate(pid, callback, &obs) == .success, let obs else { return }
-        let app = AXUIElementCreateApplication(pid)
-        // An app too busy to answer mustn't hold up the main thread.
-        AXUIElementSetMessagingTimeout(app, Self.axTimeout)
+        watchGeneration += 1
+        let generation = watchGeneration
+        pendingPID = pid
         let refcon = Unmanaged.passUnretained(self).toOpaque()
-        for name in Self.windowNotifications { AXObserverAddNotification(obs, app, name as CFString, refcon) }
-        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), .defaultMode)
-        windowObserver = obs
-        watchedPID = pid
+        axQueue.async { [weak self] in
+            var obs: AXObserver?
+            let callback: AXObserverCallback = { _, _, _, refcon in
+                guard let refcon else { return }
+                Unmanaged<FullscreenDetector>.fromOpaque(refcon).takeUnretainedValue().windowChanged()
+            }
+            guard AXObserverCreate(pid, callback, &obs) == .success, let obs else {
+                // Tried again the next time this app comes to the front.
+                DispatchQueue.main.async { if let self, self.watchGeneration == generation { self.pendingPID = 0 } }
+                return
+            }
+            let app = AXUIElementCreateApplication(pid)
+            AXUIElementSetMessagingTimeout(app, Self.axTimeout)
+            for name in Self.windowNotifications { AXObserverAddNotification(obs, app, name as CFString, refcon) }
+            DispatchQueue.main.async {
+                // Another app came to the front meanwhile: this one isn't followed.
+                guard let self, self.watchGeneration == generation else { return }
+                CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), .defaultMode)
+                self.windowObserver = obs
+                self.watchedPID = pid
+                self.pendingPID = 0
+            }
+        }
     }
 
     private func unwatchFrontApp() {
@@ -100,6 +120,8 @@ public final class FullscreenDetector {
         }
         windowObserver = nil
         watchedPID = 0
+        pendingPID = 0
+        watchGeneration += 1
         windowLooks.forEach { $0.cancel() }
         windowLooks.removeAll()
     }
