@@ -264,6 +264,34 @@ import Testing
         #expect(alone.available(now: t0.addingTimeInterval(61)).isEmpty)
     }
 
+    /// A browser posting its info again every quarter of a minute, nothing changed, doesn't take
+    /// the island back from a song that started after it: rule 2 counts changes, not reports.
+    @Test func aBrowserPostingAgainDoesNotTakeTheIsland() {
+        var m = MediaArbiter()
+        let song = Self.spotify(true, at: t0)
+        m.updateFromBridge(Self.report([Self.chrome(at: t0.addingTimeInterval(-60)), song], current: Self.chromeID))
+        #expect(m.current(now: t0.addingTimeInterval(1))?.bundleID == Self.spotifyID)
+        m.updateFromBridge(Self.report([Self.chrome(at: t0.addingTimeInterval(15)), song], current: Self.chromeID))
+        #expect(m.current(now: t0.addingTimeInterval(16))?.bundleID == Self.spotifyID)
+        #expect(m.closedIsland(now: t0.addingTimeInterval(16))?.bundleID == Self.spotifyID)
+        #expect(Self.ids(m.available(now: t0.addingTimeInterval(16))) == [Self.spotifyID, Self.chromeID])
+        #expect(m.changedAt[Self.chromeID] == t0.addingTimeInterval(-60))
+        // Another video is a change: it shows.
+        var video = Self.chrome(at: t0.addingTimeInterval(30))
+        video.title = "Next"
+        m.updateFromBridge(Self.report([video, song], current: Self.chromeID))
+        #expect(m.current(now: t0.addingTimeInterval(31))?.bundleID == Self.chromeID)
+        // And Spotify's next song takes it back, however often Chrome posts.
+        var next = Self.spotify(true, at: t0.addingTimeInterval(40))
+        next.title = "Song 2"
+        video.timestamp = t0.addingTimeInterval(45)
+        m.updateFromBridge(Self.report([video, next], current: Self.chromeID))
+        #expect(m.current(now: t0.addingTimeInterval(46))?.bundleID == Self.spotifyID)
+        // A player that goes is forgotten.
+        m.updateFromBridge(Self.report([next], current: Self.spotifyID))
+        #expect(m.changedAt[Self.chromeID] == nil)
+    }
+
     /// The bridge stopping for good (given up, or unable to start) reports nothing: the live
     /// video it reported last doesn't stay "playing" with controls that reach nothing, and
     /// Spotify's own paused song is what is left.

@@ -231,7 +231,9 @@ public struct BridgeReport: Equatable, Sendable {
 ///
 /// Rules, in order:
 /// 1. Anything playing beats anything paused.
-/// 2. Among equals, the most recently updated wins (the player you touched last).
+/// 2. Among equals, the one that changed last wins (the player you touched last): another track,
+///    starting or stopping, or moved while paused (`changedAt`). A player reporting the same
+///    again, as a browser does every quarter of a minute, isn't newer for it.
 /// 3. Direct app integrations beat the generic system bridge when they describe the same
 ///    track, because they carry richer data (artwork URL, reliable state).
 /// 4. Paused players are forgotten after `pausedTimeout` so a stale track doesn't linger forever.
@@ -280,6 +282,17 @@ public struct MediaArbiter: Sendable {
     /// Rule 4: bridge players whose time ran out, by player, with the moment it ran out. They stay
     /// listed; this only keeps their deadline from coming round again.
     private var lapsed: [String: Date] = [:]
+    /// Rule 2: when each player last changed, by `playerID`.
+    public private(set) var changedAt: [String: Date] = [:]
+    /// Rule 2: what each feed last said of each player (`feedKey`), to tell a change from the
+    /// same said again. Music's own report and the bridge's listing of Music are two feeds.
+    private var lastSaid: [String: Said] = [:]
+
+    private struct Said: Equatable, Sendable {
+        var track: String
+        var playing: Bool
+        var elapsed: Double?
+    }
 
     /// The kinds the system-wide bridge reports.
     public static let bridgeSources: Set<MediaSourceKind> = [.system, .browser]
@@ -303,6 +316,8 @@ public struct MediaArbiter: Sendable {
         let id = Self.playerID(snapshot)
         let was = reportsPlaying(id)
         snapshots[snapshot.source] = snapshot
+        noteChange(snapshot)
+        pruneChanges()
         noteSettling(snapshot)
         noteReport(from: id, wasPlaying: was)
     }
@@ -314,6 +329,7 @@ public struct MediaArbiter: Sendable {
             bridge = bridge.filter { $0.value.source != source }
             if let c = bridgeCurrent, bridge[c] == nil { bridgeCurrent = nil }
         }
+        pruneChanges()
         dropPickIfGone()
     }
 
@@ -339,6 +355,8 @@ public struct MediaArbiter: Sendable {
         }
         let was = Dictionary(uniqueKeysWithValues: next.keys.map { ($0, reportsPlaying($0)) })
         bridge = next
+        for s in next.values { noteChange(s) }
+        pruneChanges()
         bridgeCurrent = report.current.flatMap { next[$0] == nil ? nil : $0 }
         lapsed = lapsed.filter { id, at in next[id].flatMap(forgetAt) == at }
         pruneSettling()
@@ -350,6 +368,33 @@ public struct MediaArbiter: Sendable {
     /// One player that has the controls, or nil for nothing (`BridgeReport.init(_:)`).
     public mutating func updateFromBridge(_ snapshot: NowPlaying?) {
         updateFromBridge(BridgeReport(snapshot))
+    }
+
+    // MARK: When each player last changed (rule 2)
+
+    private static func feedKey(_ s: NowPlaying) -> String { s.source.rawValue + "\n" + playerID(s) }
+
+    /// Notes when a player changed: another track, starting or stopping, or moved while paused
+    /// (a seek). Its timestamp then is the moment. The same said again changes nothing.
+    private mutating func noteChange(_ s: NowPlaying) {
+        let said = Said(track: s.trackKey, playing: s.isPlaying, elapsed: s.isPlaying ? nil : s.elapsed)
+        let key = Self.feedKey(s)
+        guard lastSaid[key] != said else { return }
+        lastSaid[key] = said
+        changedAt[Self.playerID(s)] = s.timestamp
+    }
+
+    /// Forgets players no longer reported.
+    private mutating func pruneChanges() {
+        let feeds = Set(reports.map(Self.feedKey))
+        lastSaid = lastSaid.filter { feeds.contains($0.key) }
+        let players = Set(reports.map(Self.playerID))
+        changedAt = changedAt.filter { players.contains($0.key) }
+    }
+
+    /// Rule 2's moment for a snapshot: when its player last changed, or its own timestamp.
+    func changed(_ s: NowPlaying) -> Date {
+        changedAt[Self.playerID(s)] ?? s.timestamp
     }
 
     // MARK: Bare clips from unknown apps (rule 8)
@@ -417,8 +462,10 @@ public struct MediaArbiter: Sendable {
     /// Playing list does; one known only from Music's or Spotify's own reports or the API goes
     /// after `pausedTimeout`.
     public func available(now: Date) -> [NowPlaying] {
-        Self.grouped(listedSnapshots(now: now)).values.compactMap(Self.best).sorted { a, b in
-            a.timestamp != b.timestamp ? a.timestamp > b.timestamp : Self.playerID(a) < Self.playerID(b)
+        Self.grouped(listedSnapshots(now: now)).values.compactMap(best).sorted { a, b in
+            let (ca, cb) = (changed(a), changed(b))
+            if ca != cb { return ca > cb }
+            return a.timestamp != b.timestamp ? a.timestamp > b.timestamp : Self.playerID(a) < Self.playerID(b)
         }
     }
 
@@ -517,6 +564,7 @@ public struct MediaArbiter: Sendable {
     public mutating func expire(now: Date) -> Bool {
         let dead = snapshots.filter { forgetAt($0.value).map { $0 <= now } == true }.keys
         for source in dead { snapshots[source] = nil }
+        if !dead.isEmpty { pruneChanges() }
         var ranOut = false
         for (id, s) in bridge {
             guard let forget = forgetAt(s), forget <= now, lapsed[id] != forget else { continue }
@@ -531,7 +579,7 @@ public struct MediaArbiter: Sendable {
     /// (however long it has been paused), otherwise the best of all (rules 1 to 3).
     public func current(now: Date) -> NowPlaying? {
         if let picked = picked(in: listedSnapshots(now: now)) { return picked }
-        return Self.best(liveSnapshots(now: now))
+        return best(liveSnapshots(now: now))
     }
 
     /// What the closed island shows: what is playing. A pick steers the open island and the
@@ -540,12 +588,12 @@ public struct MediaArbiter: Sendable {
     /// showing there paused and then going after "Hide paused music after".
     public func closedIsland(now: Date) -> NowPlaying? {
         if let picked = picked(in: listedSnapshots(now: now)), picked.isPlaying { return picked }
-        return Self.best(liveSnapshots(now: now))
+        return best(liveSnapshots(now: now))
     }
 
     private func picked(in listed: [NowPlaying]) -> NowPlaying? {
         guard let pick, let group = Self.grouped(listed)[pick.player] else { return nil }
-        return Self.best(group)
+        return best(group)
     }
 
     /// Snapshots still counting at `now`, from sources that are on, each past its end shown as stopped.
@@ -584,12 +632,14 @@ public struct MediaArbiter: Sendable {
     }
 
     /// The one to show among `live`, with gaps filled from others describing the same track.
-    static func best(_ live: [NowPlaying]) -> NowPlaying? {
+    func best(_ live: [NowPlaying]) -> NowPlaying? {
         guard !live.isEmpty else { return nil }
         let best = live.max { a, b in
             if a.isPlaying != b.isPlaying { return !a.isPlaying }
+            let (ca, cb) = (changed(a), changed(b))
+            if ca != cb { return ca < cb }
             if a.timestamp != b.timestamp { return a.timestamp < b.timestamp }
-            return rank(a.source) < rank(b.source)
+            return Self.rank(a.source) < Self.rank(b.source)
         }!
         var result = best
         // Prefer a direct integration's identity (reliable state, controls) for the same track.
