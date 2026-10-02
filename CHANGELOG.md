@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixes
+- Music and videos playing in a browser show on the island again. A live stream, or a video whose length the browser doesn’t know, used to stop Now Playing for every app until the Mac slept and woke.
 - Settings changed from the island (time left, a Pomodoro length, a tool's **Turn on**, Lyrics, Mute, turning on the calendar) are saved and applied at once, and Settings shows them straight away.
 - A change made just after Islet saved something else, such as a slider still moving in Settings, is no longer undone a moment later.
 - Switching to a busy app no longer makes the island hitch while Islet starts following that app's windows for full screen.
