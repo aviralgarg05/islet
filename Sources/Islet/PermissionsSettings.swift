@@ -127,8 +127,10 @@ struct PermissionsSettings: View {
     }
 }
 
-/// Keeps track of the window a view is in, without holding on to it.
-private struct HostWindow: NSViewRepresentable {
+/// Keeps track of the window a view is in, without holding on to it. Settings pages that check
+/// things again use it to tell when their window is reopened: the window is kept, so SwiftUI
+/// doesn't call `onAppear` again.
+struct HostWindow: NSViewRepresentable {
     final class Box { weak var window: NSWindow? }
     let box: Box
 

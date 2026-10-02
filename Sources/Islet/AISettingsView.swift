@@ -5,6 +5,9 @@ import SwiftUI
 
 /// Settings → Ask & AI: the Ask box, keys for Claude and ChatGPT, the command-line tools and
 /// Apple Intelligence. Plain words only: the raw Apple Intelligence status is in Advanced's help.
+/// Keys, command-line tools and Apple Intelligence are checked when the page appears, when Islet
+/// becomes active again (say, after installing a tool in Terminal) and when the kept Settings
+/// window is reopened on this page; never polled.
 struct AISettingsView: View {
     @Bindable var model: AppModel
     @ViewState private var fetched: [AskProviderKind: [String]] = [:]
@@ -12,6 +15,8 @@ struct AISettingsView: View {
     @ViewState private var keyStored: [AskProviderKind: Bool] = [:]
     @ViewState private var cliFound: [AskProviderKind: Bool] = [:]
     @ViewState private var appleReady = AIAssist.shared.isAvailable
+    @ViewState private var visible = false
+    @ViewState private var host = HostWindow.Box()
 
     private var service: AskService { model.ask.service }
 
@@ -87,7 +92,23 @@ struct AISettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .onAppear(perform: refresh)
+        .background(HostWindow(box: host))
+        .onAppear {
+            visible = true
+            refresh()
+        }
+        .onDisappear { visible = false }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshIfShown()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { note in
+            if let window = host.window, note.object as? NSWindow === window { refreshIfShown() }
+        }
+    }
+
+    /// Check again only while this is the page on show in a Settings window that is on screen.
+    private func refreshIfShown() {
+        if visible, host.window?.isVisible == true { refresh() }
     }
 
     /// Apple Intelligence's state in plain words, here and in Advanced → Diagnostics (whose help has the raw status).
