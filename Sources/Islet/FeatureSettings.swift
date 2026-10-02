@@ -16,12 +16,12 @@ struct NowPlayingSettings: View {
     var body: some View {
         Form {
             Section {
-                SettingsHero(page: .nowPlaying, switchTitle: "Show what's playing", isOn: $model.settings.mediaEnabled)
+                SettingsHero(page: .nowPlaying, switchTitle: "Show what’s playing", isOn: $model.settings.mediaEnabled)
                     .settingsAnchor("nowPlaying.enabled")
             }
             if on && model.bridgeFailed {
                 Section {
-                    AccessRow(text: "Islet can't see what other apps are playing right now. Music and Spotify still show.",
+                    AccessRow(text: "Islet can’t see what other apps are playing right now. Music and Spotify still show.",
                               button: "Try again") { model.retryMedia() }
                         .settingsAnchor("nowPlaying.status")
                 }
@@ -33,12 +33,12 @@ struct NowPlayingSettings: View {
             Section {
                 MediaSourceToggles(model: model)
                 IgnoredAppsList(apps: $model.settings.hiddenMediaApps, title: "Ignore apps",
-                                detail: "What these apps play never shows, such as a game's music or a video that plays by itself.",
+                                detail: "What these apps play never shows, such as a game’s music or a video that plays by itself.",
                                 anchor: "nowPlaying.ignore")
             } header: {
                 Text("Sources").settingsAnchor("nowPlaying.sources")
             } footer: {
-                SettingsFooter("A short sound from an app that isn't a music or video player, such as a voice message, shows only once it has played for a few seconds.")
+                SettingsFooter("A short sound from an app that isn’t a music or video player, such as a voice message, shows only once it has played for a few seconds.")
             }
             .disabled(!on)
             Section("Closed island") {
@@ -66,7 +66,7 @@ struct NowPlayingSettings: View {
             Section("Open island") {
                 Toggle(isOn: $model.settings.mediaShowsRemainingTime) {
                     Text("Show time left")
-                    Text("Beside the progress bar, instead of the song's length. Clicking the time in the island switches it too.")
+                    Text("Beside the progress bar, instead of the song’s length. Clicking the time in the island switches it too.")
                 }
                 .settingsAnchor("nowPlaying.remaining")
             }
@@ -88,7 +88,7 @@ struct NowPlayingSettings: View {
                     Text("White").tag(MusicColour.white)
                 } label: {
                     Text("Music colour")
-                    Text("The playing indicator, the progress ring and the open island's progress bar.")
+                    Text("The playing indicator, the progress ring and the open island’s progress bar.")
                 }
                 .settingsAnchor("nowPlaying.musicColour")
             } header: {
@@ -96,8 +96,8 @@ struct NowPlayingSettings: View {
             } footer: {
                 HStack(spacing: 0) {
                     SettingsFooter(model.settings.visualiserStyle == .gif
-                                   ? "The sticker plays with the music and stops, dimmed, when you pause. It stays still with Reduce Motion."
-                                   : "The indicator settles and dims when you pause, and springs back when you play.")
+                                   ? "The sticker plays with the music and stops, dimmed, when you pause. It stays still with Reduce Motion or Animation Off."
+                                   : "The indicator settles and dims when you pause, and springs back when you play. With Reduce Motion or Animation Off it stays in place.")
                     SettingsLink(text: "Accent colour", page: .appearance, anchor: "appearance.accent").fixedSize()
                 }
             }
@@ -254,7 +254,7 @@ struct CalendarAccessRow: View {
     }
 }
 
-// MARK: - Notifications & HUDs
+// MARK: - Notifications & Levels
 
 struct NotificationsSettings: View {
     @Bindable var model: AppModel
@@ -294,7 +294,7 @@ struct NotificationsSettings: View {
                 .settingsAnchor("notifications.volume")
                 Toggle(isOn: $model.settings.brightnessHUDEnabled) {
                     Text("Display brightness")
-                    Text("When you change the display's brightness.")
+                    Text("When you change the display’s brightness.")
                 }
                 .settingsAnchor("notifications.brightness")
                 Toggle(isOn: $model.settings.outputChangeCard) {
@@ -314,8 +314,8 @@ struct NotificationsSettings: View {
                     } label: {
                         Text("Style")
                         Text(model.settings.hudStyle == .compact
-                             ? "Beside the notch, in the menu bar."
-                             : "Beside the notch, with the level as a percentage.")
+                             ? "Beside the notch, in the menu bar row."
+                             : "A short line just below the notch, with the level as a percentage.")
                     }
                     .settingsAnchor("notifications.hudStyle")
                     Picker(selection: $model.settings.hudColour) {
@@ -334,7 +334,7 @@ struct NotificationsSettings: View {
                 .disabled(!model.settings.showsAnyHUD)
                 Toggle(isOn: $model.settings.replaceSystemHUD) {
                     Text("Replace the system volume and brightness display")
-                    Text("Shows only Islet's when you press the keys. Keys Islet can't act on, such as brightness on another display or volume on a fixed-volume output, still go to macOS.")
+                    Text("Shows only Islet’s when you press the keys. Keys Islet can’t act on, such as brightness on another display or volume on a fixed-volume output, still go to macOS.")
                 }
                 .settingsAnchor("notifications.replaceHUD")
                 if model.settings.replaceSystemHUD && !axTrusted {
@@ -357,9 +357,9 @@ struct NotificationsSettings: View {
                 .settingsAnchor("notifications.keyboard")
                 .disabled(!model.settings.replaceSystemHUD)
             } header: {
-                Text("HUDs")
+                Text("Volume and brightness")
             } footer: {
-                SettingsFooter("A HUD shows a level for a moment when you change it. The keys still work with one switched off.")
+                SettingsFooter("A level shows for a moment when you change it. The keys still work with one switched off.")
             }
             Section {
                 Toggle(isOn: $model.settings.batteryEnabled) {
@@ -395,7 +395,7 @@ struct NotificationsSettings: View {
         case .white: return "Like the rest of the closed island."
         case .accent:
             return model.settings.accentColor == "auto"
-                ? "The playing artwork's colour, or your Mac's accent colour."
+                ? "The playing artwork’s colour, or your Mac’s accent colour."
                 : "The accent colour from Appearance."
         case .colourful: return "Volume green, brightness yellow, keyboard light blue, microphone orange."
         }

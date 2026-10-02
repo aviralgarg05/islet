@@ -18,7 +18,7 @@ public enum SettingsPage: String, CaseIterable, Sendable, Identifiable {
         case .liveActivities: return "Live Activities"
         case .calendar: return "Calendar & Reminders"
         case .timers: return "Timers"
-        case .notifications: return "Notifications & HUDs"
+        case .notifications: return "Notifications & Levels"
         case .shelf: return "Shelf & Clipboard"
         case .downloads: return "Downloads"
         case .ai: return "Ask & AI"
@@ -37,9 +37,9 @@ public enum SettingsPage: String, CaseIterable, Sendable, Identifiable {
         case .general: return "Where the island shows, and how it opens and closes."
         case .appearance: return "How the island looks and moves."
         case .shortcuts: return "Keys that work from any app."
-        case .nowPlaying: return "What's playing in Music, Spotify, your browser and other apps, with controls."
+        case .nowPlaying: return "What’s playing in Music, Spotify, your browser and other apps, with controls."
         case .liveActivities: return "Rides, deliveries, scores and flights from your iPhone, in the island."
-        case .calendar: return "Your next event with a Join button, and today's reminders."
+        case .calendar: return "Your next event with a Join button, and today’s reminders."
         case .timers: return "Timers and Pomodoro rounds that ring in the island."
         case .notifications: return "Notifications, volume, brightness, battery, calls, camera and microphone."
         case .shelf: return "Keep files handy, share them, and find what you copied."
@@ -230,12 +230,12 @@ public enum SettingsIndex {
         SettingsEntry("general.login", .general, "Launch at login", section: "Behaviour", keywords: ["startup", "login items", "start automatically", "move to Applications", "Downloads"]),
         SettingsEntry("general.open", .general, "Open the island", section: "Behaviour", keywords: ["hover", "click"]),
         SettingsEntry("general.hoverDelay", .general, "Hover delay", section: "Behaviour", keywords: ["open delay", "wait"], anchor: "general.open"),
-        SettingsEntry("general.peekOnHover", .general, "Peek at what's playing", section: "Behaviour",
+        SettingsEntry("general.peekOnHover", .general, "Peek at what’s playing", section: "Behaviour",
                       keywords: ["hover", "quick peek", "song", "music", "point", "click"], anchor: "general.open"),
         SettingsEntry("general.closeDelay", .general, "Close delay", section: "Behaviour", keywords: ["collapse", "dismiss", "wait"]),
         SettingsEntry("general.display", .general, "Show the island on", section: "Placement", keywords: ["display", "screen", "monitor", "external", "notched"]),
         SettingsEntry("general.nonNotch", .general, "On displays without a notch", section: "Placement",
-                      keywords: ["external", "monitor", "pill", "floating", "notch shape", "only on hover", "hidden", "don't show"]),
+                      keywords: ["external", "monitor", "pill", "floating", "notch shape", "only on hover", "hidden", "don’t show"]),
         SettingsEntry("general.fullscreen", .general, "In full screen", section: "Placement",
                       keywords: ["fullscreen", "games", "video", "hide music", "keep showing", "hide everything"]),
         SettingsEntry("general.capture", .general, "Hide from screenshots", section: "Placement",
@@ -383,19 +383,19 @@ public enum SettingsIndex {
                       keywords: ["banner", "sneak", "below the notch"]),
         SettingsEntry("notifications.welcome", .notifications, "Welcome back summary when you unlock", section: "Notifications",
                       keywords: ["unlock", "lock screen"]),
-        SettingsEntry("notifications.volume", .notifications, "Volume", section: "HUDs", keywords: ["HUD", "sound", "level"]),
-        SettingsEntry("notifications.brightness", .notifications, "Display brightness", section: "HUDs", keywords: ["HUD", "screen", "level"]),
-        SettingsEntry("notifications.outputCard", .notifications, "Sound output changes", section: "HUDs",
-                      keywords: ["AirPods", "headphones", "speaker", "connected", "audio device"]),
-        SettingsEntry("notifications.keyboard", .notifications, "Keyboard brightness", section: "HUDs", keywords: ["HUD", "backlight", "keys"]),
-        SettingsEntry("notifications.microphone", .notifications, "Microphone", section: "HUDs", keywords: ["HUD", "mic", "mute", "unmute"]),
-        SettingsEntry("notifications.hudStyle", .notifications, "HUD style", section: "HUDs",
-                      keywords: ["compact", "detailed", "percentage", "look"]),
-        SettingsEntry("notifications.hudColour", .notifications, "HUD colour", section: "HUDs",
+        SettingsEntry("notifications.volume", .notifications, "Volume", section: "Volume and brightness", keywords: ["HUD", "sound", "level"]),
+        SettingsEntry("notifications.brightness", .notifications, "Display brightness", section: "Volume and brightness", keywords: ["HUD", "screen", "level"]),
+        SettingsEntry("notifications.outputCard", .notifications, "Sound output changes", section: "Volume and brightness",
+                      keywords: ["HUD", "AirPods", "headphones", "speaker", "connected", "audio device"]),
+        SettingsEntry("notifications.keyboard", .notifications, "Keyboard brightness", section: "Volume and brightness", keywords: ["HUD", "backlight", "keys"]),
+        SettingsEntry("notifications.microphone", .notifications, "Microphone", section: "Volume and brightness", keywords: ["HUD", "mic", "mute", "unmute"]),
+        SettingsEntry("notifications.hudStyle", .notifications, "Volume and brightness style", section: "Volume and brightness",
+                      keywords: ["HUD", "compact", "detailed", "percentage", "look"]),
+        SettingsEntry("notifications.hudColour", .notifications, "Volume and brightness colour", section: "Volume and brightness",
                       keywords: ["HUD", "color", "colourful", "green", "yellow", "accent", "tint", "keyboard"]),
-        SettingsEntry("notifications.hudDuration", .notifications, "Stays on screen for", section: "HUDs",
+        SettingsEntry("notifications.hudDuration", .notifications, "Stays on screen for", section: "Volume and brightness",
                       keywords: ["HUD", "duration", "seconds"]),
-        SettingsEntry("notifications.replaceHUD", .notifications, "Replace the system volume and brightness display", section: "HUDs",
+        SettingsEntry("notifications.replaceHUD", .notifications, "Replace the system volume and brightness display", section: "Volume and brightness",
                       keywords: ["HUD", "keys", "overlay", "accessibility", "two HUDs", "shows twice", "only one HUD", "double"]),
         SettingsEntry("notifications.battery", .notifications, "Battery and charging", section: "Battery", keywords: ["power", "charger", "plugged in"]),
         SettingsEntry("notifications.batteryLow", .notifications, "Low battery warning", section: "Battery", keywords: ["percent"],
@@ -469,7 +469,7 @@ public enum SettingsIndex {
                                  "feet", "kilograms", "Celsius", "miles"]),
         SettingsEntry("tools.emoji", .tools, "Emoji", section: "Converter and emoji",
                       keywords: ["emoticon", "smiley", "symbols", "picker", "search"]),
-        SettingsEntry("tools.emojiTypes", .tools, "Type emoji where you're typing", section: "Converter and emoji",
+        SettingsEntry("tools.emojiTypes", .tools, "Type emoji where you’re typing", section: "Converter and emoji",
                       keywords: ["insert", "emoji", "Accessibility"], anchor: "tools.emoji"),
 
         SettingsEntry("tools.mirror", .tools, "Camera mirror", section: "Mirror",
@@ -501,7 +501,7 @@ public enum SettingsIndex {
         SettingsEntry("apps.tint", .apps, "App colour", keywords: ["color", "tint", "per-app", "custom", "any colour", "colour panel"], anchor: "apps.add"),
         SettingsEntry("apps.hide", .apps, "Hide the island while an app is in front", keywords: ["per-app", "frontmost"], anchor: "apps.add"),
         SettingsEntry("apps.fullscreen", .apps, "Keep the island in full screen", keywords: ["per-app", "fullscreen", "games"], anchor: "apps.add"),
-        SettingsEntry("apps.mute", .apps, "Mute an app's notifications and calls", keywords: ["per-app", "silence", "microphone"], anchor: "apps.add"),
+        SettingsEntry("apps.mute", .apps, "Mute an app’s notifications and calls", keywords: ["per-app", "silence", "microphone"], anchor: "apps.add"),
         SettingsEntry("apps.muted", .apps, "Muted", keywords: ["unmute", "silenced", "right-click", "sources"]),
         SettingsEntry("apps.priority", .apps, "App priority", keywords: ["per-app", "urgent", "rank", "order", "first"], anchor: "apps.add"),
     ] + PermissionKind.allCases.map { kind in

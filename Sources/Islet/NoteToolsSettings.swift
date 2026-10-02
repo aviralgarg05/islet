@@ -43,7 +43,7 @@ struct NoteToolsSettingsSections: View {
             .settingsAnchor("tools.emoji")
             if model.settings.emojiEnabled {
                 Toggle(isOn: $model.settings.emojiTypes) {
-                    Text("Type emoji where you're typing")
+                    Text("Type emoji where you’re typing")
                     Text("A click types the emoji into the app you were typing in, instead of copying it. macOS asks once to let Islet do this.")
                 }
                 .settingsAnchor("tools.emojiTypes")

@@ -781,7 +781,7 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         #expect(on27.hasPrefix("Called Device Control and Data Access in System Settings."))
         #expect(PermissionKind.accessibility.note(osMajor: 27, status: .denied)?.contains("Remove Islet with the minus button") == true)
         #expect(PermissionKind.camera.note(osMajor: 27) == nil)
-        // The setting it names is the one on the Notifications & HUDs page.
+        // The setting it names is the one on the Notifications & Levels page.
         #expect(on26.contains("Replace the system volume and brightness display"))
         // Full screen is confirmed through Accessibility too (`FullscreenDetector`).
         #expect(on26.contains("whether a window is in full screen"))

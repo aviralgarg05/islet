@@ -568,7 +568,7 @@ public struct IsletSettings: Codable, Equatable, Sendable {
         return standard + (round - standard) * (v - mid) / (Self.artworkCornerRange.upperBound - mid)
     }
 
-    /// Whether a HUD of `kind` shows (Settings → Notifications & HUDs). The keys still do
+    /// Whether a HUD of `kind` shows (Settings → Notifications & Levels). The keys still do
     /// their job when it doesn't.
     public func showsHUD(_ kind: HUDKind) -> Bool {
         switch kind {

@@ -37,7 +37,7 @@ struct GeneralSettings: View {
                                    step: 0.05, format: SettingsSlider.seconds)
                 } else {
                     Toggle(isOn: $model.settings.peekOnHover) {
-                        Text("Peek at what's playing")
+                        Text("Peek at what’s playing")
                         Text("While the pointer rests on the notch, the island shows the song without opening.")
                     }
                     .settingsAnchor("general.peekOnHover")
@@ -57,7 +57,7 @@ struct GeneralSettings: View {
                     Text("Floating pill").tag(NotchlessStyle.pill)
                     Text("Notch shape").tag(NotchlessStyle.notch)
                     Text("Only on hover").tag(NotchlessStyle.hover)
-                    Text("Don't show").tag(NotchlessStyle.hidden)
+                    Text("Don’t show").tag(NotchlessStyle.hidden)
                 } label: {
                     Text("On displays without a notch")
                     Text(Self.notchlessDetail(model.settings.notchlessStyle))
@@ -74,7 +74,7 @@ struct GeneralSettings: View {
                 .settingsAnchor("general.fullscreen")
                 Toggle(isOn: $model.settings.hideFromScreenCapture) {
                     Text("Hide from screenshots")
-                    Text("Some screen-sharing and recording apps still show it. The island's glass turns solid while this is on.")
+                    Text("Some screen-sharing and recording apps still show it. The island’s glass turns solid while this is on.")
                 }
                 .settingsAnchor("general.capture")
             }
@@ -91,8 +91,8 @@ struct GeneralSettings: View {
 extension GeneralSettings {
     static func notchlessDetail(_ style: NotchlessStyle) -> String {
         switch style {
-        case .pill: return "A pill floating in the menu bar, clear of the screen's edge."
-        case .notch: return "A notch drawn at the top edge, like a MacBook's."
+        case .pill: return "A pill floating in the menu bar, clear of the screen’s edge."
+        case .notch: return "A notch drawn at the top edge, like a MacBook’s."
         case .hover: return "Nothing until the pointer reaches the top edge, then the pill."
         case .hidden: return "The island shows only on a display with a notch."
         }
@@ -101,8 +101,8 @@ extension GeneralSettings {
     static func fullscreenDetail(_ behaviour: FullscreenBehaviour) -> String {
         switch behaviour {
         case .show: return "The island stays over full screen apps."
-        case .hideMusic: return "What\u{2019}s playing goes; timers, activities and HUDs stay. On the Apps page, pick apps that keep everything."
-        case .hide: return "Only HUDs and urgent alerts show. On the Apps page, pick apps that keep the island."
+        case .hideMusic: return "What\u{2019}s playing goes; timers, activities, volume and brightness stay. On the Apps page, pick apps that keep everything."
+        case .hide: return "Only volume, brightness and urgent alerts show. On the Apps page, pick apps that keep the island."
         }
     }
 }
@@ -166,7 +166,7 @@ struct AppearanceSettings: View {
                     .settingsAnchor("appearance.rounded")
                 Toggle(isOn: $model.settings.smartIcons) {
                     Text("Smart icons and colours for activities")
-                    Text("Picks an icon and colour for activities that don't bring their own.")
+                    Text("Picks an icon and colour for activities that don’t bring their own.")
                 }
                 .settingsAnchor("appearance.smartIcons")
             }
@@ -208,7 +208,7 @@ struct AppearanceSettings: View {
                                ? "The island sits beside the notch and shrinks to the free space in the menu bar, down to an icon each side. The wing width is the most it takes."
                                : "The island sits beside the notch at the wing width, even if that covers menu bar icons near the notch.")
             }
-            Section("Motion") {
+            Section {
                 Picker("Animation", selection: $model.settings.animationStyle) {
                     Text("Fluid").tag(AnimationStyle.fluid)
                     Text("Snappy").tag(AnimationStyle.snappy)
@@ -242,6 +242,11 @@ struct AppearanceSettings: View {
                 SettingsSlider(title: "New activities stay open for", value: $model.settings.alertDuration,
                                range: IsletSettings.alertDurationRange, step: 0.5, format: SettingsSlider.seconds)
                     .settingsAnchor("appearance.alertDuration")
+            } header: {
+                Text("Motion")
+            } footer: {
+                // Said here, so a still playing indicator doesn't look broken.
+                SettingsFooter("Reduce motion and Animation Off also calm the playing indicator, stickers and spinners.")
             }
             Section("Several at once") {
                 Picker("Activities shown together", selection: $model.settings.maxConcurrent) {
@@ -269,7 +274,7 @@ struct AppearanceSettings: View {
                     }
                 } label: {
                     Text("Artwork corners")
-                    Text("Beside the notch, in a new song's peek and in the open island.")
+                    Text("Beside the notch, in a new song’s peek and in the open island.")
                 }
                 .settingsAnchor("appearance.artworkCorners")
                 LabeledContent("Playing indicator") {
@@ -286,10 +291,10 @@ struct AppearanceSettings: View {
                         .disabled(s.resettingAppearance() == s)
                 } label: {
                     Text("Back to the original look")
-                    Text("Theme, colours, sizes, motion and the music's look. Fit to the notch stays as it is.")
+                    Text("Theme, colours, sizes, motion and the music’s look. Fit to the notch stays as it is.")
                 }
                 .settingsAnchor("appearance.reset")
-                .confirmationDialog("Reset the island's appearance?", isPresented: $confirmingReset) {
+                .confirmationDialog("Reset the island’s appearance?", isPresented: $confirmingReset) {
                     Button("Reset appearance", role: .destructive) {
                         model.settings = model.settings.resettingAppearance()
                     }
@@ -305,7 +310,8 @@ struct AppearanceSettings: View {
     }
 
     static func indicatorSummary(_ s: IsletSettings) -> String {
-        guard s.visualiserStyle != .off else { return "Off" }
+        // The same word as the look's tile on Now Playing.
+        guard s.visualiserStyle != .off else { return IndicatorStylePicker.name(.off) }
         // A sticker keeps its own colours.
         if s.visualiserStyle == .gif { return "Sticker" }
         let style = IndicatorStylePicker.name(s.visualiserStyle)
@@ -783,7 +789,7 @@ private struct NotchFitRows: View {
             }
         } label: {
             Text("Fit to the notch")
-            Text("If the island's edges don't meet the notch's, move them here.")
+            Text("If the island’s edges don’t meet the notch’s, move them here.")
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: toggle)
@@ -915,7 +921,7 @@ struct AppRulesSettings: View {
                 // What "Mute" in the island's right-click menu silenced, so it can be heard again.
                 if !model.settings.mutedSources.isEmpty {
                     Section("Muted") {
-                        Text("Muted from the island's right-click menu. Unmute one to see its activities again.")
+                        Text("Muted from the island’s right-click menu. Unmute one to see its activities again.")
                             .font(.callout).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .settingsAnchor("apps.muted")
@@ -1054,7 +1060,7 @@ struct AppRuleRow: View {
     /// Where the app's activities and notifications rank when several want the island.
     private var priorityPicker: some View {
         Picker("Priority", selection: Binding(get: { rule.priority }, set: { rule.priority = $0 })) {
-            Text("Usual priority").tag(ActivityPriority?.none)
+            Text("As the app asks").tag(ActivityPriority?.none)
             Divider()
             Text("Low priority").tag(ActivityPriority?.some(.low))
             Text("Normal priority").tag(ActivityPriority?.some(.normal))
@@ -1117,7 +1123,7 @@ struct AboutSettings: View {
                     Button("Quit Islet") { NSApp.terminate(nil) }
                 } label: {
                     Text("Quit")
-                    Text("Also in the island's right-click menu and its More menu.")
+                    Text("Also in the island’s right-click menu and its More menu.")
                 }
                 .settingsAnchor("about.quit")
             }

@@ -36,7 +36,7 @@ struct GestureSettingsSection: View {
     }
 }
 
-/// Settings → Notifications & HUDs → Battery: when to warn.
+/// Settings → Notifications & Levels → Battery: when to warn.
 struct BatteryAlertRows: View {
     @Bindable var model: AppModel
 
