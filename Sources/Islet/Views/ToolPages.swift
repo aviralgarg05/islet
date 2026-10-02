@@ -520,13 +520,20 @@ struct ToolUsageGlance: View {
                 .lineLimit(1)
         } detail: {
             if let fraction = card.fraction {
-                LevelBar(value: fraction, tint: fraction >= 0.9 ? Color(tint: "red") : tint, height: 4)
-                    .padding(.top, Space.xs)
-                    .help(card.detail ?? "")
+                VStack(alignment: .leading, spacing: Space.xs) {
+                    // Ends where Claude's and Codex's bars end, short of their percentages.
+                    LevelBar(value: fraction, tint: fraction >= 0.9 ? Color(tint: "red") : tint, height: 4)
+                        .padding(.trailing, Self.barReserve)
+                    if let detail = card.detail { Text(detail) }
+                }
+                .padding(.top, Space.xs)
             } else {
                 Text(card.detail ?? " ")
             }
         }
         .accessibilityElement(children: .combine)
     }
+
+    /// The room `UsageWindowRow` keeps after its bar for the percentage.
+    static let barReserve: CGFloat = 32 + Space.s
 }

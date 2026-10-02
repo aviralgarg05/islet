@@ -152,9 +152,12 @@ struct HomePlan {
         /// About how tall the glance is, to show only what fits without scrolling.
         var height: CGFloat {
             switch self {
-            case .usage(let u): return 18 + CGFloat(u.windows.count) * 16
+            // The name's row, then a row of 12 for each window, 4 apart.
+            case .usage(let u): return 16 + CGFloat(u.windows.count) * 16
             case .claudeHint(.offer): return 24
             case .claudeHint(.waiting): return 48
+            // The name's row, the bar and a line under it.
+            case .toolUsage(let c) where c.fraction != nil && c.detail != nil: return 44
             default: return 32
             }
         }

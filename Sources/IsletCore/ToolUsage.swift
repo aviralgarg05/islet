@@ -220,7 +220,7 @@ public enum CopilotUsage {
 
     public static func card(used: Double, plan: CopilotPlan, now: Date) -> ToolUsageCard {
         let count = Int(used.rounded())
-        return ToolUsageCard(source: .copilot, headline: "\(count) of \(plan.rawValue)", detail: "premium requests this month",
+        return ToolUsageCard(source: .copilot, headline: "\(count) of \(plan.rawValue) requests", detail: "Premium, this month",
                              fraction: used / Double(plan.rawValue), updatedAt: now)
     }
 }

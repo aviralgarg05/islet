@@ -170,7 +170,8 @@ import Testing
         """
         #expect(try CopilotUsage.requestsUsed(Data(json.utf8)) == 142)
         let card = CopilotUsage.card(used: 142, plan: .pro, now: now)
-        #expect(card.headline == "142 of 300" && card.detail == "premium requests this month")
+        // The figure says what it counts; the line under the bar says which and when.
+        #expect(card.headline == "142 of 300 requests" && card.detail == "Premium, this month")
         #expect(abs((card.fraction ?? 0) - 142.0 / 300) < 0.0001)
         #expect(CopilotUsage.card(used: 400, plan: .pro, now: now).fraction == 1)
     }
