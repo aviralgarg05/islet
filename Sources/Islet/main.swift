@@ -232,6 +232,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// - Parameter force: make the panels again even when the displays look the same (after
     ///   waking, when a panel may no longer draw though nothing about the display changed).
     private func rebuildPanels(force: Bool = false) {
+        // The built-in display may have come online (the lid opened without sleeping): its
+        // brightness is watched from now on. Nothing happens once it is.
+        if model.sessionActive, model.settings.brightnessHUDEnabled { brightness.start() }
         let screens = targetScreens()
         let wanted = screens.map(IslandWindowController.describe)
         guard DisplayPolicy.needsRebuild(current: controllers.map(\.descriptor), wanted: wanted, force: force) else {
