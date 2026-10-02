@@ -289,7 +289,8 @@ extension AppModel {
         let left = settings.bubblePlacement == .left
         let fit = IslandLayout.bubblesThatFit(all.items.count, slack: left ? placement.leftSlack : placement.rightSlack,
                                               diameter: metrics.notch.height)
-        guard fit < all.items.count else { return (all, 0) }
+        // Every activity without a bubble is counted once, in the wing: those past "Show up to"
+        // as well as those the row has no room for.
         return (BubbleSet(items: Array(all.items.prefix(fit)), overflow: 0), all.items.count - fit + all.overflow)
     }
 
@@ -450,9 +451,12 @@ struct IslandView: View {
                         bubbleViews(slots, diameter: bp.diameter, top: bp.top, geometry: g, shift: shift)
                     }
                     .fixedSize()
-                    // The row's inner edge sits one gap outside the island's edge.
+                    // The row's inner edge sits one gap outside the island's body, measured from
+                    // its side rather than from the flare at the top of the screen, so the first
+                    // bubble is as far from the island as the next is from it.
                     .alignmentGuide(left ? HorizontalAlignment.leading : HorizontalAlignment.trailing) { d in
-                        left ? d[HorizontalAlignment.trailing] + IslandLayout.bubbleGap : d[HorizontalAlignment.leading] - IslandLayout.bubbleGap
+                        left ? d[HorizontalAlignment.trailing] + IslandLayout.bubbleGap - g.top
+                             : d[HorizontalAlignment.leading] - IslandLayout.bubbleGap + g.top
                     }
                 }
             switcher(p)
@@ -646,7 +650,6 @@ struct IslandView: View {
     struct BubbleSlot: Identifiable {
         var bubble: IslandBubble
         var index: Int
-        var overflow: Int
         /// It buds from, and is absorbed into, the bubble nearer the island rather than the
         /// island itself (that bubble stays put while it moves).
         var fromNeighbour = false
@@ -684,7 +687,7 @@ struct IslandView: View {
         for (i, b) in items.enumerated() {
             let arriving = !had.contains(b.key), leaving = !has.contains(b.key)
             let neighbourLeaving = i > 0 && !has.contains(items[i - 1].key)
-            var slot = BubbleSlot(bubble: b, index: i, overflow: b == drawn.items.last ? drawn.overflow : 0)
+            var slot = BubbleSlot(bubble: b, index: i)
             slot.fromNeighbour = i > 0 && !neighbourLeaving
             slot.delay = closingDelay + Double(arrivingNearer) * Self.budStagger * k
             slot.fades = reshaping
@@ -714,10 +717,11 @@ struct IslandView: View {
         let seeThrough = closedGlass && model.settings.theme == .glass
         let cap = metrics.floats ? GooCap(top: diameter / 2, bottom: diameter / 2, seeThrough: seeThrough)
                                  : GooCap(top: 0, bottom: min(g.bottom, diameter / 2), seeThrough: seeThrough)
-        // Nearest the island first on both sides, so the farthest bubble carries the "+N".
+        // Nearest the island first on both sides. Activities without a bubble are counted in
+        // the island's wing ("+2"), never on a bubble.
         ForEach(left ? Array(slots.reversed()) : slots) { slot in
             let goo = gooShape(slot, diameter: diameter, geometry: g, left: left, cap: cap)
-            BubbleView(bubble: slot.bubble, model: model, diameter: diameter, overflow: slot.overflow)
+            BubbleView(bubble: slot.bubble, model: model, diameter: diameter, glass: seeThrough)
                 .modifier(frozenGoo(slot, shape: goo))
                 .modifier(CrossMorph(progress: 1 - (slot.fade ?? 0)))
                 // Fading with the shell, it stays where it was while the island grows away from
@@ -734,7 +738,7 @@ struct IslandView: View {
                         Button("Mute “\(AppModel.mutedName(a.source))”") { model.mute(source: a.source) }
                     }
                 }
-                .spokenButton(slot.bubble.spokenLabel(overflow: slot.overflow), value: slot.bubble.spokenValue,
+                .spokenButton(slot.bubble.spokenLabel, value: slot.bubble.spokenValue,
                               hint: "Opens the island") { model.setExpanded(display) }
                 .modifier(DismissAction(activity: slot.bubble.activity, model: model))
                 // A bubble on its way out is gone as far as VoiceOver is concerned.
@@ -742,12 +746,12 @@ struct IslandView: View {
         }
     }
 
-    /// Where a bubble's goo runs: from the island's side (inside its top flare) or from the
+    /// Where a bubble's goo runs: from the island's side (below its top flare) or from the
     /// edge of the bubble nearer the island, out to the bubble's resting centre.
     private func gooShape(_ slot: BubbleSlot, diameter: CGFloat, geometry g: IslandGeometry, left: Bool, cap: GooCap) -> GooBud {
         let gap = IslandLayout.bubbleGap
         let rest = slot.fromNeighbour ? gap + diameter / 2
-            : g.top + gap + CGFloat(slot.index) * (diameter + gap) + diameter / 2
+            : gap + CGFloat(slot.index) * (diameter + gap) + diameter / 2
         return GooBud(progress: 1, kind: .split, diameter: diameter, rest: rest, left: left,
                       anchor: slot.fromNeighbour ? .bubble : .island(cap))
     }
@@ -932,46 +936,72 @@ struct BubbleView: View {
     let bubble: IslandBubble
     let model: AppModel
     let diameter: CGFloat
-    var overflow = 0
+    /// The island beside it is see-through glass (a display without a notch), so the bubble is too.
+    var glass = false
     @Environment(\.islandMotion) private var motion
     @Environment(\.colorSchemeContrast) private var contrast
 
+    /// What sits inside a bubble, in proportion to it, so the notch's bubble and the smaller
+    /// pill's bubble look the same: a ring with clear space inside, a glyph in the ring, a
+    /// glyph on its own, artwork.
+    struct Sizes: Equatable {
+        var ring: CGFloat
+        var line: CGFloat
+        var ringed: CGFloat
+        var plain: CGFloat
+        var appIcon: CGFloat
+
+        init(diameter d: CGFloat) {
+            ring = d * 0.8
+            line = max(1.5, d * 0.07)
+            ringed = d * 0.44
+            plain = d * 0.6
+            appIcon = d * 0.62
+        }
+    }
+
     var body: some View {
+        let s = Sizes(diameter: diameter)
         ZStack {
-            Circle().fill(Color.black)
-            // Increase Contrast edges a bubble as it does the island (`IslandOutline`).
+            if glass {
+                // The same glass and smoke as the pill beside it.
+                GlassSurface(shape: Circle(), tint: Color.black.opacity(0.2), fallback: Color(white: 0.13).opacity(0.78))
+                Circle().fill(Color.black.opacity(GlassMelt.smokeFloor))
+            } else {
+                Circle().fill(Color.black)
+            }
+            // Increase Contrast or "Subtle outline" edges a bubble as it does the island.
             if contrast == .increased {
                 Circle().strokeBorder(IslandOutline.increasedEdge, lineWidth: IslandOutline.increasedWidth)
+            } else if model.settings.outline {
+                Circle().strokeBorder(IslandOutline.edge, lineWidth: IslandOutline.width)
             }
             switch bubble {
             case .media(let np):
-                TrackArtwork(media: np, size: diameter - 8, corner: (diameter - 8) / 2)
-                    .opacity(np.isPlaying ? 1 : PausedLook.artworkOpacity)
-                    .animation(motion == .off ? nil : .easeInOut(duration: PausedLook.fade), value: np.isPlaying)
+                Group {
+                    if np.artworkData == nil, np.artworkURL == nil, let bundle = np.bundleID, AppIconView.isInstalled(bundle) {
+                        // No artwork: the player's own icon, which carries its own shape.
+                        AppIconView(bundleID: bundle, size: s.appIcon)
+                    } else {
+                        TrackArtwork(media: np, size: s.ring, corner: s.ring / 2)
+                    }
+                }
+                .opacity(np.isPlaying ? 1 : PausedLook.artworkOpacity)
+                .animation(motion == .off ? nil : .easeInOut(duration: PausedLook.fade), value: np.isPlaying)
             case .activity(let a):
                 if model.visualTemplate(for: a) != nil {
                     TemplateBubble(activity: a, model: model, diameter: diameter)
                 } else if a.clampedProgress != nil, a.endsAt == nil, a.startedAt == nil {
                     // A ring only for real progress; a bubble that is just "working" stays a clean icon.
-                    ProgressRing(progress: a.clampedProgress, tint: model.tint(for: a), size: diameter - 8, lineWidth: 2.2)
+                    ProgressRing(progress: a.clampedProgress, tint: model.tint(for: a), size: s.ring, lineWidth: s.line)
                         .spokenValue(SpokenText.value(a, now: Date()))
-                    IconView(icon: model.icon(for: a), size: diameter - 17, tint: model.tint(for: a))
+                    IconView(icon: model.icon(for: a), size: s.ringed, tint: model.tint(for: a))
                 } else {
-                    IconView(icon: model.icon(for: a), size: diameter - 13, tint: model.tint(for: a))
+                    IconView(icon: model.icon(for: a), size: s.plain, tint: model.tint(for: a))
                 }
             }
         }
         .frame(width: diameter, height: diameter)
-        .overlay(alignment: .bottomTrailing) {
-            if overflow > 0 {
-                Text("+\(overflow)")
-                    .font(.system(size: 8, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.black)
-                    .padding(.horizontal, 3)
-                    .background(Capsule().fill(Color.white))
-                    .offset(x: 3, y: 2)
-            }
-        }
         .contentShape(Circle())
     }
 }

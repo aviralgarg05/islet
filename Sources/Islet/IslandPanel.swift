@@ -177,8 +177,11 @@ final class IslandWindowController {
         if !bubbles.items.isEmpty {
             let left = model.settings.bubblePlacement == .left
             let bp = IslandLayout.bubblePlacement(metrics: metrics, placement: placement, count: bubbles.items.count, left: left)
-            let span = CGFloat(bubbles.items.count) * (bp.diameter + IslandLayout.bubbleGap)
-            let x = left ? midX - g.outerWidth / 2 - span : midX + g.outerWidth / 2
+            // From one gap outside the island's body (not its top flare) to the last bubble.
+            let n = CGFloat(bubbles.items.count)
+            let span = n * bp.diameter + (n - 1) * IslandLayout.bubbleGap
+            let edge = g.size.width / 2 + IslandLayout.bubbleGap
+            let x = left ? midX - edge - span : midX + edge
             rects.append(CGRect(x: x, y: top - bp.top - bp.diameter, width: span, height: bp.diameter))
         }
         return rects

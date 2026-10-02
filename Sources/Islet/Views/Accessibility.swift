@@ -120,14 +120,12 @@ extension AppModel {
 }
 
 extension IslandBubble {
-    /// "Release build", with how many more are hidden behind the last bubble.
-    func spokenLabel(overflow: Int) -> String {
-        let label: String
+    /// "Release build". How many more there are is the island's to say: its wing counts them.
+    var spokenLabel: String {
         switch self {
-        case .media(let np): label = SpokenText.media(np)
-        case .activity(let a): label = SpokenText.label(a)
+        case .media(let np): return SpokenText.media(np)
+        case .activity(let a): return SpokenText.label(a)
         }
-        return label + (overflow > 0 ? ", \(overflow) more" : "")
     }
 
     /// Media says whether it plays; an activity's value comes from the bubble's drawing.

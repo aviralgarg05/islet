@@ -815,26 +815,27 @@ struct TemplateBubble: View {
         let a = activity
         let tint = model.tint(for: a)
         let motion = TemplateMotion(model, systemReduceMotion: reduceMotion)
-        let ring = diameter - 8
-        let glyph = diameter - 17
-        let plain = IconView(icon: model.icon(for: a), size: diameter - 13, tint: tint)
+        let sizes = BubbleView.Sizes(diameter: diameter)
+        let ring = sizes.ring, line = sizes.line
+        let glyph = sizes.ringed
+        let plain = IconView(icon: model.icon(for: a), size: sizes.plain, tint: tint)
         TemplateClock(activity: a, speaks: true) { now in
             let text = a.minimalText(now: now)
             switch model.visualTemplate(for: a) {
             case .eta? where a.trackProgress(now: now) != nil:
                 ZStack {
-                    ProgressRing(progress: a.trackProgress(now: now), tint: tint, size: ring, lineWidth: 2.2)
+                    ProgressRing(progress: a.trackProgress(now: now), tint: tint, size: ring, lineWidth: line)
                         .animation(motion.value, value: a.trackProgress(now: now))
                     if let text { label(text, color: .white) } else { IconView(icon: a.trackerIcon ?? model.icon(for: a), size: glyph, tint: tint) }
                 }
             case .stages? where a.stageCount != nil:
                 ZStack {
-                    ProgressRing(progress: stageFraction(a), tint: tint, size: ring, lineWidth: 2.2)
+                    ProgressRing(progress: stageFraction(a), tint: tint, size: ring, lineWidth: line)
                     IconView(icon: a.currentStageSymbol ?? model.icon(for: a), size: glyph, tint: tint)
                 }
             case .flight? where a.flight != nil:
                 ZStack {
-                    ProgressRing(progress: a.flight?.progress(now: now) ?? 0, tint: tint, size: ring, lineWidth: 2.2)
+                    ProgressRing(progress: a.flight?.progress(now: now) ?? 0, tint: tint, size: ring, lineWidth: line)
                     Image(systemName: "airplane").font(.system(size: glyph * 0.8, weight: .semibold)).foregroundStyle(tint)
                 }
             case .route?:
@@ -855,13 +856,13 @@ struct TemplateBubble: View {
                 }
             case .timer? where a.endsAt != nil || a.startedAt != nil:
                 ZStack {
-                    TimerRing(activity: a, tint: tint, size: ring, lineWidth: 2.2, motion: motion)
+                    TimerRing(activity: a, tint: tint, size: ring, lineWidth: line, motion: motion)
                     if let text { label(text, color: .white) }
                 }
             case .workout?:
                 if let end = a.endsAt, end > now {
                     ZStack {
-                        TimerRing(activity: a, tint: tint, size: ring, lineWidth: 2.2, motion: motion)
+                        TimerRing(activity: a, tint: tint, size: ring, lineWidth: line, motion: motion)
                         if let text { label(text, color: .white) }
                     }
                 } else if let text {
@@ -870,7 +871,7 @@ struct TemplateBubble: View {
                     plain
                 }
             case .gauge? where a.clampedProgress != nil:
-                GaugeRing(level: a.clampedProgress, tint: tint, size: ring, lineWidth: 2.2, animation: motion.value)
+                GaugeRing(level: a.clampedProgress, tint: tint, size: ring, lineWidth: line, animation: motion.value)
             case .liveAudio?:
                 if let text {
                     label(text, color: tint)
@@ -878,7 +879,7 @@ struct TemplateBubble: View {
                     VoiceWave(tint: tint, active: a.state == .running && motion.perpetual, width: diameter * 0.5, height: diameter * 0.4)
                 }
             case .agent?:
-                IconView(icon: model.icon(for: a), size: diameter - 13, tint: tint)
+                IconView(icon: model.icon(for: a), size: sizes.plain, tint: tint)
                     .overlay(alignment: .bottomTrailing) {
                         Circle().fill(stateColor(a.state, tint: tint)).frame(width: 6, height: 6)
                             .overlay(Circle().stroke(Color.black, lineWidth: 1.2))
