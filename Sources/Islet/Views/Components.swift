@@ -542,18 +542,54 @@ extension CAAnimation {
     }
 }
 
-/// A scroll view that only scrolls when it has to, and never in snapshot mode.
+/// A scroll view that only scrolls when it has to, and never in snapshot mode. When it has more
+/// than fits, its far edge fades out, so the cut-off row reads as "more below" rather than as
+/// content the island's edge has sliced through; the end can scroll clear of the fade.
 struct AdaptiveScroll<Content: View>: View {
     var axis: Axis.Set = .vertical
     var scrolls: Bool = true
     @ViewBuilder var content: Content
     @Environment(\.snapshotMode) private var snapshotMode
 
+    /// How far the fade reaches in from the edge.
+    static var fade: CGFloat { Space.m }
+
     var body: some View {
-        if scrolls && !snapshotMode {
-            ScrollView(axis, showsIndicators: false) { content }
+        let horizontal = axis == .horizontal
+        Group {
+            if scrolls && !snapshotMode {
+                ScrollView(axis, showsIndicators: false) {
+                    content.padding(horizontal ? .trailing : .bottom, Self.fade)
+                }
+            } else if scrolls {
+                // A snapshot shows it as the scroll view would, scrolled to the top.
+                Color.clear
+                    .overlay(alignment: .topLeading) { content.fixedSize(horizontal: horizontal, vertical: !horizontal) }
+                    .clipped()
+            } else {
+                content
+            }
+        }
+        .mask { OverflowFade(on: scrolls, horizontal: horizontal, length: Self.fade) }
+    }
+}
+
+/// Opaque, with the last `length` points at the far edge fading to clear while `on`.
+private struct OverflowFade: View {
+    let on: Bool
+    let horizontal: Bool
+    let length: CGFloat
+
+    var body: some View {
+        let edge = LinearGradient(colors: [.black, .black.opacity(0)], startPoint: horizontal ? .leading : .top,
+                                  endPoint: horizontal ? .trailing : .bottom)
+            .frame(width: horizontal ? length : nil, height: horizontal ? nil : length)
+        if !on {
+            Rectangle()
+        } else if horizontal {
+            HStack(spacing: 0) { Rectangle(); edge }
         } else {
-            content
+            VStack(spacing: 0) { Rectangle(); edge }
         }
     }
 }
