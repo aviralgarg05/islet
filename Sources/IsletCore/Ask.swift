@@ -30,6 +30,10 @@ public enum AskProviderKind: String, Codable, CaseIterable, Sendable, Identifiab
         }
     }
 
+    /// Whether Settings' Effort applies: Claude and ChatGPT take one; the on-device model and
+    /// the command-line tools answer as they do.
+    public var takesEffort: Bool { self == .anthropic || self == .openai }
+
     /// Who receives the question when it leaves the Mac.
     public var recipient: String? {
         switch self {
@@ -436,6 +440,56 @@ public enum AskKeys {
     /// "•••• abcd": all Settings ever shows of a stored key.
     public static func masked(_ key: String) -> String {
         "•••• " + String(key.suffix(4))
+    }
+
+    /// A saved key in plain words, from `masked` (or the key): "Saved, ends in 1234".
+    public static func savedLabel(_ masked: String) -> String {
+        "Saved, ends in " + String(masked.suffix(4))
+    }
+}
+
+/// A model's id as people say it: "claude-opus-5-5" is "Claude Opus 5.5", "gpt-6.1-sol" is
+/// "GPT-6.1 Sol". The id itself stays in config.json and in the picker's help.
+public enum AskModelName {
+    public static func title(_ id: String) -> String {
+        var parts = id.split(separator: "-", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count > 1, parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy { $0.isLetter || $0.isNumber || $0 == "." } }) else {
+            return id
+        }
+        // A dated snapshot ("…-20250929" or "…-2024-08-06"), kept apart so it doesn't read as a version.
+        var date: String?
+        let digits = { (s: String, n: Int) in s.count == n && s.allSatisfy(\.isNumber) }
+        if let last = parts.last, digits(last, 8) {
+            date = last
+            parts.removeLast()
+        } else if parts.count > 3, digits(parts[parts.count - 3], 4), digits(parts[parts.count - 2], 2), digits(parts[parts.count - 1], 2) {
+            date = parts.suffix(3).joined(separator: "-")
+            parts.removeLast(3)
+        }
+        var words: [String] = []
+        let brand = ["gpt": "GPT", "chatgpt": "ChatGPT"][parts[0].lowercased()]
+        if let brand, parts.count >= 2 {
+            // The version belongs to the name: "GPT-6", "ChatGPT-4o".
+            words.append(brand + "-" + parts[1])
+            parts.removeFirst(2)
+        }
+        var number: [String] = []
+        func flush() {
+            if !number.isEmpty { words.append(number.joined(separator: ".")) }
+            number = []
+        }
+        for part in parts {
+            if part.allSatisfy(\.isNumber) {
+                number.append(part)
+            } else {
+                flush()
+                // "o3" and "4o" keep their case; words start with a capital.
+                words.append(part.first?.isNumber == true || part.count <= 2 ? part : part.prefix(1).uppercased() + part.dropFirst())
+            }
+        }
+        flush()
+        if let date { words.append("(\(date))") }
+        return words.joined(separator: " ")
     }
 }
 

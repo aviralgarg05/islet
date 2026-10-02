@@ -178,7 +178,10 @@ struct AdvancedSettings: View {
                     .foregroundStyle(model.systemMedia.isRunning ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
             }
             .settingsAnchor("advanced.diagnostics")
-            LabeledContent("Apple Intelligence") { Text(AIAssist.shared.statusText).foregroundStyle(.secondary) }
+            // In the Ask & AI page's words; what macOS reported is in the help.
+            LabeledContent("Apple Intelligence") {
+                Text(AISettingsView.appleStatus).foregroundStyle(.secondary).help(AIAssist.shared.statusText)
+            }
             LabeledContent("Accessibility") {
                 Text(MediaKeyInterceptor.hasAccessibility ? "Allowed" : "Not allowed").foregroundStyle(.secondary)
             }

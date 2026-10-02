@@ -5,7 +5,7 @@ Islet uses AI in two places:
 1. **The Ask box**: a question field in the expanded island that streams a short answer from Apple's on-device model, Claude, ChatGPT, or the Claude Code and Codex command-line tools you already use.
 2. **Apple Intelligence helpers**: smart icons for activities and one-line summaries of long notifications. These only ever use the on-device model.
 
-Nothing goes over the network until you ask a cloud provider a question, save an API key or press **Refresh list**. Settings for both live in **Settings → Ask & AI**.
+Nothing goes over the network until you ask a cloud provider a question, save an API key or choose **Check for new models** in a model menu. Settings for both live in **Settings → Ask & AI**.
 
 ---
 
@@ -41,7 +41,7 @@ What to expect:
 
 ### Keyboard shortcut
 
-The Ask shortcut is `ctrl+option+a` (⌃⌥A) by default. From any app, it opens the island on the Ask box, pinned, with the field focused. Press it again, or Esc in the field, to close it. Change it in Settings → Shortcuts: click the shortcut and press the new keys, or press Delete to turn it off.
+The Ask shortcut is `ctrl+option+a` (⌃⌥A) by default. From any app, it opens the island on the Ask box, pinned, with the field focused. Press it again, or Esc in the field, to close it. Change it in Settings → Keyboard shortcuts or on the Ask & AI page: click the shortcut and press the new keys, or press Delete to turn it off.
 
 Write it as modifiers and a key joined by `+`. Modifiers are `ctrl`, `option` (or `opt`, `alt`), `shift` and `cmd`, or the symbols ⌃⌥⇧⌘. The key is a letter, digit or punctuation key, `space`, `return`, `tab`, `escape`, an arrow (`up`, `down`, `left`, `right`) or `f1` to `f12`. It needs a modifier other than Shift unless the key is a function key. Text Islet can't read leaves the shortcut off.
 
@@ -77,7 +77,7 @@ If the provider you picked can't answer (no key, CLI not found, Apple Intelligen
 ### Claude (Anthropic API)
 
 - `POST https://api.anthropic.com/v1/messages`, streamed, with headers `x-api-key`, `anthropic-version: 2023-06-01` and `anthropic-beta: server-side-fallback-2026-07-01`.
-- Model: `claude-opus-5-5` by default; `claude-sonnet-5-5` and `claude-haiku-4-5` are offered too, and **Refresh list** in Settings loads the Claude models your key can use (`GET /v1/models`).
+- Model: `claude-opus-5-5` by default; `claude-sonnet-5-5` and `claude-haiku-4-5` are offered too, and **Check for new models** in the model menu loads the Claude models your key can use (`GET /v1/models`). Settings names models as people say them ("Claude Opus 5.5", "GPT-6 Astra"), with the id in the menu's help.
 - `max_tokens` 4096 and `output_config.effort` from Settings (Low by default). Thinking can't be turned off on Opus 5.5, so effort is what keeps it short. Islet doesn't show the thinking.
 - `fallbacks: "default"` is on. If Claude declines a request, Anthropic re-runs it on its recommended fallback model and the answer continues in the same stream. If the answer still ends in a refusal, the Ask box says the model declined and drops any partial text.
 - Errors: a rejected key (401) asks you to enter it again; a rate limit (429) says how many seconds to wait when the API sends `retry-after`; an unknown model (404) asks you to pick another; an overloaded API (529) is retried once after about a second. A request fails if the API sends nothing for 30 seconds.
@@ -85,7 +85,7 @@ If the provider you picked can't answer (no key, CLI not found, Apple Intelligen
 ### ChatGPT (OpenAI API)
 
 - `POST https://api.openai.com/v1/responses`, streamed, with `store: false`, which asks OpenAI not to store the response (by default it would). Follow-ups re-send the earlier turns rather than chaining stored responses.
-- Model: `gpt-6-astra` by default; `gpt-6.1-sol` and `gpt-6-luna` are offered too. **Refresh list** loads the chat models your key can use.
+- Model: `gpt-6-astra` by default; `gpt-6.1-sol` and `gpt-6-luna` are offered too. **Check for new models** loads the chat models your key can use.
 - `reasoning.effort` from Settings and `max_output_tokens` 2048. If a model doesn't take a reasoning effort, Islet asks again without it.
 - Errors are handled as for Claude. An account out of credit (429 `insufficient_quota`) says so.
 

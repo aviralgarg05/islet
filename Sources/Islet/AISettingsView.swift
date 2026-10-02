@@ -4,7 +4,7 @@ import IsletSystem
 import SwiftUI
 
 /// Settings → Ask & AI: the Ask box, keys for Claude and ChatGPT, the command-line tools and
-/// Apple Intelligence. Plain words only: the raw Apple Intelligence status is in Advanced.
+/// Apple Intelligence. Plain words only: the raw Apple Intelligence status is in Advanced's help.
 struct AISettingsView: View {
     @Bindable var model: AppModel
     @ViewState private var fetched: [AskProviderKind: [String]] = [:]
@@ -12,7 +12,6 @@ struct AISettingsView: View {
     @ViewState private var keyStored: [AskProviderKind: Bool] = [:]
     @ViewState private var cliFound: [AskProviderKind: Bool] = [:]
     @ViewState private var appleReady = AIAssist.shared.isAvailable
-    @Environment(\.openSettingsPage) private var openPage
 
     private var service: AskService { model.ask.service }
 
@@ -31,17 +30,18 @@ struct AISettingsView: View {
                     Text("For Claude and ChatGPT. Low answers fastest and costs least.")
                 }
                 .pickerStyle(.segmented)
+                // Only Claude and ChatGPT take an effort.
+                .disabled(!model.settings.ask.provider.takesEffort)
                 .settingsAnchor("ai.effort")
                 Toggle(isOn: $model.settings.ask.followUps) {
                     Text("Keep follow-ups in memory")
                     Text("Sends up to \(AskLimits.followUpTurns) earlier turns with the next question. Nothing is written to disk, and quitting Islet forgets them.")
                 }
                 .settingsAnchor("ai.followUps")
+                // The same recorder as on Keyboard shortcuts.
                 LabeledContent("Shortcut") {
-                    HStack(spacing: 10) {
-                        Text(Hotkey.parse(model.settings.askHotkey)?.label ?? "Off").foregroundStyle(.secondary)
-                        Button("Change…") { openPage(.shortcuts, "shortcuts.ask") }
-                    }
+                    ShortcutField(name: "Open the Ask box", text: $model.settings.askHotkey, standard: IsletSettings().askHotkey,
+                                  other: (model.settings.hotkey, "open the island"))
                 }
             }
             Section("Claude") {
@@ -91,7 +91,7 @@ struct AISettingsView: View {
         .onChange(of: model.settings.ask.provider) { _, _ in model.ask.sessionProvider = nil }
     }
 
-    /// Apple Intelligence's state in plain words. The raw status is under Advanced → Diagnostics.
+    /// Apple Intelligence's state in plain words, here and in Advanced → Diagnostics (whose help has the raw status).
     static var appleStatus: String {
         let raw = AIAssist.shared.statusText
         if AIAssist.shared.isAvailable { return "Ready" }
@@ -119,21 +119,29 @@ struct AISettingsView: View {
         model.ask.refreshStatuses()
     }
 
+    /// Picked in the model menu: look for models the key can use, rather than choose one.
+    private static let checkForModels = "\u{0}check"
+
     private func modelPicker(_ kind: AskProviderKind) -> some View {
         let current = model.settings.ask.model(for: kind) ?? ""
         var options = fetched[kind] ?? kind.suggestedModels
         if !current.isEmpty, !options.contains(current) { options.insert(current, at: 0) }
         return VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Picker("Model", selection: Binding(get: { current }, set: { choice in
+            Picker("Model", selection: Binding(get: { current }, set: { choice in
+                if choice == Self.checkForModels {
+                    fetchModels(kind)
+                } else {
                     model.settings.ask.setModel(choice == kind.defaultModel ? nil : choice, for: kind)
-                })) {
-                    ForEach(options, id: \.self) { Text($0).tag($0) }
                 }
-                Button("Refresh list") { fetchModels(kind) }
-                    .disabled(keyStored[kind] != true)
-                    .help("Fetch the models your key can use")
+            })) {
+                ForEach(options, id: \.self) { Text(AskModelName.title($0)).tag($0) }
+                // Fetching needs a key that works.
+                if keyStored[kind] == true {
+                    Divider()
+                    Text("Check for new models").tag(Self.checkForModels)
+                }
             }
+            .help(current)
             if let error = fetchError[kind] {
                 Text(error).font(.caption).foregroundStyle(.red)
             }
@@ -161,7 +169,10 @@ struct AISettingsView: View {
                           prompt: Text("Default model"))
                     .labelsHidden()
                     .textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.leading)
                     .frame(width: 160)
+                    // Nothing to set for a tool that isn't there.
+                    .disabled(!found)
             }
         } label: {
             Text(kind.title)
@@ -188,14 +199,14 @@ struct AIKeyRow: View {
             LabeledContent("Key") {
                 if let masked, !editing {
                     HStack(spacing: 8) {
-                        Text(masked).font(.system(.body, design: .monospaced))
-                        Text("in Keychain").foregroundStyle(.secondary)
+                        Text(AskKeys.savedLabel(masked)).foregroundStyle(.secondary)
                         Button("Replace") { editing = true }
                         Button("Remove", role: .destructive, action: remove)
                     }
                 } else {
                     HStack(spacing: 8) {
                         SecureField("", text: $draft, prompt: Text("Paste your key"))
+                            .multilineTextAlignment(.leading)
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 180)
                             .onSubmit(save)

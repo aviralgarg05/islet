@@ -308,8 +308,8 @@ struct MoreUsageRows: View {
             Picker("Copilot plan", selection: $model.settings.copilotPlan) {
                 ForEach(CopilotPlan.allCases, id: \.self) { plan in Text("\(plan.title) (\(plan.rawValue) a month)").tag(plan) }
             }
-            PastedKeyRow(label: "Key", service: "GitHub", prompt: "Paste a GitHub key",
-                         help: "On GitHub, Settings → Developer settings → Fine-grained tokens: make one with read access to Plan and paste it here. It is checked once, then kept in your Keychain.",
+            PastedKeyRow(label: "Key", service: "GitHub", prompt: "Paste your GitHub key",
+                         help: "Make a read-only key on GitHub (Settings, Developer settings, Fine-grained tokens) that can read Plan, and paste it here. It is checked once, then kept in your Keychain.",
                          problem: model.toolUsage.problems[.copilot].map { $0.text("GitHub") },
                          load: { model.toolUsage.maskedKey(.copilot) },
                          save: { try await model.toolUsage.saveKey($0, for: .copilot) },
@@ -346,8 +346,7 @@ struct PastedKeyRow: View {
             LabeledContent(label) {
                 if let masked, !editing {
                     HStack(spacing: 8) {
-                        Text(masked).font(.system(.body, design: .monospaced))
-                        Text("in Keychain").foregroundStyle(.secondary)
+                        Text(AskKeys.savedLabel(masked)).foregroundStyle(.secondary)
                         Button("Replace") { editing = true }
                         Button("Remove", role: .destructive) {
                             remove()
@@ -358,6 +357,7 @@ struct PastedKeyRow: View {
                 } else {
                     HStack(spacing: 8) {
                         SecureField("", text: $draft, prompt: Text(prompt))
+                            .multilineTextAlignment(.leading)
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 200)
                             .onSubmit(commit)
