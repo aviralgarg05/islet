@@ -130,6 +130,10 @@ struct TeleprompterTab: View {
     let model: AppModel
     let size: CGSize
     @ViewState private var shown: Double = 0
+    /// One line of the script and two, as set, measured: the line's height and the pitch from
+    /// one line to the next, so lines rest whole and the fades cover whole gaps.
+    @ViewState private var oneLine: CGFloat = 0
+    @ViewState private var twoLines: CGFloat = 0
 
     private static let controls: CGFloat = 28
 
@@ -147,11 +151,14 @@ struct TeleprompterTab: View {
             }
         } else {
             let textWidth = size.width - Self.controls - Space.m
+            let lines = TeleprompterLines(height: size.height, line: oneLine, pitch: twoLines - oneLine)
             HStack(alignment: .top, spacing: Space.m) {
-                script(t, width: textWidth)
-                    .frame(width: textWidth, height: size.height, alignment: .top)
+                script(t, width: textWidth, pitch: lines.pitch)
+                    .frame(width: textWidth, height: lines.shown, alignment: .top)
                     .clipped()
-                    .mask(Self.fade)
+                    .mask(Self.fade(lines))
+                    .frame(height: size.height, alignment: .top)
+                    .background(alignment: .topLeading) { measure }
                     .contentShape(Rectangle())
                     .contextMenu {
                         Button("Back to the top") { t.restart() }
@@ -165,19 +172,37 @@ struct TeleprompterTab: View {
         }
     }
 
-    private func script(_ t: TeleprompterController, width: CGFloat) -> some View {
-        Text(t.script)
-            .font(.system(size: model.settings.teleprompter.textSize, weight: .medium, design: model.settings.roundedFont ? .rounded : .default))
-            .foregroundStyle(Ink.primary)
-            .lineSpacing(model.settings.teleprompter.textSize * 0.25)
+    private func script(_ t: TeleprompterController, width: CGFloat, pitch: CGFloat) -> some View {
+        styled(Text(t.script))
             .multilineTextAlignment(.leading)
             .frame(width: width, alignment: .topLeading)
             .fixedSize(horizontal: false, vertical: true)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { h in
-                t.layout(textHeight: Double(h), viewport: Double(size.height))
+                t.layout(textHeight: Double(h), viewport: Double(size.height), linePitch: Double(pitch))
             }
-            // Paused, it sits where the playback says; playing, `shown` carries the animation.
-            .offset(y: -(t.isPlaying ? shown : t.playback.position(at: Date())))
+            // Paused, it rests on a whole line where the playback says; playing, `shown`
+            // carries the animation.
+            .offset(y: -(t.isPlaying ? shown
+                : TeleprompterPlayback.onLine(t.playback.position(at: Date()), pitch: Double(pitch), end: t.playback.end)))
+    }
+
+    private func styled(_ text: Text) -> some View {
+        text
+            .font(.system(size: model.settings.teleprompter.textSize, weight: .medium, design: model.settings.roundedFont ? .rounded : .default))
+            .foregroundStyle(Ink.primary)
+            .lineSpacing(model.settings.teleprompter.textSize * 0.25)
+    }
+
+    /// One line and two in the script's type, never drawn: their heights give the line pitch.
+    private var measure: some View {
+        VStack(spacing: 0) {
+            styled(Text("Ag")).fixedSize()
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { oneLine = $0 }
+            styled(Text("Ag\nAg")).fixedSize()
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { twoLines = $0 }
+        }
+        .hidden()
+        .accessibilityHidden(true)
     }
 
     private func controlColumn(_ t: TeleprompterController) -> some View {
@@ -199,11 +224,13 @@ struct TeleprompterTab: View {
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    /// Lines fade in at the bottom and out at the top.
-    private static var fade: some View {
-        LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.08),
-                               .init(color: .black, location: 0.8), .init(color: .clear, location: 1)],
-                       startPoint: .top, endPoint: .bottom)
+    /// Lines fade out at the top and in at the bottom, over the gap between two lines (and
+    /// the part of the next line that peeks in), so a line at rest is never dimmed or cut.
+    private static func fade(_ l: TeleprompterLines) -> some View {
+        let stops = l.fade
+        return LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: stops.top),
+                                      .init(color: .black, location: stops.bottom), .init(color: .clear, location: 1)],
+                              startPoint: .top, endPoint: .bottom)
     }
 
     /// While playing: from where the script is, one linear move to the end. Nothing ticks;

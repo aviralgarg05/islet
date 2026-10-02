@@ -66,6 +66,39 @@ public enum Teleprompter {
     }
 }
 
+/// How the teleprompter page is cut into lines of the script. `shown` is the height drawn;
+/// `whole` the lines that fit in it whole; `gap` the space between two lines. The next line
+/// peeks in under the whole ones only when at least half of it shows, so it reads as words,
+/// never as the dots of its i's.
+public struct TeleprompterLines: Equatable, Sendable {
+    public var shown: CGFloat
+    public var whole: Int
+    public var pitch: CGFloat
+    public var gap: CGFloat
+
+    /// `line` is one line's height, `pitch` from one line to the next; 0 before they are known.
+    public init(height: CGFloat, line: CGFloat, pitch: CGFloat) {
+        guard line > 0, pitch >= line, height > 0 else {
+            shown = max(0, height); whole = 0; self.pitch = 0; gap = 0
+            return
+        }
+        gap = pitch - line
+        self.pitch = pitch
+        whole = max(1, Int(((height + gap) / pitch).rounded(.down)))
+        let peek = height - CGFloat(whole) * pitch
+        shown = peek >= line * 0.5 ? height : min(height, CGFloat(whole) * pitch)
+    }
+
+    /// Where the fades end and start, as fractions of `shown`: in from the top over a gap,
+    /// and out at the bottom from the end of the last whole line.
+    public var fade: (top: CGFloat, bottom: CGFloat) {
+        guard pitch > 0 else { return (0.08, 0.8) }
+        let h = max(1, shown)
+        let top = min(0.3, max(gap, 4) / h)
+        return (top, min(0.95, max(top + 0.01, (CGFloat(whole) * pitch - gap) / h)))
+    }
+}
+
 /// Where the script is and whether it is moving. While playing, the position is worked out
 /// from when it started, so pausing reads exactly where the animation had got to.
 public struct TeleprompterPlayback: Equatable, Sendable {
@@ -120,6 +153,22 @@ public struct TeleprompterPlayback: Equatable, Sendable {
     public mutating func scroll(by delta: Double, now: Date) {
         pause(now: now)
         anchor = min(end, max(0, anchor + delta))
+    }
+
+    /// `position` on the nearest whole line, for lines `pitch` points apart: where a paused
+    /// script rests, so no line sits across the page's top edge. Never past the end; the end
+    /// itself stays where it is.
+    public static func onLine(_ position: Double, pitch: Double, end: Double) -> Double {
+        guard pitch > 0, pitch.isFinite, position.isFinite, position < end - 0.5 else { return position }
+        let nearest = (position / pitch).rounded() * pitch
+        return max(0, nearest <= end ? nearest : (end / pitch).rounded(.down) * pitch)
+    }
+
+    /// Paused, settle on the nearest whole line (`onLine`), so playing again starts from
+    /// where the page shows it.
+    public mutating func settle(pitch: Double) {
+        guard !isPlaying else { return }
+        anchor = Self.onLine(anchor, pitch: pitch, end: end)
     }
 
     /// Back to the top, paused.

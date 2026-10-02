@@ -145,6 +145,41 @@ import Testing
         #expect(!p.isPlaying && p.position(at: t0) == 40)
     }
 
+    @Test func thePageShowsWholeLines() {
+        // 28 pt text on the smallest island: two whole lines, and none of the third's dots.
+        let large = TeleprompterLines(height: 90, line: 33.4, pitch: 40.4)
+        #expect(large.whole == 2 && abs(large.shown - 80.8) < 0.001)
+        // 20 pt text: three whole lines fill it.
+        let small = TeleprompterLines(height: 90, line: 24, pitch: 30)
+        #expect(small.whole == 3 && small.shown == 90)
+        // Most of the next line showing: it peeks in, fading.
+        let peek = TeleprompterLines(height: 110, line: 24, pitch: 30)
+        #expect(peek.whole == 3 && peek.shown == 110)
+        // A sliver of it: the page stops after the whole lines.
+        #expect(TeleprompterLines(height: 121, line: 24, pitch: 30).shown == 120)
+        #expect(peek.fade.bottom < 1 && peek.fade.top > 0)
+        // Before the lines are measured: the whole page, with plain fades.
+        #expect(TeleprompterLines(height: 90, line: 0, pitch: 0).shown == 90)
+    }
+
+    @Test func aPausedScriptRestsOnWholeLines() {
+        #expect(TeleprompterPlayback.onLine(18, pitch: 30, end: 500) == 30)
+        #expect(TeleprompterPlayback.onLine(44, pitch: 30, end: 500) == 30)
+        #expect(TeleprompterPlayback.onLine(0, pitch: 30, end: 500) == 0)
+        // Never past the end, and the end itself stays.
+        #expect(TeleprompterPlayback.onLine(95, pitch: 30, end: 100) == 90)
+        #expect(TeleprompterPlayback.onLine(100, pitch: 30, end: 100) == 100)
+        #expect(TeleprompterPlayback.onLine(40, pitch: 0, end: 100) == 40)
+        var p = TeleprompterPlayback()
+        p.configure(speed: 10, end: 300, now: t0)
+        p.play(now: t0)
+        p.settle(pitch: 30)
+        #expect(p.isPlaying)
+        p.pause(now: t0.addingTimeInterval(4.7))
+        p.settle(pitch: 30)
+        #expect(p.position(at: t0) == 60)
+    }
+
     @Test func reachingTheEndStopsAndPlayStartsAgainFromTheTop() {
         var p = TeleprompterPlayback()
         p.configure(speed: 50, end: 100, now: t0)
