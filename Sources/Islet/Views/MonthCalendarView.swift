@@ -150,7 +150,7 @@ struct MonthDayColumn: View {
                 // Off, or macOS not letting Islet read it: what is wrong, and the button that helps.
                 let advice = model.calendarAdvice(.calendars)
                 VStack(alignment: .leading, spacing: Space.s) {
-                    Text(advice.isAllowed || advice.action == .ask ? "Your events, with a Join button for calls." : advice.status)
+                    Text(advice.isAllowed || advice.action == .ask ? "Your events, with a Join button for calls." : advice.detail ?? advice.status)
                         .textStyle(.body).foregroundStyle(Ink.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Button(advice.isAllowed ? "Turn on" : advice.action == .ask ? "Allow Calendar" : advice.button ?? "Open System Settings") {

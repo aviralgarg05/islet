@@ -43,15 +43,26 @@ public struct CalendarAccessAdvice: Equatable, Sendable {
         case openSettings(URL)
     }
 
-    /// A few words: "Allowed", "Not allowed yet", "Turned off in System Settings", "Islet can only add events".
+    /// A few words: "Allowed", "Not allowed yet", "Not allowed", "Turned off", "Add events only".
+    /// Short enough to share a line with `islandButton` on the Today page.
     public var status: String
     /// One line on what to switch, when there is something to do.
     public var detail: String?
     public var action: Action?
-    /// The button's title, with `action`.
+    /// The button's title in Settings, with `action`.
     public var button: String?
 
     public var isAllowed: Bool { action == nil }
+
+    /// The button's title in the island, where it sits beside the status: "Allow…", or
+    /// "Settings…" for System Settings (the detail says which page).
+    public var islandButton: String? {
+        switch action {
+        case .ask: return button
+        case .openSettings: return "Settings…"
+        case nil: return nil
+        }
+    }
 
     /// - Parameters:
     ///   - kind: `.calendars` or `.reminders`.
@@ -61,23 +72,23 @@ public struct CalendarAccessAdvice: Equatable, Sendable {
         let pane = kind == .reminders ? "Reminders" : "Calendars"
         let settings = Action.openSettings(kind.settingsURL)
         let open = "Open System Settings"
-        let switchOn = "In Privacy & Security → \(pane), switch on Islet."
+        let switchOn = "Switch on Islet in Privacy & Security → \(pane)."
         switch access {
         case .fullAccess:
             return CalendarAccessAdvice(status: "Allowed")
         case .notDetermined where refused:
-            return CalendarAccessAdvice(status: "macOS didn't ask", detail: switchOn, action: settings, button: open)
+            return CalendarAccessAdvice(status: "Not allowed", detail: switchOn, action: settings, button: open)
         case .notDetermined:
             return CalendarAccessAdvice(status: "Not allowed yet", detail: "macOS asks once, when you press Allow.", action: .ask, button: "Allow…")
         case .denied:
-            return CalendarAccessAdvice(status: "Turned off in System Settings", detail: switchOn, action: settings, button: open)
+            return CalendarAccessAdvice(status: "Turned off", detail: switchOn, action: settings, button: open)
         case .restricted:
-            return CalendarAccessAdvice(status: "Turned off in System Settings",
+            return CalendarAccessAdvice(status: "Turned off",
                                         detail: "Screen Time or a profile on this Mac manages it.", action: settings, button: open)
         case .writeOnly:
-            let noun = kind == .reminders ? "reminders" : "events"
-            return CalendarAccessAdvice(status: "Islet can only add \(noun)",
-                                        detail: "In Privacy & Security → \(pane), choose Full Access for Islet.", action: settings, button: open)
+            // macOS's own name for the choice.
+            return CalendarAccessAdvice(status: "Add events only",
+                                        detail: "Choose Full Access for Islet in Privacy & Security → \(pane).", action: settings, button: open)
         }
     }
 }
