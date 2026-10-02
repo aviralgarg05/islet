@@ -50,6 +50,7 @@ enum SettingsWindow {
                      increasedContrast: Bool = false) -> NSWindow {
         let root = SettingsView(model: model, navigation: navigation).environment(\.snapshotMode, snapshot)
             .modifier(IncreasedContrastStandIn(on: increasedContrast))
+            .modifier(SnapshotAccent(on: snapshot))
         let host = NSHostingController(rootView: root)
         host.sizingOptions = []
         let w = window ?? NSWindow()
@@ -80,6 +81,20 @@ private struct IncreasedContrastStandIn: ViewModifier {
 
     func body(content: Content) -> some View {
         if on { content.environment(\._colorSchemeContrast, .increased) } else { content }
+    }
+}
+
+/// Snapshots show Settings as most people see it: the standard blue accent in a window in
+/// front, whatever accent this Mac uses and although the off-screen window is never active.
+private struct SnapshotAccent: ViewModifier {
+    let on: Bool
+
+    func body(content: Content) -> some View {
+        if on {
+            content.tint(Color(nsColor: .systemBlue)).environment(\.controlActiveState, .key)
+        } else {
+            content
+        }
     }
 }
 
@@ -182,6 +197,10 @@ private struct SidebarRow: View {
     let page: SettingsPage
     var drawsSelection = false
     var attention = false
+    @Environment(\.snapshotMode) private var snapshotMode
+
+    /// The selection, which only snapshots draw: in the standard blue, as `SnapshotAccent` sets.
+    private var selectionColour: Color { Color(nsColor: snapshotMode ? .systemBlue : .controlAccentColor) }
 
     var body: some View {
         Label {
@@ -199,7 +218,7 @@ private struct SidebarRow: View {
             SettingsTile(page: page)
         }
         .listRowBackground(drawsSelection
-                           ? RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color(nsColor: .controlAccentColor)).padding(.horizontal, 10)
+                           ? RoundedRectangle(cornerRadius: 6, style: .continuous).fill(selectionColour).padding(.horizontal, 10)
                            : nil)
     }
 }

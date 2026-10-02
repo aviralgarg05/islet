@@ -492,7 +492,9 @@ if let i = args.firstIndex(of: "--settings-snapshot") {
     env["ISLET_SUPPORT_DIR"] = scratch.appendingPathComponent("support").path
     let child = Process()
     child.executableURL = Bundle.main.executableURL
-    child.arguments = ["--settings-snapshot", dir.path]
+    // The standard blue accent, whatever this Mac uses, so controls draw as most people see them.
+    child.arguments = ["--settings-snapshot", dir.path, "-AppleAccentColor", "4", "-AppleHighlightColor",
+                       "0.698039 0.843137 1.000000 Blue"]
     child.environment = env
     var status: Int32 = 1
     do {

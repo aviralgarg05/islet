@@ -160,8 +160,11 @@ enum SettingsSnapshots {
             custom.songProgressRing = true
             custom.visualiserStyle = .dots
             model.settings = custom
+            // Tall enough to show the accent swatches, the picked colour among them.
+            window.setContentSize(NSSize(width: SettingsWindow.defaultSize.width, height: 760))
             navigation.open(.appearance)
             shoot("appearance-custom", in: extra)
+            window.setContentSize(SettingsWindow.defaultSize)
             // Opening on click: the peek at what's playing takes the hover delay's place.
             var click = sampleSettings
             click.hoverToOpen = false
@@ -287,4 +290,11 @@ private final class OffscreenWindow: NSWindow {
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
     override var isKeyWindow: Bool { true }
     override var isMainWindow: Bool { true }
+
+    // The snapshot process is never the active app (it must not take focus from whoever runs
+    // it), and AppKit draws switches and checkboxes grey in a window of an app that isn't.
+    // AppKit asks the window these, so they answer as a window in front would.
+    @objc(_hasActiveAppearance) func snapshotHasActiveAppearance() -> Bool { true }
+    @objc(_hasActiveAppearanceIgnoringKeyFocus) func snapshotHasActiveAppearanceIgnoringKeyFocus() -> Bool { true }
+    @objc(_hasKeyAppearance) func snapshotHasKeyAppearance() -> Bool { true }
 }
