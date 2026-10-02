@@ -273,6 +273,7 @@ struct ScrubBar: View {
     @ViewState private var dragging = false
     @ViewState private var hovering = false
     @ViewState private var last: Double?
+    @Environment(\.islandMotion) private var motion
 
     var body: some View {
         GeometryReader { geo in
@@ -303,7 +304,7 @@ struct ScrubBar: View {
             last = nil
             onCancel()
         }
-        .animation(.snappy(duration: 0.15), value: dragging || hovering)
+        .animation(motion == .off ? nil : .snappy(duration: 0.15), value: dragging || hovering)
     }
 }
 

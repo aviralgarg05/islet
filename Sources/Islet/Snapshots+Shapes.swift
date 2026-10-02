@@ -42,6 +42,9 @@ extension Snapshots {
             shoot("60-expanded-black", height: open)
             model.settings.theme = saved.theme
 
+            // The island answers the pointer only with motion on (with animation Off it would
+            // jump): these shots show the response, so they draw it as the default style does.
+            model.settings.animationStyle = .fluid
             model.setHover(1)
             model.forcedPresentation = .idle
             shoot("61-hover-idle", height: 60)
@@ -49,6 +52,7 @@ extension Snapshots {
             shoot("61-hover-compact-media", height: 60)
             model.setHover(nil)
             shoot("61-rest-compact-media", height: 60)
+            model.settings.animationStyle = saved.animationStyle
         }
     }
 }

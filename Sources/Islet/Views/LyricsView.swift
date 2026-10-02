@@ -15,6 +15,7 @@ struct LyricsColumn: View {
     var showsSungLine = true
     @ViewState private var hovering = false
     @Environment(\.reduceMotionAnywhere) private var reduceMotion
+    @Environment(\.islandMotion) private var motion
 
     /// A line shows a moment before it is sung, so it is read in time.
     static let lead: Double = 0.2
@@ -91,7 +92,11 @@ struct LyricsColumn: View {
                 Haptics.play(.tap)
                 model.seek(to: line.time)
             }
-            .animation(reduceMotion || model.settings.animationStyle == .off ? nil : Motion.settle, value: current)
+            // The column moves on with the settle spring; with less motion the lines only fade
+            // (`LyricLines`), so a short ease is all it needs, and nothing with Off.
+            .animation(model.settings.animationStyle == .off ? nil
+                       : reduceMotion || !motion.isRich ? .easeInOut(duration: 0.14 * Motion.pace) : Motion.settle,
+                       value: current)
         }
     }
 }
@@ -103,6 +108,8 @@ struct LyricLines: View {
     let current: Int?
     var showsSungLine = true
     var onTap: (LyricLine) -> Void
+    @Environment(\.islandMotion) private var motion
+    @Environment(\.reduceMotionAnywhere) private var reduceMotion
 
     /// More than ever fit, so the column is always full; the frame clips the rest.
     private static let window = 7
@@ -147,8 +154,11 @@ struct LyricLines: View {
         .accessibilityLabel(lines[i].text.isEmpty ? "Instrumental" : lines[i].text)
         .accessibilityHint("Plays from here")
         .accessibilityAddTraits(isCurrent ? .isSelected : [])
-        .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity),
-                                removal: .move(edge: .top).combined(with: .opacity)))
+        // Lines slide up with the richer motion; Minimal and Reduce Motion only fade them.
+        .transition(motion.isRich && !reduceMotion
+                    ? .asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity),
+                                  removal: .move(edge: .top).combined(with: .opacity))
+                    : .opacity)
     }
 }
 

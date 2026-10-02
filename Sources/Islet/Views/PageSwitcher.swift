@@ -209,9 +209,11 @@ struct PageSwitcher: View {
 
 /// Gives a little when pressed; no hover wash (the glass reacts on its own).
 struct PressableStyle: ButtonStyle {
+    @Environment(\.islandMotion) private var motion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? Motion.pressScale : 1)
-            .animation(Motion.settle, value: configuration.isPressed)
+            .animation(Motion.press(motion), value: configuration.isPressed)
     }
 }

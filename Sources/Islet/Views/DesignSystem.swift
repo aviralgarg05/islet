@@ -145,6 +145,9 @@ enum Motion {
 
     /// Pressed controls give a little.
     static let pressScale: CGFloat = 0.94
+
+    /// How a pressed control gives: the settle spring, and no movement with animation Off.
+    static func press(_ style: AnimationStyle) -> Animation? { style == .off ? nil : settle }
 }
 
 /// Where things sit inside the expanded island.
@@ -246,6 +249,7 @@ private struct CapsuleButtonBody: View {
     let filled: Bool
     let compact: Bool
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.islandMotion) private var motion
     @ViewState private var hovering = false
 
     var body: some View {
@@ -259,7 +263,7 @@ private struct CapsuleButtonBody: View {
             .contrastEdge(Capsule())
             .contentShape(Capsule())
             .scaleEffect(configuration.isPressed && isEnabled ? Motion.pressScale : 1)
-            .animation(Motion.settle, value: configuration.isPressed)
+            .animation(Motion.press(motion), value: configuration.isPressed)
             .onHover { hovering = $0 && isEnabled }
     }
 

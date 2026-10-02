@@ -61,7 +61,8 @@ struct IslandLook: Equatable {
 
 extension AppModel {
     func look(for display: CGDirectDisplayID) -> IslandLook {
-        let calm = settings.reduceMotion || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        // No hover response with less motion, nor with animation Off, where it would jump.
+        let calm = settings.reduceMotion || settings.animationStyle == .off || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         let resting = hoverDisplay == display && expandedScreen == nil
         // An approval card's header uses the whole row, so it keeps the full-width shape.
         return IslandLook(detailedHUD: settings.hudStyle == .detailed,

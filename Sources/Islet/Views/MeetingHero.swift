@@ -63,6 +63,7 @@ struct MeetingHero: View {
 struct LargeCapsuleButtonStyle: ButtonStyle {
     var tint: Color
     @ViewState private var hovering = false
+    @Environment(\.islandMotion) private var motion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -75,7 +76,7 @@ struct LargeCapsuleButtonStyle: ButtonStyle {
             .contrastEdge(Capsule())
             .contentShape(Capsule())
             .scaleEffect(configuration.isPressed ? Motion.pressScale : 1)
-            .animation(Motion.settle, value: configuration.isPressed)
+            .animation(Motion.press(motion), value: configuration.isPressed)
             .onHover { hovering = $0 }
     }
 }
