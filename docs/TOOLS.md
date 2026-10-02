@@ -12,7 +12,7 @@ Settings → General → Island pages lists the pages that are on, in the order 
 
 - Drag a page onto another to put it there, or onto **In the capsule** or **Under More**. Each row's "…" menu moves it up, down, or between the two, for the keyboard.
 - A page's switch leaves it out of the switcher without turning its feature off. A page opened another way (a file dropped on the island, a shortcut, the API) still shows while it is open.
-- Home is always in the capsule. With more than four pages there, the last one goes under More. The More menu stays even with no page under it, for keep awake, Settings, Send feedback and Quit.
+- Home is always in the capsule. With more than four pages there, the last one goes under More. The More menu stays even with no page under it, for Keep awake, Keep open, Settings, Send feedback and Quit.
 - A page whose feature is off keeps its place for when it comes back on. **Reset** goes back to Home, Today and Shelf in the capsule.
 
 `config.json`: `"islandPages": {"bar": ["home", "todos", "today", "shelf"], "more": ["clipboard", "weather"], "hidden": ["widgets"]}`. Pages left out of both lists go at the end of the one they come in.
@@ -80,7 +80,7 @@ Your script moves up just under the camera, so you read it while looking into th
 - **See-through while reading** turns the open island to clear glass on this page, whatever the theme.
 - **Text size** goes from 14 to 40 points.
 
-The script moves with one linear animation from where it is to the end, and Islet's one deadline timer marks the end, so nothing ticks while it plays.
+Nothing runs on a timer while the script plays.
 
 `config.json`: `"teleprompter": {"enabled": true, "wordsPerMinute": 140, "textSize": 20, "seeThrough": false}`.
 
@@ -112,7 +112,7 @@ Today's takings from your stores: one total, large, and each store beside it, wi
 - **Connect…** checks the key by asking the store for today's sales, then keeps it in your Keychain. Settings shows only that a store is connected; **Remove** deletes the key.
 - "Today" is since midnight on your Mac. The total leads with your own currency when there are takings in it; other currencies show beside it.
 - Islet asks each connected store when the Sales page opens (if the figures are more than a minute old) and every 15 minutes while Sales is on and the Mac is unlocked, and again at midnight so "Today" starts afresh. It doesn't ask while the screen is locked or in Low Power Mode, and picks up again when you unlock or Low Power Mode ends.
-- Requests go only to that store's API (`api.stripe.com`, your `*.myshopify.com`, `api.lemonsqueezy.com`, `api.gumroad.com`, `live.dodopayments.com`, `api.polar.sh`, `api.paddle.com`), over HTTPS, with no cookies, and never follow a redirect. At most ten pages are read per store each time (Paddle sends 30 transactions a page, the others 100), and a reply over 8 MB is dropped as it arrives.
+- Requests go only to that store's API (`api.stripe.com`, your `*.myshopify.com`, `api.lemonsqueezy.com`, `api.gumroad.com`, `live.dodopayments.com`, `api.polar.sh`, `api.paddle.com`), over HTTPS, with no cookies, and never follow a redirect.
 - A store that turns a key down shows a warning on the page and in Settings, and the total leaves it out.
 
 `config.json`: `"sales": {"enabled": true, "stores": ["stripe", "shopify"], "shopifyStore": "example.myshopify.com"}`. Keys are never in this file.

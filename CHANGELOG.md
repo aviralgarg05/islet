@@ -2,197 +2,179 @@
 
 ## 0.2.0 (unreleased)
 
-Islet now shows the Live Activities your iPhone sends to the Mac, answers coding agents' permission requests, runs timers, and asks Apple Intelligence, Claude or ChatGPT. It also stays beside the notch and shrinks to the free space in the menu bar.
+Islet now shows the Live Activities your iPhone sends to the Mac, lets you answer coding agents' permission requests in the island, runs timers, and asks Apple Intelligence, Claude or ChatGPT. It also stays beside the notch and shrinks to the free space in the menu bar.
+
+### Highlights
+- **Your iPhone's Live Activities** in the island: rides, deliveries, scores and flights, with their own look for 137 apps.
+- **Answer Claude Code, Codex and Cursor from the notch**, and see Claude Code's and Codex's usage limits on Home.
+- **Ask** Apple Intelligence, Claude, ChatGPT or your command-line agent a quick question with ⌃⌥A.
+- **Timers, a Pomodoro and a stopwatch**, started from the island, a phrase like "tea 4m", Siri or a script.
+- **Meeting reminders** that count down beside the notch and stay until you join.
+- **Tools you switch on when you want them**: to-dos, a note, a converter, emoji, lyrics, the weather, a camera mirror, a teleprompter, stocks and sales.
+- **More from Now Playing**: switch between players, see each new song for a moment, and choose a turning record or an animated sticker beside the notch.
+- **A calmer look**: the Glass theme, a page switcher under the island, and Settings rebuilt as a sidebar window you can search.
 
 ### iPhone Live Activities
-- Rides, deliveries, scores, flights and other Live Activities that macOS 26 and later show in the menu bar now appear in the island, including ones macOS has tucked behind the notch. Islet recognises them by the label macOS gives them, in all 41 of its languages, and never mistakes Now Playing, the Clock timer or the camera controls for one.
-- A catalogue of 137 apps that use Live Activities gives each its icon, colour and layout: ride or delivery ETA with a moving marker, order stages, flight board, transit route, live score, timer ring, workout, gauge, live audio, media and agent.
-- Clicking a mirrored activity opens Apple's own view of it. Nothing outside Islet can trigger that click.
-- Needs Accessibility. Settings can limit mirroring to activities the notch hides, and mirrored text is kept out of the API unless you allow it.
-- Each app's Live Activities have a source of their own, so **Mute** in the right-click menu silences that app only (a mute of every mirrored activity from an earlier build still holds). One you dismiss stays away until it leaves the menu bar, even as its text changes, and one whose text hasn't changed for 30 minutes dims. Settings → Apps lists what was muted by name (an app, an Islet feature, or a script's source in words: "Github actions (from a script)"), each with **Unmute**.
+- Rides, deliveries, scores, flights and other Live Activities that macOS 26 and later show in the menu bar now appear in the island, even ones hidden behind the notch. Islet recognises them in any of macOS's 41 languages. Needs Accessibility.
+- 137 apps get their own icon, colour and layout, such as a ride ETA with a moving marker, a flight board or a live score.
+- Clicking one opens Apple's own view of it. You can mirror only what the notch hides, and mirrored text stays out of the API unless you allow it.
+- **Mute** in the right-click menu silences one app's Live Activities, and Settings → Apps lists what you've muted, each with **Unmute**. One you dismiss stays away until it leaves the menu bar, and one unchanged for 30 minutes dims.
 
 ### The menu bar
-- The closed island always stays in the top row, beside the notch, like the iPhone's. With Accessibility it measures the free space beside the notch and fits itself to it, down to icon-only wings on a crowded menu bar. If even those don't fit, it keeps the icon-only wings, which may then cover the nearest menu bar item.
-- Bubbles for other activities sit beside the island in the menu bar row and never cover a menu bar icon or hang below the row. When there's no room for them, the island shows how many there are ("+2") in its wing instead, the one place it counts them: a bubble never carries a badge.
-- Values beside the notch keep one size in each width of wing and are never squeezed or cut. A narrow wing says "18m" for "18 min" or "2h" for "1:59:54", or shows the status as a symbol, and an icon-only wing shows only what fits. Flight countdowns read in minutes ("42 min") like every other countdown, and a finished activity's tick isn't repeated on both sides of the notch.
-- Something urgent lights the closed island's edge from inside instead of glowing round it, so nothing spills below the menu bar or over the icons beside it.
-- With only the resting sticker to show, the island hugs the notch with one small wing.
-- It keeps clear of macOS 27's overflow chevron whenever there's room, and items hidden behind the chevron no longer make the menu bar look full.
-- Measuring reads one window of the system menu bar instead of asking every app, and only while the island is showing.
-- Mission Control now hides the island.
-- **In full screen** chooses between Keep showing, Hide music only (timers, activities and HUDs stay) and Hide everything, replacing the on/off switch.
-- On a display without a notch the island is a **Floating pill** inside the menu bar by default. It can also be a notch shape at the top edge, appear only when the pointer reaches the top edge, or not show at all. This replaces "Show on displays without a notch".
-- Full screen is worked out per display, whichever app is in front: a video in full screen on one display keeps the island out of the way there while you work on the other, and that app's own rule (Keep it in full screen) is the one that counts. A large window under a menu bar that hides itself no longer counts as full screen unless Accessibility confirms it is, and a game that goes full screen a second or two after it opens is caught.
-- Without Accessibility, a display narrower than 1500 points (a 13-inch MacBook Air, or a larger one at a Larger Text setting) gets icon-only wings.
+- The closed island always stays in the menu bar row beside the notch. With Accessibility it fits the free space, down to icon-only wings; without it, a display narrower than 1500 points (a 13-inch MacBook Air) gets icon-only wings.
+- Other activities sit in bubbles beside the island and never cover a menu bar icon. With no room for them, the wing counts them ("+2").
+- Values beside the notch are never squeezed or cut: a narrow wing says "18m" or "2h", or shows a symbol. Flight countdowns read in minutes like every other countdown, and a finished activity's tick shows once.
+- Something urgent lights the island's edge from inside rather than glowing over the icons beside it. The island keeps clear of the overflow chevron when there's room, and items hidden behind the chevron no longer make the menu bar look full.
+- With only the music sticker to show (**Also when nothing is playing**), the island hugs the notch with one small wing.
+- **In full screen** offers Keep showing, Hide music only or Hide everything, worked out per display, and an app's **Keep the island in full screen** rule on the Apps page overrides it. A game that goes full screen a moment after opening is caught, a large window under a menu bar that hides itself no longer counts by mistake, and Mission Control hides the island.
+- On a display without a notch the island is a **Floating pill** in the menu bar by default. It can also be a notch shape, appear only when the pointer reaches the top edge, or stay hidden.
 
 ### Coding agents
-- **Approvals.** Claude Code, Codex and Cursor can ask in the island: Allow, Always for this session, Deny, or answer in the terminal. Commands are shown in full, risky ones (recursive deletes, force pushes, sudo and more) need a second click, and questions and plans can be answered there too. If Islet isn't running or you don't answer, the agent asks in the terminal as usual.
-- **Usage limits.** Claude Code's and Codex's 5-hour and weekly limits appear on Home, with one alert at 90% and at 100% that shows the share used beside the notch. They come from files the tools write locally; no tokens are read and nothing goes over the network.
-- Claude Code only hands its usage to its status line, so its limits need Islet's status line. When Claude Code is installed without it, Home shows Claude with a **Show usage** button that opens Settings at Usage limits, where a plain note says what changes (only `statusLine` in `~/.claude/settings.json`, with a backup) and nothing is written until you confirm. Home then says it is waiting for Claude Code until the first figures arrive. The "x" hides the hint for good.
-- **Status for every connected agent.** Codex and Cursor, connected from Settings, now show each session in the island (Thinking, the command or tool that's running, Waiting, Done), not only approval cards. Codex's older `notify` setup still works.
-- When Islet.app moves after an agent was connected, Coding agents says **Needs an update** instead of Connected, with a dot in the sidebar (checked once at launch), and **Update…** points the hooks at the new place. Hooks that call `isletctl` by name, as the examples in `integrations/` do, stay Connected. **Disconnect…** takes Islet's hooks out again after showing what it removes, and leaves everything else.
-- **MCP.** `isletctl mcp` lets agents show progress, notes and timers in the notch as tools.
-- A card nobody answers in time leaves the agent's status saying **Answer in the terminal**, and Answer in the terminal says so when the terminal couldn't be brought forward, so an agent never waits unseen.
-- Hooks leave out a tool's output, which Islet never reads, so a long one no longer goes over the API's size limit, and `isletctl` ignores system proxies on its way to 127.0.0.1.
-- Commands shown in the notch, and Codex's last message, hide anything that looks like a key or password.
-- **More usage on Home**, each off until switched on in Settings → Coding agents → Usage limits: **OpenRouter spending** (today's spend and what's left of the key's limit, with your own key), **Copilot premium requests** (this month's count against your plan, with a GitHub key that can read Plan) and **Ollama models** (what Ollama has loaded on this Mac and the memory it takes). They are asked for when the island opens, at most every few minutes, and never between. Keys are checked once, then kept in the Keychain. No other app's sign-in is read; Cursor offers usage only to team admins, so it isn't included.
-
-- Approval cards keep a command whole: the box stops between two lines and fades the next, the risks fit one line with **Click twice to allow** beside them, an edit names the file before its folder, and every card's buttons sit on the same line, with **Answer in the terminal** on the left.
+- **Approvals.** Claude Code, Codex and Cursor can ask in the island: Allow, **Always** (for the rest of the session), Deny or **Answer in the terminal**. Risky commands (recursive deletes, force pushes, sudo and more) need a second click. Questions and plans can be answered there too.
+- If Islet isn't running or you don't answer in time, the agent asks in the terminal as usual. A card that runs out of time leaves the agent's status saying **Answer in the terminal**, so it never waits unseen.
+- **Status for every agent.** Codex and Cursor now show each session (Thinking, the running command, Waiting, Done), as Claude Code does. Codex's older `notify` setup still works.
+- Settings → Coding agents connects each agent with one button, showing the change first. If Islet.app moves, the agent's row says so and **Update…** fixes it. **Disconnect…** removes Islet's hooks and nothing else.
+- **MCP.** `isletctl mcp` lets agents show progress, notes and timers in the notch.
+- An agent's status and Codex's last message hide anything that looks like a key or password. Approval cards still show the whole command, so you see what you're allowing.
+- **Usage limits.** Claude Code's and Codex's 5-hour and weekly limits appear on Home, with a short alert beside the notch at 90% and again at 100%. They are read on this Mac: no sign-in is read, and nothing goes over the network.
+- Claude Code shares its limits only with its status line, so Home offers **Show usage** to add Islet's. Nothing is written until you confirm; then only the status line changes, and a backup is kept.
+- **More usage on Home**, each off until you switch it on under Coding agents → Usage limits: OpenRouter spending, Copilot premium requests (with a read-only GitHub key) and the models Ollama has loaded. They are fetched only when the island opens, and keys are kept in the Keychain.
 
 ### Ask
-- An Ask box answered on the Mac by Apple Intelligence, by Claude or ChatGPT with your own API key (kept in the Keychain), or by the Claude Code and Codex command-line tools with the login you already have. ⌃⌥A opens it from anywhere.
-- Answers stream in and stop when the island closes. Nothing is kept on disk, and an `islet://ask` link only fills in the question.
-- Apple Intelligence now picks icons from a fixed set of categories, so its answers are always usable.
-- An answer shows whole lines in the body size, its last line fading only when more follows. A key Claude or ChatGPT didn't accept comes with **Change the key…**, as a missing one comes with **Add a key…**, and the hints say what they mean in plain words ("ChatGPT needs your OpenAI key.").
+- An Ask box answered by Apple Intelligence on the Mac, by Claude or ChatGPT with your own API key (kept in the Keychain), or by the Claude Code and Codex command-line tools with the login you already have. ⌃⌥A opens it from anywhere.
+- Answers stream in and stop when the island closes, and nothing is kept on disk. A missing or refused key gets a plain hint with **Add a key…** or **Change the key…**, and the box says so when Claude Code or Codex isn't installed.
+- Ask & AI names models as people say them ("Claude Opus 5.5") and checks for new ones.
 
 ### Timers and Siri
-- Timers you can start, pause, extend and stop from the island, the API, the URL scheme or `isletctl`, including phrases like "tea 4m" or "in 20 minutes to check the oven". A Pomodoro cycle. Timers survive a relaunch and ring with a sound of your choice.
-- A timer that ended more than an hour ago, while the Mac was asleep or Islet wasn't running, leaves a quiet note beside the notch instead of vanishing.
+- Timers from the island, the API, the URL scheme or `isletctl`, with phrases like "tea 4m" or "in 20 minutes to check the oven", and a Pomodoro cycle (25/5, 50/10 or 90/20 minutes). They survive a relaunch and ring with a sound you choose.
+- A paused timer shows its time left in grey beside the notch. One that ended over an hour ago, while the Mac slept or Islet was closed, leaves a quiet note instead of vanishing.
 - Siri reaches Islet through Shortcuts; [docs/SHORTCUTS.md](docs/SHORTCUTS.md) has the recipes.
-- A paused timer keeps its time left beside the notch, in grey, and a ringing one shows 0:00. The timer panel sits at the top of the island with the timers already running under it, and the Pomodoro wears the same leaf everywhere.
 
 ### Tools
-Every tool starts off until you turn it on in Settings: on the Tools page, or on the page of the feature it belongs to. To-dos, Note, Converter, Emoji, Shortcuts, Weather, Mirror, Teleprompter, Stocks and Sales then appear under More in the page switcher. Each tool has a row the Settings search finds.
-- **To-dos**: add a line and press Return, star what matters, tick it off. What is left comes first, starred lines at the top; done lines wait at the end until **Clear done**. Kept in a private file on the Mac.
-- **Quick note**: a scratch pad that keeps its text, saved as you type (half a second after you stop, with no timer of its own) and when the island closes.
-- **Unit converter**: type "5 ft in cm", "100f to c" or "2 cups = ml" for lengths, weights, temperatures, volumes and speeds, and click the answer to copy its number, without thousands separators so it pastes anywhere. Long whole numbers are never rounded off (a mile is 1,609,344 mm). Imperial and US units use their exact definitions, a plain pint or gallon follows the Mac's region, and the Ask box answers a conversion as you type it while the converter is on.
-- **Emoji**: search every emoji macOS can name, by its name or the words people use ("lol", "tada", "thumbs up"), with the ones you used lately first, and click one to copy it. **Type emoji where you're typing** (off by default, needs Accessibility) types it into the app you were in instead.
-- **Pages in the switcher** (General → Island pages): turn pages on or off in the switcher and drag them into order, up to four in the capsule and the rest under More. Home always stays, and so does the More menu, with Settings, Send feedback and Quit, even with no page under it; **Reset** goes back to Home, Today and Shelf.
-- **Send feedback** (About, and the island's More menu): **Report a problem…** or **Suggest an idea…** opens the GitHub issue form in your browser with the Islet and macOS versions filled in. Nothing is sent until you submit it there.
-- **Lyrics** (Now Playing → Lyrics): time-synced lyrics from LRCLIB beside the song on Home, for Music and Spotify. The line being sung is bright and the column moves on as the song plays; click a line to jump there, and the "x" hides them for that song. Only the title, artist, album and length are sent, once per song, and each answer is kept on the Mac. Islet wakes once per line, never on a timer. A timer or the stopwatch that is counting stays above the lyrics, and something that needs you still takes the column back.
-- **Shortcuts**: a page that searches and runs your shortcuts, using macOS's own Shortcuts tool. Return runs the best match for what you typed (never with the field empty), and the Ask box offers a shortcut whose name matches what you type. With the island closed, a quick note says when it has finished.
-- **Weather**: the weather now and for the week ahead from Open-Meteo, which needs no account, for a city you search for in Settings or for where you are. Location is asked for only when you choose "Where I am", and the position is rounded to about a kilometre before it is sent. The forecast is fetched when the Weather page opens, at most every 30 minutes. One kept from an earlier visit shows from the place's today on and says when it is from ("As of 09:12"). Celsius, Fahrenheit or the region's choice.
-- **Month calendar on Today** (Calendar & Reminders): the month beside today's events. Days with events are brighter and today is red; click a day to see what's on, the arrows for other months and the month's name to come back. Opening Today starts from this month again. On a wide island the reminders keep their own column.
-- **Stopwatch** (Timers): started from the timer button, with laps. It counts beside the notch while it runs, sits on Home like a timer, and survives a relaunch.
-- **Pomodoro lengths**: 25 / 5, 50 / 10 and 90 / 20 minutes (long breaks three times the short one), from the arrow beside Pomodoro in the timer button's panel or Timers → Lengths.
-- **Focus sound** (Timers): brown noise, rain or waves that Islet makes itself, or your own music, during Pomodoro focus rounds; they stop for the breaks. Your music is paused for a break only if Islet started it. Settings has a volume and a Listen button.
-- **Camera mirror.** Your camera centred under the notch, for a quick look before a call. It runs only while the Mirror page is open, so the camera light is on exactly then, stops while the screen is locked or asleep, and nothing is recorded. **Flip like a mirror** is on by default. macOS asks for the camera the first time you press **Allow camera**, and Settings → Permissions lists it.
-- **Teleprompter.** Your script moves up just under the camera at the pace you choose (60 to 300 words a minute, with − and + on the page), so you read while looking into the lens. Scroll over it to move it by hand; play again from the end starts from the top. **See-through while reading** turns the open island to clear glass on that page. The script stays in a private file on the Mac. The text moves with one linear animation and stops at the end through Islet's single deadline timer, so nothing ticks while it plays.
-- **Stocks.** A watchlist (up to 12 shares, indices such as ^GSPC, or currencies such as EURUSD=X) with each price, the day's change and a line for the day against the previous close. Prices come from Yahoo Finance without an account, only while the Stocks page is open: when it opens, then every two minutes.
-- **Sales.** Today's takings from Stripe, Shopify, Lemon Squeezy, Gumroad, Dodo Payments, Polar and Paddle, as one total (in your own currency when there are takings in it, with other currencies beside it) and per store, with the number of orders. Paste a read-only key for each store (Lemon Squeezy's keys can't be limited, and Islet only reads); it is checked, then kept in the Keychain. Paid orders since midnight count, less refunds, without test orders. Islet asks every 15 minutes while Sales is on and the Mac is unlocked, not in Low Power Mode, at midnight, and when you open the page.
-- Requests for sales, stocks and usage go only to the service each one names, over HTTPS (Ollama over plain HTTP on 127.0.0.1), with no cookies or cache, and never follow a redirect, so a key can't be sent anywhere else.
-- Settings → Permissions lists Location, and the Settings window is a little taller so every page still fits in the sidebar.
-- The tool pages read more plainly: the teleprompter's script rests on whole lines, a stock price kept after a failed refresh says **Earlier price**, indices go by their names (S&P 500), a store that can't be reached says what to do (**Reconnect**), an old weather report takes today's sky and keeps its place, a long lyric wraps to two rows, and a running shortcut shows its progress beside its name.
+Every tool starts off until you turn it on in Settings, on the Tools page or the page of the feature it belongs to. A tool with a page of its own then appears under More. The System page (CPU and memory) now starts off too.
+- **To-dos**: add, star and tick off lines; what's left comes first.
+- **Quick note**: a scratch pad that saves as you type.
+- **Unit converter**: type "5 ft in cm" or "100f to c" and click the answer to copy it. While it's on, the Ask box answers conversions too.
+- **Emoji**: search by name or the words people use ("lol", "tada") and click one to copy it, or to type it where you were with **Type emoji where you're typing** (needs Accessibility).
+- **Lyrics** (Now Playing): time-synced lyrics from LRCLIB beside the song on Home, for Music and Spotify; click a line to jump there. Only the title, artist, album and length are sent, once per song.
+- **Shortcuts**: search and run your shortcuts from the island or the Ask box.
+- **Weather**: now and the week ahead from Open-Meteo, with no account, for a city or for where you are. Location is asked for only when you choose "Where I am", and the position is rounded to about a kilometre.
+- **Month calendar** on Today (Calendar & Reminders), with days that have events brighter.
+- **Stopwatch** (Timers) with laps, beside the notch and on Home.
+- **Focus sound** (Timers): brown noise, rain, waves or your own music during Pomodoro focus rounds.
+- **Camera mirror**: your camera under the notch for a quick look before a call. It runs only while the page is open, and nothing is recorded.
+- **Teleprompter**: your script scrolls just under the camera at 60 to 300 words a minute, so you read while looking into the lens.
+- **Stocks**: a watchlist of up to 12 shares, indices or currencies from Yahoo Finance, fetched only while the page is open.
+- **Sales**: today's takings from Stripe, Shopify, Lemon Squeezy, Gumroad, Dodo Payments, Polar and Paddle, with a read-only key per store kept in the Keychain. Islet asks every 15 minutes while the Mac is unlocked and not in Low Power Mode, and when you open the page.
+- Sales, stocks and usage requests go only to the service each one names, over HTTPS (Ollama stays on this Mac), with no cookies, and never follow a redirect, so a key can't end up anywhere else.
 
 ### Now Playing and controls
-- The scrubber seeks. ±15 seconds, shuffle and repeat where the player supports them, the system volume and an output picker.
-- A new song shows for a moment: the island opens a little below the notch with the artwork, title and artist, then closes again. Skipping through tracks shows only the one you stop on, a song is shown once, and nothing shows for the first song after launch, while the island is open or hidden, or over a HUD or another peek. **Show the new song for a moment** in Settings (`songChangePeek`) turns it off.
-- Changing song no longer snaps: the artwork swaps with a short spring, and in the open island the title and artist slide in from below. With Reduce Motion they fade.
-- Two-finger swipes: down to open, up to close, sideways over music to change track. **Reverse sideways swipes** turns the sideways ones round.
-- Keep awake for 15 minutes, an hour, two hours or until you turn it off.
-- Battery thresholds are adjustable, with an optional "charged to 80%" alert. Time to full or empty reads in words ("full in 48 min", "2 h 10 min left").
-- The playing indicator springs down to a dim, flat line when you pause and rises back into motion when you play, instead of jumping. Settings → Now Playing chooses its look (bars, slim bars, dots, wave, pulse or none) and its colour (from the artwork, the accent colour or white). With the accent colour on automatic, "accent" means the artwork's colour, as it does everywhere else. With Reduce Motion a playing song no longer looks paused, and in Low Power Mode the indicator holds still.
-- Paused music stays beside the notch (or in its bubble beside an activity) for a while so the pause can be seen: the artwork dims and the indicator settles, then the island goes back to the notch. **Hide paused music after** sets how long (right away to 5 minutes, or never; 10 seconds by default) and replaces "Show paused music" (on becomes never).
-- Play and pause change the moment you click, with the symbol morphing between them, then follow what the player reports.
-- **Show song progress** (off by default) draws a thin ring round the artwork beside the notch that fills as the song plays. Core Animation fills it, so Islet does nothing while the song plays on.
-- Three more looks for the playing indicator: **Mirror** (bars that grow up and down from a centre line), **Vinyl** (the artwork beside the notch becomes a record that turns slowly while the song plays and coasts to a stop when you pause, with a small dot on the other side) and **GIF**, a little animated sticker in the right wing while music plays. Five stickers come with Islet, all drawn for it: a cat in headphones nodding along, a hopping jelly, two floating notes, a spinning record and a twinkling star. **Add GIF…** (or dropping a file on the gallery) adds your own GIF, animated PNG, WebP or HEIC of up to 5 MB, scaled to the wing and kept in Islet's folder; up to 12, removed from their right-click menu. Position and Size move and resize it, always inside the menu bar row, and **Also when nothing is playing** keeps it, still, beside the notch when nothing plays (off by default). The sticker plays only while music does, freezes and dims when you pause, and stops when the island hides, in full screen, with Reduce Motion (first frame) and in Low Power Mode. Its frames are decoded once at the size they are drawn, played by Core Animation at each frame's own pace as a browser plays it (up to 30 frames a second), and let go when the island stops showing it.
-- One **Music colour** now colours the playing indicator, the progress ring and the open island's progress bar, shuffle and repeat. It replaces the indicator's own colour setting (`visualiserColour` becomes `musicColour`).
-- A new song stays on show for as long as **New activities stay open for** says, instead of a fixed 2.5 seconds.
-- When the island opens on click, resting the pointer on the notch peeks at what's playing until the pointer leaves (**Peek at what's playing**, in General).
-- **Switch between players.** With several players at once (a video in Chrome and a song in Spotify), the open island shows the others as small app icons beside the title, with a dot on one that is playing. Clicking one shows and controls that player in the open island, until another player starts playing. The closed island keeps showing what plays: picking a paused video while a song plays leaves the song beside the notch, where the paused video used to show and then go after **Hide paused music after**. Once the picked player plays, the closed island shows it. A sideways swipe on the closed island changes the song it shows. Commands go to the player on show: a press on Spotify no longer pauses the video Chrome is playing. A player the system doesn't treat as now playing is controlled directly, which for Spotify and Music needs Automation; without it, the island says **Allow Islet to control Spotify…** and opens Settings → Permissions.
-- **Ignore apps** (Now Playing → Sources) keeps an app's media out, whichever way it is reported: a game's music, a video that plays by itself. An app that isn't a music or video player, reporting only a title, shows once it has played for 3 seconds, so a voice message or a short sound doesn't take over. Dia, Safari Technology Preview, the beta and developer versions of Chrome, Edge, Brave and Firefox, Chromium, Opera GX and DuckDuckGo count as **Web browsers**, for calls and clipboard history too.
-- When the Now Playing helper stops for good, Settings → Now Playing says so with **Try again**, and waking the Mac tries again by itself.
-- A sideways swipe over a volume or brightness HUD acts on what is under it, so it changes track over music.
-- The progress bar follows the newest report of a song, so it no longer drifts back after a seek in Spotify.
-- The song's title on Home keeps room for about a dozen characters and takes all the width the row leaves it. At the compact size, with another player's icon beside it, the volume button makes way rather than cutting "Midnight City" to "Midnight…". Several other players fold into one chip that counts them ("+3") and offers them in a menu, before the volume button goes. The volume button keeps its speaker and sits on a wash while the volume row shows, the progress and volume bars start and end in the same places, and time left has a real minus sign.
+- The scrubber seeks, and the open island has ±15 seconds, shuffle and repeat, the system volume and an output picker.
+- **Switch between players.** With a Chrome video and a Spotify song at once, small app icons beside the title switch between them and the controls follow, so a press on Spotify no longer pauses Chrome's video. The closed island keeps showing whatever plays.
+- When macOS doesn't list Spotify or Music as now playing, Islet controls them directly; without Automation it says **Allow Islet to control Spotify…** instead of doing nothing.
+- Each new song shows for a moment below the notch, for as long as **New activities stay open for** says, and **Show the new song for a moment** turns it off. When the island opens on click, resting the pointer on the notch peeks at what's playing (**Peek at what's playing**).
+- Changing song swaps the artwork with a short spring instead of snapping, and play and pause change the moment you click.
+- Paused music stays beside the notch for a while, dimmed, so you can see the pause. **Hide paused music after** (10 seconds by default) replaces **Show paused music**.
+- The playing indicator settles to a flat line when you pause. Settings → Now Playing chooses its look: bars, slim bars, dots, wave, pulse, **Mirror**, **Vinyl** (the artwork turns like a record) or **Sticker**. With Reduce Motion a playing song no longer looks paused.
+- **Sticker** puts a little animated sticker in the right wing while music plays: one of five drawn for Islet, or up to 12 of your own GIFs, animated PNGs, WebPs or HEICs, added with **Add…**. **Left and right**, **Up and down** and **Size** place it inside the menu bar row. It freezes when you pause and stops in full screen, with Reduce Motion and in Low Power Mode.
+- One **Music colour** (the artwork's, the accent colour or white) colours the indicator, the progress ring and the open island's progress bar, shuffle and repeat. **Show song progress** draws a thin ring round the artwork that fills as the song plays.
+- **Ignore apps** (Now Playing → Sources) keeps an app's media out, and an app that isn't a music or video player shows only once it has played for 3 seconds, so a voice message doesn't take over. More browsers, such as Dia, Opera GX and the beta versions of Chrome, Edge, Brave and Firefox, now count as web browsers, for calls and clipboard history too.
+- On Home the song's title keeps its room: at the Compact size the volume button and other players (folded into one "+3" chip) make way first.
+- Fixed: the progress bar drifting back after a seek in Spotify, a browser video that stayed "playing" after it ended or its window closed, and a crash and a core at 100% when the Now Playing helper stopped. If the helper stops for good, Settings → Now Playing offers **Try again**.
+- Keep awake for 15 minutes, an hour, two hours or until you turn it off. Battery alerts have thresholds you set and an optional "charged to 80%", and time left reads in words ("2 h 10 min left").
 
 ### Calendar and reminders
-- A Today tab with the rest of the day's events, Join buttons and reminders you can tick off. Repeating meetings now alert every time, and the agenda rolls over at midnight.
-- **Meeting reminders that stay until you join.** From 10 minutes before a meeting (**Remind me before meetings**: off, 5, 10, 15 or 30 minutes), it shows beside the notch with its call app's icon (Zoom, Teams, Webex, FaceTime) or its calendar's colour, counting down ("9 min"), then "Now". It opens for a moment when it appears and again at the start, when it starts to glow. With **Keep reminding until I join** (on by default) it stays until you press Join, dismiss it (its ×, a swipe up, or Dismiss in its menu) or the meeting ends; without, it goes a few minutes after the start. Clicking it opens Home on the meeting with a large Join button. Being in a call in the meeting's app counts as joining, even one you joined a few minutes early from somewhere else, so it never glows while you are in the meeting.
-- Only meetings with a call link remind you (**Only meetings with a call link**, on by default). All-day events, cancelled meetings and invitations you declined never do. Each occurrence of a repeating meeting is its own, and what you joined or dismissed is remembered across a relaunch. A Mac asleep through the start catches up when it wakes, and full screen and app rules hide reminders like other activities. These replace the old "starting soon" alert, and nothing checks the calendar every minute any more: Islet wakes only when a reminder is due.
-- **Calendar access that explains itself.** The Calendar & Reminders page, the Today page and Settings → Permissions now say what macOS allows in plain words: not allowed yet (**Allow…** asks), not allowed, turned off, or **Add events only**, each with a button to Privacy & Security → Calendars or Reminders and one line on what to switch. On Today the status and its button share a line, so nothing runs past the island's edge. When Allow comes back refused without macOS asking, the System Settings route shows instead of nothing happening. While the calendar is on but can't be read, Home says so in one quiet line with the same button. Coming back from System Settings starts the calendar at once, without a relaunch.
-- A meeting's countdown on Home says what the wing and the peek say ("In 9 min"), and a list with more than fits says how many more ("+2 more", click for the rest) instead of leaving them out unsaid.
-- Cancelled events no longer show on Home or Today, and an event macOS gives no identifier keeps the same one from one refresh to the next, so it alerts once.
-- `GET /v1/state` and `isletctl state` include `calendar` with the access for events and reminders and how many events are left today, never their titles. Meeting reminders stay out of what scripts can read, change or remove: clearing the `calendar` source from a script leaves them alone.
+- A Today page with the rest of the day's events, Join buttons and reminders you can tick off.
+- **Meeting reminders that stay until you join.** From 10 minutes before (or 5, 15 or 30, or off), a meeting with a call link counts down beside the notch with its call app's icon, glows when it starts, and stays until you join, dismiss it or it ends. Being in the call already counts as joining.
+- All-day events, cancelled meetings and declined invitations never remind you, every occurrence of a repeating meeting does, and a Mac asleep through the start catches up. These replace the old "starting soon" alert.
+- **Calendar access that explains itself.** The Calendar & Reminders page, Today and Settings → Permissions say in plain words what macOS allows, with a button to the right part of Privacy & Security. Coming back from System Settings starts the calendar at once.
+- On Home a meeting says "In 9 min", and a list too long to fit says how many more ("+2 more"). Cancelled events no longer show, and an event just added on another device no longer reminds you twice.
 
 ### Look
-- A calmer open island. The pages move out of the menu bar row into a small glass switcher under the island (Home, Today, Shelf and a menu for the rest), with a timer button on one side and Ask on the other. Home shows one main thing large, usually what's playing, with a quiet column beside it. Cards lost their borders, and spacing, corners and type follow one set of sizes.
-- Dynamic Glass is the default theme. The open island takes a stem-and-body shape: only a notch-wide black stem sits in the menu bar row, so the menu bar beside the notch stays in view, and the island is Liquid Glass from the bottom of the menu bar (a blurred material before macOS 26), with the black melting a little way down under the stem. A faint smoke keeps text readable, and a slow sheen drifts across unless Reduce Motion or Low Power Mode is on. **Glass level** in Settings sets how far the black melts and how dark the glass is, and every part of the slider does something: the default sits in the middle, and towards Glass the glass clears further. The pin moves to the page switcher's menu as **Keep open**. Black and Graphite keep the full-width row.
-- The closed island widens a little while the pointer rests on it, before it opens. It never grows downwards, and not at all with Reduce Motion.
-- **Subtle outline** (Appearance) draws a faint edge round the island for dark wallpapers; Increase Contrast always draws it. **Glass on displays without a notch** makes the closed pill glass too with the Glass theme, and its bubbles with it. Opening from the pill keeps its width in the menu bar, and a peek floats like the pill.
-- Graphite keeps the menu bar row black, so the notch never shows as a dark bite in a grey bar. A player with no artwork shows its own icon as it is, without a grey tile behind it.
-- **Animation speed** (Appearance) makes every move Relaxed, Normal or Quick, whatever the animation style.
-- The page switcher keeps one width on every page, so the timer and Ask buttons never move out from under the pointer, and a button that can't be used yet (Start with nothing typed) looks it.
-- The island moves like liquid: bubbles bud off its side and are pulled back in, the shell springs open before its content fades in and the page switcher rises after it, closing clears the content first, a new activity's icon bounces in, a changed value morphs instead of popping, and a peek's shoulders no longer flash square corners or a nub, with or without a notch. Growing out of the notch and bouncing when something arrives, it keeps clear of the menu bar items beside it. Reduce Motion, Minimal, Off and Low Power Mode keep to short fades.
-- An app on the Apps page can take any colour from the system colour panel, as the accent can, and a priority for its activities and notifications (low to urgent).
-- **Reset appearance…** at the end of Appearance puts the look back as Islet came, after asking: everything on that page and the music's look. Fit to the notch stays as it is.
-- **Artwork corners** (Appearance) go from square to round beside the notch, in a new song's peek and in the open island.
-- **Fit to the notch** (Appearance) nudges the notch's width by up to 20 points and its height by up to 4, so the closed island lines up with the hardware. Hovering and clicking follow.
-- Volume and brightness HUDs can be white, the accent colour or colourful (volume green, brightness yellow, keyboard light blue).
-- HUDs can be **Compact** (in the wings, as before) or **Detailed**: a short line just below the notch with the icon, the level and a percentage (or "Muted"), leaving the menu bar beside the notch clear. Keyboard brightness and microphone HUDs have their own switches beside volume and display brightness.
+- A calmer open island: the pages move into a small glass switcher under it (Home, Today, Shelf and More), with a timer button and Ask on either side, and Home shows one main thing large. **Pages in the switcher** (General) turns pages on or off and orders them, and the pin moves to the switcher's menu as **Keep open**.
+- Glass is now the default theme. Only a notch-wide black stem sits in the menu bar row, so the menu bar stays in view, and the island below is Liquid Glass (a blur before macOS 26). **Glass level** sets how far the black reaches down. Black and Graphite keep the full-width row.
+- The island moves like liquid: bubbles bud off its side, the shell springs open before its content fades in, and changed values morph. Minimal, Reduce Motion and Low Power Mode use short fades, Off doesn't animate, and **Animation speed** makes moves Relaxed, Normal or Quick.
+- The closed island widens a little under the pointer before it opens, and a peek no longer flashes square corners.
+- New in Appearance: **Subtle outline** for dark wallpapers (always on with Increase Contrast), **Glass on displays without a notch**, **Artwork corners**, **Fit to the notch** (adjusts the notch's width by up to 20 points and its height by up to 4 to match the hardware) and **Reset appearance…**.
+- Graphite keeps the menu bar row black, so the notch doesn't show as a dark bite, and a player without artwork shows its own icon.
+- An app on the Apps page can take any colour and a priority (low to urgent).
+- When an activity sets no icon, Apple Intelligence now picks one from a fixed set of categories, so it always gets an icon that exists.
+- HUDs can be **Compact** (in the wings) or **Detailed** (a short line below the notch with a percentage), and white, the accent colour or colourful. Keyboard brightness and microphone HUDs have their own switches; the keyboard's works while Islet replaces the system volume and brightness display.
 
 ### Calm by default
-- Volume and brightness HUDs start off in a new setup, since macOS shows its own and every key press showed two. With one on and the system display not replaced, Notifications & HUDs says so and offers **Show only Islet's**. A config from before keeps what it had.
-- The card for a new sound output (AirPods connecting) has its own switch, **Sound output changes**, on in a new setup. A config from before gets it only if its volume HUD was on, as the card came with it then. The level a new output sets for itself, or an app's change while Islet replaces the system display, shows no HUD.
-- Mirrored notifications stay beside the notch, since macOS shows its banner at the same moment; **Peek at new notifications** opens them below the notch as well. Each banner is mirrored once while it is up, banners already showing when mirroring starts aren't, and a second one with the same words is.
-- A call shows once its app has held the microphone for 3 seconds. A browser or a chat app first shows a quiet **Microphone in use** until the camera comes on or a minute passes. A dismissed call stays away until the app lets go of the microphone, and **Mute notifications and calls** on the Apps page silences an app's calls too.
+- Volume and brightness HUDs start off in a new setup, since macOS shows its own. Turn on **Replace the system volume and brightness display** to see only Islet's. Older configs keep what they had.
+- A new sound output's card has its own switch, **Sound output changes**, and the level a new output sets for itself shows no HUD.
+- Mirrored notifications stay beside the notch, since macOS shows its own banner; **Peek at new notifications** opens them below the notch too. Each banner is mirrored once.
+- A call shows once its app has held the microphone for 3 seconds, and a browser or chat app first shows a quiet **Microphone in use**. A dismissed call stays away until the microphone is free.
+- Unlocking no longer shows an empty "Welcome back", and Clipboard is in the More menu only while clipboard history is on.
 
 ### Using the island
-- With the island open, only what is drawn takes clicks: a click just outside it, or beside the page switcher, reaches the window underneath.
-- A peek that opens under the pointer neither opens the island nor takes a click meant for what was there, until the pointer has left it.
-- Closing the island with the pointer on the notch (the shortcut, a menu, a link, Ask) no longer lets it open again by itself.
-- The island stays open while the timer's field has the keyboard, while a right-click menu is open and while a file is dragged out of the shelf.
-- **Quit Islet** is in the island's right-click menu, its More menu and Settings → About, for when the menu bar icon is hidden behind the notch.
-- Islet's two shortcuts can't be set to the same keys: the field says which one already uses them.
+- With the island open, only what is drawn takes clicks; a click just outside reaches the window underneath.
+- Pushing the pointer against the top of the screen over the notch now opens the island, as resting on the notch does.
+- A peek under the pointer no longer opens the island or takes a click meant for what was there, and closing the island with the pointer on the notch no longer reopens it.
+- The island stays open while you type a timer, use a right-click menu or drag a file out of the shelf.
+- Two-finger swipes open and close the island and change track (or skip 10 seconds) over music; **Reverse sideways swipes** turns them round.
+- **Quit Islet** is in the island's right-click and More menus and Settings → About, for when the menu bar icon is hidden behind the notch.
+
+### Shelf and clipboard
+- **Keep files on the shelf for** an hour, a day (the default), a week or until you remove them; only the shelf forgets them, never the files. A shelf from an earlier version keeps its files until you choose. Each file has an AirDrop button, and files on a disconnected disk stay, dimmed.
+- Clipboard history keeps links, colours, pictures and files as well as text, each shown as itself, with search, filters and **Clear unpinned**. Pictures stay in memory only, and nothing marked secret is read.
+- **Skip passwords copied in a browser** (on by default) leaves out what password manager extensions copy, and text shaped like a generated password, but keeps ordinary text such as "Windows11". **Ignore apps** leaves out any app you choose.
+- Turning clipboard history off clears it, pinned items too.
 
 ### VoiceOver, contrast and the keyboard
-- VoiceOver reads the island in words. The closed island and each bubble are one element with what is going on and its state ("Claude, islet, waiting for you"), and a value as it stands: "4 minutes 32 seconds left", "46%", "step 3 of 5", "Lakers 102, Celtics 98, Q4", "lands in 1 hour 12 minutes". Countdowns stay current, since the value comes from the drawing that ticks. The volume, brightness and keyboard backlight HUDs, the clock on Home, timers, the stopwatch, events, reminders and usage limits are read the same way.
-- Every button that is only an icon has a name, the page switcher says which page is open, and the volume and the song's position move with VoiceOver's adjust keys. Things that show only under the pointer (dismiss, pin or remove a clip, open or AirDrop a shelf file, pause or add a minute to a timer, hide lyrics) are VoiceOver actions too, and the risky Allow button of an agent's request is pressed twice.
-- With Increase Contrast on (System Settings → Accessibility → Display), the island's quieter text and lines are firmer, so even the faintest reads at 4.5:1, and controls, boxes, the page switcher and the bubbles get a clear edge. In Settings the theme, indicator and sticker tiles, the accent swatches and the search field do too. Nothing changes with it off.
-- With Keyboard navigation on (System Settings → Keyboard), Tab reaches every control in Settings, including **Fit to the notch**, which Space opens. Tab or Shift-Tab leaves a shortcut field without changing the shortcut, and Delete removes a sticker of yours that has the focus.
+- VoiceOver reads the island in words ("Claude, my-app, waiting for you", "4 minutes 32 seconds left"), every icon button has a name, and buttons that show only under the pointer are VoiceOver actions too.
+- Increase Contrast makes the faintest text read at 4.5:1 and gives controls a clear edge, in the island and in Settings.
+- With Keyboard navigation on, Tab reaches every control in Settings, including **Fit to the notch**.
 
 ### Settings
-- Settings is a sidebar window like System Settings, with a search field that finds any setting and opens its page at that row. Each feature page starts with its switch and one plain line; Appearance gathers every look, with a live drawing of the island, any accent colour and sizes you can drag; shortcuts are set by pressing them; Coding agents connects Claude Code, Codex and Cursor with one button each, showing the change first; and ports, tokens, hook commands and script widgets wait under Advanced.
-- Appearance and Now Playing open with a live drawing of the closed island and a play/pause button, so the indicator and the pause can be judged without music playing.
-- A shortcut field can record a combination that is already one of Islet's shortcuts; they pause while it listens, and come back if you switch to another app or close Settings.
-- Buttons use sentence case. The Ask box says plainly when Claude Code or Codex isn't installed; where Islet looked is in Advanced → Diagnostics.
-- Permissions puts each permission's status and button on its title line, in a column, with what uses it below at full width; calendars and reminders say what the Calendar page says, and Automation offers **Open Music** (or Spotify) when the app has to be open to check.
-- Ask & AI names models as people say them ("Claude Opus 5.5"), checks for new ones from the model menu, records the Ask shortcut as Keyboard shortcuts does, and greys out Effort for answers that don't use it. The shortcuts page is now called **Keyboard shortcuts**.
-- The System page (CPU and memory) starts off and is switched on Tools, with the other pages. **Swipe sideways over music** is one choice: Off, Next or previous song, or Skip 10 seconds.
-- The GIF look is called **Sticker**, and its sliders stop where the sticker stops moving in the menu bar row. Now Playing lists Music, Spotify and browsers first; what scripts send is switched in Advanced → Local API.
-- Hook snippets in Advanced wrap at spaces, so a path never splits, and scroll with a fade when they are long. The offer to move Islet to Applications is two sentences under Islet's icon.
+- Settings is a sidebar window like System Settings, with a search field that finds any setting. Each page opens with one plain line on what it does, and technical settings wait under Advanced.
+- Appearance and Now Playing show a live drawing of the closed island with a play/pause button.
+- Shortcuts are set by pressing them, on a page now called **Keyboard shortcuts**. Islet's two can't share keys, and they pause while a field listens.
+- Permissions shows each status on its title line, says what Accessibility lets Islet read (never your typing) and offers **Open Music** (or Spotify) when the app must be open to check. Launch at login says why a change didn't take.
+- **Send feedback** (About and the More menu) opens a GitHub issue form with your versions filled in; nothing is sent until you submit it.
 
 ### Safer and lighter
-- A crash when the Now Playing helper stopped, and a core spinning at 100% after it did, are fixed.
-- Module switches in Settings take effect at once, and turning clipboard history off clears it, pinned items too.
-- A typo in `config.json` no longer resets every setting. Islet keeps the settings it had and saves nothing over the file until it parses again; Settings → Advanced says which line has the error, and **Replace…** writes the settings in use over it, keeping a copy as `config.json.broken`. A file that is already broken when Islet starts (edited while it was quit) gives the settings from the last time it parsed, kept in `~/Library/Application Support/Islet/config-last-good.json`, rather than the defaults; with no such copy, Advanced says Islet is on its defaults. Keys Islet doesn't know, from a newer version or added by hand, survive a save.
-- An unreadable `shelf.json` or `timers.json` is moved to `shelf.json.corrupt` or `timers.json.corrupt` before the shelf or timers start empty, instead of being saved over. Files on a disk that isn't connected stay on the shelf, dimmed, until it comes back.
-- Clipboard history keeps links, colours, pictures and files as well as text, and shows each as itself: a link by its site and path, a colour (`#0A84FF`, `rgb()`, `hsl()`) with a swatch (an issue number such as `#123` stays text), a picture as a thumbnail with its size, files by their icon and names. A search field and filters (Pinned, Text, Links, Colours, Images, Files, only for what is there) sit on top, a click copies an item back as it was, and a link opens in the browser or files show in Finder from under the pointer. Pictures stay in memory only (up to 12 MB each and 36 MB in all), and nothing on the pasteboard marked secret or throwaway is read at all.
-- The shelf lets files go after a while: **Keep files on the shelf for** an hour, a day (the default), a week or until you remove them. Only the shelf forgets them; the files stay where they are, and dropping one again starts its time again. The shelf of an earlier version keeps its files until you choose. Each file also has its own AirDrop button under the pointer.
-- Clipboard history leaves out passwords copied in a browser, since password manager extensions copy as the browser (**Skip passwords copied in a browser**, on by default): anything a password manager's extension copies, and text shaped like a generated password. Ordinary text that mixes letters and digits, such as "Windows11", "COVID-19", "iPhone15Pro" or a UUID, is kept. **Ignore apps** leaves out any app you choose. **Clear unpinned** sits at the end of the Clipboard page.
-- A calmer island: unlocking no longer shows an empty "Welcome back" when nothing arrived, and Clipboard is in the island's menu only while clipboard history is on.
-- **Replace the system volume and brightness display** lets a key through to macOS when Islet can't act on it: brightness on another display or with the lid closed, brightness while BetterDisplay, MonitorControl or Lunar is running, volume on a fixed-volume output, and Option with a key, which opens Sound or Displays settings. Islet's HUD shows only a change that really happened. A key held down keeps the answer its press got, so macOS never sees a release without its press. Allowing Accessibility in System Settings starts it at once, without a relaunch.
-- **Hide from screenshots** says that some screen-sharing and recording apps still show the island, and the island's glass draws solid while it's on, so it can't turn into a black slab.
-- With the Now Playing helper unavailable, a Music or Spotify control that macOS hasn't allowed Islet to use now says **Allow Islet to control Spotify…** in place of the buttons, instead of doing nothing. Music or Spotify switched off in Settings sends no AppleScript at all, and a script can no longer reopen a player that has just quit.
-- An activity's end, a HUD or a peek that fell due just as something else changed no longer stays on screen until the next event.
-- `islet://` links can't replace Islet's own activities or open anything but https. Script widgets are off until you turn them on and only run files you own. Meeting links must be on the real host to get a Join button.
-- Downloads, the clipboard and plugins stop checking while nothing changes or the screen is locked.
-- Nothing slow runs on the main thread: Notification Center is read in the background with a short time limit, and shelf files on another disk or a share are checked in the background too, so a share that doesn't answer neither holds up launch nor loses its files (they show dimmed). A disk mounting or unmounting checks again.
-- After sleep the island's windows are made again once the displays settle, and the key tap and the shortcuts are set up afresh. With fast user switching, nothing reads the menu bar, banners or keys from the background session. Accessibility allowed (or taken away) in System Settings starts (or stops) Live Activities and notification mirroring at once.
-- The island's looping animations hold still in Low Power Mode.
-- Script widgets run with a short list of variables (home, user, language, PATH and the xbar ones) instead of Islet's whole environment, and Advanced names what they can use.
-- Clipboard history keeps at most 4 MB of text, dropping the oldest unpinned copies first.
-- What goes wrong in the background (a card that ran out of time, a terminal that couldn't be brought forward, the Now Playing helper stopping, a file that couldn't be read or saved) goes to the system log under Islet's name, by area, and never with what you typed or copied.
-- Settings → Permissions says what Accessibility lets Islet read (never your typing) and, from macOS 27, what System Settings calls it. Launch at login says why a change didn't take, and General says when Islet runs from outside Applications, with **Move to Applications…**.
-- **Opened straight from Downloads.** macOS then runs Islet from a temporary copy that moves at every launch, so connected coding agents showed **Needs an update** each time and Launch at login could lose it. Islet now asks, when it opens and before connecting a coding agent or Claude Code's usage, to move itself to Applications. **Move to Applications** copies it there (Applications in your home folder if Islet can't write to the shared one), puts the downloaded copy in the Bin and opens Islet again from its new place; **Not now** leaves things as they are.
-- A browser video no longer stays "playing" in the island after you close its window, and a video that finished without saying so shows as stopped and then goes.
-- Local builds use the hardened runtime.
-- Islet builds with Xcode 26 and the macOS 26 SDK as well as the macOS 27 one. Built with the macOS 26 SDK, the on-device model's errors are read from their description rather than macOS 27's error type.
-- The iPhone bridge has its own token, separate from the local API's, with Copy and New Token in Settings → Advanced. It only accepts notifications, timers, Focus and simple activities (no links, buttons or image files), refuses a wrong token before reading the body, and limits bodies to 16 KB and connections to 8, 2 per client. Connections whose headers take longer than 2 seconds are closed. Bonjour advertises it as "Islet" rather than the Mac's name. `isletctl token --lan` prints its token.
-- A request refused from its headers alone (a wrong token, a refused route, a body that's too large) now gets its answer through to clients still sending a large body, such as URLSession, instead of ending in a timeout or a lost connection.
-- Calendar and Reminders access works in the app bundle: the hardened runtime needed the calendars entitlement, without which macOS refused access and never asked.
-- The camera mirror has the camera entitlement and a usage description for the same reason.
-- Hovering opens the island when the pointer is pushed against the top edge of the screen. Settings can switch it to open on click instead.
+- **Opened straight from Downloads**, Islet ran from a temporary copy that moved at every launch, so agents and Launch at login lost track of it. Islet now offers to move itself to Applications (putting the download in the Bin) when it opens and before connecting an agent, and General has **Move to Applications…**.
+- A typo in `config.json` no longer resets your settings: Islet keeps what it had, Advanced shows the line with the error, and **Replace…** keeps a copy of the broken file. A file already broken at launch starts from the last one that worked, and unknown keys survive a save.
+- A broken shelf or timers file is set aside rather than saved over.
+- Feature switches take effect at once, and an activity, HUD or peek that ended just as something else changed no longer sticks on screen.
+- **Replace the system volume and brightness display** passes a key to macOS when Islet can't act on it (another display, a closed lid, BetterDisplay, MonitorControl or Lunar, a fixed-volume output, Option with a key), and shows only changes that happened.
+- After sleep the island's windows, keys and shortcuts are set up again, and with fast user switching nothing is read from the background session. Granting or removing Accessibility takes effect at once.
+- **Hide from screenshots** says that some screen-sharing apps still show the island, and the glass draws solid while it's on, so it can't turn black.
+- Music or Spotify switched off in Settings gets no AppleScript at all, and a script can no longer reopen a player that has just quit.
+- `islet://` links can't replace Islet's own activities or open anything but https. Script widgets are off until you turn them on, run only files you own and get a short list of variables instead of Islet's whole environment. Meeting links must be on the real host to get a Join button.
+- Hooks no longer send a tool's output, so a long one can't make the request fail, and `isletctl` ignores system proxies.
+- On macOS 27, measuring the menu bar reads one system window, and only while the island shows. Notification Center and shelf files on network shares are read in the background, so a slow share can't hold up the island.
+- Downloads, clipboard history and script widgets stop checking while nothing changes or the screen is locked, and looping animations hold still in Low Power Mode.
+- Background errors go to the system log under Islet's name, never with what you typed or copied.
+
+### For developers
+- The iPhone bridge has its own token (**Copy** and **New token…** in Settings → Advanced, or `isletctl token --lan`), takes only notifications, timers, Focus and simple activities, and limits requests and connections ([docs/API.md](docs/API.md)). Bonjour calls it "Islet", not your Mac's name.
+- `GET /v1/state` and `isletctl state` include calendar access and how many events are left today, never their titles. Scripts can't read, change or remove meeting reminders.
+- A request refused from its headers alone now gets its answer back while the client is still sending a large body.
+- Hook snippets in Advanced wrap at spaces. Local builds use the hardened runtime, with the entitlements macOS needs for calendars, the camera, location and Automation. Islet also builds with the macOS 26 SDK.
 
 ### Measured on an M3 Pro MacBook Pro, macOS 27.0.1
 
-MEASURED_TABLE
+| State | CPU over 10 s | Budget |
+| --- | --- | --- |
+| Idle | 0.0% | 0.5% |
+| Closed, live countdown | 0.4% | 1.5% |
+| Closed, static progress | 0.4% | 1.5% |
+| Closed, spinner | 0.0% | 1.5% |
+| Closed, music playing | 0.4% | 1.5% |
+| Open, Now Playing | 0.7% | 3% |
+| Idle again | 0.3% | 0.5% |
+
+Memory: 106 MB resident. End-to-end suite: 62 passed, 1 skipped (the media test, which never runs while something is playing).
 
 ### Known issues
 - Tested on macOS 27 only; mirroring Live Activities on macOS 26 is untested.
 - How much text a Live Activity exposes varies by app.
+- On a very crowded menu bar the icon-only wings can still cover the nearest menu bar item.
 - Apple Intelligence features need the on-device model to be downloaded.
-- Siri can't call Islet directly yet: that needs App Intents metadata only Xcode can build.
+- Siri can't call Islet directly yet: Islet is built without full Xcode, and Siri only finds an app's actions through a file Xcode makes. A shortcut can reach Islet through `islet://` links or `isletctl`, and Siri runs shortcuts by name ([docs/SHORTCUTS.md](docs/SHORTCUTS.md)).
 - The build is ad-hoc signed, so macOS asks you to confirm the first launch.
 
 ## 0.1.0 (30 September 2026)
@@ -227,7 +209,7 @@ Memory stayed between 73 and 88 MB across those runs. 132 unit and system tests 
 
 ### Known issues
 
-- When something is showing in the closed island, its sides can cover menu bar icons that sit close to the notch. Fixed in the next version.
+- When something is showing in the closed island, its sides can cover menu bar icons that sit close to the notch. Mostly fixed in 0.2.0.
 - Notification mirroring depends on Notification Center's accessibility tree and hasn't been tested against every app.
 - Apple Intelligence features only switch on when the on-device model is downloaded. Otherwise Islet falls back to its own icon rules.
 - The build is ad-hoc signed, so macOS will ask you to confirm the first launch.

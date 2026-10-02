@@ -224,7 +224,7 @@ curl -s -X POST http://127.0.0.1:47831/v1/activities \
 
 `GET /v1/state` (and `isletctl state`) includes `"calendar": {"events": "fullAccess", "reminders": "notDetermined", "upcoming": 3}`: what macOS allows for calendars and for reminders (`notDetermined`, `fullAccess`, `writeOnly` for "Add events only", `denied` or `restricted`), read afresh for each request, and how many timed events are left today. It never includes a title. Meeting reminders (ids starting with `meeting-`, source `calendar`) carry the meeting's title, so `GET /v1/activities` and `/v1/state` always leave them out. To a script they aren't there: changing or removing one by its id gets a `404`, and `DELETE /v1/activities?source=calendar` removes only your own `calendar` activities and counts only those.
 
-Live Activities mirrored from the menu bar (ids starting with `live-`, source `live-activity`) belong to the mirror. Creating, changing or removing one, or sending that source, gets a `403` whether or not the id exists. `GET /v1/activities` and `/v1/state` leave them out, and `/v1/debug/menubar` leaves out their text, unless **Share mirrored activities with scripts** is on; see [LIVE-ACTIVITIES.md](LIVE-ACTIVITIES.md).
+Live Activities mirrored from the menu bar (ids starting with `live-`, sources `live-activity` or starting with `live-activity:`, such as `live-activity:uber`) belong to the mirror. Creating, changing or removing one, or sending that source, gets a `403` whether or not the id exists. `GET /v1/activities` and `/v1/state` leave them out, and `/v1/debug/menubar` leaves out their text, unless **Let scripts read Live Activities** (Settings → Advanced → Local API) is on; see [LIVE-ACTIVITIES.md](LIVE-ACTIVITIES.md).
 
 ### Media commands
 
@@ -277,7 +277,7 @@ curl -s -X POST http://127.0.0.1:47831/v1/timer -H "Authorization: Bearer $TOKEN
 
 **Actions.** `pause` keeps the time left; `resume` counts down from there; `add` adds `seconds` or `in` (default 60), and restarts a ringing timer for just that long; `snooze` rings again in 5 minutes (or `seconds`); `restart` runs the full length again; `stop` removes it. `PATCH /v1/timers` without an id acts on the ringing timer, or else the newest one.
 
-**When a timer ends** it rings: the island opens on Home with Stop, Snooze 5 and Restart (unless you've hidden the island for the app in front or for fullscreen apps), the chosen sound plays, and the activity turns critical, so it pops up over fullscreen apps too. A timer that ended more than an hour before Islet could ring it (the Mac was asleep or Islet wasn't running) is dropped instead.
+**When a timer ends** it rings: the island opens on Home with Stop, Snooze 5 min and Restart (unless you've hidden the island for the app in front or for fullscreen apps), the chosen sound plays, and the activity turns critical, so it pops up over fullscreen apps too. A timer that ended more than an hour before Islet could ring it (the Mac was asleep or Islet wasn't running) is dropped instead.
 
 **Pomodoro.** 25 minutes of focus, a 5-minute break, and a 15-minute break after every 4th round, moving on by itself. Change the lengths in Settings → Timers, or with the `pomodoro` key in the settings file.
 ### Approvals (long-poll)
@@ -342,15 +342,19 @@ isletctl statusline [-- <command…>]    Claude Code status line: record plan us
 isletctl hook <claude|codex|cursor> --wait N   wait up to N s for an answer in the notch, print it
 isletctl state | health | token
 isletctl token --lan                  the iPhone bridge's token (not the local API's)
+isletctl debug menubar [--watch]      what Islet sees in the menu bar (see LIVE-ACTIVITIES.md)
+isletctl mcp                          run as an MCP server on stdio (see MCP.md)
 ```
 
 `isletctl hook` never fails the calling agent: it exits 0 within ~1.5 s even when Islet isn't running.
 
+With `--wait N`, events that ask for a decision wait up to N seconds for an answer in the notch, and the answer is printed on stdout for the agent. Every failure (Islet not running, API off, no answer) still exits 0 and prints nothing, so the agent asks in the terminal instead. Other events are sent and forgotten as before.
+
 `isletctl token --lan` prints the iPhone bridge's token from `lan.json`, even while Islet isn't running, and says so if the bridge has never been turned on.
 
 `isletctl statusline` is a Claude Code status line command. It reads the JSON Claude passes on stdin and saves the plan limits, model and context use to `~/Library/Application Support/Islet/usage/claude.json` (mode 0600, written only when a figure changes). Then it runs `<command…>` with the same stdin and passes its output and exit code through; if Claude Code stops the status line early, the command is stopped too. A single argument runs with `/bin/sh -c`, which is how Claude stores a command line; several arguments run directly, without a shell. With no command it prints a short line such as `Opus 5.5 · 42% context · 5h 62%`. It never contacts the app or the network, and its own work takes a few milliseconds. See [Usage limits](INTEGRATIONS.md#usage-limits).
+
 `isletctl timer` reads the same phrases as the API's `in`, with one difference: a bare number is seconds (`isletctl timer 300`), as it always was. Quote phrases with spaces: `isletctl timer "in 20 minutes to check the oven"`.
-With `--wait N`, events that ask for a decision wait up to N seconds for an answer in the notch, and the answer is printed on stdout for the agent. Every failure (Islet not running, API off, no answer) still exits 0 and prints nothing, so the agent asks in the terminal instead. Other events are sent and forgotten as before.
 
 ---
 
@@ -383,8 +387,10 @@ Any app or web page can open these URLs, and they carry no token, so they are li
 - `priority=critical` is treated as `high`.
 
 Use the local API or `isletctl` when you need more.
+
 Siri can open these links through a shortcut: see [Siri and Shortcuts](SHORTCUTS.md).
-`islet://ask` opens the Ask box in the island with the question filled in and the field focused. It **never sends**: you press Return. `q` is optional (up to 4,000 characters). `provider` is optional and picks the provider for this session: `on-device`, `claude` (or `anthropic`), `chatgpt` (or `openai`), `claude-code`, `codex`; an unknown name is an error. There is no HTTP or `isletctl` equivalent, by design: nothing outside the Ask box can spend money on your API keys. See [AI.md](AI.md).
+
+`islet://ask` fills in the Ask box and never sends; there is no HTTP or `isletctl` equivalent. See [AI.md](AI.md#islet-ask).
 
 ---
 
@@ -424,6 +430,7 @@ Placement, look and motion keys:
 
 | Key | Default | Meaning |
 |---|---|---|
+| `hoverToOpen` | `true` | Open the island when the pointer reaches it (after `openDelay`, 0.18 s); `false` opens it on click. |
 | `notchlessStyle` | `"pill"` | Displays without a notch: `"pill"` (floating in the menu bar), `"notch"` (a notch shape at the top edge), `"hover"` (nothing until the pointer reaches the top edge) or `"hidden"`. Replaces `showOnNonNotchDisplays`, which is read once: `false` becomes `"hidden"`. |
 | `fullscreenBehaviour` | `"hide"` | Over a full screen app: `"show"`, `"hideMusic"` (activities, timers and HUDs stay) or `"hide"` (only HUDs and critical alerts). An app rule's `showInFullscreen` keeps everything. Replaces `hideInFullscreen`, which is read once: `false` becomes `"show"`. |
 | `glassLevel` | `0.6` | Glass theme, 0 to 1: towards 0 the black under the notch melts further down and the glass darkens; at 1 the island is glass right from the bottom of the menu bar. |
@@ -449,9 +456,10 @@ Now Playing, closed island, HUD, gestures and battery keys:
 | `sticker` | `{"id": "cat"}` | The `"gif"` look's sticker. `id`: `"cat"`, `"jelly"`, `"notes"`, `"record"`, `"star"`, or `"custom-"` and the id of one added in Settings (kept as animated PNGs in `~/Library/Application Support/Islet/stickers`, at most 12). `offsetX` and `offsetY`: points from where it sits, -12 to 12 (positive is right and down; it never leaves the menu bar row). `scale`: 0.6 to 1.6. `whenIdle` (`false`): the sticker stays, still, beside the notch when nothing is playing. An unknown id is the cat. |
 | `musicColour` | `"artwork"` | The playing indicator, the progress ring and the open island's progress bar: `"artwork"`, `"accent"` (the artwork's colour while `accentColor` is `"auto"`) or `"white"`. Replaces `visualiserColour`, which is read once. |
 | `artworkCornerRadius` | `5` | Artwork corners beside the notch, 0 (square) to 10 (round). The song peek and the open island scale it to their size. |
-| `hudEnabled`, `brightnessHUDEnabled`, `keyboardHUDEnabled`, `microphoneHUDEnabled` | `true` | Which HUDs show: volume, display brightness, keyboard brightness and microphone. The keys still work with one off, and the API's `hud` follows the same switches. |
+| `hudEnabled`, `brightnessHUDEnabled` | `false` | The volume and display brightness HUDs. Off in a new setup, since macOS shows its own; a config from before this that leaves them out keeps them on. |
+| `keyboardHUDEnabled`, `microphoneHUDEnabled` | `true` | The keyboard brightness HUD (only while `replaceSystemHUD` is on) and the microphone HUD. The keys still work with a HUD off, and the API's `hud` follows the same switches. |
 | `hudStyle` | `"compact"` | `"compact"` (in the wings beside the notch) or `"detailed"` (just below the notch, with a percentage). |
-| `hudColour` | `"white"` | Volume and brightness HUDs: `"white"`, `"accent"` or `"colourful"` (volume green, brightness yellow, keyboard light blue, microphone orange). |
+| `hudColour` | `"white"` | Every HUD: `"white"`, `"accent"` or `"colourful"` (volume green, brightness yellow, keyboard light blue, microphone orange). |
 | `notchWidthAdjust`, `notchHeightAdjust` | `0` | Points added to the notch so the closed island lines up with it: width −20 to +20, height −4 to +4. |
 | `gesturesEnabled` | `true` | Two-finger swipes on the island. |
 | `swipeDownToOpen`, `swipeUpToClose` | `true` | Open and close by swiping. |
@@ -469,6 +477,7 @@ Now Playing, closed island, HUD, gestures and battery keys:
 | `shelfKeepFor` | `86400` | Seconds a file stays on the shelf before the shelf lets it go (the file itself stays where it is): Settings offers `3600`, `86400`, `604800` and `0` (until you remove it). Other values from 60 to 2592000 (30 days) work too. A config from before this setting keeps `0`. |
 | `islandPages` | Home, Today and Shelf in the capsule | The switcher's order: `{"bar": [...], "more": [...], "hidden": [...]}` with page names (`home`, `today`, `shelf`, `widgets`, `clipboard`, `stats`, `shortcuts`, `weather`, `todos`, `note`, `converter`, `emoji`, `mirror`, `teleprompter`, `stocks`, `sales`). At most four pages that are on show in the capsule; `hidden` ones are left out of the switcher. Home is always in the capsule, and pages not named go at the end of the list they come in. |
 | `todosEnabled`, `noteEnabled`, `converterEnabled`, `emojiEnabled` | `false` | The To-dos, Note, Converter and Emoji pages under More ([Tools](TOOLS.md)). |
+| `systemStatsEnabled` | `false` | The System page under More: CPU and memory, measured only while it is open. |
 | `emojiTypes` | `false` | A click on an emoji types it into the app you were typing in instead of copying it. Needs Accessibility. |
 
 The old `hapticFeedback: false` is read as `"hapticsMode": "off"`; use `hapticsMode` from now on.

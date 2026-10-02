@@ -6,7 +6,7 @@ Islet connects to apps in three ways:
 2. **Push from anything:** the `isletctl` CLI, the local HTTP API, the `islet://` URL scheme and the iPhone bridge. Every app or tool that can run a command, open a URL or make a request can drive the island. The full reference is in [API.md](API.md).
 3. **Script widgets:** any xbar/SwiftBar plugin, or a script that prints an Islet activity as JSON.
 
-Ready-made files live in [`integrations/`](../integrations/). For recipes covering ~50 specific apps — Mail, Things, OmniFocus, Xcode, VS Code, Cursor, iTerm2, Ghostty, Docker, GitHub, Homebrew, OBS, Time Machine, Tailscale and more — see the [app integration catalogue](research/05-app-integration-catalogue.md).
+Ready-made files live in [`integrations/`](../integrations/). For recipes covering about 50 apps, such as Mail, Things, OmniFocus, Xcode, VS Code, Cursor, iTerm2, Ghostty, Docker, GitHub, Homebrew, OBS, Time Machine and Tailscale, see the [app integration catalogue](research/05-app-integration-catalogue.md).
 
 ---
 
@@ -14,11 +14,11 @@ Ready-made files live in [`integrations/`](../integrations/). For recipes coveri
 
 | Source | What you see | Needs |
 |---|---|---|
-| Any app that reports Now Playing (Music, Spotify, Podcasts, TV, Safari/Chrome/Arc/Firefox tabs, VLC, IINA, Plexamp, Tidal, Cider…) | Artwork + equalizer in the closed island, and each new song for a moment below the notch; when open, a scrubber you can drag, ±15 s, shuffle and repeat (when the player reports them), system volume and an output picker. With several players at once (a Chrome video and a Spotify song), the others show as small app icons beside the title; clicking one shows and controls that player | nothing (Automation for Spotify or Music to control one the system doesn't treat as now playing) |
+| Any app that reports Now Playing (Music, Spotify, Podcasts, TV, Safari/Chrome/Arc/Firefox tabs, VLC, IINA, Plexamp, Tidal, Cider…) | Artwork and the playing indicator in the closed island, and each new song for a moment below the notch; when open, a scrubber you can drag, ±15 s, shuffle and repeat (when the player reports them), system volume and an output picker. With several players at once (a Chrome video and a Spotify song), the others show as small app icons beside the title; clicking one shows and controls that player | nothing (Automation for Spotify or Music to control one the system doesn't treat as now playing) |
 | FaceTime, Zoom, Teams, Slack huddles, Discord, WhatsApp, Webex, Skype, Telegram, Signal, Meet in a browser | Green call pill with a live timer once the app has held the microphone for 3 seconds; video icon when the camera is on. A browser or a chat app first shows a quiet "Microphone in use" until the camera comes on or a minute passes. A dismissed pill stays away until the app lets go of the microphone | nothing |
 | Calendar (iCloud, Google and Exchange accounts added to macOS) | Meeting reminders: from 10 minutes before (5, 15 or 30, or off), the meeting counts down beside the notch with its call app's icon, glows when it starts and stays until you join, dismiss it or it ends. **Join** opens the Zoom, Meet, Teams, Webex or FaceTime link; being in a call in that app (joined up to 10 minutes early) counts as joining. All-day events, cancelled meetings and declined invitations never remind you | Calendar access (full access, not "Add events only") |
 | Battery | Charging splash (the adapter's watts show in the open island), low and critical warnings at levels you choose, an optional "charged to 80%" alert, Low Power Mode on/off | nothing |
-| Volume, brightness, keyboard backlight | HUD in the notch (optionally replacing the system one). Volume and brightness start off in a new setup, since macOS shows its own | nothing (Accessibility to replace) |
+| Volume, brightness, keyboard backlight | HUD in the notch. Volume and brightness start off in a new setup, since macOS shows its own; the keyboard backlight HUD shows only while Islet replaces the system one | nothing (Accessibility to replace the system HUD) |
 | AirPods / headphones / displays / speakers | "Connected" card when the output device changes (its own switch, **Sound output changes**) | nothing |
 | Safari, Chrome, Firefox, Edge, Brave, Arc downloads | Progress (real % for Safari), then "Downloaded" with Open/Show | Downloads folder access |
 | Notifications from every app, including iPhone notifications forwarded by macOS | App icon + sender + one line beside the notch (macOS shows its own banner too; **Peek at new notifications** opens it below the notch as well); per-app mute, tint and priority; optional on-device summary | Accessibility (experimental) |
@@ -28,7 +28,11 @@ Ready-made files live in [`integrations/`](../integrations/). For recipes coveri
 
 ## Coding agents
 
-The quickest way: open *Settings → Coding agents* and press **Connect…** beside Claude Code, Codex or Cursor. A sheet lists every change before anything is written, your own hooks and settings stay as they are, and each file is copied to a `.bak` file first. The row then says **Connected**. If you later change how long Islet waits for an answer, or Islet.app moves (the hooks call the `isletctl` inside it), it says **Needs an update** and **Update…** brings the hooks in line; Islet checks once at launch and puts a dot on Coding agents when a hook points at an `isletctl` that is gone. Hooks that call `isletctl` by name, as in the examples below, never count as moved. **Disconnect…** takes out Islet's hooks and nothing else, after showing what it removes. The commands themselves are in *Settings → Advanced → Coding agents*, for dotfiles. The sections below do the same by hand.
+The quickest way: open *Settings → Coding agents* and press **Connect…** beside Claude Code, Codex or Cursor. A sheet lists every change before anything is written, your own hooks and settings stay as they are, and each file is copied to a `.bak` file first. The row then says **Connected**.
+
+- If Islet.app moves (the hooks call the `isletctl` inside it), the row says Islet has moved and the agent can't reach it, and Coding agents gets a dot in the sidebar; **Update…** points the hooks at the new place. Islet checks at launch and whenever the Coding agents page opens. Hooks that call `isletctl` by name, as in the examples below, never count as moved.
+- **Disconnect…** shows what it removes, then takes out Islet's hooks and nothing else.
+- The commands themselves are in *Settings → Advanced → Coding agents*, for dotfiles. The sections below do the same by hand.
 
 All three show each session in the island: *Thinking…* when you send a prompt (Claude Code and Codex), the command or tool that is running, **Waiting** when one needs your approval, and **Done** when the turn ends. Cursor's sessions are its conversations, and a stop with an error shows as one.
 
@@ -80,7 +84,7 @@ Questions show their options as buttons. When a question takes several answers, 
 
 The hook's `timeout` is 30 seconds longer than `--wait`, so Islet always answers first. Claude Code's deny and ask rules still apply: an **Allow** from the notch can't override them.
 
-**Codex CLI:** **Connect…** beside Codex adds Islet's hooks to `~/.codex/hooks.json` and turns on `hooks = true` under `[features]` in `~/.codex/config.toml`, changing only that line. By hand: add the key, and copy [`integrations/codex/hooks.json`](../integrations/codex/hooks.json) to `~/.codex/hooks.json`. Either way, run `/hooks` in Codex once to trust the new hooks; Codex won't run them until you do.
+**Codex CLI:** **Connect…** beside Codex adds Islet's hooks to `~/.codex/hooks.json` and turns on `hooks = true` under `[features]` in `~/.codex/config.toml`, changing only that line. By hand, follow the Codex steps under [Coding agents](#coding-agents): the same `hooks.json` carries the approval hook. Either way, run `/hooks` in Codex once to trust the new hooks; Codex won't run them until you do.
 
 **Cursor:** **Connect…** beside Cursor adds Islet's hooks to `~/.cursor/hooks.json`. By hand, copy [`integrations/cursor/hooks.json`](../integrations/cursor/hooks.json) there (or to a project's `.cursor/hooks.json`). Shell commands and MCP tool calls then ask in the notch, and **Answer in the terminal** hands the choice back to Cursor's own prompt.
 
@@ -92,7 +96,7 @@ Cards clear themselves when a later event shows the question is settled: the too
 
 **Back to the terminal.** The hook records where the agent runs: `TERM_PROGRAM`, `__CFBundleIdentifier`, the tmux, WezTerm, kitty and Zellij pane variables, and the terminal device. The window button on the card, and **Answer in the terminal**, bring that app forward if it's running and select the tmux pane (or WezTerm pane). This needs no Automation permission. Individual iTerm2 and Terminal tabs are not selected.
 
-Settings → Coding agents → Approvals has **Answer requests in the notch** (on by default) and **Hand back to the terminal after** (5 minutes by default). After changing the wait, press **Update…** beside each connected agent so the hooks' `--wait` and `timeout` follow it; until then the shorter of the two applies.
+Settings → Coding agents → Approvals has **Answer requests in the island** (on by default) and **Hand back to the terminal after** (5 minutes by default). After changing the wait, press **Update…** beside each connected agent so the hooks' `--wait` and `timeout` follow it; until then the shorter of the two applies.
 
 ---
 
@@ -143,7 +147,7 @@ Codex CLI writes its limits into its session logs (`~/.codex/sessions/YYYY/MM/DD
 
 ### OpenRouter, Copilot and Ollama
 
-Each is a line in Home's column with a bar where there is a limit. They are asked for when the island opens, and only if the figures are older than a few minutes (OpenRouter 5, Copilot 15, Ollama 15 seconds); nothing runs while the island is closed. None of them raises alerts in the closed island.
+Each is a line in Home's column with a bar where there is a limit. They are asked for when the island opens, and only if the figures are older than 5 minutes for OpenRouter, 15 minutes for Copilot or 15 seconds for Ollama; nothing runs while the island is closed. None of them raises alerts in the closed island.
 
 - **OpenRouter spending** (`openRouterUsageEnabled`). Paste your OpenRouter key (it starts with `sk-or-`); Islet checks it once and keeps it in the Keychain. Islet asks `GET https://openrouter.ai/api/v1/key` with it: with a limit on the key, Home shows what's left and today's spend; without one, today's and this month's spend; on the free tier, the free requests used today.
 - **Copilot premium requests** (`copilotUsageEnabled`, `copilotPlan`). Make a fine-grained GitHub token with read access to Plan (Settings → Developer settings → Fine-grained tokens) and paste it. Islet learns your login from `GET https://api.github.com/user`, then asks for this month's premium request usage (`GET /users/{login}/settings/billing/premium_request/usage`, with the month in UTC as GitHub bills it) and shows the count against your plan's allowance (Free 50, Pro or Business 300, Enterprise 1,000, Pro+ 1,500).
@@ -200,7 +204,7 @@ Two-finger swipes on the island work without any permission: Islet reads the scr
 
 | Swipe | Where | Does |
 |---|---|---|
-| Down | closed island | open it (handy with *Open the island* set to *On click*) |
+| Down | closed island | open it (handy with *Open the island* set to *When I click it*) |
 | Up | open island | close it (it stays closed until the pointer leaves the notch) |
 | Left / right | music, closed or on the Home tab | next / previous track, or 10 s forward / back |
 | Left / right | a closed activity | show the next / previous activity, from the bubbles beside the notch |

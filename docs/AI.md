@@ -139,7 +139,7 @@ security delete-generic-password -s dev.islet.Islet.ai -a anthropic
 | Never, with the on-device model | Nothing | |
 | You press Return with Claude or ChatGPT | Your question, earlier turns if follow-ups are on (including ones the on-device model answered), and a short instruction to keep the answer brief | Anthropic or OpenAI, with your key |
 | You press Return with Claude Code or Codex | The same, as the CLI's prompt, plus whatever the CLI adds itself (such as its own system prompt) | The CLI's vendor, with your login |
-| You save a key, or press Refresh List | A request for the model list | The key's provider |
+| You save a key, or choose **Check for new models** | A request for the model list | The key's provider |
 
 - Nothing is sent at launch or in the background.
 - Notification, calendar and clipboard text is never sent to a cloud provider. Smart icons and notification summaries use the on-device model or nothing.
@@ -166,13 +166,13 @@ Settings → Ask & AI → Apple Intelligence says in a few words whether the on-
 
 | Status | What Islet does |
 |---|---|
-| Ready (on-device) | On-device answers in the Ask box; smart icons and notification summaries when *On-device AI for icons and summaries* is on |
+| Ready (on-device) | On-device answers in the Ask box; smart icons and notification summaries when *Smart icons and short summaries* is on |
 | Unavailable: deviceNotEligible | This Mac can't run Apple Intelligence. Icons come from Islet's keyword rules, notifications aren't summarised, and the Ask box offers the other providers |
 | Unavailable: appleIntelligenceNotEnabled | Same; turn it on in System Settings → Apple Intelligence & Siri |
 | Unavailable: modelNotReady | Same, until the model finishes downloading |
 | Needs macOS 26 or later | On macOS 14 or 15 there is no on-device model; the other providers work |
 
-- **Smart icons**: when an activity arrives with no icon and the keyword rules can't place it, the model picks one of Islet's icon categories from the activity's title and source, once per activity. *Smart icons and colors for activities* must be on too.
+- **Smart icons**: when an activity arrives with no icon and the keyword rules can't place it, the model picks one of Islet's icon categories from the activity's title and source, once per activity. *Smart icons and colours for activities* (Settings → Appearance) must be on too.
 - **Summaries**: when a mirrored notification's text is longer than 90 characters, the model is asked to condense it to at most 12 words. The result, cut to 90 characters, replaces the notification's subtitle.
 
 The on-device model has a small context window, so on-device follow-ups keep only the last two earlier turns.
@@ -181,7 +181,7 @@ The on-device model has a small context window, so on-device follow-ups keep onl
 
 ## `config.json`
 
-The Ask settings are stored under `"ask"` in `~/.config/islet/config.json` (keys are not). `aiAssist` (the *On-device AI for icons and summaries* toggle) and `askHotkey` (the Ask shortcut, `""` for off) are top level:
+The Ask settings are stored under `"ask"` in `~/.config/islet/config.json` (keys are not). `aiAssist` (the *Smart icons and short summaries* switch under Apple Intelligence) and `askHotkey` (the Ask shortcut, `""` for off) are top level:
 
 ```json
 {
