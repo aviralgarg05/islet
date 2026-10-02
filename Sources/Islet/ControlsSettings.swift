@@ -15,12 +15,13 @@ struct GestureSettingsSection: View {
             Group {
                 Toggle("Swipe down to open", isOn: $model.settings.swipeDownToOpen)
                 Toggle("Swipe up to close", isOn: $model.settings.swipeUpToClose)
-                Toggle("Swipe sideways over music", isOn: $model.settings.swipeMedia)
-                Picker("Sideways over music", selection: $model.settings.swipeMediaAction) {
-                    Text("Next or previous song").tag(MediaSwipeAction.track)
-                    Text("Skip 10 seconds").tag(MediaSwipeAction.seek)
+                // One row: off, or what the swipe does.
+                Picker("Swipe sideways over music", selection: $model.settings.mediaSwipe) {
+                    Text("Off").tag(MediaSwipeAction?.none)
+                    Divider()
+                    Text("Next or previous song").tag(MediaSwipeAction?.some(.track))
+                    Text("Skip 10 seconds").tag(MediaSwipeAction?.some(.seek))
                 }
-                .disabled(!model.settings.swipeMedia)
                 Toggle("Swipe sideways to switch between activities", isOn: $model.settings.swipeCyclesActivities)
                 Toggle(isOn: $model.settings.reverseSideSwipes) {
                     Text("Reverse sideways swipes")

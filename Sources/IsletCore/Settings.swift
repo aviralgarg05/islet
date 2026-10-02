@@ -421,6 +421,15 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// Swipe sideways over playing media to change track (or seek, see `swipeMediaAction`).
     public var swipeMedia = true
     public var swipeMediaAction: MediaSwipeAction = .track
+    /// Settings' one "Swipe sideways over music" choice: nil when off, else what the swipe does.
+    /// Turning it off keeps the action for when it comes back on.
+    public var mediaSwipe: MediaSwipeAction? {
+        get { swipeMedia ? swipeMediaAction : nil }
+        set {
+            swipeMedia = newValue != nil
+            if let newValue { swipeMediaAction = newValue }
+        }
+    }
     /// Swipe sideways over a closed activity to bring the next one forward.
     public var swipeCyclesActivities = true
     /// Sideways swipes the other way round: right for the next song or activity.
