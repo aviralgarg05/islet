@@ -158,7 +158,10 @@ import Testing
         try paused.pause("Pasta", now: now.addingTimeInterval(60))
         let p = try c.apply(paused.spec(for: try #require(paused.find("Pasta"))), now: now)
         #expect(SpokenText.label(p) == "Pasta")
-        #expect(SpokenText.value(p, now: now) == "Paused")
+        // The wing shows the time left, still; it is read with the word it stands for.
+        #expect(SpokenText.value(p, now: now) == "paused, 3 minutes left")
+        #expect(SpokenText.clockSeconds("1:02:03") == 3723 && SpokenText.clockSeconds("4:05") == 245)
+        #expect(SpokenText.clockSeconds("Paused") == nil && SpokenText.clockSeconds("4:75") == nil && SpokenText.clockSeconds(":5") == nil)
     }
 
     @Test func timersOnHome() {

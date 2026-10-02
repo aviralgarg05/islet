@@ -271,12 +271,16 @@ import Testing
         let t = try e.pause("Tea", now: t0.addingTimeInterval(100))
         let spec = e.spec(for: t)
         #expect(spec.endsAt == nil)
-        #expect(spec.trailing == "Paused")
-        #expect(spec.subtitle == "3:20 left")
+        // The time left, still and grey, so a narrow wing keeps digits instead of an "i".
+        #expect(spec.trailing == "3:20")
+        #expect(spec.subtitle == "Paused")
         #expect(spec.tint == "gray")
+        // The ring stays where it stopped: the share of the time still to run.
+        #expect(abs((spec.progress ?? 0) - 200.0 / 300) < 0.0001)
         var center = ActivityCenter()
         let a = try center.apply(spec, now: t0)
-        #expect(a.trailingText(now: t0) == "Paused")
+        #expect(a.trailingText(now: t0) == "3:20")
+        #expect(NarrowValue.glyph(for: "3:20", state: a.state) == nil)
         #expect(!center.needsClockTick(now: t0))
     }
 
@@ -288,7 +292,10 @@ import Testing
         #expect(spec.priority == .critical)
         #expect(spec.state == .waiting)
         #expect(spec.icon == .symbol("alarm.fill"))
-        #expect(spec.trailing == "Done")
+        // A number, not a status word, so a narrow wing doesn't trade it for the waiting bubble.
+        #expect(spec.trailing == "0:00")
+        #expect(NarrowValue.glyph(for: spec.trailing ?? "", state: spec.state ?? .info) == nil)
+        #expect(spec.subtitle == "Time\u{2019}s up")
         #expect(spec.endsAt == nil)
         #expect(spec.actions?.map(\.title) == ["Stop", "Snooze 5 min", "Restart"])
         #expect(spec.actions?.allSatisfy { $0.dismiss == false } == true)
@@ -302,7 +309,7 @@ import Testing
         let s = PomodoroSchedule()
         try e.startPomodoro(now: t0, schedule: s)
         #expect(e.spec(for: e.pomodoro!, schedule: s).subtitle == "Round 1 of 4")
-        #expect(e.spec(for: e.pomodoro!, schedule: s).icon == .emoji("🍅"))
+        #expect(e.spec(for: e.pomodoro!, schedule: s).icon == .symbol("leaf.fill"))
         #expect(e.pomodoroRound(e.pomodoro!, schedule: s, short: true) == "1/4")
         _ = e.advance(now: e.nextDeadline()!, schedule: s)
         #expect(e.pomodoroRound(e.pomodoro!, schedule: s) == "Round 1 of 4 done")

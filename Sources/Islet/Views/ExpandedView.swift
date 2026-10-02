@@ -112,10 +112,13 @@ struct HomePlan {
         case activity(Activity)
         case clock
 
-        /// Now Playing uses the whole column; the others are shorter than it.
+        /// Now Playing uses the whole column, and a ringing timer starts at its top, level with
+        /// the first glance beside it; the others are shorter and sit in the middle.
         var fills: Bool {
-            if case .media = self { return true }
-            return false
+            switch self {
+            case .media, .ringing: return true
+            default: return false
+            }
         }
     }
 
@@ -228,7 +231,7 @@ struct HomeTab: View {
 
     var body: some View {
         if model.timers.isEntering {
-            TimerComposer(model: model)
+            TimerComposer(model: model, size: size)
         } else {
             let plan = HomePlan(model: model)
             // Lyrics, when on and found, take the glances' column beside the music, under a

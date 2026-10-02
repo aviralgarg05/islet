@@ -408,7 +408,8 @@ public struct TimerEngine: Codable, Equatable, Sendable {
 
     public static func look(for t: TimerItem) -> (icon: ActivityIcon, tint: String) {
         switch t.phase {
-        case .focus: return (.emoji("🍅"), "red")
+        // The leaf the composer's Pomodoro button wears, so it is one mark everywhere.
+        case .focus: return (.symbol("leaf.fill"), "red")
         case .shortBreak: return (.symbol("cup.and.saucer.fill"), "green")
         case .longBreak: return (.symbol("figure.walk"), "teal")
         case nil: return (.symbol("timer"), "orange")
@@ -423,9 +424,10 @@ public struct TimerEngine: Codable, Equatable, Sendable {
                      icon: .symbol("timer"), state: .info, tint: "gray", priority: .low, ttl: 3600, sneak: false)
     }
 
-    /// The activity that shows a timer. Running: a live countdown to `endsAt`. Paused: no
-    /// countdown, "Paused" in the wing and the time left underneath. Ringing: critical, so it
-    /// breaks through fullscreen, with Stop / Snooze / Restart.
+    /// The activity that shows a timer. Running: a live countdown to `endsAt`. Paused: the time
+    /// left, still, in grey, "Paused" underneath and the ring held where it stopped. Ringing:
+    /// critical, so it breaks through fullscreen, with Stop / Snooze / Restart, and "0:00" in
+    /// the wing, so a narrow wing keeps a number rather than a glyph that could mean anything.
     public func spec(for t: TimerItem, schedule: PomodoroSchedule = PomodoroSchedule()) -> ActivitySpec {
         let look = Self.look(for: t)
         var spec = ActivitySpec(id: t.id, source: Self.source, title: t.displayTitle, icon: look.icon,
@@ -438,14 +440,16 @@ public struct TimerEngine: Codable, Equatable, Sendable {
         case .paused:
             spec.state = .info
             spec.tint = "gray"
-            spec.subtitle = "\(Format.clock((t.remaining ?? t.duration).rounded(.up))) left"
-            spec.trailing = "Paused"
+            let left = t.remaining ?? t.duration
+            spec.subtitle = "Paused"
+            spec.trailing = Format.clock(left.rounded(.up))
+            spec.progress = t.duration > 0 ? min(1, max(0, left / t.duration)) : nil
         case .ringing:
             spec.state = .waiting
             spec.priority = .critical
             spec.icon = .symbol("alarm.fill")
-            spec.subtitle = "Time's up"
-            spec.trailing = "Done"
+            spec.subtitle = "Time’s up"
+            spec.trailing = "0:00"
             spec.actions = [
                 ActivityAction(title: "Stop", url: Self.url(.stop, id: t.id), dismiss: false),
                 ActivityAction(title: "Snooze 5 min", url: Self.url(.snooze, id: t.id), dismiss: false),

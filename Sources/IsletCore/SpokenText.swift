@@ -63,7 +63,9 @@ public enum SpokenText {
     /// says the state again ("Time's up").
     public static func label(_ a: Activity, detail: Bool = false) -> String {
         let state = state(of: a)
-        let sub = detail ? a.subtitle.map(phrase).flatMap { $0.lowercased() == state?.lowercased() ? nil : $0 } : nil
+        // Either apostrophe: "Time’s up" underneath says the same as "time's up".
+        func same(_ s: String?) -> String? { s?.lowercased().replacingOccurrences(of: "\u{2019}", with: "'") }
+        let sub = detail ? a.subtitle.map(phrase).flatMap { same($0) == same(state) ? nil : $0 } : nil
         return [phrase(a.title), state, sub].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
     }
 
@@ -71,6 +73,10 @@ public enum SpokenText {
     /// "step 3 of 5", "Lakers 102, Celtics 98, Q4". Nil when there is none, or when it only
     /// repeats the state ("Waiting"). A game clock is left to `time`, where it is drawn.
     public static func value(_ a: Activity, now: Date) -> String? {
+        // A paused timer's wing holds the time left, still: "paused, 3 minutes 20 seconds left".
+        if a.source == TimerEngine.source, a.state == .info, let t = a.trailing, let left = clockSeconds(t) {
+            return "paused, \(duration(left)) left"
+        }
         if let t = a.trailing { return repeatsState(t, of: a) ? nil : phrase(t) }
         switch a.resolvedTemplate {
         case .score:
@@ -127,6 +133,15 @@ public enum SpokenText {
     static func minutes(until date: Date, now: Date) -> String {
         let remaining = max(0, date.timeIntervalSince(now))
         return duration((remaining / 60).rounded(.up) * 60)
+    }
+
+    /// Seconds in a clock as `Format.clock` writes it ("4:05", "1:02:03"); nil for anything else.
+    static func clockSeconds(_ text: String) -> Double? {
+        let parts = text.split(separator: ":", omittingEmptySubsequences: false)
+        guard (2...3).contains(parts.count), parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isASCII) }) else { return nil }
+        let numbers = parts.compactMap { Int($0) }
+        guard numbers.count == parts.count, numbers.dropFirst().allSatisfy({ (0..<60).contains($0) }) else { return nil }
+        return Double(numbers.reduce(0) { $0 * 60 + $1 })
     }
 
     /// Status words already said by `state(of:)`: "Waiting" after "waiting for you".

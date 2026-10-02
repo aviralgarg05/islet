@@ -4,8 +4,8 @@ import SwiftUI
 
 // Timers on Home. A running timer is the primary thing when nothing is playing (a ring and the
 // time, large), or a glance beside the music. New timers start from the composer, opened with
-// the timer button under the island: a field that reads "tea 4m" or "at 18:30", a few presets
-// and the Pomodoro.
+// the timer button under the island: a field that reads "Tea 4 min" or "at 18:30", a few
+// presets and the Pomodoro, with the timers already running under them when there is room.
 
 /// A timer as Home's primary thing: the ring, the time left in large type, and its controls.
 /// A ringing timer gets Stop, Snooze and Restart instead.
@@ -71,22 +71,20 @@ struct TimerHero: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: Space.hair) {
                     Text(timer.displayTitle).textStyle(.title).foregroundStyle(Ink.primary).lineLimit(1)
-                    Text("Time's up").textStyle(.body).foregroundStyle(tint)
+                    Text("Time’s up").textStyle(.body).foregroundStyle(tint)
                 }
             }
             .accessibilityElement(children: .combine)
-            ViewThatFits(in: .horizontal) {
-                ringingButtons(tint: tint, snooze: "Snooze 5 min")
-                ringingButtons(tint: tint, snooze: "Snooze")
-            }
+            ringingButtons(tint: tint)
         }
     }
 
-    private func ringingButtons(tint: Color, snooze: String) -> some View {
+    /// The same words at every size; how long a snooze lasts is in its help.
+    private func ringingButtons(tint: Color) -> some View {
         HStack(spacing: Space.s) {
             Button("Stop") { model.timers.control(.stop, timer) }
                 .buttonStyle(CapsuleButtonStyle(tint: tint, filled: true))
-            Button(snooze) { model.timers.control(.snooze, timer) }
+            Button("Snooze") { model.timers.control(.snooze, timer) }
                 .buttonStyle(CapsuleButtonStyle())
                 .help("Ring again in 5 minutes")
             Button("Restart") { model.timers.control(.restart, timer) }
@@ -131,7 +129,7 @@ struct TimerGlance: View {
             GlanceRow(title: timer.displayTitle, speech: speech(now: ctx.date, ends: ends)) {
                 ProgressRing(progress: timer.fraction(at: ctx.date), tint: paused ? Ink.tertiary : tint, size: 14, lineWidth: 2)
             } trailing: {
-                Text(timer.status == .ringing ? "Time's up" : Format.clock(timer.timeLeft(at: ctx.date).rounded(.up)))
+                Text(timer.status == .ringing ? "Time’s up" : Format.clock(timer.timeLeft(at: ctx.date).rounded(.up)))
                     .textStyle(.body, emphasized: true, numeric: true)
                     .foregroundStyle(paused ? Ink.secondary : tint)
                     .contentTransition(.numericText(countsDown: true))
@@ -167,10 +165,13 @@ struct TimerGlance: View {
     }
 }
 
-/// Starting a timer: type one ("tea 4m", "25 min", "at 18:30"), or pick a preset or the
+/// Starting a timer: type one ("Tea 4 min", "25 min", "at 18:30"), or pick a preset or the
 /// Pomodoro. Return starts it, Escape closes. The island takes the keyboard while it is open.
+/// It sits at the top of the page; the timers already running fill the room under it.
 struct TimerComposer: View {
     let model: AppModel
+    /// The page's content area.
+    var size: CGSize = .zero
     @ViewState private var text = ""
     @ViewState private var invalid = false
     @FocusState private var focused: Bool
@@ -197,8 +198,9 @@ struct TimerComposer: View {
                 startRow(presets: [5, 10, 25], pomodoro: pomodoro, focus: focus)
                 startRow(presets: [5, 25], pomodoro: pomodoro, focus: focus)
             }
+            running
         }
-        .frame(maxHeight: .infinity)
+        .frame(maxHeight: .infinity, alignment: .top)
         .onAppear {
             guard !snapshotMode else { return }
             IslandKeyboard.take(on: model.expandedScreen)
@@ -209,6 +211,39 @@ struct TimerComposer: View {
             IslandKeyboard.giveBack()
             model.timers.isEntering = false
         }
+    }
+
+    /// The timers already running, two to a row, in the room left under the composer; none
+    /// when a row of them doesn't fit.
+    @ViewBuilder private var running: some View {
+        let timers = model.timers.timers
+        let rows = Self.runningRows(height: size.height, timers: timers.count)
+        if rows > 0 {
+            let shown = Array(timers.prefix(rows * 2))
+            let pairs = stride(from: 0, to: shown.count, by: 2).map { Array(shown[$0..<min($0 + 2, shown.count)]) }
+            VStack(alignment: .leading, spacing: Space.m) {
+                ForEach(Array(pairs.enumerated()), id: \.offset) { _, pair in
+                    HStack(alignment: .top, spacing: Space.xxl) {
+                        ForEach(pair) { t in TimerGlance(timer: t, model: model).frame(maxWidth: .infinity) }
+                        if pair.count == 1 { Color.clear.frame(maxWidth: .infinity, maxHeight: 1) }
+                    }
+                }
+            }
+            .padding(.top, Space.s)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Running")
+        }
+    }
+
+    /// The field and the start row, both 24 high, a gap apart; rows of running timers follow.
+    static let composerHeight: CGFloat = 24 + Space.m + 24
+
+    static func runningRows(height: CGFloat, timers: Int) -> Int {
+        guard timers > 0 else { return 0 }
+        let row: CGFloat = 32
+        let room = height - composerHeight - Space.m - Space.s
+        let fit = room >= row ? Int((room + Space.m) / (row + Space.m)) : 0
+        return min(fit, (timers + 1) / 2)
     }
 
     private func startRow(presets: [Int], pomodoro: Bool, focus: Int) -> some View {
@@ -279,10 +314,10 @@ struct TimerComposer: View {
                 .foregroundStyle(Self.orange)
                 .accessibilityHidden(true)
             if snapshotMode {
-                Text("tea 4m, 25 min or at 18:30").textStyle(.body).foregroundStyle(Ink.tertiary)
+                Text(Self.prompt).textStyle(.body).foregroundStyle(Ink.tertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                TextField("tea 4m, 25 min or at 18:30", text: $text)
+                TextField(Self.prompt, text: $text)
                     .textFieldStyle(.plain)
                     .textStyle(.body)
                     .foregroundStyle(invalid ? Self.orange : Ink.primary)
@@ -294,10 +329,13 @@ struct TimerComposer: View {
             }
         }
         .padding(.horizontal, Space.m)
-        .frame(height: 28)
+        // The height of Start and the presets beside it, so the row's edges line up.
+        .frame(height: 24)
         .background(Capsule().fill(Wash.regular))
         .contrastEdge(Capsule())
     }
+
+    static let prompt = "Tea 4 min, 25 min or at 18:30"
 
     private func submit() {
         if model.timers.start(text: text) {

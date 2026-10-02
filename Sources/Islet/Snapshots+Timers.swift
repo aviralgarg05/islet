@@ -3,8 +3,10 @@ import IsletCore
 import SwiftUI
 
 extension Snapshots {
-    /// The Timer card at every size, a ringing timer, the Pomodoro, the custom field, and
-    /// the closed island for a paused and a ringing timer. Leaves the model as it found it.
+    /// The Timer card at every size (a timer leading Home with nothing playing), timers beside
+    /// the music, a ringing timer, the Pomodoro, the composer over running timers and over the
+    /// Pomodoro, and the closed island for a paused and a ringing timer. Leaves the model as
+    /// it found it.
     static func renderTimers(model: AppModel, now: Date, shoot: (String) -> Void, size: (SizePreset) -> Void) {
         func engine(_ build: (inout TimerEngine) throws -> Void) -> TimerEngine {
             var e = TimerEngine()
@@ -30,21 +32,31 @@ extension Snapshots {
 
         model.forcedPresentation = .expanded
         model.tab = .home
+        let mediaEnabled = model.settings.mediaEnabled
         for preset in [SizePreset.compact, .standard, .large] {
             size(preset)
-            model.timers.showForSnapshot(TimerEngine())
-            shoot("30-timer-card-\(preset.rawValue)")
+            // Nothing playing, so the timer leads Home.
             model.timers.showForSnapshot(running)
+            model.settings.mediaEnabled = false
+            shoot("30-timer-card-\(preset.rawValue)")
+            model.settings.mediaEnabled = mediaEnabled
             shoot("31-timers-\(preset.rawValue)")
             model.timers.showForSnapshot(ringing)
             shoot("32-timer-ringing-\(preset.rawValue)")
             model.timers.showForSnapshot(pomodoro)
             shoot("33-pomodoro-\(preset.rawValue)")
+            // The composer over the timers already running.
+            model.timers.showForSnapshot(running)
             model.timers.isEntering = true
             shoot("34-timer-entry-\(preset.rawValue)")
             model.timers.isEntering = false
         }
         size(.compact)
+        // The composer while a Pomodoro runs: its button stops it.
+        model.timers.showForSnapshot(pomodoro)
+        model.timers.isEntering = true
+        shoot("34b-timer-entry-pomodoro")
+        model.timers.isEntering = false
         model.timers.showForSnapshot(TimerEngine())
 
         var center = ActivityCenter()
