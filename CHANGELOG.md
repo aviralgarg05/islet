@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Fixes
+- Settings changed from the island (time left, a Pomodoro length, a tool's **Turn on**, Lyrics, Mute, turning on the calendar) are saved and applied at once, and Settings shows them straight away.
+- A change made just after Islet saved something else, such as a slider still moving in Settings, is no longer undone a moment later.
+- Switching to a busy app no longer makes the island hitch while Islet starts following that app's windows for full screen.
 - With an island on every display, moving from the open island onto another display closes it after the usual moment instead of leaving it open.
 - With Shelf off, files dropped on the notch are refused rather than kept on a hidden shelf.
 - Turning off **Answer requests in the island** sends waiting requests back to the terminal at once, and lets go of the island.
