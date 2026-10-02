@@ -183,7 +183,7 @@ Coding agents can ask for permission, ask a question or present a plan as a card
 4. The wait ends when the user answers, after N seconds or the wait in Settings (`approvalWait`, 300 s by default), whichever is shorter, when a later hook event settles the card (answered in the terminal, tool ran, turn ended), or when the client hangs up. If the island is hidden (a fullscreen app or a per-app rule), requests go back to the terminal at once.
 5. The reply is `200` with exactly the JSON the hook prints (`ApprovalOutput`), or `204` for no decision, in which case `isletctl` prints nothing and the agent asks in the terminal.
 
-No endpoint accepts a decision: answers come only from clicks on the card. `RiskRules` add friction to risky calls (a second click or a hold, no "Always") without blocking them. **Terminal** brings the agent's terminal forward, activating only apps that are already running and driving tmux and WezTerm with fixed arguments. Nothing polls while cards wait: each has one expiry work item. The LAN bridge never takes part. See [INTEGRATIONS.md](INTEGRATIONS.md#approvals-from-the-notch).
+No endpoint accepts a decision: answers come only from clicks on the card. `RiskRules` add friction to risky calls (a second click or a hold, no "Always") without blocking them. **Answer in the terminal** brings the agent's terminal forward, activating only apps that are already running and driving tmux and WezTerm with fixed arguments. Nothing polls while cards wait: each has one expiry work item. The LAN bridge never takes part. See [INTEGRATIONS.md](INTEGRATIONS.md#approvals-from-the-notch).
 
 ## Ask
 

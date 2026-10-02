@@ -57,16 +57,16 @@ isletctl set plan --title "Migrate DB" --steps 5 --step 2 --subtitle "Backfillin
 
 ### Approvals from the notch
 
-Claude Code, Codex and Cursor can ask you in the island instead of the terminal: permission to run a command or change a file, Claude's multiple-choice questions, and plans from plan mode. The island opens a card with the agent and project, the full command or file path (the box scrolls; nothing is cut short), and these buttons:
+Claude Code, Codex and Cursor can ask you in the island instead of the terminal: permission to run a command or change a file, Claude's multiple-choice questions, and plans from plan mode. The island opens a card with the agent and project, the full command, or the file and its folder (the box scrolls; nothing is cut short), and these buttons:
 
 | Button | What the agent gets |
 |---|---|
 | **Allow** | Allowed, this once |
 | **Always** | Allowed, plus the rule Claude suggests (for example `Bash(npm test:*)`) for the rest of this session only. Claude Code only, and only when Claude suggests a rule |
 | **Deny** | Denied, with a short message so the agent knows you said no |
-| **Terminal** | No answer: the agent asks in the terminal as usual, and Islet brings that terminal forward |
+| **Answer in the terminal** | No answer: the agent asks in the terminal as usual, and Islet brings that terminal forward |
 
-Questions show their options as buttons. When a question takes several answers, tick them and press **Send**. Plans show the Markdown with **Approve** and **Keep planning**. With more requests waiting, the card shows **+N** and they come one at a time. The chevron hides the card; it comes back when you open the island. While the island is hidden (a fullscreen app, or a rule for the app in front), requests go straight back to the terminal instead of waiting where you can't see them.
+Questions show their options as buttons. When a question takes several answers, tick them and press **Send**. Plans show the Markdown with **Approve** and **Keep planning**. With more requests waiting, the card says how many more ("2 more") and they come one at a time. The chevron hides the card; it comes back when you open the island. While the island is hidden (a fullscreen app, or a rule for the app in front), requests go straight back to the terminal instead of waiting where you can't see them.
 
 **Risky commands.** Commands are checked against a list of patterns: `rm -rf`, `sudo`, `git push --force`, `git reset --hard`, `git clean -f`, `curl … | sh`, `chmod 777`, `dd` to a disk, `mkfs`, `diskutil erase…`, `npm publish`, `DROP TABLE`, writes, copies and moves outside the project folder, files that often hold secrets, and a few more. A match is shown in orange above the command, **Allow** then needs a second click (or a press and hold), and **Always** is hidden. The rules only add friction; they never block anything.
 
@@ -82,15 +82,15 @@ The hook's `timeout` is 30 seconds longer than `--wait`, so Islet always answers
 
 **Codex CLI:** **Connect…** beside Codex adds Islet's hooks to `~/.codex/hooks.json` and turns on `hooks = true` under `[features]` in `~/.codex/config.toml`, changing only that line. By hand: add the key, and copy [`integrations/codex/hooks.json`](../integrations/codex/hooks.json) to `~/.codex/hooks.json`. Either way, run `/hooks` in Codex once to trust the new hooks; Codex won't run them until you do.
 
-**Cursor:** **Connect…** beside Cursor adds Islet's hooks to `~/.cursor/hooks.json`. By hand, copy [`integrations/cursor/hooks.json`](../integrations/cursor/hooks.json) there (or to a project's `.cursor/hooks.json`). Shell commands and MCP tool calls then ask in the notch, and **Terminal** hands the choice back to Cursor's own prompt.
+**Cursor:** **Connect…** beside Cursor adds Islet's hooks to `~/.cursor/hooks.json`. By hand, copy [`integrations/cursor/hooks.json`](../integrations/cursor/hooks.json) there (or to a project's `.cursor/hooks.json`). Shell commands and MCP tool calls then ask in the notch, and **Answer in the terminal** hands the choice back to Cursor's own prompt.
 
-**How it works.** `isletctl hook <agent> --wait N` posts the hook's payload to `/v1/hooks/<agent>?wait=N` and waits (see [API.md](API.md#approvals-long-poll)). The card appears a quarter of a second later, so the terminal can print its own prompt first. Islet holds the request until you answer, for at most N seconds or the wait set in Settings, whichever is shorter, and `isletctl` prints the answer in the form the agent expects. Everything fails open: if Islet isn't running, approvals are off, the wait runs out or you choose **Terminal**, `isletctl` prints nothing and exits 0, and the agent asks in the terminal as if no hook had run. Only events that ask for a decision wait; every other event is sent and forgotten within 1.5 seconds.
+**How it works.** `isletctl hook <agent> --wait N` posts the hook's payload to `/v1/hooks/<agent>?wait=N` and waits (see [API.md](API.md#approvals-long-poll)). The card appears a quarter of a second later, so the terminal can print its own prompt first. Islet holds the request until you answer, for at most N seconds or the wait set in Settings, whichever is shorter, and `isletctl` prints the answer in the form the agent expects. Everything fails open: if Islet isn't running, approvals are off, the wait runs out or you choose **Answer in the terminal**, `isletctl` prints nothing and exits 0, and the agent asks in the terminal as if no hook had run. Only events that ask for a decision wait; every other event is sent and forgotten within 1.5 seconds.
 
 Cards clear themselves when a later event shows the question is settled: the tool ran (`PostToolUse`), the turn ended (`Stop`), a new prompt arrived (`UserPromptSubmit`) or the session ended. If the agent stops the hook early (its timeout ran out, or it was interrupted), the card goes too.
 
 **Safety.** Answers come only from clicks on the card. No API endpoint, `islet://` URL or script can approve anything, so a script holding the API token can at most show a card. The local-network bridge never shows cards. Each waiting card costs one sleeping `isletctl` process and one open loopback connection; nothing polls.
 
-**Back to the terminal.** The hook records where the agent runs: `TERM_PROGRAM`, `__CFBundleIdentifier`, the tmux, WezTerm, kitty and Zellij pane variables, and the terminal device. The window button on the card, and **Terminal**, bring that app forward if it's running and select the tmux pane (or WezTerm pane). This needs no Automation permission. Individual iTerm2 and Terminal tabs are not selected.
+**Back to the terminal.** The hook records where the agent runs: `TERM_PROGRAM`, `__CFBundleIdentifier`, the tmux, WezTerm, kitty and Zellij pane variables, and the terminal device. The window button on the card, and **Answer in the terminal**, bring that app forward if it's running and select the tmux pane (or WezTerm pane). This needs no Automation permission. Individual iTerm2 and Terminal tabs are not selected.
 
 Settings → Coding agents → Approvals has **Answer requests in the notch** (on by default) and **Hand back to the terminal after** (5 minutes by default). After changing the wait, press **Update…** beside each connected agent so the hooks' `--wait` and `timeout` follow it; until then the shorter of the two applies.
 

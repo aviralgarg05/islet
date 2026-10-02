@@ -285,7 +285,7 @@ curl -s -X POST http://127.0.0.1:47831/v1/timer -H "Authorization: Bearer $TOKEN
 `POST /v1/hooks/{provider}?wait=N` is for blocking agent hooks (`provider` is `claude`, `codex` or `cursor`; `N` is 1 to 3600 seconds). It maps the agent's status like the plain hook endpoint. If the payload asks for a decision (Claude Code `PermissionRequest`, `PreToolUse` for `AskUserQuestion` or `ExitPlanMode`, Codex `PermissionRequest`, Cursor `beforeShellExecution` or `beforeMCPExecution`) and approvals are on, Islet shows a card and holds the request until:
 
 - you answer: `200` with exactly the JSON the hook must print, for example `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}` for Claude Code and Codex, or `{"permission":"allow"}` for Cursor;
-- there is no decision (N seconds or the wait in Settings pass, **Terminal** is chosen, a later event settles it, the island is hidden for a fullscreen app, or approvals are off): `204` with no body. For Cursor, **Terminal** is `200` with `{"permission":"ask"}`.
+- there is no decision (N seconds or the wait in Settings pass, **Answer in the terminal** is chosen, a later event settles it, the island is hidden for a fullscreen app, or approvals are off): `204` with no body. For Cursor, **Answer in the terminal** is `200` with `{"permission":"ask"}`.
 
 The reply never contains the activity JSON, because hooks print whatever comes back. Events that don't ask for a decision return `204` at once. If the client disconnects, the card is withdrawn. At most 16 requests wait at once; more get `503`. `wait` outside 1 to 3600 is a `400`. The local-network bridge never shows cards.
 
