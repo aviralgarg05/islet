@@ -111,6 +111,7 @@ Every tool starts off until you turn it on in Settings, on the Tools page or the
 - Mirrored notifications stay beside the notch, since macOS shows its own banner; **Peek at new notifications** opens them below the notch too. Each banner is mirrored once.
 - A call shows once its app has held the microphone for 3 seconds, and a browser or chat app first shows a quiet **Microphone in use**. A dismissed call stays away until the microphone is free.
 - Unlocking no longer shows an empty "Welcome back", and Clipboard is in the More menu only while clipboard history is on.
+- **Welcome back** names who sent what as you know them ("3 from Claude Code · 2 from Downloads"), never by Islet's internal names.
 
 ### Using the island
 - With the island open, only what is drawn takes clicks; a click just outside reaches the window underneath.

@@ -1305,16 +1305,10 @@ final class AppModel {
         }
         // Nothing arrived: nothing to say, so the island stays as it was.
         guard let since = lockedAt,
-              let spec = WelcomeBack.activity(counts: lockedDigest, lockedFor: Date().timeIntervalSince(since), name: Self.friendlySource)
+              let spec = WelcomeBack.activity(counts: lockedDigest, lockedFor: Date().timeIntervalSince(since),
+                                              name: { WelcomeBack.name($0, appName: Self.appName(bundleID:)) })
         else { return }
         _ = try? commit(spec)
-    }
-
-    static func friendlySource(_ source: String) -> String {
-        if source.contains("."), let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: source) {
-            return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
-        }
-        return source
     }
 
     /// The "x" on Home's Claude usage hint: hide it for good.
@@ -1342,10 +1336,13 @@ final class AppModel {
 
     /// How a muted source reads in menus and Settings: an app's name rather than its bundle id.
     static func mutedName(_ source: String) -> String {
-        MutedSources.displayName(source) { id in
-            NSWorkspace.shared.urlForApplication(withBundleIdentifier: id)
-                .map { FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "") }
-        }
+        MutedSources.displayName(source, appName: appName(bundleID:))
+    }
+
+    /// An installed app's name ("Mail") for its bundle id, if it is installed.
+    static func appName(bundleID: String) -> String? {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+            .map { FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "") }
     }
 
     private func startLAN() {

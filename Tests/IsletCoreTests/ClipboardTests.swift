@@ -250,6 +250,21 @@ struct SplitMix {
         #expect(many?.subtitle == "5 from c · 2 from a · 2 from b")
     }
 
+    /// The summary names senders as people know them, never by an internal source id.
+    @Test func welcomeBackNamesSendersInWords() {
+        let apps = ["com.apple.mail": "Mail"]
+        func name(_ s: String) -> String { WelcomeBack.name(s) { apps[$0] } }
+        #expect(name("claude-code") == "Claude Code")
+        #expect(name("downloads") == "Downloads")
+        #expect(name(TimerEngine.source) == "Timers")
+        #expect(name("cli") == "Scripts and Terminal")
+        #expect(name("com.apple.mail") == "Mail")
+        #expect(name("live-activity:uber") == "Uber")
+        #expect(name("github-actions") == "Github actions")
+        let spec = WelcomeBack.activity(counts: ["claude-code": 3, "downloads": 2, "cli": 1], lockedFor: 600, name: name)
+        #expect(spec?.subtitle == "3 from Claude Code · 2 from Downloads · 1 from Scripts and Terminal")
+    }
+
     @Test func clipboardIsListedOnlyWhileItIsOn() {
         var s = IsletSettings()
         s.clipboardEnabled = false

@@ -447,6 +447,16 @@ public enum WelcomeBack {
             icon: .symbol("lock.open.fill"), state: .info, tint: "white", priority: .normal, ttl: 4, sneak: true
         )
     }
+
+    /// How a source reads in the summary: the name the Mute menus use, without their note in
+    /// brackets ("2 from Uber", not "2 from Uber (Live Activity)"), never a raw id such as
+    /// "claude-code" or "live-activity:uber".
+    public static func name(_ source: String, appName: (String) -> String?) -> String {
+        let full = MutedSources.displayName(source, appName: appName)
+        guard full.hasSuffix(")"), let open = full.range(of: " (", options: .backwards),
+              open.lowerBound > full.startIndex else { return full }
+        return String(full[..<open.lowerBound])
+    }
 }
 
 // MARK: - Focus
