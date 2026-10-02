@@ -297,6 +297,9 @@ final class TriggerView: NSView {
     var onDragExit: (() -> Void)?
     var onDrop: (([URL]) -> Void)?
     var onSwipe: ((SwipeDirection) -> Void)?
+    /// Whether files dropped here go on the shelf (Shelf is on). When they don't, a drag shows
+    /// no copy badge and a drop is refused.
+    var acceptsDrops: () -> Bool = { true }
     private var area: NSTrackingArea?
     private var swipes = SwipeRecognizer()
 
@@ -341,12 +344,13 @@ final class TriggerView: NSView {
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         onDragEnter?()
-        return .copy
+        return acceptsDrops() ? .copy : []
     }
 
     override func draggingExited(_ sender: NSDraggingInfo?) { onDragExit?() }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard acceptsDrops() else { return false }
         let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
         onDrop?(urls)
         return !urls.isEmpty
@@ -419,6 +423,7 @@ final class PointerCoordinator {
             c.trigger.view.onSwipe = { [weak self] direction in self?.model.handleSwipe(direction, display: display) }
             c.trigger.view.onDragEnter = { [weak self] in self?.dragEntered(display) }
             c.trigger.view.onDragExit = { [weak self] in self?.model.setDraggingFile(false) }
+            c.trigger.view.acceptsDrops = { [weak self] in self?.model.settings.shelfEnabled ?? false }
             c.trigger.view.onDrop = { [weak self] urls in
                 self?.model.setDraggingFile(false)
                 if !urls.isEmpty { self?.model.addToShelf(urls) }
@@ -540,8 +545,16 @@ final class PointerCoordinator {
         if !inTrigger { model.controls.hoverOpenBlocked = false }
         // Resting on the closed island: it grows a little, and may peek at what's playing.
         model.setHover(inTrigger && !expandedHere && model.expandedScreen == nil ? c.display : nil)
-        // The dwell opens the island, or with "open on click", peeks at the song.
-        if model.settings.hoverToOpen || expandedHere || model.settings.peekOnHover {
+        if case .leavingOpen(let open) = HoverIntent.subject(pointerOn: c.display, open: model.expandedScreen, inTrigger: inTrigger) {
+            // Open on another display, and the pointer has left it for this one: that island
+            // closes after the grace period. Sampled as this display's closed island instead,
+            // the pending close would be dropped and it would stay open.
+            let decision = intent.sample(point: p, now: now, inTrigger: false, inExpanded: false, isOpen: true)
+            activeDisplay = open
+            apply(decision, display: open)
+            armRestTimerIfNeeded()
+        } else if model.settings.hoverToOpen || expandedHere || model.settings.peekOnHover {
+            // The dwell opens the island, or with "open on click", peeks at the song.
             let decision = intent.sample(point: p, now: now, inTrigger: inTrigger,
                                          inExpanded: expandedHere && c.expandedRect.insetBy(dx: -6, dy: -6).contains(p), isOpen: expandedHere)
             activeDisplay = c.display

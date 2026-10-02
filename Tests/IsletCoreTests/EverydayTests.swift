@@ -503,6 +503,9 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         let cursor = ApprovalRequest(provider: .cursor, hook: .beforeShellExecution, sessionID: "conv-9", toolName: "shell")
         #expect(cursor.statusUpdate(backToTerminal: .jumpFailed).id == "cursor-conv-9")
         #expect(cursor.statusUpdate(backToTerminal: .jumpFailed).subtitle?.hasPrefix("Couldn’t bring the terminal forward") == true)
+        // Cards turned off while one waited: the same word as a card that ran out of time.
+        let off = claude.statusUpdate(backToTerminal: .turnedOff)
+        #expect(off.id == expired.id && off.subtitle == "Answer in the terminal" && off.state == .waiting)
     }
 }
 
@@ -560,6 +563,20 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         let notched = [ScreenWindow(bounds: CGRect(x: 0, y: 32, width: 1512, height: 950), layer: 0, pid: 10)]
         #expect(FullscreenCoverage.coveringApps(windows: notched, displays: [builtIn], menuLevel: menuLevel, menuBarAutoHides: false) == [1: 10])
         #expect(FullscreenCoverage.followUpLooks == [0.6, 2])
+    }
+
+    /// A window that fills a display while its app stays in front (a video in Firefox, mpv or a
+    /// game going full screen in place) is looked at once it settles: soon enough that the
+    /// island is gone within about half a second.
+    @Test func windowsOfTheAppInFrontAreFollowedWithAccessibility() {
+        #expect(FullscreenCoverage.windowChangeLooks.first.map { $0 <= 0.3 } == true)
+        #expect(FullscreenCoverage.windowChangeLooks == FullscreenCoverage.windowChangeLooks.sorted())
+        #expect(FullscreenCoverage.followsWindows(of: 812, trusted: true, ownPID: 400))
+        // Without Accessibility there is nothing to follow them with (and no polling instead).
+        #expect(!FullscreenCoverage.followsWindows(of: 812, trusted: false, ownPID: 400))
+        // Islet in front (Settings): its own windows never cover a display.
+        #expect(!FullscreenCoverage.followsWindows(of: 400, trusted: true, ownPID: 400))
+        #expect(!FullscreenCoverage.followsWindows(of: 0, trusted: true, ownPID: 400))
     }
 }
 

@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Fixes
+- With an island on every display, moving from the open island onto another display closes it after the usual moment instead of leaving it open.
+- With Shelf off, files dropped on the notch are refused rather than kept on a hidden shelf.
+- Turning off **Answer requests in the island** sends waiting requests back to the terminal at once, and lets go of the island.
+- Closing the island while a request waits no longer pins it or closes it later under the pointer. A card with several questions keeps the answers given when hidden or moved to another display.
+- **Fit the menu bar** fits the wings again as soon as a menu bar item appears or widens, with Live Activities off too.
+- The Clipboard page goes back to All once its filter has nothing left, and stays there when such a clip comes back.
+- With Accessibility, a video or game that goes full screen without switching apps is noticed, and so is it leaving, for **In full screen**.
 - The Ask chip in the island now changes the provider in Settings → Ask & AI, and it's kept after a restart. A link's provider lasts until the island closes.
 - Changes made while `config.json` has a typo are kept when it's fixed, rather than lost.
 - Edits to `config.json` by hand always load, including undoing one and a config folder replaced by a dotfiles tool. With Settings open, Islet no longer rewrites a file you edited by hand.

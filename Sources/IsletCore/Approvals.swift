@@ -561,6 +561,8 @@ public struct ApprovalRequest: Equatable, Sendable {
         case expired
         /// "Answer in the terminal", but the terminal couldn't be brought forward.
         case jumpFailed
+        /// "Answer requests in the island" was turned off while the card waited.
+        case turnedOff
     }
 
     /// The agent's status once its question has gone back to the terminal unanswered, so a
@@ -569,7 +571,7 @@ public struct ApprovalRequest: Equatable, Sendable {
     public func statusUpdate(backToTerminal reason: BackToTerminal) -> ActivitySpec {
         let subtitle: String
         switch reason {
-        case .expired: subtitle = "Answer in the terminal"
+        case .expired, .turnedOff: subtitle = "Answer in the terminal"
         case .jumpFailed: subtitle = "Couldn’t bring the terminal forward. Answer there."
         }
         return ActivitySpec(id: statusActivityID, subtitle: subtitle, trailing: "Waiting", state: .waiting,
@@ -783,6 +785,86 @@ public struct ApprovalQueue: Sendable {
     static func sessionPrefix(_ p: AgentProvider, _ session: String) -> String { "\(p.rawValue)\n\(session)\n" }
 
     static func handOffKey(_ r: ApprovalRequest) -> String { sessionPrefix(r.provider, r.sessionID) + r.callKey }
+}
+
+/// What the island goes back to once the last card has gone. Cards hold the island open (pinned)
+/// while they wait: when none is left, an island a card opened closes again, and one that was
+/// already open gets back the pin it had. Closing the island any other way (the shortcut, a
+/// swipe, Hide) ends the hold, so a later answer neither pins a closed island nor closes one
+/// opened since.
+public struct ApprovalIslandHold: Equatable, Sendable {
+    /// What to do to the island once the last card has gone.
+    public enum Restore: Equatable, Sendable {
+        /// Leave it as it is.
+        case nothing
+        /// A card opened it: close it.
+        case close
+        /// It was open before the cards: give it back this pin.
+        case pin(Bool)
+    }
+
+    private var wasOpen = false
+    private var pinned = false
+    public private(set) var isHolding = false
+
+    public init() {}
+
+    /// A card is on show and holds the island. Only the first card notes how the island was.
+    public mutating func hold(islandWasOpen: Bool, pinned: Bool) {
+        guard !isHolding else { return }
+        isHolding = true
+        wasOpen = islandWasOpen
+        self.pinned = pinned
+    }
+
+    /// The island closed, by whatever means: there is nothing left to put back.
+    public mutating func islandClosed() { isHolding = false }
+
+    /// The last card has gone.
+    public mutating func release(islandOpen: Bool) -> Restore {
+        guard isHolding else { return .nothing }
+        isHolding = false
+        guard islandOpen else { return .nothing }
+        return wasOpen ? .pin(pinned) : .close
+    }
+}
+
+/// How far the user has got through a card's questions. Kept with the pending card, not in its
+/// view, so hiding the card or the island moving to another display keeps the answers given.
+public struct QuestionProgress: Equatable, Sendable {
+    /// The question on show.
+    public private(set) var index = 0
+    /// The answers so far, by question.
+    public private(set) var answers: [String: String] = [:]
+    /// The options ticked on the question on show (one that takes more than one answer).
+    public private(set) var picked: [String] = []
+
+    public init() {}
+
+    /// The question on show, among `count`.
+    public func current(of count: Int) -> Int { max(0, min(index, count - 1)) }
+
+    /// Ticks an option, or unticks it.
+    public mutating func toggle(_ option: String) {
+        if let i = picked.firstIndex(of: option) { picked.remove(at: i) } else { picked.append(option) }
+    }
+
+    /// The ticked options, in the order the question lists them.
+    public func pickedAnswer(options: [String]) -> String {
+        options.filter(picked.contains).joined(separator: ", ")
+    }
+
+    /// Answers the question on show and moves on to the next. Returns every answer once the
+    /// last of `count` questions has been answered, nil while more are to come.
+    public mutating func answer(_ question: String, with value: String, of count: Int) -> [String: String]? {
+        answers[question] = value
+        picked = []
+        guard index + 1 >= count else {
+            index += 1
+            return nil
+        }
+        return answers
+    }
 }
 
 /// A JSON value that keeps agent payload fragments intact (tool input, permission

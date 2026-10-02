@@ -115,6 +115,23 @@ extension HoverIntent {
     public static func blocksReopen(wasOpen: Bool, isOpen: Bool, pointerOnNotch: Bool) -> Bool {
         wasOpen && !isOpen && pointerOnNotch
     }
+
+    /// Which island a pointer sample is about.
+    public enum Subject: Equatable, Sendable {
+        /// The island on the display under the pointer.
+        case here
+        /// The island open on another display, which the pointer has left.
+        case leavingOpen(UInt32)
+    }
+
+    /// With an island on every display, the pointer can leave the open island for another
+    /// display's. Away from that display's notch it is leaving the open one, which closes after
+    /// the grace period as it would for any other leave; on that notch it arms opening there,
+    /// which moves the island.
+    public static func subject(pointerOn display: UInt32, open: UInt32?, inTrigger: Bool) -> Subject {
+        if let open, open != display, !inTrigger { return .leavingOpen(open) }
+        return .here
+    }
 }
 
 /// A peek (an activity's sneak peek or a new song) can open below the notch right under the

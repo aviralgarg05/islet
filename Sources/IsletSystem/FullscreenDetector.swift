@@ -10,7 +10,9 @@ import IsletCore
 /// Uses `CGWindowListCopyWindowInfo` bounds and owner PIDs, which need no Screen Recording
 /// permission (only window *titles* do). With Accessibility, a window that fills the screen is
 /// checked with `AXFullScreen`. Re-evaluated on app activation and Space changes (and twice
-/// more shortly after, `FullscreenCoverage.followUpLooks`) rather than on a timer.
+/// more shortly after, `FullscreenCoverage.followUpLooks`) rather than on a timer. With
+/// Accessibility it also follows the windows of the app in front, so a video or a game that goes
+/// full screen in place (no new Space, no app switch) is noticed, and so is it leaving.
 public final class FullscreenDetector {
     /// Called with the app covering each covered display (its bundle id, "" when it has none),
     /// and the frontmost app's bundle id.
@@ -18,6 +20,10 @@ public final class FullscreenDetector {
     private var observers: [NSObjectProtocol] = []
     private var lastResult: ([CGDirectDisplayID: String], String?)?
     private var followUps: [DispatchWorkItem] = []
+    /// Follows the windows of the app in front (`watchFrontApp`).
+    private var windowObserver: AXObserver?
+    private var watchedPID: pid_t = 0
+    private var windowLooks: [DispatchWorkItem] = []
 
     public init() {}
     deinit { stop() }
@@ -25,15 +31,21 @@ public final class FullscreenDetector {
     public func start() {
         let ws = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.didActivateApplicationNotification, NSWorkspace.activeSpaceDidChangeNotification] {
-            observers.append(ws.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+            observers.append(ws.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
                 self?.evaluate()
                 self?.lookAgainShortly()
+                // Accessibility is checked again each time, so a grant takes effect at the next switch.
+                if note.name == NSWorkspace.didActivateApplicationNotification { self?.watchFrontApp() }
             })
         }
         observers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
-        ) { [weak self] _ in self?.evaluate() })
+        ) { [weak self] _ in
+            self?.evaluate()
+            self?.lookAgainShortly()
+        })
         evaluate()
+        watchFrontApp()
     }
 
     public func stop() {
@@ -44,6 +56,63 @@ public final class FullscreenDetector {
         observers.removeAll()
         followUps.forEach { $0.cancel() }
         followUps.removeAll()
+        unwatchFrontApp()
+    }
+
+    // MARK: The app in front
+
+    /// What the app in front's windows announce, on the app itself: no per-window bookkeeping.
+    /// A window closing shows up as another taking the focus, or as the app leaving the front.
+    static let windowNotifications = [kAXWindowMovedNotification, kAXWindowResizedNotification, kAXWindowCreatedNotification,
+                                      kAXFocusedWindowChangedNotification, kAXWindowMiniaturizedNotification,
+                                      kAXWindowDeminiaturizedNotification]
+
+    /// Follows the windows of the app now in front, with Accessibility. Without it, there is
+    /// no event to follow them by, and Islet doesn't poll: app switches and Space changes still
+    /// catch full screen.
+    private func watchFrontApp() {
+        let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
+        guard FullscreenCoverage.followsWindows(of: pid, trusted: AXIsProcessTrusted(), ownPID: getpid()) else {
+            unwatchFrontApp()
+            return
+        }
+        guard pid != watchedPID || windowObserver == nil else { return }
+        unwatchFrontApp()
+        var obs: AXObserver?
+        let callback: AXObserverCallback = { _, _, _, refcon in
+            guard let refcon else { return }
+            Unmanaged<FullscreenDetector>.fromOpaque(refcon).takeUnretainedValue().windowChanged()
+        }
+        guard AXObserverCreate(pid, callback, &obs) == .success, let obs else { return }
+        let app = AXUIElementCreateApplication(pid)
+        // An app too busy to answer mustn't hold up the main thread.
+        AXUIElementSetMessagingTimeout(app, Self.axTimeout)
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        for name in Self.windowNotifications { AXObserverAddNotification(obs, app, name as CFString, refcon) }
+        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), .defaultMode)
+        windowObserver = obs
+        watchedPID = pid
+    }
+
+    private func unwatchFrontApp() {
+        if let windowObserver {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(windowObserver), .defaultMode)
+        }
+        windowObserver = nil
+        watchedPID = 0
+        windowLooks.forEach { $0.cancel() }
+        windowLooks.removeAll()
+    }
+
+    /// A window of the app in front changed: look once it has settled
+    /// (`FullscreenCoverage.windowChangeLooks`). A newer change replaces the pending looks.
+    private func windowChanged() {
+        windowLooks.forEach { $0.cancel() }
+        windowLooks = FullscreenCoverage.windowChangeLooks.map { delay in
+            let work = DispatchWorkItem { [weak self] in self?.evaluate() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+            return work
+        }
     }
 
     /// Space switches animate for a moment, and a game may go full screen a second or two after

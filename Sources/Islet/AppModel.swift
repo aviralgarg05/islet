@@ -95,7 +95,16 @@ final class AppModel {
     private(set) var clipboard = ClipboardHistory() {
         // Thumbnails of pictures that have left the history (removed, cleared, or history
         // turned off) are forgotten with them.
-        didSet { ClipThumbnails.forget(except: clipboard.entries) }
+        didSet {
+            ClipThumbnails.forget(except: clipboard.entries)
+            // A filter the Clipboard page no longer offers goes back to All, whatever took its
+            // last clip away (unpinned, removed, cleared, trimmed or ignored).
+            if clipboard.filters != oldValue.filters {
+                let page = tools.clipboardPage
+                let filter = clipboard.resolved(page.filter)
+                if filter != page.filter { page.filter = filter }
+            }
+        }
     }
     private(set) var stats: SystemStats?
     private(set) var plugins: [String: PluginResult] = [:]
@@ -363,14 +372,24 @@ final class AppModel {
         if settings.unlockSplash { unlock.start() } else { unlock.stop() }
         let onlyHiddenChanged = lastMirrorOnlyHidden != settings.mirrorOnlyHiddenActivities
         lastMirrorOnlyHidden = settings.mirrorOnlyHiddenActivities
-        if settings.mirrorMenuBarActivities && inFront && liveActivitiesSupported && MenuBarLiveActivityMonitor.isAvailable {
+        // Items appearing, going or widening in the menu bar re-measure it, so "Fit the menu bar"
+        // keeps the wings off them with Live Activities off too.
+        let watch = MenuBarLiveActivities.watch(showActivities: settings.mirrorMenuBarActivities, fitsMenuBar: settings.closedLayout == .auto,
+                                                inFront: inFront, supported: liveActivitiesSupported,
+                                                trusted: MenuBarLiveActivityMonitor.isAvailable)
+        menuBarActivities.onStructureChange = { NotificationCenter.default.post(name: .isletMenuBarChanged, object: nil) }
+        menuBarActivities.mirrors = watch == .mirror
+        switch watch {
+        case .mirror:
             menuBarActivities.onChange = { [weak self] list in self?.syncMenuBarActivities(list) }
             menuBarActivities.knownApp = { $0.count <= 24 && LiveActivityCatalog.look(for: $0) != nil }
-            menuBarActivities.onStructureChange = { NotificationCenter.default.post(name: .isletMenuBarChanged, object: nil) }
             menuBarActivities.start()
             // The scan only publishes a changed menu bar; the filter changed, so publish it again.
             if onlyHiddenChanged { menuBarActivities.refresh() }
-        } else {
+        case .layout:
+            menuBarActivities.start()
+            syncMenuBarActivities([])
+        case .off:
             menuBarActivities.stop()
             syncMenuBarActivities([])
         }
@@ -1085,6 +1104,7 @@ final class AppModel {
             if tab == .mirror { tab = .home }
             pinned = false
             ask.islandDidCollapse()
+            approvals.islandDidCollapse()
             controlHint = nil
         }
     }
@@ -1606,6 +1626,9 @@ final class AppModel {
     // MARK: Shelf / clipboard
 
     func addToShelf(_ urls: [URL]) {
+        // With Shelf off nothing is kept: the files would wait unseen, never leaving, for the
+        // shelf to come back.
+        guard settings.shelfEnabled else { return }
         Haptics.play(.drop)
         shelfService.add(urls: urls)
         _ = try? applyLocal(ActivitySpec(

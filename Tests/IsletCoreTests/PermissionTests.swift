@@ -172,6 +172,28 @@ import Testing
         #expect(PermissionKind.accessibility.uses(s, osMajor: 26).map(\.feature).contains("Show Live Activities"))
     }
 
+    /// The menu bar's layout is followed while either use needs it: showing Live Activities, or
+    /// fitting the closed island to the menu bar with Live Activities off. Never in the
+    /// background session, on a macOS without MenuBarAgent, or without Accessibility.
+    @Test func theMenuBarIsFollowedForEitherUse() {
+        func watch(_ show: Bool, _ fit: Bool, inFront: Bool = true, supported: Bool = true, trusted: Bool = true) -> MenuBarLiveActivities.Watch {
+            MenuBarLiveActivities.watch(showActivities: show, fitsMenuBar: fit, inFront: inFront, supported: supported, trusted: trusted)
+        }
+        #expect(watch(true, true) == .mirror)
+        #expect(watch(true, false) == .mirror)
+        // Live Activities off, "Fit the menu bar": the layout only, nothing read.
+        #expect(watch(false, true) == .layout)
+        // "Always full width" with Live Activities off: nothing follows the menu bar.
+        #expect(watch(false, false) == .off)
+        #expect(watch(true, true, inFront: false) == .off)
+        #expect(watch(false, true, supported: false) == .off)
+        #expect(watch(false, true, trusted: false) == .off)
+        // "Fit the menu bar" is the default, and Accessibility already lists it as a use.
+        let s = IsletSettings()
+        #expect(s.closedLayout == .auto)
+        #expect(PermissionKind.accessibility.uses(s, osMajor: 26).contains { $0.feature == "Fit the closed island between menu bar icons" && $0.isOn })
+    }
+
     @Test func usesFollowTheSettings() {
         var s = IsletSettings()
         s.replaceSystemHUD = false

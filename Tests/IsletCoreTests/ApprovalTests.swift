@@ -469,6 +469,82 @@ enum HookFixtures {
     }
 }
 
+@Suite struct ApprovalIslandHoldTests {
+    @Test func aCardThatOpenedTheIslandClosesItAgain() {
+        var hold = ApprovalIslandHold()
+        hold.hold(islandWasOpen: false, pinned: false)
+        #expect(hold.isHolding)
+        #expect(hold.release(islandOpen: true) == .close)
+        #expect(!hold.isHolding)
+        #expect(hold.release(islandOpen: true) == .nothing)
+    }
+
+    @Test func anIslandAlreadyOpenGetsItsOwnPinBack() {
+        var hold = ApprovalIslandHold()
+        hold.hold(islandWasOpen: true, pinned: true)
+        // A second card doesn't overwrite what the first noted (the island is pinned by then).
+        hold.hold(islandWasOpen: true, pinned: false)
+        #expect(hold.release(islandOpen: true) == .pin(true))
+        var hovered = ApprovalIslandHold()
+        hovered.hold(islandWasOpen: true, pinned: false)
+        #expect(hovered.release(islandOpen: true) == .pin(false))
+    }
+
+    @Test func closingTheIslandAnotherWayEndsTheHold() {
+        // Opened with the shortcut (pinned), a card arrives, the shortcut closes it, then the
+        // agent is answered in the terminal: a closed island must not be pinned.
+        var shortcut = ApprovalIslandHold()
+        shortcut.hold(islandWasOpen: true, pinned: true)
+        shortcut.islandClosed()
+        #expect(shortcut.release(islandOpen: false) == .nothing)
+        // The card opened it, a swipe closed it, a hover opened it again: the answer leaves
+        // the island the pointer is on open.
+        var swiped = ApprovalIslandHold()
+        swiped.hold(islandWasOpen: false, pinned: false)
+        swiped.islandClosed()
+        #expect(swiped.release(islandOpen: true) == .nothing)
+        // A closed island is never pinned, even if nothing said it closed.
+        var unannounced = ApprovalIslandHold()
+        unannounced.hold(islandWasOpen: true, pinned: true)
+        #expect(unannounced.release(islandOpen: false) == .nothing)
+    }
+}
+
+@Suite struct QuestionProgressTests {
+    @Test func answersAreKeptUntilTheLastOne() {
+        var p = QuestionProgress()
+        #expect(p.current(of: 3) == 0)
+        #expect(p.answer("Which database?", with: "Postgres", of: 3) == nil)
+        #expect(p.answer("Which port?", with: "5432", of: 3) == nil)
+        // Hidden here and shown again: the third question, with the first two answered.
+        let kept = p
+        #expect(kept.current(of: 3) == 2)
+        #expect(kept.answers == ["Which database?": "Postgres", "Which port?": "5432"])
+        let all = p.answer("Run migrations?", with: "Yes", of: 3)
+        #expect(all == ["Which database?": "Postgres", "Which port?": "5432", "Run migrations?": "Yes"])
+    }
+
+    @Test func tickedOptionsFollowTheQuestionsOrder() {
+        var p = QuestionProgress()
+        p.toggle("Tests")
+        p.toggle("Docs")
+        p.toggle("Lint")
+        p.toggle("Docs")
+        #expect(p.picked == ["Tests", "Lint"])
+        #expect(p.pickedAnswer(options: ["Lint", "Docs", "Tests"]) == "Lint, Tests")
+        // Answering moves on with nothing ticked on the next question.
+        _ = p.answer("Which checks?", with: p.pickedAnswer(options: ["Lint", "Docs", "Tests"]), of: 2)
+        #expect(p.picked.isEmpty && p.current(of: 2) == 1)
+    }
+
+    @Test func theQuestionOnShowStaysInRange() {
+        var p = QuestionProgress()
+        _ = p.answer("A?", with: "a", of: 1)
+        #expect(p.current(of: 1) == 0)
+        #expect(QuestionProgress().current(of: 0) == 0)
+    }
+}
+
 @Suite struct RiskRuleTests {
     func reasons(_ command: String, cwd: String? = "/Users/me/proj") -> [String] {
         RiskRules.reasons(command: command, cwd: cwd, home: "/Users/me")

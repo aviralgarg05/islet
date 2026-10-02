@@ -17,12 +17,15 @@ final class ApprovalController {
     /// Whether the card is shown. It appears a moment after a request arrives, so the terminal
     /// can print its own prompt first and requests that settle at once never flash a card.
     private(set) var presented = false
+    /// How far the user has got through each waiting card's questions, by card. Kept here so a
+    /// card hidden, or redrawn on another display, still has the answers already given.
+    private(set) var questionProgress: [String: QuestionProgress] = [:]
 
     @ObservationIgnored private var waiters: [String: CheckedContinuation<ApprovalDecision?, Never>] = [:]
     @ObservationIgnored private var expiries: [String: DispatchWorkItem] = [:]
     @ObservationIgnored private var showWork: DispatchWorkItem?
-    /// Island state to put back when the last card goes; set while cards hold the island open.
-    @ObservationIgnored private var restore: (wasOpen: Bool, pinned: Bool)?
+    /// Island state to put back when the last card goes, while cards hold the island open.
+    @ObservationIgnored private var hold = ApprovalIslandHold()
     /// The card on top and when it got there. Clicks just after a card appears are ignored, so
     /// the second click of a double-click can't answer the next card before it has been seen.
     @ObservationIgnored private var front: (id: String?, since: Date) = (nil, .distantPast)
@@ -32,6 +35,11 @@ final class ApprovalController {
 
     init(model: AppModel) {
         self.model = model
+        // Followed here rather than by the app delegate: turning the cards off (in Settings or
+        // config.json) sends the waiting ones back to the terminal at once.
+        NotificationCenter.default.addObserver(forName: .isletSettingsChanged, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.settingsChanged() }
+        }
     }
 
     /// The card to show, if any.
@@ -96,6 +104,32 @@ final class ApprovalController {
         finish(entry.id, with: decision)
     }
 
+    /// The answers given so far on a card's questions.
+    func progress(for entry: ApprovalQueue.Entry) -> QuestionProgress {
+        questionProgress[entry.id] ?? QuestionProgress()
+    }
+
+    /// Records a step through a card's questions, for as long as the card waits.
+    @discardableResult
+    func updateProgress<T>(for entry: ApprovalQueue.Entry, _ change: (inout QuestionProgress) -> T) -> T {
+        var p = progress(for: entry)
+        let result = change(&p)
+        if queue.entries.contains(where: { $0.id == entry.id }) { questionProgress[entry.id] = p }
+        return result
+    }
+
+    /// "Answer requests in the island" was turned off: every card still waiting goes back to
+    /// the terminal now rather than holding the agent up for the rest of its wait, and the
+    /// island lets go of the pin the cards held.
+    private func settingsChanged() {
+        guard !model.settings.approvalsEnabled, !queue.isEmpty else { return }
+        Log.approvals.notice("Cards turned off; \(self.queue.count, privacy: .public) waiting go back to the terminal")
+        for entry in queue.entries where waiters[entry.id] != nil {
+            _ = try? model.applyLocal(entry.request.statusUpdate(backToTerminal: .turnedOff))
+        }
+        for id in queue.entries.map(\.id) { finish(id, with: nil) }
+    }
+
     private func finish(_ id: String, with decision: ApprovalDecision?) {
         guard let waiter = waiters.removeValue(forKey: id) else { return }
         expiries.removeValue(forKey: id)?.cancel()
@@ -129,14 +163,14 @@ final class ApprovalController {
                 for id in queue.entries.map(\.id) { finish(id, with: nil) }
                 return
             }
-            if restore == nil { restore = (false, model.pinned) }
+            hold.hold(islandWasOpen: false, pinned: model.pinned)
             model.pinned = true
             model.expandedScreen = display
             // The island opens under whatever the pointer is doing: guard against a stray click.
             front.since = Date()
             NotificationCenter.default.post(name: .isletLayoutChanged, object: nil)
         } else {
-            if restore == nil { restore = (true, model.pinned) }
+            hold.hold(islandWasOpen: true, pinned: model.pinned)
             model.pinned = true
         }
     }
@@ -149,20 +183,30 @@ final class ApprovalController {
 
     private func queueChanged() {
         noteFront()
+        // Answers on a card that has gone are no use to anyone.
+        let live = Set(queue.entries.map(\.id))
+        if questionProgress.keys.contains(where: { !live.contains($0) }) {
+            questionProgress = questionProgress.filter { live.contains($0.key) }
+        }
         guard queue.isEmpty else { return }
         showWork?.cancel()
         showWork = nil
         presented = false
-        if let r = restore {
-            restore = nil
-            if r.wasOpen { model.pinned = r.pinned } else { model.setExpanded(nil) }
+        switch hold.release(islandOpen: model.expandedScreen != nil) {
+        case .nothing: break
+        case .close: model.setExpanded(nil)
+        case .pin(let pinned): model.pinned = pinned
         }
     }
+
+    /// The island closed (the shortcut, a swipe, the menu, Esc, the API or Hide): the cards no
+    /// longer hold it, so the last one going later changes nothing.
+    func islandDidCollapse() { hold.islandClosed() }
 
     /// Puts the card away. It's still pending and comes back when the island opens.
     func hide() {
         Haptics.play(.tap)
-        restore = nil
+        hold.islandClosed()
         model.setExpanded(nil)
     }
 
@@ -185,6 +229,7 @@ final class ApprovalController {
     /// Snapshot rendering: show these requests as if they had just arrived.
     func showForSnapshot(_ requests: [ApprovalRequest]) {
         queue = ApprovalQueue()
+        questionProgress = [:]
         for (i, r) in requests.enumerated() { _ = queue.enqueue(r, id: "snapshot-\(i)", now: Date()) }
         presented = !requests.isEmpty
     }
