@@ -227,6 +227,9 @@ final class AppModel {
     /// What config.json is known to hold: written, read or (when it was broken at launch) the
     /// settings started with. Changes made in memory since are kept when the file is read again.
     @ObservationIgnored private var diskSettings: IsletSettings
+    /// The settings last saved (or refused while config.json doesn't parse), read or reset. A
+    /// change the Settings window reports that is already one of these isn't an edit to save.
+    @ObservationIgnored private var committedSettings: IsletSettings
     /// Set while config.json doesn't parse: Islet keeps its last good settings and saves
     /// nothing until the file is fixed or replaced (Settings → Advanced).
     private(set) var settingsProblem: FileProblem?
@@ -253,6 +256,7 @@ final class AppModel {
         let settings = start
         configFile = file
         diskSettings = start
+        committedSettings = start
         settingsProblem = file.problem
         settingsOrigin = origin
         self.settings = settings
@@ -755,6 +759,7 @@ final class AppModel {
         } catch {
             Log.files.error("couldn't save config.json: \(error.localizedDescription, privacy: .public)")
         }
+        committedSettings = settings
         noteSettingsProblem(configFile.problem)
     }
 
@@ -767,6 +772,7 @@ final class AppModel {
         } catch {
             Log.files.error("couldn't replace config.json: \(error.localizedDescription, privacy: .public)")
         }
+        committedSettings = settings
         noteSettingsProblem(configFile.problem)
     }
 
@@ -812,6 +818,11 @@ final class AppModel {
     /// A change made in the Settings window. Dragging a slider or typing a shortcut produces a
     /// change per step, so saving and applying wait for a quarter of a second of quiet.
     func settingsEdited() {
+        // The Settings window reports every change to `settings`, also ones already saved or
+        // read: the island's own switches, a hand edit of config.json, Reset. Saving those again
+        // would rewrite a hand-edited file in Islet's own form. This comes before the cancel, so
+        // an edit still waiting for its save goes ahead even when the island saved it meanwhile.
+        guard settings != committedSettings else { return }
         Self.pendingSettingsCommit?.cancel()
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
@@ -879,6 +890,7 @@ final class AppModel {
             // panels) on this notification.
             NotificationCenter.default.post(name: .isletSettingsChanged, object: nil)
         }
+        committedSettings = settings
         // The file gets the changes it missed.
         if next != fresh { saveSettings() }
     }
