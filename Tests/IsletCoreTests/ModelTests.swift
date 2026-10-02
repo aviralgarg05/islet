@@ -492,6 +492,28 @@ import Testing
         #expect(Format.batteryTime(minutes: 24 * 60) == nil)
     }
 
+    /// A relative time that starts a line is capitalised there ("In 23 min · 09:08").
+    @Test func sentenceCase() {
+        #expect(Format.sentence("in 23 min") == "In 23 min")
+        #expect(Format.sentence("now") == "Now")
+        #expect(Format.sentence("") == "")
+        #expect(Format.sentence("Already") == "Already")
+    }
+
+    /// The meeting countdown ticks when its rounded-up minutes change, so Home, the wing and
+    /// the sneak peek never show different numbers for the same meeting.
+    @Test func minuteAnchor() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        // 8 min 30 s before: the last whole-minute moment is 9 minutes before the start.
+        let anchor = Format.minuteAnchor(for: start, now: start.addingTimeInterval(-510))
+        #expect(anchor == start.addingTimeInterval(-540))
+        #expect(anchor <= start.addingTimeInterval(-510))
+        // Exactly on a minute, it is now.
+        #expect(Format.minuteAnchor(for: start, now: start.addingTimeInterval(-300)) == start.addingTimeInterval(-300))
+        // After the start it keeps counting whole minutes from it.
+        #expect(Format.minuteAnchor(for: start, now: start.addingTimeInterval(90)) == start.addingTimeInterval(60))
+    }
+
     @Test func bytes() {
         #expect(Format.bytes(512) == "512 B")
         #expect(Format.bytes(1_200_000) == "1.2 MB")

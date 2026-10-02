@@ -235,9 +235,9 @@ struct HomeTab: View {
             let share: CGFloat = size.width < 480 ? 0.47 : 0.56
             let primaryWidth = split ? (size.width * share).rounded() : size.width
             HStack(alignment: .top, spacing: 0) {
-                // Media fills its column; anything else sits centred in it.
+                // Every primary starts on the content's top line, as the glances beside it do.
                 primary(plan.primary, width: primaryWidth)
-                    .frame(width: primaryWidth, height: size.height, alignment: plan.primary.fills ? .topLeading : .leading)
+                    .frame(width: primaryWidth, height: size.height, alignment: .topLeading)
                 if split {
                     ColumnRule()
                         .frame(height: size.height)
@@ -336,11 +336,12 @@ struct ActivityHero: View {
                             Text(sub).textStyle(.body).foregroundStyle(Ink.secondary).lineLimit(2)
                         }
                     }
-                    Spacer(minLength: Space.s)
-                    // A bar below says the progress already; a ring beside it would say it twice.
+                    // Beside the title, not out at the column's far edge. A bar below says the
+                    // progress already; a ring beside it would say it twice.
                     if !showsBar || activity.trailing != nil {
                         ActivityTrailing(activity: activity, tint: tint)
                     }
+                    Spacer(minLength: 0)
                 }
                 // One element; the bar's share is its value when nothing beside the title says it.
                 .spokenGroup(SpokenText.label(activity, detail: true),
@@ -380,17 +381,25 @@ struct GlanceColumn: View {
     let model: AppModel
     let glances: [HomePlan.Glance]
     let height: CGFloat
-    @Environment(\.snapshotMode) private var snapshotMode
+    /// "+3 more" was clicked: every glance, in a column that scrolls.
+    @ViewState private var showsAll = false
 
     private static let spacing: CGFloat = Space.m
 
     var body: some View {
-        let fitting = Self.fitting(glances, in: height)
-        AdaptiveScroll(scrolls: fitting < glances.count) {
-            VStack(alignment: .leading, spacing: Self.spacing) {
-                // Snapshots can't scroll, so they show what fits.
-                ForEach(snapshotMode ? Array(glances.prefix(fitting)) : glances) { g in
-                    glance(g)
+        let fit = ListFit.fit(glances.map { Double($0.height) }, spacing: Double(Self.spacing), in: Double(height))
+        let all = showsAll || fit.more == 0
+        AdaptiveScroll(scrolls: showsAll && fit.more > 0) {
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: Self.spacing) {
+                    ForEach(all ? glances : Array(glances.prefix(fit.shown))) { g in
+                        glance(g)
+                    }
+                }
+                // What doesn't fit is counted, never dropped without a word.
+                if !all {
+                    MoreLine(count: fit.more) { showsAll = true }
+                        .padding(.top, ListFit.moreGap)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -398,15 +407,6 @@ struct GlanceColumn: View {
         // VoiceOver reads the column beside the main thing as one group, as it is drawn.
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Also going on")
-    }
-
-    static func fitting(_ glances: [HomePlan.Glance], in height: CGFloat) -> Int {
-        var used: CGFloat = 0
-        for (i, g) in glances.enumerated() {
-            used += g.height + (i == 0 ? 0 : spacing)
-            if used > height + 2 { return i }
-        }
-        return glances.count
     }
 
     @ViewBuilder
@@ -423,13 +423,13 @@ struct GlanceColumn: View {
         case .claudeHint(let hint):
             ClaudeUsageHintRow(hint: hint, model: model)
         case .calendarAccess(let advice):
-            GlanceRow(title: "Calendar", speech: GlanceSpeech(label: "Calendar", value: advice.status)) {
+            GlanceRow(title: "Calendar", speech: GlanceSpeech(label: "Calendar", value: advice.status), trailingIsButton: true) {
                 Image(systemName: "calendar").font(.system(size: 12, weight: .semibold)).foregroundStyle(Ink.tertiary)
             } trailing: {
-                Button(advice.button == "Open System Settings" ? "Open" : advice.button ?? "Open") {
+                Button(advice.islandButton ?? "Settings…") {
                     model.requestCalendarAccess(.calendars)
                 }
-                .buttonStyle(CapsuleButtonStyle(tint: .blue))
+                .buttonStyle(CapsuleButtonStyle(tint: .blue, compact: true))
                 .help(advice.detail ?? "")
             } detail: {
                 Text(advice.status)
@@ -451,14 +451,20 @@ struct GlanceSpeech {
 struct GlanceRow<Lead: View, Trailing: View, Detail: View>: View {
     let title: String
     var speech: GlanceSpeech?
+    /// What sits beside the title is a button (Join, in its compact size), taller than the
+    /// title's line: it starts on the row's top line, like the mark and the title, and hangs
+    /// down beside the detail, which stops short of it. Anything shorter (a ring, a time) is
+    /// centred on the title and leaves the detail its whole width.
+    var trailingIsButton = false
     let lead: Lead
     let trailing: Trailing
     let detail: Detail
 
-    init(title: String, speech: GlanceSpeech? = nil, @ViewBuilder lead: () -> Lead, @ViewBuilder trailing: () -> Trailing,
-         @ViewBuilder detail: () -> Detail) {
+    init(title: String, speech: GlanceSpeech? = nil, trailingIsButton: Bool = false, @ViewBuilder lead: () -> Lead,
+         @ViewBuilder trailing: () -> Trailing, @ViewBuilder detail: () -> Detail) {
         self.title = title
         self.speech = speech
+        self.trailingIsButton = trailingIsButton
         self.lead = lead()
         self.trailing = trailing()
         self.detail = detail()
@@ -470,13 +476,10 @@ struct GlanceRow<Lead: View, Trailing: View, Detail: View>: View {
                 .accessibilityHidden(speech != nil)
             VStack(alignment: .leading, spacing: Space.hair) {
                 HStack(spacing: Space.s) {
-                    Text(title)
-                        .textStyle(.body, emphasized: true)
-                        .foregroundStyle(Ink.primary)
-                        .lineLimit(1)
+                    GlanceTitleText(title: title)
                         .modifier(GlanceTitleSpeech(speech: speech))
                     Spacer(minLength: 0)
-                    trailing.fixedSize()
+                    if !trailingIsButton { trailing.fixedSize() }
                 }
                 .frame(height: 16)
                 detail
@@ -485,10 +488,50 @@ struct GlanceRow<Lead: View, Trailing: View, Detail: View>: View {
                     .lineLimit(1)
                     .accessibilityHidden(speech != nil)
             }
+            if trailingIsButton { trailing.fixedSize() }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .accessibilityElement(children: .contain)
+    }
+}
+
+/// A glance's title in one line. The part after its last " · " (a plate, a project) stays
+/// whole and the rest truncates (`GlanceTitle`).
+private struct GlanceTitleText: View {
+    let title: String
+
+    var body: some View {
+        let split = GlanceTitle.split(title)
+        HStack(spacing: 0) {
+            Text(split.head).lineLimit(1)
+            if let tail = split.tail {
+                Text(tail).lineLimit(1).fixedSize()
+            }
+        }
+        .textStyle(.body, emphasized: true)
+        .foregroundStyle(Ink.primary)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// "+3 more" under a list that has more than fits: quiet, and a click shows the rest.
+struct MoreLine: View {
+    let count: Int
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(ListFit.moreText(count))
+                .textStyle(.caption, emphasized: true, numeric: true)
+                .foregroundStyle(Ink.tertiary)
+                .frame(height: ListFit.moreHeight)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Show all")
+        .accessibilityLabel("\(count) more")
+        .accessibilityHint("Shows the rest of the list")
     }
 }
 
@@ -511,10 +554,14 @@ struct EventGlance: View {
     let model: AppModel
 
     var body: some View {
-        TimelineView(.everyMinute) { ctx in
+        // Ticks when the rounded-up minutes change, and counts from now rather than from the
+        // tick, so it says what the wing and the sneak peek say.
+        TimelineView(.periodic(from: Format.minuteAnchor(for: item.start, now: Date()), by: 60)) { _ in
+            let now = Date()
             let time: (Date) -> String = { $0.formatted(date: .omitted, time: .shortened) }
             GlanceRow(title: item.title, speech: GlanceSpeech(label: item.title, value: SpokenText.when(
-                start: item.start, now: ctx.date, ongoing: item.isOngoing(at: ctx.date), startText: time(item.start), endText: time(item.end)))) {
+                start: item.start, now: now, ongoing: item.isOngoing(at: now), startText: time(item.start), endText: time(item.end))),
+                      trailingIsButton: item.meetingURL != nil) {
                 RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                     .fill(Color(tint: item.calendarColor, fallback: .blue))
                     .frame(width: 3, height: 30)
@@ -522,11 +569,11 @@ struct EventGlance: View {
             } trailing: {
                 if item.meetingURL != nil {
                     Button("Join") { model.join(item) }
-                        .buttonStyle(CapsuleButtonStyle(tint: .green))
+                        .buttonStyle(CapsuleButtonStyle(tint: .green, compact: true))
                 }
             } detail: {
-                Text(item.isOngoing(at: ctx.date) ? "Now · until \(item.end.formatted(date: .omitted, time: .shortened))"
-                     : "\(Format.relative(to: item.start, now: ctx.date)) · \(item.start.formatted(date: .omitted, time: .shortened))")
+                Text(item.isOngoing(at: now) ? "Now · until \(item.end.formatted(date: .omitted, time: .shortened))"
+                     : "\(Format.sentence(Format.relative(to: item.start, now: now))) · \(item.start.formatted(date: .omitted, time: .shortened))")
             }
         }
     }
@@ -545,14 +592,14 @@ struct ActivityGlance: View {
         // × under the pointer is left out of this: VoiceOver has it as an action.
         let button = !a.actions.isEmpty
         let label = SpokenText.label(a, detail: true)
-        GlanceRow(title: a.title, speech: button ? GlanceSpeech(label: label) : nil) {
+        GlanceRow(title: a.title, speech: button ? GlanceSpeech(label: label) : nil, trailingIsButton: button) {
             TemplateLeading(activity: a, model: model, tint: tint, size: 14, compact: true)
         } trailing: {
             if hovering {
                 DismissButton { model.remove(activityID: a.id) }
             } else if let action = a.actions.first {
                 Button(action.title) { model.perform(action, activityID: a.id) }
-                    .buttonStyle(CapsuleButtonStyle(tint: tint))
+                    .buttonStyle(CapsuleButtonStyle(tint: tint, compact: true))
             } else {
                 TemplateTrailing(activity: a, model: model, tint: tint, compact: true)
                     .environment(\.wingRoom, 60)

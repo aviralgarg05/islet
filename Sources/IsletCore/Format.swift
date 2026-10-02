@@ -100,6 +100,21 @@ public enum Format {
         return m == 0 ? "\(h) h" : "\(h) h \(m) min"
     }
 
+    /// `text` with its first letter capitalised, for a phrase that starts a line ("In 9 min").
+    public static func sentence(_ text: String) -> String {
+        guard let first = text.first else { return text }
+        return first.uppercased() + text.dropFirst()
+    }
+
+    /// The latest moment at or before `now` that is a whole number of minutes from `date`. A
+    /// countdown to `date` that ticks on these moments changes when its rounded-up minutes do,
+    /// as the wing's does, rather than on the clock's minute.
+    public static func minuteAnchor(for date: Date, now: Date) -> Date {
+        let delta = date.timeIntervalSince(now)
+        guard delta.isFinite else { return now }
+        return date.addingTimeInterval(-60 * (delta / 60).rounded(.up))
+    }
+
     /// Human readable byte count ("1.2 GB").
     public static func bytes(_ count: Int64) -> String {
         let units = ["B", "KB", "MB", "GB", "TB"]
