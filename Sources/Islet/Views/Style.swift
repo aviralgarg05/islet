@@ -147,13 +147,24 @@ extension IslandTheme {
                     closedGlass: Bool = false, stem: CGFloat? = nil) -> some View {
         switch self {
         case .graphite where expanded:
-            shape.fill(Color(white: 0.105)).overlay(shape.stroke(Color.white.opacity(0.08), lineWidth: 1))
+            // The menu bar row stays black, so the hardware notch never shows as a dark bite
+            // in a grey bar; the grey starts just below it. The edge leaves out the top, at the
+            // top of the screen.
+            let h = max(height, row + Space.m, 1)
+            shape.fill(LinearGradient(stops: [.init(color: .black, location: 0),
+                                              .init(color: .black, location: row / h),
+                                              .init(color: Self.graphite, location: (row + Space.m) / h)],
+                                      startPoint: .top, endPoint: .bottom))
+                .overlay(IslandEdge(shape: shape).stroke(Color.white.opacity(0.08), lineWidth: 1))
         case .glass:
             GlassBody(shape: shape, expanded: expanded, row: row, height: height, level: glassLevel, closedGlass: closedGlass, stem: stem)
         default:
             shape.fill(Color.black)
         }
     }
+
+    /// The open Graphite surface below the menu bar row.
+    static let graphite = Color(white: 0.105)
 }
 
 /// "Subtle outline": a faint edge round the island so black shows on a dark wallpaper. The
