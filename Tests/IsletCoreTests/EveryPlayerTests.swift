@@ -158,6 +158,25 @@ import Testing
         #expect(m.controlsHolder(now: now) == nil)
     }
 
+    /// The helper exited and is starting again: until it reports, no app is taken to have the
+    /// controls. A press on Spotify's card goes to Spotify itself, not through the bridge to
+    /// whichever app macOS has given the controls to meanwhile; what was listed stays on show.
+    @Test func nobodyHasTheControlsUntilARestartedHelperReports() {
+        var m = MediaArbiter()
+        m.updateFromBridge(Self.report([Self.spotify(), Self.chrome()], current: Self.spotifyID))
+        #expect(MediaRoute.route(for: Self.spotify(), bridgeRunning: true, bridgePlayer: m.bridgePlayer) == .bridge)
+        m.bridgeInterrupted()
+        #expect(m.bridgePlayer == nil)
+        #expect(MediaRoute.route(for: Self.spotify(), bridgeRunning: true, bridgePlayer: m.bridgePlayer) == .player(.spotify))
+        #expect(MediaRoute.route(for: Self.chrome(), bridgeRunning: true, bridgePlayer: m.bridgePlayer) == .none)
+        #expect(m.controlsHolder(now: t0.addingTimeInterval(1)) == nil)
+        #expect(Set(Self.ids(m.available(now: t0.addingTimeInterval(1)))) == [Self.chromeID, Self.spotifyID])
+        #expect(m.current(now: t0.addingTimeInterval(1))?.bundleID == Self.chromeID)
+        // The new helper's first report says who has them now.
+        m.updateFromBridge(Self.report([Self.spotify(), Self.chrome(at: t0.addingTimeInterval(2))], current: Self.chromeID))
+        #expect(m.bridgePlayer == Self.chromeID)
+    }
+
     @Test func aPressThatWentNowhereSaysWhy() {
         let safari = Self.safari()
         let hint = PlayerIntegration.hint(for: safari, route: .none, sent: false, canScript: false, bridgeRunning: true,

@@ -16,6 +16,10 @@ public final class SystemNowPlayingBridge {
     public var onUnavailable: ((String) -> Void)?
     /// Called when the helper says it is up, so a failure said before is over.
     public var onRunning: (() -> Void)?
+    /// Called when the helper exits and is to be started again. Until the new one reports, nobody
+    /// is known to have the controls: a command written to it would reach whichever app macOS has
+    /// given them to meanwhile.
+    public var onInterrupted: (() -> Void)?
 
     private var process: Process?
     private var stdin: FileHandle?
@@ -144,6 +148,7 @@ public final class SystemNowPlayingBridge {
         // What it left unfinished can't be finished now.
         lines.reset()
         guard !stopped else { return }
+        onInterrupted?()
         failed("MediaRemote helper keeps exiting (status \(status)).", ranFor: Date().timeIntervalSince(startedAt))
     }
 

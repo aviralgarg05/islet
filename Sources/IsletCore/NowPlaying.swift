@@ -406,6 +406,13 @@ public struct MediaArbiter: Sendable {
         updateFromBridge(BridgeReport(snapshot))
     }
 
+    /// The bridge's helper exited and is starting again. What it listed stays on show, but until
+    /// it reports again nobody is known to have the controls, so no command goes through it: one
+    /// written now would reach whichever app macOS has given them to meanwhile.
+    public mutating func bridgeInterrupted() {
+        bridgeCurrent = nil
+    }
+
     // MARK: When each player last changed (rule 2)
 
     private static func feedKey(_ s: NowPlaying) -> String { s.source.rawValue + "\n" + playerID(s) }

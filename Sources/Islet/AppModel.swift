@@ -474,6 +474,11 @@ final class AppModel {
             self.bridgeFailed = false
             self.syncPlayers()
         }
+        // The helper exited and starts again: until it reports, no command goes through it.
+        systemMedia.onInterrupted = { [weak self] in
+            self?.media.bridgeInterrupted()
+            self?.mediaChanged()
+        }
         bridgeFailed = false
         // Switched on, a fresh set of tries, even if it gave up before Now Playing went off.
         systemMedia.retry()
