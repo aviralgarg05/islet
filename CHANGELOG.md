@@ -157,6 +157,7 @@ Every tool starts off until you turn it on in Settings, on the Tools page or the
 - The iPhone bridge has its own token (**Copy** and **New token…** in Settings → Advanced, or `isletctl token --lan`), takes only notifications, timers, Focus and simple activities, and limits requests and connections ([docs/API.md](docs/API.md)). Bonjour calls it "Islet", not your Mac's name.
 - `GET /v1/state` and `isletctl state` include calendar access and how many events are left today, never their titles. Scripts can't read, change or remove meeting reminders.
 - A request refused from its headers alone now gets its answer back while the client is still sending a large body.
+- `isletctl media seek` no longer crashes, and takes 90s, 2m, 1:30 or 0 for the start.
 - Hook snippets in Advanced wrap at spaces. Local builds use the hardened runtime, with the entitlements macOS needs for calendars, the camera, location and Automation. Islet also builds with the macOS 26 SDK.
 
 ### Measured on an M3 Pro MacBook Pro, macOS 27.0.1

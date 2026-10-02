@@ -291,6 +291,19 @@ def run_suite(e, app, windows_bin):
     check("LAN is rate limited", 429 in codes, str(sorted(set(codes))))
     check("loopback API is not rate limited", all(http("GET", "/v1/health")[0] == 200 for _ in range(40)))
 
+    print("▸ media seek")
+    # A seek used to abort isletctl (an unencodable body). Never seek the user's own player:
+    # with something on show, only the media suite's fake player is used.
+    p = ctl(e, "media", "seek", "soon", check_rc=False)
+    check("media seek refuses words that aren't a place in the track", p.returncode == 1 and "1:30" in p.stderr, p.stderr.strip())
+    if state(e).get("nowPlaying"):
+        skip("media seek with no player", "something is on show; not moving it")
+    else:
+        for pos in ["90s", "0", "1:30"]:
+            p = ctl(e, "media", "seek", pos, check_rc=False)
+            check(f"media seek {pos} with no player is a clean 503", p.returncode == 1 and "503" in p.stderr,
+                  f"exit {p.returncode}: {p.stderr.strip()}")
+
     print("▸ HUD, island, removal")
     check("hud accepted", ctl(e, "hud", "volume", "0.4").returncode == 0)
     check("presentation is hud", state(e).get("presentation") == "hud")
@@ -425,6 +438,9 @@ def media_suite(e):
             time.sleep(1.0)
             with open(log.name) as f:
                 check("transport command reaches the player", "command togglePlayPause" in f.read())
+            for pos in ["90s", "0"]:
+                p = ctl(e, "media", "seek", pos, check_rc=False)
+                check(f"media seek {pos} is accepted", p.returncode == 0, f"exit {p.returncode}: {p.stderr.strip()}")
     finally:
         player.terminate()
         os.unlink(log.name)

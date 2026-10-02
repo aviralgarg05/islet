@@ -23,7 +23,7 @@ USAGE
   isletctl run [--title T] -- <command…>   show a command's progress and result in the notch
   isletctl hud <volume|brightness|keyboardBrightness> <0-1>
   isletctl media <play|pause|playpause|next|previous|forward|rewind|shuffle|repeat>
-  isletctl media seek <90s|2m>          jump to a position in the track
+  isletctl media seek <90s|2m|1:30|0>  jump to a place in the track (0: the start)
   isletctl awake [15m|1h|2h|on|off|status]   keep the Mac awake (default: until turned off)
   isletctl focus <name> [on|off]       show a Focus change (for Shortcuts automations)
   isletctl open | close                expand or collapse the island
@@ -324,8 +324,12 @@ func run(_ argv: [String]) async throws -> Int32 {
                    "next": "next", "previous": "previous", "prev": "previous",
                    "forward": "skipForward", "rewind": "skipBackward", "shuffle": "toggleShuffle", "repeat": "toggleRepeat"]
         if a.positional.first?.lowercased() == "seek" {
-            guard a.positional.count == 2 else { throw CLIError("usage: isletctl media seek <90s|2m>") }
-            let body: [String: Any] = ["command": "seek", "position": try parseDuration(a.positional[1])]
+            guard a.positional.count >= 2 else { throw CLIError("usage: isletctl media seek <90s|2m|1:30|0>") }
+            let typed = a.positional.dropFirst().joined(separator: " ")
+            guard let position = MediaSeek.parsePosition(typed) else {
+                throw CLIError("can't read '\(typed)' as a place in the track; try 90s, 2m, 1:30 or 0 for the start")
+            }
+            let body: [String: Any] = ["command": "seek", "position": position]
             try expectOK(try await Client.discover().send("POST", "/v1/media/command", json: try JSONSerialization.data(withJSONObject: body)))
             return 0
         }

@@ -16,6 +16,35 @@ private func track(elapsed: Double? = 60, duration: Double? = 200, playing: Bool
         #expect(MediaSeek.target(from: nil, by: 15, duration: 200) == nil)
     }
 
+    /// `isletctl media seek` takes a place in the track, including the very start, as a plain
+    /// number of seconds the API can encode.
+    @Test func seekPositionsAsTyped() {
+        #expect(MediaSeek.parsePosition("90") == 90)
+        #expect(MediaSeek.parsePosition("90s") == 90)
+        #expect(MediaSeek.parsePosition("2m") == 120)
+        #expect(MediaSeek.parsePosition("1m 30s") == 90)
+        #expect(MediaSeek.parsePosition("1:30") == 90)
+        #expect(MediaSeek.parsePosition("1:02:03") == 3723)
+        #expect(MediaSeek.parsePosition("12.5") == 12.5)
+        #expect(MediaSeek.parsePosition("0") == 0)
+        #expect(MediaSeek.parsePosition("0s") == 0)
+        #expect(MediaSeek.parsePosition(" 2 minutes ") == 120)
+    }
+
+    @Test func seekRefusesWhatIsNotAPlaceInTheTrack() {
+        #expect(MediaSeek.parsePosition("") == nil)
+        #expect(MediaSeek.parsePosition("-5") == nil)
+        #expect(MediaSeek.parsePosition("-5s") == nil)
+        #expect(MediaSeek.parsePosition("at 18:30") == nil)
+        #expect(MediaSeek.parsePosition("6pm") == nil)
+        #expect(MediaSeek.parsePosition("tea 4m") == nil)
+        #expect(MediaSeek.parsePosition("1:75") == nil)
+        #expect(MediaSeek.parsePosition("1:2") == nil)
+        #expect(MediaSeek.parsePosition("1:") == nil)
+        #expect(MediaSeek.parsePosition("0x10") == nil)
+        #expect(MediaSeek.parsePosition("soon") == nil)
+    }
+
     @Test func scrubberGeometry() {
         #expect(MediaSeek.fraction(x: 50, width: 200) == 0.25)
         #expect(MediaSeek.fraction(x: -10, width: 200) == 0)

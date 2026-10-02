@@ -31,6 +31,11 @@ rc.playCommand.addTarget { _ in playing = true; publish(); log("command play"); 
 rc.pauseCommand.addTarget { _ in playing = false; publish(); log("command pause"); return .success }
 rc.nextTrackCommand.addTarget { _ in log("command next"); return .success }
 rc.previousTrackCommand.addTarget { _ in log("command previous"); return .success }
+rc.changePlaybackPositionCommand.addTarget { event in
+    let position = (event as? MPChangePlaybackPositionCommandEvent)?.positionTime ?? -1
+    log("command seek \(position)")
+    return .success
+}
 
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)

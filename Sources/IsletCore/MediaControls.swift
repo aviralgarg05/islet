@@ -36,6 +36,29 @@ public enum MediaSeek {
         return old > 0 && old < 1 || (old <= 0) != (new <= 0)
     }
 
+    /// A position in the track as typed for `isletctl media seek`: "90" or "90s", "2m",
+    /// "1m 30s", "1:30", "1:02:03", and "0" for the start. Nil for a negative position, a time
+    /// of day ("at 18:30") or anything with words left over.
+    public static func parsePosition(_ text: String) -> Double? {
+        let t = text.trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty else { return nil }
+        if t.allSatisfy({ $0.isASCII && ($0.isNumber || $0 == ".") }), let v = Double(t) {
+            return v.isFinite ? v : nil
+        }
+        let clock = t.split(separator: ":", omittingEmptySubsequences: false)
+        if clock.count > 1 {
+            guard clock.count <= 3,
+                  clock.allSatisfy({ !$0.isEmpty && $0.allSatisfy { $0.isASCII && $0.isNumber } }),
+                  clock.dropFirst().allSatisfy({ $0.count == 2 && Int($0)! < 60 }) else { return nil }
+            return clock.reduce(0) { $0 * 60 + Double($1)! }
+        }
+        let words = t.split(whereSeparator: \.isWhitespace).map(String.init)
+        let scanner = DurationParser.Scanner(tokens: DurationParser.tokenize(words), now: Date(), calendar: .current)
+        guard let (seconds, end) = scanner.duration(at: 0), end == scanner.tokens.count,
+              seconds.isFinite, seconds >= 0 else { return nil }
+        return seconds
+    }
+
     /// The right-hand time label: time remaining ("−2:51", with a real minus sign, as other
     /// negative figures have) or the track length ("4:03").
     public static func trailingLabel(position: Double, duration: Double, remaining: Bool) -> String {

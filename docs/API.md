@@ -333,7 +333,7 @@ isletctl pomodoro [start|stop|toggle] (toggle when left out)
 isletctl run [--title T] -- <command…>   mirror a command in the notch; exit code passes through
 isletctl hud <volume|brightness|keyboardBrightness> <0-1>
 isletctl media <play|pause|playpause|next|previous|forward|rewind|shuffle|repeat>
-isletctl media seek <90s|2m>           jump to a position in the track
+isletctl media seek <90s|2m|1:30|0>   jump to a place in the track (0: the start)
 isletctl awake [15m|1h|2h|on|off|status]   keep the Mac awake (default: until turned off; up to 24h)
 isletctl focus <name> [on|off]
 isletctl open | close                  (or press ⌃⌥I; change it in Settings → Keyboard shortcuts)
