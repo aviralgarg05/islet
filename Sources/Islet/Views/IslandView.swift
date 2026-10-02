@@ -149,10 +149,16 @@ enum IslandLayout {
     /// Height of the detailed HUD's line below the notch: no more than the line needs.
     static let hudBody: CGFloat = 30
 
-    /// A sneak peek with a bar under its text gets a little more height, so the bar clears the
-    /// rounded bottom edge.
+    /// A sneak peek whose detail takes a second line gets a little more height, so it clears
+    /// the rounded bottom edge: a bar on its own line, or the flight board's codes over their
+    /// times. Bars that sit beside their text (ETA, gauge) need none.
     static func sneakBar(_ a: Activity) -> CGFloat {
-        a.state == .running && (a.clampedProgress != nil || a.steps != nil) ? Space.s : 0
+        switch a.resolvedTemplate {
+        case .flight where a.flight != nil: return Space.m
+        case .eta, .gauge: return 0
+        case .stages where a.stageCount != nil: return Space.s
+        default: return a.state == .running && (a.clampedProgress != nil || a.steps != nil) ? Space.s : 0
+        }
     }
 
     /// The panel: room for the widest and tallest island, its shadow, and the page switcher

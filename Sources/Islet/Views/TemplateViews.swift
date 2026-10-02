@@ -447,7 +447,7 @@ struct MilestoneBar: View {
                 HStack(spacing: 0) {
                     ForEach(0..<n, id: \.self) { i in
                         Text(i < labels.count ? labels[i] : "")
-                            .font(.system(size: 8.5, weight: i + 1 == shown ? .bold : .medium))
+                            .textStyle(.caption, emphasized: i + 1 == shown)
                             .foregroundStyle(i + 1 == shown ? Color.white : Color.islandTertiary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
@@ -508,8 +508,7 @@ struct AirportColumn: View {
                 .foregroundStyle(.white)
             if let time {
                 Text(time.formatted(date: .omitted, time: .shortened))
-                    .font(.system(size: size * 0.7, weight: .medium, design: .rounded))
-                    .monospacedDigit()
+                    .textStyle(.caption, numeric: true)
                     .foregroundStyle(delayed ? Color.orange : Color.islandSecondary)
                     .contentTransition(.numericText())
             }
@@ -529,7 +528,7 @@ struct FlightLine: View {
         VStack(spacing: 1) {
             if let number {
                 Text(number)
-                    .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                    .textStyle(.caption, numeric: true)
                     .foregroundStyle(Color.islandTertiary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -560,7 +559,7 @@ struct StatusChip: View {
     var body: some View {
         let c: Color = kind == .cancelled ? .red : kind == .delayed ? .orange : .green
         Text(text)
-            .font(.system(size: 9.5, weight: .semibold))
+            .textStyle(.caption, emphasized: true)
             .foregroundStyle(c)
             .lineLimit(1)
             .minimumScaleFactor(0.75)
@@ -953,7 +952,7 @@ struct TemplateDetail<Fallback: View>: View {
                              dot: 6, animate: motion.perpetual)
             }
         case .flight? where a.flight != nil:
-            FlightBoard(activity: a, tint: tint, size: TextStyle.body.size)
+            FlightBoard(activity: a, tint: tint, size: TextStyle.body.size, showsNumber: false)
         case .route? where a.route != nil:
             HStack(spacing: 6) {
                 if a.route?.line != nil { Image(systemName: a.route!.symbol).font(.system(size: 10, weight: .semibold)).foregroundStyle(tint) }
@@ -964,7 +963,7 @@ struct TemplateDetail<Fallback: View>: View {
                 let clock = a.endsAt != nil || a.startedAt != nil ? a.trailingText(now: now) : nil
                 HStack(spacing: 6) {
                     if let head = [a.period, clock].compactMap({ $0 }).joined(separator: " ").nilIfEmpty {
-                        Text(head).font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit().foregroundStyle(.white)
+                        Text(head).textStyle(.caption, emphasized: true, numeric: true).foregroundStyle(.white)
                             .lineLimit(1).fixedSize()
                     }
                     if let sub = a.subtitle { secondary(sub) }
@@ -1011,6 +1010,8 @@ struct FlightBoard: View {
     var size: CGFloat
     /// Carries the flight's spoken value (where nothing else beside it does).
     var speaks = false
+    /// The flight number over the line. A sneak peek leaves it out: its title already says it.
+    var showsNumber = true
 
     var body: some View {
         let f = activity.flight ?? ActivityFlight()
@@ -1018,7 +1019,7 @@ struct FlightBoard: View {
         TemplateClock(activity: activity, speaks: speaks) { now in
             HStack(spacing: 6) {
                 if let from = f.from { AirportColumn(code: from, time: f.departs, delayed: delayed, alignment: .leading, size: size) }
-                FlightLine(progress: f.progress(now: now), tint: tint, number: f.number)
+                FlightLine(progress: f.progress(now: now), tint: tint, number: showsNumber ? f.number : nil)
                 if let to = f.to { AirportColumn(code: to, time: f.arrives, delayed: delayed, alignment: .trailing, size: size) }
                 if let status = f.status { StatusChip(text: status, kind: f.statusKind).fixedSize() }
             }
@@ -1046,12 +1047,12 @@ struct ScoreLine: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 VStack(spacing: 0) {
                     if let period = activity.period {
-                        Text(period).font(.system(size: 10.5, weight: .semibold, design: .rounded)).foregroundStyle(.white)
+                        Text(period).textStyle(.caption, emphasized: true, numeric: true).foregroundStyle(.white)
                     }
                     if activity.endsAt != nil || activity.startedAt != nil {
                         TemplateClock(activity: activity) { now in
                             Text(activity.trailingText(now: now) ?? "")
-                                .font(.system(size: 9.5, weight: .medium, design: .rounded)).monospacedDigit()
+                                .textStyle(.caption, numeric: true)
                                 .foregroundStyle(Color.islandSecondary)
                                 .spokenValue(SpokenText.time(activity, now: now))
                         }
@@ -1181,12 +1182,12 @@ struct TemplateRow: View {
                         ViewThatFits(in: .horizontal) {
                             HStack(spacing: 5) {
                                 title.fixedSize()
-                                Text(label).font(.system(size: 11)).foregroundStyle(Color.islandSecondary).lineLimit(1).fixedSize()
+                                Text(label).textStyle(.caption).foregroundStyle(Ink.secondary).lineLimit(1).fixedSize()
                             }
                             title
                         }
                     } else {
-                        title
+                        RowTitle(text: rowTitle(t))
                     }
                     secondLine(t, tint: tint, motion: motion)
                 }
@@ -1227,7 +1228,7 @@ struct TemplateRow: View {
                 if let p = a.trackProgress(now: now) {
                     EtaTrack(progress: p, tint: tint, tracker: a.trackerIcon ?? model.icon(for: a), glyph: 10, animation: motion.value)
                 } else if let sub = a.subtitle {
-                    Text(sub).font(.system(size: 11)).foregroundStyle(Color.islandSecondary).lineLimit(1)
+                    Text(sub).textStyle(.caption).foregroundStyle(Ink.secondary).lineLimit(1)
                 }
             }
         case .stages:
@@ -1241,14 +1242,19 @@ struct TemplateRow: View {
                     }
                 }
             } else if let sub = a.subtitle {
-                Text(sub).font(.system(size: 11)).foregroundStyle(Color.islandSecondary).lineLimit(1)
+                Text(sub).textStyle(.caption).foregroundStyle(Ink.secondary).lineLimit(1)
             }
         case .route:
-            let line = [a.subtitle, a.route?.instruction != nil ? a.title : nil].compactMap { $0 }.first
-            if let line { Text(line).font(.system(size: 11)).foregroundStyle(Color.islandSecondary).lineLimit(1) }
+            // The stops lead the line ("3 stops · N Judah to Ocean Beach") rather than taking a
+            // column of their own beside the title.
+            let stops = a.trailing == nil ? a.route?.stopsLeft.map { $0 == 1 ? "1 stop" : "\($0) stops" } : nil
+            let about = [a.subtitle, a.route?.instruction != nil ? a.title : nil].compactMap { $0 }.first
+            if let line = [stops, about].compactMap({ $0 }).joined(separator: " · ").nilIfEmpty {
+                Text(line).textStyle(.caption).foregroundStyle(Ink.secondary).lineLimit(1)
+            }
         default:
             if let sub = a.subtitle {
-                Text(sub).font(.system(size: 11)).foregroundStyle(Color.islandSecondary).lineLimit(1)
+                Text(sub).textStyle(.caption).foregroundStyle(Ink.secondary).lineLimit(1)
             }
         }
     }
@@ -1263,14 +1269,33 @@ struct TemplateRow: View {
             }
         case .eta where activity.trailing == nil && activity.phase == "arrived":
             TemplateTrailing(activity: activity, model: model, tint: tint)
-        case .eta where activity.subtitle != nil && activity.trackProgress(now: Date()) != nil:
-            VStack(alignment: .trailing, spacing: 1) {
-                TemplateValueText(activity: activity, model: model, size: 13, tint: tint)
-                Text(activity.subtitle ?? "").font(.system(size: 10.5)).foregroundStyle(Color.islandSecondary).lineLimit(1)
-            }
+        case .route where activity.trailing == nil && activity.route?.stopsLeft != nil:
+            // The stops are on the second line.
+            EmptyView()
         default:
             TemplateValueText(activity: activity, model: model, size: 13, tint: tint)
         }
+    }
+}
+
+/// A row's title. One that ends in a detail after " · " (a plate, a gate) keeps that detail
+/// whole and lets only the part before it shorten: "Grey Pri… · 7ABC123", never "Grey Prius · 7AB…".
+struct RowTitle: View {
+    let text: String
+
+    var body: some View {
+        Group {
+            if let cut = text.range(of: " · ", options: .backwards), cut.lowerBound > text.startIndex {
+                HStack(spacing: 0) {
+                    Text(text[..<cut.lowerBound]).lineLimit(1)
+                    Text(text[cut.lowerBound...]).lineLimit(1).fixedSize()
+                }
+            } else {
+                Text(text).lineLimit(1)
+            }
+        }
+        .textStyle(.body, emphasized: true)
+        .foregroundStyle(Ink.primary)
     }
 }
 
