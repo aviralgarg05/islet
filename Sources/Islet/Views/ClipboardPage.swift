@@ -78,6 +78,7 @@ struct ClipFilterBar: View {
     let selected: ClipFilter
     let choose: (ClipFilter) -> Void
     @Namespace private var highlight
+    @Environment(\.islandMotion) private var motion
 
     var body: some View {
         HStack(spacing: 0) {
@@ -109,7 +110,8 @@ struct ClipFilterBar: View {
         .background(Capsule().fill(Wash.regular))
         .contrastEdge(Capsule())
         .fixedSize()
-        .animation(Motion.settle, value: selected)
+        // The highlight slides like the page switcher's; a fade with less motion, none with Off.
+        .animation(motion.inPlace, value: selected)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Show")
     }

@@ -165,7 +165,7 @@ struct IslandPagesEditor: View {
         }
         .dropDestination(for: String.self) { items, _ in
             guard let raw = items.first, let dragged = IslandPage(rawValue: raw) else { return false }
-            withAnimation { model.settings.islandPages.move(dragged, onto: page, listed: listed) }
+            model.settings.islandPages.move(dragged, onto: page, listed: listed)
             return true
         }
     }
@@ -177,11 +177,11 @@ struct IslandPagesEditor: View {
     }
 
     private func move(_ page: IslandPage, to place: IslandPageLayout.Place) {
-        withAnimation { model.settings.islandPages.move(page, to: place, atStart: place == .more, listed: listed) }
+        model.settings.islandPages.move(page, to: place, atStart: place == .more, listed: listed)
     }
 
     private func nudge(_ page: IslandPage, _ step: Int) {
-        withAnimation { model.settings.islandPages.nudge(page, by: step, listed: listed) }
+        model.settings.islandPages.nudge(page, by: step, listed: listed)
     }
 }
 
