@@ -45,10 +45,8 @@ import Testing
 
     /// Messages that send people to Settings name a page that exists ("Settings → Ask & AI").
     @Test func messagesNamePagesThatExist() {
+        // A missing or refused key has a button to the key instead of words about where it is.
         let messages = [
-            AskProviderStatus.needsKey.message(for: .anthropic),
-            AskProviderStatus.needsKey.message(for: .openai),
-            AskErrorText.http(status: 401, body: Data(), retryAfter: nil, provider: .anthropic),
             AskErrorText.http(status: 404, body: Data(), retryAfter: nil, provider: .openai),
         ]
         for message in messages {

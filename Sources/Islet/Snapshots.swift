@@ -137,7 +137,7 @@ enum Snapshots {
         let notif = MirroredNotification(appName: "Messages", bundleID: "com.apple.MobileSMS", title: "Alice", body: "Running 5 min late, order me a flat white?")
         model.forcedPresentation = .sneak(activity(notif.activity(rule: nil)))
         shoot("21-sneak-notification")
-        renderAsk(model: model, shoot: shoot)
+        renderAsk(model: model, shoot: shoot) { model.settings.sizePreset = $0; metrics = metricsFor(model.settings) }
 
         // Themes and sizes.
         model.forcedPresentation = .expanded

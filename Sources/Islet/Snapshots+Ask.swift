@@ -1,8 +1,9 @@
+import Foundation
 import IsletCore
 
 extension Snapshots {
     /// The Ask tab: not ready, empty, missing key, answered, streaming and failed.
-    static func renderAsk(model: AppModel, shoot: (String) -> Void) {
+    static func renderAsk(model: AppModel, shoot: (String) -> Void, size: (SizePreset) -> Void) {
         let ask = model.ask
         model.forcedPresentation = .expanded
         model.tab = .ask
@@ -26,6 +27,10 @@ extension Snapshots {
             provider: .anthropic, usage: AskUsage(model: "claude-opus-5-5", inputTokens: 58, outputTokens: 71), phase: .done)
         ask.draft = "And how do I undo it?"
         shoot("25-expanded-ask-answer")
+        // The same answer with room for more of it.
+        size(.standard)
+        shoot("25c-expanded-ask-answer-standard")
+        size(.compact)
         increasedContrast = true
         shoot("86-contrast-ask-answer")
         increasedContrast = false
@@ -36,7 +41,7 @@ extension Snapshots {
         shoot("26-expanded-ask-streaming")
 
         ask.showForSnapshot(question: "Hello", answer: "", provider: .anthropic, usage: nil,
-                            phase: .failed("Anthropic rejected the API key. Enter it again in Settings → Ask & AI."))
+                            phase: .failed(AskErrorText.http(status: 401, body: Data(), retryAfter: nil, provider: .anthropic), needsKey: true))
         shoot("27-expanded-ask-error")
 
         ask.clearForSnapshot()

@@ -222,7 +222,10 @@ func joinedText(_ events: [AskEvent]) -> String {
     @Test func httpStatuses() {
         let empty = Data()
         #expect(AskErrorText.http(status: 401, body: empty, retryAfter: nil, provider: .anthropic)
-                == "Anthropic rejected the API key. Enter it again in Settings → Ask & AI.")
+                == "Anthropic didn’t accept your key.")
+        // A new key may fix these, so the island offers the button to it.
+        #expect(AskErrorText.isKeyProblem(status: 401) && AskErrorText.isKeyProblem(status: 403))
+        #expect(!AskErrorText.isKeyProblem(status: 429) && !AskErrorText.isKeyProblem(status: 500))
         #expect(AskErrorText.http(status: 429, body: empty, retryAfter: "12", provider: .anthropic) == "Rate limited. Try again in 12 s.")
         #expect(AskErrorText.http(status: 429, body: empty, retryAfter: "Wed, 21 Oct 2026 07:28:00 GMT", provider: .openai)
                 == "Rate limited. Try again shortly.")
@@ -477,12 +480,22 @@ func joinedText(_ events: [AskEvent]) -> String {
         #expect(AskProviderKind(alias: "OpenAI") == .openai)
         #expect(AskProviderKind(alias: "claude_code") == .claudeCode)
         #expect(AskProviderKind(alias: "") == nil)
-        #expect(AskProviderStatus.needsKey.message(for: .openai) == "Add an OpenAI API key in Settings → Ask & AI to ask ChatGPT.")
-        #expect(AskProviderStatus.notInstalled.message(for: .claudeCode) == "Claude Code isn't installed. Install it, then try again.")
+        // Plain words; the button under the hint goes to the key.
+        #expect(AskProviderStatus.needsKey.message(for: .openai) == "ChatGPT needs your OpenAI key.")
+        #expect(AskProviderStatus.needsKey.message(for: .anthropic) == "Claude needs your Anthropic key.")
+        #expect(AskProviderStatus.ready.message(for: .anthropic) == "Your question goes to Anthropic. Nothing is saved on this Mac.")
+        #expect(AskProviderStatus.notInstalled.message(for: .claudeCode) == "Claude Code isn’t installed. Install it, then try again.")
         // Folder paths belong in Advanced → Diagnostics, not in the Ask box.
         #expect(!AskProviderStatus.notInstalled.message(for: .codex).contains("/"))
         #expect(AskProviderStatus.unavailable(AskProviderStatus.onDeviceReason("modelNotReady")).message(for: .onDevice)
-                == "Apple Intelligence is still downloading. Pick another provider from the menu.")
+                == "Apple Intelligence is still downloading. Choose another model from the menu.")
+        // What the island shows is for everyone: no API talk, no straight apostrophes.
+        for kind in AskProviderKind.allCases {
+            for status in [AskProviderStatus.ready, .needsKey, .notInstalled, .unavailable(AskProviderStatus.onDeviceReason("x"))] {
+                let text = status.message(for: kind)
+                #expect(!text.contains("API") && !text.contains("'"), "\(text)")
+            }
+        }
     }
 
     @Test func keys() {

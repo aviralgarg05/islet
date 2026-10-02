@@ -207,6 +207,9 @@ public enum AskEvent: Equatable, Sendable {
     case refusal(String?)
     /// Something failed; the message is ready to show.
     case error(String)
+    /// The provider needs an API key: none is stored, or it didn't accept the one it was sent.
+    /// The message is ready to show, beside a button to the key in Settings.
+    case needsKey(String)
 
     public var isTerminal: Bool {
         if case .text = self { return false }
@@ -389,27 +392,28 @@ public enum AskProviderStatus: Equatable, Sendable {
         case .ready:
             switch kind {
             case .onDevice: return "Ask anything. The on-device model answers without anything leaving this Mac."
-            case .anthropic, .openai: return "Your question goes to \(kind.recipient ?? "the provider") with your API key. Nothing is saved on this Mac."
+            case .anthropic, .openai: return "Your question goes to \(kind.recipient ?? "the provider"). Nothing is saved on this Mac."
             case .claudeCode, .codex: return "Runs \(kind.title) with your existing login, so it counts towards your plan."
             }
         case .needsKey:
-            return "Add \(kind == .openai ? "an OpenAI" : "an Anthropic") API key in Settings → Ask & AI to ask \(kind.title)."
+            // The button under it ("Add a key…") goes straight to the key in Settings.
+            return "\(kind.title) needs your \(kind.recipient ?? kind.title) key."
         case .notInstalled:
             // Where Islet looked is in Settings → Advanced → Diagnostics, not here.
-            return "\(kind.title) isn't installed. Install it, then try again."
+            return "\(kind.title) isn’t installed. Install it, then try again."
         case .unavailable(let reason):
-            return reason + " Pick another provider from the menu."
+            return reason + " Choose another model from the menu."
         }
     }
 
     /// Text for each on-device unavailability reason.
     public static func onDeviceReason(_ reason: String) -> String {
         switch reason {
-        case "deviceNotEligible": return "This Mac can't run Apple Intelligence."
+        case "deviceNotEligible": return "This Mac can’t run Apple Intelligence."
         case "appleIntelligenceNotEnabled": return "Apple Intelligence is off. Turn it on in System Settings."
         case "modelNotReady": return "Apple Intelligence is still downloading."
         case "needsNewerMacOS": return "On-device answers need macOS 26 or later."
-        default: return "Apple Intelligence isn't available."
+        default: return "Apple Intelligence isn’t available."
         }
     }
 }
@@ -449,11 +453,12 @@ public enum AskErrorText {
         case 400:
             return "\(vendor) rejected the request" + (apiMessage.map { ": \($0)" } ?? ".")
         case 401:
-            return "\(vendor) rejected the API key. Enter it again in Settings → Ask & AI."
+            // A button beside it goes to the key in Settings (`isKeyProblem`).
+            return "\(vendor) didn’t accept your key."
         case 402:
             return "\(vendor) reports a billing problem on your account."
         case 403:
-            return "This API key isn't allowed to do that" + (apiMessage.map { ": \($0)" } ?? ".")
+            return "This key isn’t allowed to do that" + (apiMessage.map { ": \($0)" } ?? ".")
         case 404:
             return "Model not found. Pick another one in Settings → Ask & AI."
         case 413:
@@ -470,6 +475,9 @@ public enum AskErrorText {
             return "\(vendor) returned HTTP \(status)" + (apiMessage.map { ": \($0)" } ?? ".")
         }
     }
+
+    /// Statuses a new key may fix: the key wasn't accepted (401), or isn't allowed to do this (403).
+    public static func isKeyProblem(status: Int) -> Bool { status == 401 || status == 403 }
 
     /// An `error` record inside an otherwise successful stream.
     public static func stream(type: String?, message: String?, provider: AskProviderKind) -> String {
