@@ -1515,6 +1515,9 @@ final class AppModel {
     // MARK: Shelf / clipboard
 
     func addToShelf(_ urls: [URL]) {
+        // With Shelf off nothing is kept: the files would wait unseen, never leaving, for the
+        // shelf to come back.
+        guard settings.shelfEnabled else { return }
         Haptics.play(.drop)
         shelfService.add(urls: urls)
         _ = try? applyLocal(ActivitySpec(

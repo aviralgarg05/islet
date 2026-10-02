@@ -297,6 +297,9 @@ final class TriggerView: NSView {
     var onDragExit: (() -> Void)?
     var onDrop: (([URL]) -> Void)?
     var onSwipe: ((SwipeDirection) -> Void)?
+    /// Whether files dropped here go on the shelf (Shelf is on). When they don't, a drag shows
+    /// no copy badge and a drop is refused.
+    var acceptsDrops: () -> Bool = { true }
     private var area: NSTrackingArea?
     private var swipes = SwipeRecognizer()
 
@@ -341,12 +344,13 @@ final class TriggerView: NSView {
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         onDragEnter?()
-        return .copy
+        return acceptsDrops() ? .copy : []
     }
 
     override func draggingExited(_ sender: NSDraggingInfo?) { onDragExit?() }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard acceptsDrops() else { return false }
         let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
         onDrop?(urls)
         return !urls.isEmpty
@@ -419,6 +423,7 @@ final class PointerCoordinator {
             c.trigger.view.onSwipe = { [weak self] direction in self?.model.handleSwipe(direction, display: display) }
             c.trigger.view.onDragEnter = { [weak self] in self?.dragEntered(display) }
             c.trigger.view.onDragExit = { [weak self] in self?.model.setDraggingFile(false) }
+            c.trigger.view.acceptsDrops = { [weak self] in self?.model.settings.shelfEnabled ?? false }
             c.trigger.view.onDrop = { [weak self] urls in
                 self?.model.setDraggingFile(false)
                 if !urls.isEmpty { self?.model.addToShelf(urls) }
