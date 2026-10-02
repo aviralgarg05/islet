@@ -173,6 +173,9 @@ final class AppModel {
     private var mirrorClock = LiveActivityClock()
     /// Dismissed mirrored items, and when each item's text last changed.
     private var mirrorTracker = MirrorTracker()
+    /// "Only when the notch hides them" as the mirror last filtered with it, so moving the
+    /// switch re-filters what is already in the menu bar instead of waiting for its next change.
+    private var lastMirrorOnlyHidden: Bool?
     /// Mirrored activity id → the menu bar item it came from. Clicking one presses that item;
     /// this never goes through a URL, so nothing outside Islet can trigger the press.
     private var mirroredActivityKeys: [String: String] = [:]
@@ -345,11 +348,15 @@ final class AppModel {
         }
         unlock.onUnlock = { [weak self] in self?.welcomeBack() }
         if settings.unlockSplash { unlock.start() } else { unlock.stop() }
+        let onlyHiddenChanged = lastMirrorOnlyHidden != settings.mirrorOnlyHiddenActivities
+        lastMirrorOnlyHidden = settings.mirrorOnlyHiddenActivities
         if settings.mirrorMenuBarActivities && inFront && MenuBarLiveActivityMonitor.isAvailable {
             menuBarActivities.onChange = { [weak self] list in self?.syncMenuBarActivities(list) }
             menuBarActivities.knownApp = { $0.count <= 24 && LiveActivityCatalog.look(for: $0) != nil }
             menuBarActivities.onStructureChange = { NotificationCenter.default.post(name: .isletMenuBarChanged, object: nil) }
             menuBarActivities.start()
+            // The scan only publishes a changed menu bar; the filter changed, so publish it again.
+            if onlyHiddenChanged { menuBarActivities.refresh() }
         } else {
             menuBarActivities.stop()
             syncMenuBarActivities([])

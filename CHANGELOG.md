@@ -18,6 +18,7 @@ Islet now shows the Live Activities your iPhone sends to the Mac, lets you answe
 - Rides, deliveries, scores, flights and other Live Activities that macOS 26 and later show in the menu bar now appear in the island, even ones hidden behind the notch. Islet recognises them in any of macOS's 41 languages. Needs Accessibility.
 - 137 apps get their own icon, colour and layout, such as a ride ETA with a moving marker, a flight board or a live score.
 - Clicking one opens Apple's own view of it. You can mirror only what the notch hides, and mirrored text stays out of the API unless you allow it.
+- **Only when the notch hides them** applies at once to what is already showing, rather than at the next change in the menu bar.
 - **Mute** in the right-click menu silences one app's Live Activities, and Settings → Apps lists what you've muted, each with **Unmute**. One you dismiss stays away until it leaves the menu bar, and one unchanged for 30 minutes dims.
 
 ### The menu bar
