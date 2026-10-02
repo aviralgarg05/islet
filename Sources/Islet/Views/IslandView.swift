@@ -988,6 +988,20 @@ struct MoreCount: View {
     let count: Int
     @Environment(\.islandMotion) private var motion
 
+    /// How wide "+`count`" is drawn: the caption style, emphasised, with rounded tabular digits.
+    @MainActor
+    static func width(_ count: Int) -> CGFloat {
+        if let w = widths[count] { return w }
+        let size = TextStyle.caption.size
+        let base = NSFont.monospacedDigitSystemFont(ofSize: size, weight: .semibold)
+        let font = base.fontDescriptor.withDesign(.rounded).flatMap { NSFont(descriptor: $0, size: size) } ?? base
+        let w = ceil(("+\(count)" as NSString).size(withAttributes: [.font: font]).width)
+        widths[count] = w
+        return w
+    }
+
+    @MainActor private static var widths: [Int: CGFloat] = [:]
+
     var body: some View {
         if count > 0 {
             Text("+\(count)")
@@ -1161,23 +1175,32 @@ struct IslandRow: View {
 
     // MARK: Swaps
 
+    /// The leading glyph and, beside it, the count of other activities ("+2"). Only the glyph
+    /// swaps when the leading activity changes: the count stays in place and changes on its
+    /// own, and the glyph keeps its identity (a turning record keeps turning) when the count
+    /// comes or goes and it is drawn a little smaller to make room.
     private var leadingSlot: some View {
         let p = presentation
         let arriving = Self.isActivity(p)
-        return ZStack(alignment: .leading) {
-            if let frame, Self.leadingKey(frame.from) != Self.leadingKey(p) {
-                let t = frame.t
-                leading(frame.from).modifier(CrossMorph(progress: IslandMotion.morphOut(at: t, pace: Motion.pace)))
-                if arriving {
-                    leading(p).modifier(GlyphArrival(progress: IslandMotion.glyphArrival(at: t, pace: Motion.pace)))
+        let fit = countFit(p)
+        return HStack(spacing: fit.gap) {
+            ZStack(alignment: .leading) {
+                if let frame, Self.leadingKey(frame.from) != Self.leadingKey(p) {
+                    let t = frame.t
+                    leading(frame.from, size: countFit(frame.from).size)
+                        .modifier(CrossMorph(progress: IslandMotion.morphOut(at: t, pace: Motion.pace)))
+                    if arriving {
+                        leading(p, size: fit.size).modifier(GlyphArrival(progress: IslandMotion.glyphArrival(at: t, pace: Motion.pace)))
+                    } else {
+                        leading(p, size: fit.size).modifier(CrossMorph(progress: IslandMotion.morphIn(at: t, pace: Motion.pace)))
+                    }
                 } else {
-                    leading(p).modifier(CrossMorph(progress: IslandMotion.morphIn(at: t, pace: Motion.pace)))
+                    leading(p, size: fit.size)
+                        .id(Self.leadingKey(p))
+                        .transition(arriving ? motion.glyphTransition : motion.valueTransition)
                 }
-            } else {
-                leading(p)
-                    .id(Self.leadingKey(p))
-                    .transition(arriving ? motion.glyphTransition : motion.valueTransition)
             }
+            MoreCount(count: fit.counts ? leadCount(p) : 0)
         }
     }
 
@@ -1274,21 +1297,17 @@ struct IslandRow: View {
 
     // MARK: Parts
 
+    /// The leading glyph at `size` (`countFit`).
     @ViewBuilder
-    private func leading(_ p: IslandPresentation) -> some View {
+    private func leading(_ p: IslandPresentation, size: CGFloat) -> some View {
         switch p {
         case .compact(.nowPlaying(let np)), .songPeek(let np):
             // A new song swaps the artwork; the equaliser beside it keeps running.
-            counting(Self.bodyKey(p) == nil ? counted : 0,
-                     size: min(ClosedArtwork.size(metrics), Wings<EmptyView, EmptyView>.room(for: geometry.wing) - Space.xs)) { size in
-                ClosedArtwork(media: np, model: model, size: size)
-            }
+            ClosedArtwork(media: np, model: model, size: size)
         case .compact(.activity(let a, _)), .sneak(let a):
-            // With bubbles off, or no room for them in the menu bar row, count the other
-            // activities here instead.
-            counting(activityCount(p), size: Wings<EmptyView, EmptyView>.glyph(for: geometry.wing)) { size in
-                TemplateLeading(activity: a, model: model, tint: model.tint(for: a), size: size)
-            }
+            TemplateLeading(activity: a, model: model, tint: model.tint(for: a), size: size)
+                // A glyph that fits itself to the room (a score, a gate) leaves the count its own.
+                .environment(\.wingRoom, glyphRoom(p))
         case .compact(.battery(let ev)):
             Image(systemName: BatteryGlyph.symbol(ev.state))
                 .font(.system(size: 14, weight: .semibold))
@@ -1306,38 +1325,52 @@ struct IslandRow: View {
         }
     }
 
-    /// The leading glyph with the count of other activities beside it ("+2") when both fit
-    /// before the notch: at `size`, then a little smaller and closer in a narrow wing, else the
-    /// glyph alone. Nothing goes under the notch, where it can't be seen. VoiceOver says the
-    /// count either way.
-    private func counting<Lead: View>(_ count: Int, size: CGFloat, @ViewBuilder lead: (CGFloat) -> Lead) -> some View {
-        return ViewThatFits(in: .horizontal) {
-            HStack(spacing: Space.xs) {
-                lead(size)
-                MoreCount(count: count)
-            }
-            if count > 0 {
-                HStack(spacing: Space.hair) {
-                    lead(max(8, size - 3))
-                    MoreCount(count: count)
-                }
-                HStack(spacing: Space.hair) {
-                    lead(max(8, size - 5))
-                    MoreCount(count: count)
-                }
-                // A timer's ring is wider than its glyph.
-                HStack(spacing: Space.hair) {
-                    lead(max(8, size - 8))
-                    MoreCount(count: count)
-                }
-            }
-            lead(size)
+    /// How many other activities the wing counts beside the glyph: those with no room for a
+    /// bubble (or all of them with bubbles off). None in a peek.
+    private func leadCount(_ p: IslandPresentation) -> Int {
+        switch p {
+        case .compact(.nowPlaying): return counted
+        case .compact(.activity(_, let others)): return model.settings.maxConcurrent == 1 ? others : counted
+        default: return 0
         }
     }
 
-    private func activityCount(_ p: IslandPresentation) -> Int {
-        guard case .compact(.activity(_, let others)) = p else { return 0 }
-        return model.settings.maxConcurrent == 1 ? others : counted
+    /// The glyph's size with nothing to count beside it.
+    private func glyphSize(_ p: IslandPresentation) -> CGFloat {
+        let room = Wings<EmptyView, EmptyView>.room(for: geometry.wing)
+        switch p {
+        case .compact(.nowPlaying), .songPeek: return min(ClosedArtwork.size(metrics), room - Space.xs)
+        default: return Wings<EmptyView, EmptyView>.glyph(for: geometry.wing)
+        }
+    }
+
+    /// The glyph's size and whether the count fits beside it before the notch: at the glyph's
+    /// size, then a little smaller and closer in a narrow wing, else the glyph alone. Nothing
+    /// goes under the notch, where it can't be seen. VoiceOver says the count either way.
+    private func countFit(_ p: IslandPresentation) -> WingCount.Fit {
+        let count = leadCount(p)
+        return WingCount.fit(room: Wings<EmptyView, EmptyView>.room(for: geometry.wing), size: glyphSize(p),
+                             extra: Self.extraWidth(p, model: model), count: count > 0 ? MoreCount.width(count) : 0,
+                             gap: Space.xs, tightGap: Space.hair)
+    }
+
+    /// The room left for the glyph once the count has its own.
+    private func glyphRoom(_ p: IslandPresentation) -> CGFloat {
+        let fit = countFit(p)
+        let room = Wings<EmptyView, EmptyView>.room(for: geometry.wing)
+        return fit.counts ? max(0, room - fit.gap - MoreCount.width(leadCount(p))) : room
+    }
+
+    /// How much wider than its size a glyph is drawn: a ring round a timer or a gauge.
+    static func extraWidth(_ p: IslandPresentation, model: AppModel) -> CGFloat {
+        guard case .compact(.activity(let a, _)) = p else { return 0 }
+        switch model.visualTemplate(for: a) {
+        case .timer? where a.endsAt == nil && model.icon(for: a).isDial: return 0
+        case .timer? where a.endsAt != nil || a.startedAt != nil: return 4
+        case .gauge? where a.clampedProgress != nil: return 5
+        case nil where a.source == TimerEngine.source && a.clampedProgress != nil: return 4
+        default: return 0
+        }
     }
 
     @ViewBuilder

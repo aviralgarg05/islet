@@ -45,3 +45,48 @@ extension ActivityIcon {
         return ["timer", "stopwatch", "clock", "alarm", "deskclock"].contains { name == $0 || name.hasPrefix($0 + ".") }
     }
 }
+
+/// The leading glyph and the count of other activities beside it ("+2") in a closed wing: both
+/// at the glyph's size when they fit, else the glyph a little smaller and closer to the count,
+/// else the glyph alone (nothing goes under the notch, where it can't be seen). One answer for
+/// the wing, so the glyph keeps its place and identity as the count comes and goes, and the
+/// count changes in place instead of swapping with the glyph.
+public enum WingCount {
+    /// How much smaller the glyph may be drawn to make room for the count, in turn.
+    public static let shrinks: [CGFloat] = [0, 3, 5, 8]
+    /// The smallest the glyph is ever drawn.
+    public static let smallest: CGFloat = 8
+
+    public struct Fit: Equatable, Sendable {
+        /// The glyph's size.
+        public var size: CGFloat
+        /// The space between the glyph and the count.
+        public var gap: CGFloat
+        /// Whether the count is shown.
+        public var counts: Bool
+
+        public init(size: CGFloat, gap: CGFloat, counts: Bool) {
+            self.size = size
+            self.gap = gap
+            self.counts = counts
+        }
+    }
+
+    /// - Parameters:
+    ///   - room: the wing's room for its content.
+    ///   - size: the glyph's size with no count.
+    ///   - extra: how much wider than its size the glyph is drawn (a ring round a timer).
+    ///   - count: the count's width, or 0 with nothing to count.
+    ///   - gap: the space before the count at the full size; `tightGap` once the glyph shrinks.
+    public static func fit(room: CGFloat, size: CGFloat, extra: CGFloat = 0, count: CGFloat,
+                           gap: CGFloat, tightGap: CGFloat) -> Fit {
+        guard count > 0 else { return Fit(size: size, gap: gap, counts: false) }
+        for shrink in shrinks {
+            let s = max(smallest, size - shrink)
+            let g = shrink == 0 ? gap : tightGap
+            if s + extra + g + count <= room + 0.5 { return Fit(size: s, gap: g, counts: true) }
+            if s == smallest { break }
+        }
+        return Fit(size: size, gap: gap, counts: false)
+    }
+}

@@ -138,3 +138,36 @@ import Testing
         #expect(white.readableTextOnBlack() == white)
     }
 }
+
+/// The leading glyph and the count beside it ("+2") are laid out once, so the glyph keeps its
+/// place as the count comes and goes.
+@Suite struct WingCountTests {
+    @Test func bothFitAtTheGlyphsSizeInARoomyWing() {
+        let fit = WingCount.fit(room: 60, size: 15, count: 14, gap: 4, tightGap: 2)
+        #expect(fit == WingCount.Fit(size: 15, gap: 4, counts: true))
+    }
+
+    @Test func theGlyphShrinksAndMovesInBeforeTheCountGoes() {
+        // 20 + 4 + 14 = 38 is too wide for 32; 17 + 2 + 14 = 33 still is; 15 + 2 + 14 = 31 fits.
+        let fit = WingCount.fit(room: 32, size: 20, count: 14, gap: 4, tightGap: 2)
+        #expect(fit == WingCount.Fit(size: 15, gap: 2, counts: true))
+        // A timer's ring is wider than its glyph.
+        let ring = WingCount.fit(room: 32, size: 15, extra: 4, count: 14, gap: 4, tightGap: 2)
+        #expect(ring.counts && ring.size + 4 + ring.gap + 14 <= 32.5)
+    }
+
+    @Test func withNoRoomTheGlyphStaysWholeAlone() {
+        let fit = WingCount.fit(room: 18, size: 15, count: 14, gap: 4, tightGap: 2)
+        #expect(fit == WingCount.Fit(size: 15, gap: 4, counts: false))
+        // Never smaller than the smallest glyph.
+        for room in stride(from: CGFloat(0), through: 60, by: 1) {
+            let f = WingCount.fit(room: room, size: 15, count: 14, gap: 4, tightGap: 2)
+            #expect(f.size >= WingCount.smallest)
+            if f.counts { #expect(f.size + f.gap + 14 <= room + 0.5, "nothing goes under the notch") }
+        }
+    }
+
+    @Test func nothingToCountKeepsTheFullSize() {
+        #expect(WingCount.fit(room: 10, size: 20, count: 0, gap: 4, tightGap: 2) == WingCount.Fit(size: 20, gap: 4, counts: false))
+    }
+}
