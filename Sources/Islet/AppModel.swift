@@ -1237,17 +1237,19 @@ final class AppModel {
             let batterySettings = URL(string: "x-apple.systempreferences:com.apple.Battery-Settings.extension")
             switch ev.kind {
             case .critical, .low:
-                _ = try? commit(ActivitySpec(
+                let spec = ActivitySpec(
                     id: "battery-low", source: "battery", title: "Battery at \(s.level)%",
                     subtitle: s.lowPowerMode ? "Low Power Mode is on" : "Plug in soon, or turn on Low Power Mode",
                     icon: .symbol(ev.kind == .critical ? "battery.0percent" : "battery.25percent"), state: .warning,
                     tint: "red", priority: ev.kind == .critical ? .critical : .high, ttl: ev.kind == .critical ? 0 : 6,
                     url: batterySettings,
                     actions: [ActivityAction(title: "Battery settings", url: batterySettings)], sneak: true
-                ))
+                )
+                // A Mac about to run out always says so, even with Battery muted.
+                if ev.kind == .critical { _ = try? commit(spec) } else { _ = try? applyLocal(spec) }
             case .lowPowerOn, .lowPowerOff:
                 let on = ev.kind == .lowPowerOn
-                _ = try? commit(ActivitySpec(
+                _ = try? applyLocal(ActivitySpec(
                     id: "low-power", source: "battery", title: "Low Power Mode", icon: .symbol(on ? "battery.25percent" : "battery.75percent"),
                     trailing: on ? "On" : "Off", state: .info, tint: on ? "yellow" : "gray", priority: .normal, ttl: 2.5, sneak: true
                 ))
@@ -1274,7 +1276,7 @@ final class AppModel {
             // A new output gets its card ("Sound output changes"), not a volume HUD.
             guard settings.outputChangeCard else { return }
             let bt = AudioMonitor.isBluetooth(AudioMonitor.defaultDevice(input: false))
-            _ = try? commit(ActivitySpec(
+            _ = try? applyLocal(ActivitySpec(
                 id: "audio-route", source: "audio", title: name, subtitle: bt ? "Connected" : "Audio output",
                 icon: .symbol(Self.symbol(forDevice: name, bluetooth: bt)), state: .info, tint: "blue",
                 priority: .normal, ttl: 3, sneak: true
@@ -1447,7 +1449,7 @@ final class AppModel {
               let spec = WelcomeBack.activity(counts: lockedDigest, lockedFor: Date().timeIntervalSince(since),
                                               name: { WelcomeBack.name($0, appName: Self.appName(bundleID:)) })
         else { return }
-        _ = try? commit(spec)
+        _ = try? applyLocal(spec)
     }
 
     /// The "x" on Home's Claude usage hint: hide it for good.

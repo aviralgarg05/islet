@@ -638,7 +638,9 @@ struct ActivityGlance: View {
         .contextMenu {
             if model.canOpen(a) { Button("Open") { model.openActivity(a) } }
             Button("Dismiss") { model.remove(activityID: a.id) }
-            Button("Mute “\(AppModel.mutedName(a.source))”") { model.mute(source: a.source) }
+            if MutedSources.canMute(a.source) {
+                Button("Mute “\(AppModel.mutedName(a.source))”") { model.mute(source: a.source) }
+            }
         }
     }
 

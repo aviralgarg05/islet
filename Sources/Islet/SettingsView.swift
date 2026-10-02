@@ -927,11 +927,7 @@ struct AppRulesSettings: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .settingsAnchor("apps.muted")
                         ForEach(model.settings.mutedSources, id: \.self) { source in
-                            HStack {
-                                Text(AppModel.mutedName(source)).lineLimit(1)
-                                Spacer(minLength: 8)
-                                Button("Unmute") { model.unmute(source: source) }
-                            }
+                            MutedSourceRow(model: model, source: source)
                         }
                     }
                 }
@@ -953,6 +949,25 @@ struct AppRulesSettings: View {
         guard !model.settings.appRules.contains(where: { $0.bundleID == bundleID }) else { return }
         model.settings.appRules.append(AppRule(bundleID: bundleID))
         added = bundleID
+    }
+}
+
+/// One source muted from the island, with what still shows from it and its Unmute.
+struct MutedSourceRow: View {
+    let model: AppModel
+    let source: String
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(AppModel.mutedName(source)).lineLimit(1)
+                if let note = MutedSources.stillShows(source) {
+                    Text(note).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 8)
+            Button("Unmute") { model.unmute(source: source) }
+        }
     }
 }
 

@@ -827,7 +827,9 @@ struct IslandView: View {
                 .contextMenu {
                     if case .activity(let a) = slot.bubble {
                         Button("Dismiss") { model.remove(activityID: a.id) }
-                        Button("Mute “\(AppModel.mutedName(a.source))”") { model.mute(source: a.source) }
+                        if MutedSources.canMute(a.source) {
+                            Button("Mute “\(AppModel.mutedName(a.source))”") { model.mute(source: a.source) }
+                        }
                     }
                 }
                 .spokenButton(slot.bubble.spokenLabel, value: slot.bubble.spokenValue,
@@ -895,7 +897,9 @@ struct IslandView: View {
         if let a = model.focusedActivity(for: p) {
             if model.canOpen(a) { Button("Open") { model.openActivity(a) } }
             Button("Dismiss “\(a.title)”") { model.remove(activityID: a.id) }
-            Button("Mute “\(AppModel.mutedName(a.source))”") { model.mute(source: a.source) }
+            if MutedSources.canMute(a.source) {
+                Button("Mute “\(AppModel.mutedName(a.source))”") { model.mute(source: a.source) }
+            }
             Divider()
         }
         Button(model.expandedScreen == nil ? "Open island" : "Close island") {

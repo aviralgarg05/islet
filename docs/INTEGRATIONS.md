@@ -276,4 +276,4 @@ Turn on **Run scripts from the plugins folder** in *Settings → Advanced → Sc
 - **keep the island in full screen** (for example, a call app), whatever *General → In full screen* says;
 - **mute its notifications and calls**.
 
-Right-click any activity in the island to dismiss it or mute its source. Muted sources are listed under *Settings → Apps → Muted*, each with **Unmute**. Each app's Live Activities are a source of their own, so muting one leaves the others, and one you dismiss stays away until it leaves the menu bar.
+Right-click any activity in the island to dismiss it or mute its source, Islet's own cards included (battery, sound output, keep awake, welcome back). Muted sources are listed under *Settings → Apps → Muted*, each with **Unmute**. A battery about to run out still warns you while Battery is muted. Each app's Live Activities are a source of their own, so muting one leaves the others, and one you dismiss stays away until it leaves the menu bar.

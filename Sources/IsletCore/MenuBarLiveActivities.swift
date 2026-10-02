@@ -422,6 +422,15 @@ public enum MutedSources {
         return words.prefix(1).uppercased() + words.dropFirst() + " (from a script)"
     }
 
+    /// Whether "Mute" in the island's menus would silence anything. Appearance's previews show
+    /// because they were asked for, so muting them would do nothing.
+    public static func canMute(_ source: String) -> Bool { source != "preview" }
+
+    /// What still shows from a muted source, said beside it in Settings.
+    public static func stillShows(_ source: String) -> String? {
+        source == "battery" ? "A battery about to run out still warns you." : nil
+    }
+
     /// Islet's own sources, by the feature that sends them.
     static let builtIn: [String: String] = [
         TimerEngine.source: "Timers", Stopwatch.source: "Stopwatch", KeepAwake.source: "Keep awake",

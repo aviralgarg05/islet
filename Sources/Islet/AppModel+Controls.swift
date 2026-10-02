@@ -158,7 +158,7 @@ extension AppModel {
             return
         }
         if KeepAwake.shouldRelease(battery ?? BatteryMonitor.read()) {
-            _ = try? commit(KeepAwake.notice("Battery below \(KeepAwake.lowBatteryLevel)%. Plug in to keep your Mac awake."))
+            _ = try? applyLocal(KeepAwake.notice("Battery below \(KeepAwake.lowBatteryLevel)%. Plug in to keep your Mac awake."))
             return
         }
         guard controls.assertion.hold(reason: "Islet keep awake") else { return }
@@ -184,7 +184,8 @@ extension AppModel {
         }
         // A fresh activity, so switching from a timed period to "until turned off" drops the countdown.
         remove(activityID: KeepAwake.activityID)
-        _ = try? commit(KeepAwake.activity(for: session, sneak: announce) { $0.formatted(date: .omitted, time: .shortened) })
+        // Muted, the Mac still stays awake; only the pill is left out.
+        _ = try? applyLocal(KeepAwake.activity(for: session, sneak: announce) { $0.formatted(date: .omitted, time: .shortened) })
     }
 
     func stopKeepAwake(notice: String?) {
@@ -196,7 +197,7 @@ extension AppModel {
         guard controls.awake != nil else { return }
         controls.awake = nil
         remove(activityID: KeepAwake.activityID)
-        if let notice { _ = try? commit(KeepAwake.notice(notice)) }
+        if let notice { _ = try? applyLocal(KeepAwake.notice(notice)) }
     }
 
     /// Called with every battery reading: keep awake never runs the battery flat.
@@ -215,7 +216,7 @@ extension AppModel {
 
     /// Charging reached the level set in Settings (for example 80%, to unplug early).
     func announceCharged(_ s: BatteryState) {
-        _ = try? commit(ActivitySpec(
+        _ = try? applyLocal(ActivitySpec(
             id: "battery-charged", source: "battery", title: "Charged to \(s.level)%", subtitle: "You can unplug now",
             icon: .symbol("battery.100percent.bolt"), state: .success, tint: "green", priority: .normal, ttl: 6, sneak: true
         ))
