@@ -561,6 +561,8 @@ public struct ApprovalRequest: Equatable, Sendable {
         case expired
         /// "Answer in the terminal", but the terminal couldn't be brought forward.
         case jumpFailed
+        /// "Answer requests in the island" was turned off while the card waited.
+        case turnedOff
     }
 
     /// The agent's status once its question has gone back to the terminal unanswered, so a
@@ -569,7 +571,7 @@ public struct ApprovalRequest: Equatable, Sendable {
     public func statusUpdate(backToTerminal reason: BackToTerminal) -> ActivitySpec {
         let subtitle: String
         switch reason {
-        case .expired: subtitle = "Answer in the terminal"
+        case .expired, .turnedOff: subtitle = "Answer in the terminal"
         case .jumpFailed: subtitle = "Couldn’t bring the terminal forward. Answer there."
         }
         return ActivitySpec(id: statusActivityID, subtitle: subtitle, trailing: "Waiting", state: .waiting,

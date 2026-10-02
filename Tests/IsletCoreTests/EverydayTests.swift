@@ -503,6 +503,9 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         let cursor = ApprovalRequest(provider: .cursor, hook: .beforeShellExecution, sessionID: "conv-9", toolName: "shell")
         #expect(cursor.statusUpdate(backToTerminal: .jumpFailed).id == "cursor-conv-9")
         #expect(cursor.statusUpdate(backToTerminal: .jumpFailed).subtitle?.hasPrefix("Couldn’t bring the terminal forward") == true)
+        // Cards turned off while one waited: the same word as a card that ran out of time.
+        let off = claude.statusUpdate(backToTerminal: .turnedOff)
+        #expect(off.id == expired.id && off.subtitle == "Answer in the terminal" && off.state == .waiting)
     }
 }
 

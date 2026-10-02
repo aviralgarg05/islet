@@ -32,6 +32,11 @@ final class ApprovalController {
 
     init(model: AppModel) {
         self.model = model
+        // Followed here rather than by the app delegate: turning the cards off (in Settings or
+        // config.json) sends the waiting ones back to the terminal at once.
+        NotificationCenter.default.addObserver(forName: .isletSettingsChanged, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.settingsChanged() }
+        }
     }
 
     /// The card to show, if any.
@@ -94,6 +99,18 @@ final class ApprovalController {
         }
         if let status = entry.request.statusUpdate(after: decision) { _ = try? model.applyLocal(status) }
         finish(entry.id, with: decision)
+    }
+
+    /// "Answer requests in the island" was turned off: every card still waiting goes back to
+    /// the terminal now rather than holding the agent up for the rest of its wait, and the
+    /// island lets go of the pin the cards held.
+    private func settingsChanged() {
+        guard !model.settings.approvalsEnabled, !queue.isEmpty else { return }
+        Log.approvals.notice("Cards turned off; \(self.queue.count, privacy: .public) waiting go back to the terminal")
+        for entry in queue.entries where waiters[entry.id] != nil {
+            _ = try? model.applyLocal(entry.request.statusUpdate(backToTerminal: .turnedOff))
+        }
+        for id in queue.entries.map(\.id) { finish(id, with: nil) }
     }
 
     private func finish(_ id: String, with decision: ApprovalDecision?) {
