@@ -613,6 +613,38 @@ import Testing
         #expect(h.sample(point: .zero, now: t0.addingTimeInterval(0.8), inTrigger: false, inExpanded: false, isOpen: true) == .close)
         #expect(h.tick(now: t0.addingTimeInterval(0.9), isOpen: true) == .close)
     }
+
+    @Test func thePointerOnAnotherDisplayIsLeavingTheOpenIsland() {
+        // Open on display 1, pointer on display 2 away from its notch: about the open island.
+        #expect(HoverIntent.subject(pointerOn: 2, open: 1, inTrigger: false) == .leavingOpen(1))
+        // On display 2's notch it arms opening there instead, which moves the island.
+        #expect(HoverIntent.subject(pointerOn: 2, open: 1, inTrigger: true) == .here)
+        #expect(HoverIntent.subject(pointerOn: 1, open: 1, inTrigger: false) == .here)
+        #expect(HoverIntent.subject(pointerOn: 2, open: nil, inTrigger: false) == .here)
+    }
+
+    @Test func leavingForAnotherDisplayClosesAfterTheGracePeriod() {
+        var h = HoverIntent(closeDelay: 0.35)
+        // Inside the open island, then onto the other display, sampled as leaving the open one.
+        _ = h.sample(point: .zero, now: t0, inTrigger: false, inExpanded: true, isOpen: true)
+        #expect(h.sample(point: CGPoint(x: 0, y: 900), now: t0.addingTimeInterval(0.1), inTrigger: false, inExpanded: false, isOpen: true) == .none)
+        #expect(h.exitedAt != nil)
+        #expect(h.sample(point: CGPoint(x: 5, y: 900), now: t0.addingTimeInterval(0.3), inTrigger: false, inExpanded: false, isOpen: true) == .none)
+        #expect(h.sample(point: CGPoint(x: 9, y: 900), now: t0.addingTimeInterval(0.5), inTrigger: false, inExpanded: false, isOpen: true) == .close)
+        // Resting there, the timer closes it too.
+        var resting = HoverIntent(closeDelay: 0.35)
+        _ = resting.sample(point: .zero, now: t0, inTrigger: false, inExpanded: false, isOpen: true)
+        #expect(resting.tick(now: t0.addingTimeInterval(0.4), isOpen: true) == .close)
+    }
+
+    @Test func samplingTheOtherDisplaysClosedIslandWouldDropThePendingClose() {
+        // What went wrong before: the sample about the closed island under the pointer forgot
+        // that the open one had been left.
+        var h = HoverIntent(closeDelay: 0.35)
+        _ = h.sample(point: .zero, now: t0, inTrigger: false, inExpanded: false, isOpen: true)
+        _ = h.sample(point: .zero, now: t0.addingTimeInterval(0.1), inTrigger: false, inExpanded: false, isOpen: false)
+        #expect(h.exitedAt == nil)
+    }
 }
 
 @Suite struct BrightnessFilterTests {

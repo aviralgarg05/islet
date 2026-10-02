@@ -540,8 +540,16 @@ final class PointerCoordinator {
         if !inTrigger { model.controls.hoverOpenBlocked = false }
         // Resting on the closed island: it grows a little, and may peek at what's playing.
         model.setHover(inTrigger && !expandedHere && model.expandedScreen == nil ? c.display : nil)
-        // The dwell opens the island, or with "open on click", peeks at the song.
-        if model.settings.hoverToOpen || expandedHere || model.settings.peekOnHover {
+        if case .leavingOpen(let open) = HoverIntent.subject(pointerOn: c.display, open: model.expandedScreen, inTrigger: inTrigger) {
+            // Open on another display, and the pointer has left it for this one: that island
+            // closes after the grace period. Sampled as this display's closed island instead,
+            // the pending close would be dropped and it would stay open.
+            let decision = intent.sample(point: p, now: now, inTrigger: false, inExpanded: false, isOpen: true)
+            activeDisplay = open
+            apply(decision, display: open)
+            armRestTimerIfNeeded()
+        } else if model.settings.hoverToOpen || expandedHere || model.settings.peekOnHover {
+            // The dwell opens the island, or with "open on click", peeks at the song.
             let decision = intent.sample(point: p, now: now, inTrigger: inTrigger,
                                          inExpanded: expandedHere && c.expandedRect.insetBy(dx: -6, dy: -6).contains(p), isOpen: expandedHere)
             activeDisplay = c.display
