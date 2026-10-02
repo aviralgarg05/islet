@@ -1619,7 +1619,7 @@ final class AppModel {
     @discardableResult
     func send(_ command: PlaybackCommand, position: Double? = nil, to target: NowPlaying? = nil) -> Bool {
         let now = Date()
-        let np = target ?? commandTarget(now: now)
+        let np = target ?? commandTarget(for: command, now: now)
         // Only a press on the player on show shows at once.
         let onShow = np.map(MediaArbiter.playerID) == nowPlaying.map(MediaArbiter.playerID)
         let intent = onShow ? nowPlaying.flatMap { PlaybackIntent.intended(command, on: $0, at: now) } : nil
@@ -1679,7 +1679,7 @@ final class AppModel {
     /// Focus sounds' "Your music": play the music a command reaches now (`commandTarget`).
     /// Returns the player the press reached (`MediaArbiter.playerID`), or nil when it went nowhere.
     func playMusic() -> String? {
-        guard let target = commandTarget(now: Date()), send(.play, to: target) else { return nil }
+        guard let target = commandTarget(for: .play, now: Date()), send(.play, to: target) else { return nil }
         return MediaArbiter.playerID(target)
     }
 
@@ -1693,9 +1693,12 @@ final class AppModel {
     /// The player a command with no target goes to: the one on show or, with nothing on show,
     /// the one macOS gives the controls to while Islet offers it (Spotify paused an hour ago).
     /// Never one Islet keeps out of the island, and with no player at all nothing, rather than
-    /// the system's Now Playing, which could start Music.
-    private func commandTarget(now: Date) -> NowPlaying? {
-        nowPlaying ?? (systemMedia.isRunning ? media.controlsHolder(now: now) : nil)
+    /// the system's Now Playing, which could start Music. A seek or a 15 s jump goes only to the
+    /// player on show: it moves a place in the track, and a player out of sight has none on show.
+    private func commandTarget(for command: PlaybackCommand, now: Date) -> NowPlaying? {
+        if let nowPlaying { return nowPlaying }
+        guard systemMedia.isRunning, !command.movesPosition else { return nil }
+        return media.controlsHolder(now: now)
     }
 
     /// Commands go to the player on show (the one picked in the island, or the newest): the

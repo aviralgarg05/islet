@@ -149,6 +149,12 @@ public enum PlaybackCommand: String, Codable, Sendable, CaseIterable {
     /// Only offered when the player reports its shuffle or repeat state.
     case toggleShuffle, toggleRepeat
 
+    /// A seek or a 15 s jump: it moves a place in the track on show. With nothing on show there is
+    /// none, so such a command goes nowhere rather than to a player out of sight (`controlsHolder`).
+    public var movesPosition: Bool {
+        self == .seek || self == .skipForward || self == .skipBackward
+    }
+
     /// The commands a player takes, from MediaRemote's numbers for them. Numbers with no command
     /// here (stop, fast forward, rate a track) are left out.
     public static func taken(mediaRemote numbers: [Int]) -> Set<PlaybackCommand> {

@@ -192,6 +192,9 @@ import Testing
         #expect(m.controlsHolder(now: now) == nil)
         m.updateFromBridge(Self.report([], current: nil))
         #expect(m.controlsHolder(now: now) == nil)
+        // A seek or a 15 s jump moves a place in the track on show: with nothing on show, none
+        // goes to the player out of sight.
+        #expect(PlaybackCommand.allCases.filter(\.movesPosition) == [.seek, .skipForward, .skipBackward])
     }
 
     /// The helper exited and is starting again: until it reports, no app is taken to have the
