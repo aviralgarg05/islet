@@ -213,6 +213,10 @@ struct AppIconView: View {
             Image(systemName: "app.fill").font(.system(size: size * 0.8)).foregroundStyle(Color.islandSecondary).frame(width: size, height: size)
         }
     }
+
+    static func isInstalled(_ bundleID: String) -> Bool {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil
+    }
 }
 
 /// Album art with sensible fallbacks.
@@ -222,21 +226,23 @@ struct ArtworkView: View {
     var corner: CGFloat
 
     var body: some View {
-        Group {
-            if let data = media.artworkData, let img = ArtworkCache.image(for: data) {
-                Image(nsImage: img).resizable().scaledToFill()
-            } else if let url = media.artworkURL {
-                AsyncImage(url: url) { img in img.resizable().scaledToFill() } placeholder: { placeholder }
-            } else if let bundle = media.bundleID, NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) != nil {
-                AppIconView(bundleID: bundle, size: size * 0.8)
-                    .frame(width: size, height: size)
-                    .background(Color.islandFill)
-            } else {
-                placeholder
+        if media.artworkData == nil, media.artworkURL == nil, let bundle = media.bundleID, AppIconView.isInstalled(bundle) {
+            // No artwork: the player's own icon at full size. It carries its own shape, so no
+            // tile behind it and no clip (a box in a box).
+            AppIconView(bundleID: bundle, size: size)
+        } else {
+            Group {
+                if let data = media.artworkData, let img = ArtworkCache.image(for: data) {
+                    Image(nsImage: img).resizable().scaledToFill()
+                } else if let url = media.artworkURL {
+                    AsyncImage(url: url) { img in img.resizable().scaledToFill() } placeholder: { placeholder }
+                } else {
+                    placeholder
+                }
             }
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
         }
-        .frame(width: size, height: size)
-        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
     }
 
     private var placeholder: some View {
