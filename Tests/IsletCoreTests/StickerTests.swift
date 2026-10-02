@@ -156,9 +156,9 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
 }
 
 @Suite struct StickerPlaybackTests {
-    private func plan(_ mode: StickerMode, animated: Bool = true, reduceMotion: Bool = false, lowPower: Bool = false,
+    private func plan(_ mode: StickerMode, animated: Bool = true, reduceMotion: Bool = false,
                       current: Int = 7) -> StickerPlayback {
-        StickerPlayback.plan(mode: mode, animated: animated, reduceMotion: reduceMotion, lowPower: lowPower, current: current)
+        StickerPlayback.plan(mode: mode, animated: animated, reduceMotion: reduceMotion, current: current)
     }
 
     @Test func itLoopsOnlyWhileTheMusicPlays() {
@@ -167,14 +167,10 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
         #expect(plan(.idle) == .hold(0), "resting with nothing playing: the first frame")
     }
 
-    @Test func reduceMotionShowsTheFirstFrameAndLowPowerHoldsTheCurrentOne() {
+    @Test func reduceMotionShowsTheFirstFrame() {
         for mode in [StickerMode.playing, .paused, .idle] {
             #expect(plan(mode, reduceMotion: true) == .hold(0), "\(mode)")
-            #expect(plan(mode, reduceMotion: true, lowPower: true) == .hold(0), "\(mode)")
         }
-        #expect(plan(.playing, lowPower: true) == .hold(7))
-        #expect(plan(.paused, lowPower: true) == .hold(7))
-        #expect(plan(.idle, lowPower: true) == .hold(0))
     }
 
     @Test func aStillPictureNeverLoops() {

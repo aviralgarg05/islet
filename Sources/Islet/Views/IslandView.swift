@@ -519,8 +519,7 @@ struct IslandView: View {
         }
         .fontDesign(model.settings.roundedFont ? .rounded : .default)
         .environment(\.islandReduceMotion, IslandLoops.holdStill(reduceMotion: model.settings.reduceMotion,
-                                                                 animationOff: model.settings.animationStyle == .off,
-                                                                 lowPower: model.lowPowerMode))
+                                                                 animationOff: model.settings.animationStyle == .off))
         .environment(\.islandMotion, style)
         .environment(\.visualiserStyle, model.settings.visualiserStyle)
         .environment(\.hiddenFromCapture, model.settings.hideFromScreenCapture)
@@ -680,7 +679,7 @@ struct IslandView: View {
             // Out-of-date content stops its spinner, glow and other looping motion.
             .environment(\.islandReduceMotion, IslandLoops.holdStill(reduceMotion: model.settings.reduceMotion,
                                                                      animationOff: model.settings.animationStyle == .off,
-                                                                     lowPower: model.lowPowerMode, stale: stale))
+                                                                     stale: stale))
             .padding(.horizontal, g.top)
             .frame(width: g.outerWidth, height: g.size.height, alignment: .top)
             .clipShape(g.shape)

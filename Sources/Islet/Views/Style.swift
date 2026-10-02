@@ -50,11 +50,11 @@ enum Haptics {
 
 extension AnimationStyle {
     /// The style the island actually uses: Off stays off; Reduce Motion (the system's or
-    /// Islet's) and Low Power Mode get plain short fades.
-    static func effective(_ setting: AnimationStyle, reduceMotion: Bool,
-                          lowPower: Bool = ProcessInfo.processInfo.isLowPowerModeEnabled) -> AnimationStyle {
+    /// Islet's) gets plain short fades. Low Power Mode keeps the style: a spring that runs once
+    /// costs next to nothing, and its loops slow down instead (`IslandLoops.frameRate`).
+    static func effective(_ setting: AnimationStyle, reduceMotion: Bool) -> AnimationStyle {
         if setting == .off { return .off }
-        return reduceMotion || lowPower ? .minimal : setting
+        return reduceMotion ? .minimal : setting
     }
 
     /// Every duration below is scaled by "Animation speed" (`Motion.pace`).

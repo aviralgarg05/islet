@@ -464,12 +464,18 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
 }
 
 @Suite struct LoopTests {
-    @Test func loopsHoldStillForLessMotionLowPowerAndStaleContent() {
-        #expect(!IslandLoops.holdStill(reduceMotion: false, animationOff: false, lowPower: false))
-        #expect(IslandLoops.holdStill(reduceMotion: false, animationOff: false, lowPower: true))
-        #expect(IslandLoops.holdStill(reduceMotion: true, animationOff: false, lowPower: false))
-        #expect(IslandLoops.holdStill(reduceMotion: false, animationOff: true, lowPower: false))
-        #expect(IslandLoops.holdStill(reduceMotion: false, animationOff: false, lowPower: false, stale: true))
+    @Test func loopsHoldStillForLessMotionAndStaleContent() {
+        #expect(!IslandLoops.holdStill(reduceMotion: false, animationOff: false))
+        #expect(IslandLoops.holdStill(reduceMotion: true, animationOff: false))
+        #expect(IslandLoops.holdStill(reduceMotion: false, animationOff: true))
+        #expect(IslandLoops.holdStill(reduceMotion: false, animationOff: false, stale: true))
+    }
+
+    /// Low Power Mode slows the loops down instead of stopping them: a still playing indicator
+    /// looks broken.
+    @Test func lowPowerModeHalvesTheFrameRate() {
+        #expect(IslandLoops.frameRate(lowPower: false) == 30)
+        #expect(IslandLoops.frameRate(lowPower: true) == 15)
     }
 }
 

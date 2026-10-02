@@ -145,12 +145,12 @@ public enum StickerPlayback: Equatable, Sendable {
     case hold(Int)
 
     /// It loops only while the music plays, for a picture with more than one frame, without
-    /// Reduce Motion (or animation style Off) and outside Low Power Mode. Otherwise it holds a
-    /// frame: the first with Reduce Motion and when resting with nothing playing, the one it
-    /// had reached when paused or in Low Power Mode. `current` is the frame on show now.
-    public static func plan(mode: StickerMode, animated: Bool, reduceMotion: Bool, lowPower: Bool, current: Int) -> StickerPlayback {
+    /// Reduce Motion (or animation style Off); Low Power Mode plays it at a lower frame rate.
+    /// Otherwise it holds a frame: the first with Reduce Motion and when resting with nothing
+    /// playing, the one it had reached when paused. `current` is the frame on show now.
+    public static func plan(mode: StickerMode, animated: Bool, reduceMotion: Bool, current: Int) -> StickerPlayback {
         let frame = max(0, current)
-        if mode == .playing, animated, !reduceMotion, !lowPower { return .loop(from: frame) }
+        if mode == .playing, animated, !reduceMotion { return .loop(from: frame) }
         return .hold(reduceMotion || mode == .idle ? 0 : frame)
     }
 
