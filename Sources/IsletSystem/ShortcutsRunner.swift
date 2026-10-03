@@ -67,13 +67,19 @@ public final class ShortcutsRunner {
                 DispatchQueue.global().asyncAfter(deadline: deadline, execute: timer)
                 process.waitUntilExit()
                 timer.cancel()
-                // The shortcut has gone. A child it left behind may still hold the pipes, so the
-                // rest of its output is waited for only briefly, as `CLIChild` waits on stderr.
-                let read = group.wait(timeout: .now() + 0.5) == .success
-                if process.terminationStatus == 0 {
-                    result = .success(read ? String(decoding: output, as: UTF8.self) : "")
+                // The shortcut has gone. A child it left behind may still hold the pipes; the
+                // reads stop themselves at the deadline, so waiting on them is bounded, and the
+                // grace is only for the hand-off.
+                let read = group.wait(timeout: deadline + .milliseconds(250)) == .success
+                if !read {
+                    // The reads still own `output`, so it can't be looked at from here. Saying
+                    // this succeeded with nothing in it would draw an empty list of shortcuts as
+                    // though that were the answer.
+                    result = .failure(.failed(nil))
+                } else if process.terminationStatus == 0 {
+                    result = .success(String(decoding: output, as: UTF8.self))
                 } else {
-                    result = .failure(.failed(read ? ShortcutsCatalog.failureReason(String(decoding: errors, as: UTF8.self)) : nil))
+                    result = .failure(.failed(ShortcutsCatalog.failureReason(String(decoding: errors, as: UTF8.self))))
                 }
             } catch {
                 result = .failure(.failed(nil))

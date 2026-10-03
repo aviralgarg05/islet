@@ -10,6 +10,10 @@ public final class DownloadsWatcher {
     public let directory: URL
     private var tracker = DownloadTracker()
     private var source: DispatchSourceFileSystemObject?
+    /// A standby watch on the folder that holds Downloads, kept only while there is nothing at
+    /// the path. Downloads moved to the Trash leaves nothing to watch, so the event saying it is
+    /// back can only arrive on its parent; once it is back, this is let go of again.
+    private var parent: DispatchSourceFileSystemObject?
     private var ticker: Timer?
 
     public init(directory: URL = IsletPaths.home.appendingPathComponent("Downloads")) {
@@ -21,7 +25,8 @@ public final class DownloadsWatcher {
     public func start() {
         guard source == nil else { return }
         let fd = open(directory.path, O_EVTONLY)
-        guard fd >= 0 else { return }
+        // Nothing at the path: stand by on the folder that holds it until it comes back.
+        guard fd >= 0 else { return watchParent() }
         let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete], queue: .main)
         src.setEventHandler { [weak self] in
             guard let self else { return }
@@ -34,11 +39,15 @@ public final class DownloadsWatcher {
         src.setCancelHandler { close(fd) }
         src.resume()
         source = src
+        // Watched directly now, so the standby on its parent has nothing left to do.
+        parent?.cancel()
+        parent = nil
         scan()
     }
 
     /// Watch the path again. `start()` ends with a scan of its own; a path with no folder at it
-    /// still gets one, so a download that has gone is reported.
+    /// still gets one, so a download that has gone is reported, and `start()` stands by on the
+    /// parent so the path is picked up again when the folder comes back.
     private func rearm() {
         source?.cancel()
         source = nil
@@ -46,9 +55,28 @@ public final class DownloadsWatcher {
         if source == nil { scan() }
     }
 
+    /// Watch the folder Downloads sits in, so a folder deleted and then restored is followed.
+    /// Nothing polls: the restore is a write to the parent, and that is what wakes this. Only
+    /// while the folder is away, so an ordinary Mac has no second watch at all.
+    private func watchParent() {
+        guard parent == nil else { return }
+        let fd = open(directory.deletingLastPathComponent().path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write], queue: .main)
+        src.setEventHandler { [weak self] in
+            guard let self, self.source == nil else { return }
+            self.start()
+        }
+        src.setCancelHandler { close(fd) }
+        src.resume()
+        parent = src
+    }
+
     public func stop() {
         source?.cancel()
         source = nil
+        parent?.cancel()
+        parent = nil
         ticker?.invalidate()
         ticker = nil
     }

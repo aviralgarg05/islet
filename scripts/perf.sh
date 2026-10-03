@@ -59,6 +59,18 @@ activity_feed() {
         sleep 0.6
     done
 }
+# A delivery or a ride reporting the same arrival time again, which is what a mirrored Live
+# Activity, a ride and a timer all look like. The end doesn't move, so the island has nothing to
+# draw: the track's span used to be worked out a float ulp above the span already in hand, and
+# every report then read as a change and had the island sort and draw again.
+countdown_feed() {
+    local ends=$(( $(date +%s) + 600 ))
+    while :; do
+        api POST /v1/activities \
+            "{\"id\":\"eta\",\"source\":\"perf\",\"title\":\"Order\",\"subtitle\":\"Arriving\",\"endsAt\":$ends,\"sneak\":false}"
+        sleep 1
+    done
+}
 # Launch work (loading, the first drawing of blurs and glass) isn't the idle cost either.
 sleep 10
 echo "CPU over ${SECS}s per state:"
@@ -69,7 +81,8 @@ ctl rm p; ctl set s --title Spinner --progress -1 --sneak false; measure "compac
 ctl rm s; api POST /v1/media '{"title":"Perf","artist":"Bench","isPlaying":true,"duration":200,"elapsed":1}'; measure "compact: music playing" 1.5
 api DELETE /v1/media;                              feeding "compact: music reported each second" 1.5 media_feed
 api DELETE /v1/media;                              feeding "compact: agent hooks reporting" 1.5 activity_feed
-ctl rm agent; api POST /v1/media '{"title":"Perf","artist":"Bench","isPlaying":true,"duration":200,"elapsed":1}'
+ctl rm agent;                                      feeding "compact: same countdown each second" 1.5 countdown_feed
+ctl rm eta; api POST /v1/media '{"title":"Perf","artist":"Bench","isPlaying":true,"duration":200,"elapsed":1}'
 ctl open;                                          measure "expanded: now playing" 3
 api DELETE /v1/media; ctl close;                   measure "idle again" 0.5
 echo "RSS: $(( $(ps -o rss= -p $PID) / 1024 )) MB"

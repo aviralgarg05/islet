@@ -76,10 +76,15 @@ import Testing
         #expect(TemperatureUnit.automatic.resolved(usesUSMeasures: true) == .fahrenheit)
         #expect(TemperatureUnit.automatic.resolved(usesUSMeasures: false) == .celsius)
         #expect(TemperatureUnit.celsius.resolved(usesUSMeasures: true) == .celsius)
-        // The reading comes from the service: `Int(_:)` traps beyond its range.
-        #expect(TemperatureUnit.celsius.format(1e300) == "9000000000000000000\u{00B0}")
-        #expect(TemperatureUnit.fahrenheit.format(-1e300) == "-9000000000000000000\u{00B0}")
-        #expect(TemperatureUnit.celsius.format(.nan) == "0\u{00B0}")
+        // The reading comes from the service: `Int(_:)` traps beyond its range, and a figure no
+        // weather service could mean is not drawn as though it were the weather.
+        #expect(TemperatureUnit.celsius.format(1e300) == "–")
+        #expect(TemperatureUnit.fahrenheit.format(-1e300) == "–")
+        #expect(TemperatureUnit.celsius.format(.nan) == "–")
+        #expect(TemperatureUnit.celsius.format(.infinity) == "–")
+        // The hottest and coldest it has ever been here still show.
+        #expect(TemperatureUnit.celsius.format(56.7) == "57\u{00B0}")
+        #expect(TemperatureUnit.celsius.format(-89.2) == "-89\u{00B0}")
     }
 
     @Test func codesHaveWordsAndSymbols() {

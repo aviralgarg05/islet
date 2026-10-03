@@ -93,6 +93,20 @@ import Testing
         let page = try SalesAPI.parse(.stripe, data: Data(stripe.utf8), since: Self.since)
         #expect(page.figures.orders == 1)
         #expect(page.figures.amounts["GBP"] == 9_000_000_000_000_000_000)
+        // Two of them in the same currency: clamping each one only moved the trap into the sum,
+        // which is pinned to the end of its range instead.
+        let twice = """
+        {"object":"list","has_more":false,"data":[
+          {"id":"ch_1","paid":true,"status":"succeeded","amount":1e300,"amount_captured":1e300,"amount_refunded":0,"currency":"gbp"},
+          {"id":"ch_2","paid":true,"status":"succeeded","amount":1e300,"amount_captured":1e300,"amount_refunded":0,"currency":"gbp"}]}
+        """
+        let both = try SalesAPI.parse(.stripe, data: Data(twice.utf8), since: Self.since)
+        #expect(both.figures.orders == 2)
+        #expect(both.figures.amounts["GBP"] == Int64.max)
+        // And across pages, which add one page's figures into another's.
+        var running = page.figures
+        running.add(both.figures)
+        #expect(running.amounts["GBP"] == Int64.max)
         // Gumroad and Paddle read their own fields the same way.
         let gumroad = #"{"success":true,"sales":[{"created_at":"2026-10-01T08:00:00Z","price":1e300,"currency":"usd"}]}"#
         #expect(try SalesAPI.parse(.gumroad, data: Data(gumroad.utf8), since: Self.since).figures.orders == 1)

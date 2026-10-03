@@ -17,13 +17,20 @@ public enum TemperatureUnit: String, Codable, Sendable, CaseIterable {
 
     /// A Celsius reading in this unit, rounded, with a degree sign: "18°". `automatic` reads as
     /// Celsius; resolve it first.
+    ///
+    /// The reading comes from someone else's API, so one no weather service could mean reads as
+    /// "–" instead. Clamping it only kept `Int(_:)` from trapping, and left the island showing
+    /// nine quintillion degrees as though that were the weather.
     public func format(_ celsius: Double) -> String {
+        guard celsius.isFinite, abs(celsius) <= Self.plausible else { return "–" }
         let value = self == .fahrenheit ? celsius * 9 / 5 + 32 : celsius
-        // The reading comes from the weather service, so it is clamped: `Int(_:)` traps on
-        // anything beyond its range, and on a reading that isn't a number at all.
-        let whole = Int(ToolJSON.whole(value.rounded()))
+        let whole = Int(value.rounded())
         return "\(whole == 0 ? 0 : whole)°"
     }
+
+    /// The widest Celsius reading worth drawing. The records on this planet are about -90 and
+    /// 57, so this is generous and still rules out a figure in the wrong unit or plain nonsense.
+    static let plausible: Double = 200
 }
 
 /// A place the user chose for the weather, found by name.

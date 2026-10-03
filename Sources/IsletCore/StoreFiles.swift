@@ -302,7 +302,20 @@ public struct SettingsFile: Sendable {
     /// drift apart. Following the link first writes the repo's own file instead, as
     /// `ClaudeStatusLineSetup.apply` already does. A symlinked folder needs nothing: the
     /// rename happens inside it.
-    var writeURL: URL { url.resolvingSymlinksInPath() }
+    ///
+    /// The link is read directly rather than through `resolvingSymlinksInPath()`, which hands
+    /// back the link's own path when its target isn't there. That is the dotfiles repo cloned
+    /// but not yet linked up, or a target moved away for a moment, and an atomic write would
+    /// then replace the link with a regular file: the very thing this exists to prevent. Saving
+    /// creates the folder on the way, so the first change lands in the repo and the link holds.
+    var writeURL: URL {
+        guard let hop = try? FileManager.default.destinationOfSymbolicLink(atPath: url.path) else {
+            return url.resolvingSymlinksInPath()
+        }
+        let target = hop.hasPrefix("/") ? URL(fileURLWithPath: hop)
+                                        : url.deletingLastPathComponent().appendingPathComponent(hop)
+        return target.resolvingSymlinksInPath()
+    }
 
     /// Reads the file. `.unreadable` also records the problem, so saving refuses; anything
     /// else clears it.

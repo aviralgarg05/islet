@@ -104,10 +104,14 @@ public final class CalendarService {
         guard Self.eventAccess.canRead else { return }
         let now = Date()
         let end = Calendar.current.date(byAdding: .day, value: 2, to: Calendar.current.startOfDay(for: now)) ?? now.addingTimeInterval(86400)
-        let store = self.store
         agendaGeneration += 1
         let mine = agendaGeneration
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            // Its own store. `EKEventStore` isn't documented as safe to use from two threads at
+            // once, and the one on `self` is read on the main thread by the month calendar on
+            // Today, by `calendars()` and by `complete(reminderID:)`. Access is granted to the
+            // process, not to a store, and the predicate has to come from the store that fetches.
+            let store = EKEventStore()
             let predicate = store.predicateForEvents(withStart: now.addingTimeInterval(-3600), end: end, calendars: nil)
             let items = store.events(matching: predicate).map(Self.item(from:))
             DispatchQueue.main.async {

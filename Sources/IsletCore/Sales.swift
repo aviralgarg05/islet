@@ -65,7 +65,7 @@ public struct SalesFigures: Equatable, Sendable {
     public mutating func add(_ minor: Int64, currency: String) {
         let code = currency.uppercased()
         guard minor != 0, code.count == 3 else { return }
-        amounts[code, default: 0] += minor
+        amounts[code] = ToolJSON.sum(amounts[code] ?? 0, minor)
     }
 
     public mutating func add(_ other: SalesFigures) {

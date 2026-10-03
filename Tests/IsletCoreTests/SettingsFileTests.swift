@@ -209,6 +209,44 @@ private func scratchFolder(_ name: String) throws -> URL {
         #expect(try Data(contentsOf: file.brokenCopy) == broken)
     }
 
+    /// The dotfiles repo cloned but not yet linked up, or a target moved away for a moment:
+    /// `config.json` is a link pointing at nothing. `resolvingSymlinksInPath()` gives the link's
+    /// own path back for that, so an atomic write would replace the link with a regular file and
+    /// the repo would quietly stop being the copy in use.
+    @Test func aLinkWhoseTargetIsNotThereYetSurvivesASave() throws {
+        let dir = try scratchFolder("dangling")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let config = dir.appendingPathComponent("islet")
+        try FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
+        // The repo folder doesn't exist either: a save has to make it.
+        let target = dir.appendingPathComponent("dotfiles/islet-config.json")
+        let link = config.appendingPathComponent("config.json")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+
+        var file = SettingsFile(url: link)
+        if case .missing = file.read() {} else { Issue.record("expected missing") }
+        var settings = IsletSettings()
+        settings.hoverToOpen = false
+        #expect(try file.save(settings) == .saved)
+
+        // Still a link, and the bytes are at its target.
+        let kind = try FileManager.default.attributesOfItem(atPath: link.path)[.type] as? FileAttributeType
+        #expect(kind == .typeSymbolicLink)
+        #expect(FileManager.default.fileExists(atPath: target.path))
+        #expect(try Data(contentsOf: target) == Data(contentsOf: link))
+        #expect(try String(decoding: Data(contentsOf: target), as: UTF8.self).contains("\"hoverToOpen\" : false"))
+
+        // A relative link is followed the same way.
+        let relativeDir = try scratchFolder("dangling-relative")
+        defer { try? FileManager.default.removeItem(at: relativeDir) }
+        let relativeLink = relativeDir.appendingPathComponent("config.json")
+        try FileManager.default.createSymbolicLink(atPath: relativeLink.path, withDestinationPath: "repo/islet-config.json")
+        var relative = SettingsFile(url: relativeLink)
+        #expect(try relative.save(settings) == .saved)
+        #expect(try FileManager.default.attributesOfItem(atPath: relativeLink.path)[.type] as? FileAttributeType == .typeSymbolicLink)
+        #expect(FileManager.default.fileExists(atPath: relativeDir.appendingPathComponent("repo/islet-config.json").path))
+    }
+
     @Test func fixingTheFileClearsTheProblem() throws {
         let dir = try scratchFolder("config")
         defer { try? FileManager.default.removeItem(at: dir) }

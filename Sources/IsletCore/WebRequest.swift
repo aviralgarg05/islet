@@ -114,6 +114,16 @@ enum ToolJSON {
         return Int64(min(max(v, -9e18), 9e18))
     }
 
+    /// `a + b`, pinned to the ends of `Int64` instead of trapping. `whole` keeps one figure in
+    /// range, but two of them near its ceiling still overflow when added, and these are summed
+    /// per currency and across pages: a service sending one amount in the wrong unit would
+    /// otherwise end Islet rather than show a silly total.
+    static func sum(_ a: Int64, _ b: Int64) -> Int64 {
+        let (total, overflowed) = a.addingReportingOverflow(b)
+        guard overflowed else { return total }
+        return b > 0 ? .max : .min
+    }
+
     static func date(_ v: Any?) -> Date? {
         if let s = v as? String { return UsageJSON.iso(s) ?? isoWithoutZone(s) }
         return UsageJSON.date(v)

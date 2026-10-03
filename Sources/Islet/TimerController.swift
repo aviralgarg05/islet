@@ -196,10 +196,12 @@ final class TimerController {
     func islandDidCollapse() { alarmHold.islandClosed() }
 
     /// The main screen when it has an island, else a display that does (with "Show island on:
-    /// the notched screen", the main screen can be an external display with no island).
+    /// the notched screen", the main screen can be an external display with no island). Nil when
+    /// there is no island anywhere: the timer still rings, but nothing is opened and nothing
+    /// pinned, rather than pinning a display that draws nothing.
     private var alarmDisplay: CGDirectDisplayID? {
-        let islands = NSApp.windows.filter { $0 is IslandPanel && $0.isVisible }.compactMap { $0.screen?.displayID }
-        if let main = NSScreen.main?.displayID, islands.isEmpty || islands.contains(main) { return main }
+        let islands = model.islandDisplays
+        if let main = NSScreen.main?.displayID, islands.contains(main) { return main }
         return islands.first
     }
 

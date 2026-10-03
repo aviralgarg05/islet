@@ -41,9 +41,9 @@ public enum MenuBarAgentScanner {
     /// Accessibility observer per mirrored pill and a safety timer, and
     /// `NSWorkspace.shared.runningApplications` builds an object for every app each time.
     ///
-    /// An app Islet can't name isn't kept, so it is asked about again next time, and `appTerminated`
-    /// forgets one that quit, so a pid the system gives to another process later is never read from
-    /// here. A new app needs nothing: it is looked up when it is first seen.
+    /// An app Islet can't name isn't kept, so it is asked about again next time, and neither is a
+    /// widget renderer, whose pid decides whether an item is a Live Activity at all. `appTerminated`
+    /// forgets one that quit. A new app needs nothing: it is looked up when it is first seen.
     private static let ownersLock = NSLock()
     private static var owners: [pid_t: String] = [:]
 
@@ -54,6 +54,12 @@ public enum MenuBarAgentScanner {
         if let known { return known }
         let id = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? ""
         guard !id.isEmpty else { return id }
+        // A widget renderer is never remembered. They are short-lived out-of-process renderers
+        // that don't reliably announce quitting, so a pid the system gave to one and later gives
+        // to an app with a status item would be read as a renderer: its item would be mirrored,
+        // its text read, and a black cover laid over it. There are at most two of them, so
+        // asking each time costs nothing.
+        guard !MenuBarLiveActivities.rendererBundleIDs.contains(id) else { return id }
         ownersLock.lock()
         owners[pid] = id
         ownersLock.unlock()

@@ -131,6 +131,11 @@ struct Args {
     func double(_ name: String) throws -> Double? {
         guard let raw = flags[name] else { return nil }
         guard let v = Double(raw) else { throw CLIError("--\(name) must be a number, got '\(raw)'") }
+        // Bounded here, as a link's numbers are: `--steps 1e300` reaches `Int(_:)`, whose
+        // precondition traps, and a trap reads as a crash rather than as a usage mistake.
+        guard v.isFinite, abs(v) <= URLCommand.numberLimit else {
+            throw CLIError("--\(name) is out of range: '\(raw)'")
+        }
         return v
     }
 }

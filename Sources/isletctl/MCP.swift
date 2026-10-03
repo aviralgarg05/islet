@@ -116,7 +116,13 @@ enum MCPServer {
             return ("Islet isn't running on this Mac, so nothing was shown.", true)
         }
         func string(_ key: String) -> String? { (a[key] as? String).flatMap { $0.isEmpty ? nil : String($0.prefix(200)) } }
-        func number(_ key: String) -> Double? { (a[key] as? NSNumber)?.doubleValue }
+        /// Bounded the way a link's numbers are. An agent does send `1e300` or `inf`, and an
+        /// unchecked one reaching `Int(_:)` traps, which would end this server mid-session.
+        func number(_ key: String) -> Double? {
+            guard let v = (a[key] as? NSNumber)?.doubleValue, v.isFinite,
+                  abs(v) <= URLCommand.numberLimit else { return nil }
+            return v
+        }
         do {
             switch name {
             case "notify":

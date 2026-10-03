@@ -361,6 +361,25 @@ func requestHead(_ method: String, _ path: String, token: String?, length: Int) 
         #expect(get.reply(within: 3).hasPrefix("HTTP/1.1 401"))
         #expect(Date().timeIntervalSince(getStarted) < 0.4)
     }
+
+    /// A head Islet can't parse still gets its answer rather than a reset connection, and a
+    /// client that has finished sending doesn't hold its connection slot while nothing comes.
+    @Test func aHeadThatDoesNotParseIsAnsweredWithoutLingering() async throws {
+        for lan in [false, true] {
+            let (server, port) = try await startServer(lan: lan) { $0.lingerTimeout = 5 }
+            defer { server.stop() }
+            // Chunked: Islet needs a length it can check against the body limit, so this is a 411.
+            let chunked = try RawSocket(port: port)
+            chunked.transmit("POST /v1/notify HTTP/1.1\r\nHost: 127.0.0.1\r\nTransfer-Encoding: chunked\r\n\r\n")
+            #expect(chunked.reply(within: 3).hasPrefix("HTTP/1.1 411"), "lan: \(lan)")
+            // Nonsense, sent and done with: answered and closed, not held for the linger.
+            let junk = try RawSocket(port: port)
+            let started = Date()
+            #expect(junk.transmitAll("not-a-request\r\n\r\n"), "lan: \(lan)")
+            #expect(junk.reply(within: 3).hasPrefix("HTTP/1.1 400"), "lan: \(lan)")
+            #expect(Date().timeIntervalSince(started) < 2, "lan: \(lan)")
+        }
+    }
 }
 
 /// `isletctl token --lan`, run from the build folder against a temporary support folder.

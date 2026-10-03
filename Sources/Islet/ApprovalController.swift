@@ -153,7 +153,7 @@ final class ApprovalController {
     /// Where the island can't be seen (a fullscreen app, a per-app rule, no island display),
     /// the requests go back to the terminal at once: the hook blocks the agent, and a card
     /// nobody can see would hold it up for the whole wait.
-    private func showCard() {
+    private func showCard(retrying: Bool = false) {
         showWork = nil
         guard !queue.isEmpty else { return }
         presented = true
@@ -164,8 +164,21 @@ final class ApprovalController {
             // nothing while `presented` stays true, and the agent waits for the whole timeout
             // with no card on any screen. `setExpanded` does the rest of the opening, without
             // the haptic nobody asked for.
-            guard let display = Self.islandDisplay(model.settings), model.islandDisplays.contains(display),
-                  model.presentation(for: display) != .hidden else {
+            guard let display = Self.islandDisplay(model.settings), model.islandDisplays.contains(display) else {
+                // `islandDisplays` is written at the end of a panel rebuild, so it lags through
+                // the display-change debounce and the first second after waking, which is just
+                // when display ids change. Looked at once more by then, rather than sending every
+                // waiting request back to the terminal on a list a moment out of date.
+                guard retrying else {
+                    presented = false
+                    return retryCard()
+                }
+                for id in queue.entries.map(\.id) { finish(id, with: nil) }
+                return
+            }
+            guard model.presentation(for: display) != .hidden else {
+                // Nothing stale about this one: a full screen app or this app's own rule hides
+                // the island there, so the requests go back now rather than after a wait.
                 for id in queue.entries.map(\.id) { finish(id, with: nil) }
                 return
             }
@@ -178,6 +191,18 @@ final class ApprovalController {
             hold.hold(islandWasOpen: true, pinned: model.pinned)
             model.pinned = true
         }
+    }
+
+    /// Look again once the panels have been made for the displays as they are now: the forced
+    /// rebuild after waking is the slower of the two things this waits on
+    /// (`DisplayPolicy.wakeLooks`), and the display-change debounce is shorter still.
+    private func retryCard() {
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated { self?.showCard(retrying: true) }
+        }
+        showWork = work
+        let delay = (DisplayPolicy.wakeLooks.first?.delay ?? 1) + Self.arrivalDelay
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     /// Restarts the click guard when a different card comes to the top.

@@ -181,6 +181,12 @@ import Testing
     @Test func afigureNoServiceCouldReportIsClampedRatherThanTrapping() throws {
         let json = #"{"models":[{"name":"huge","size":1e300,"size_vram":1e300}]}"#
         #expect(try OllamaUsage.parse(Data(json.utf8)).first?.bytes == 9_000_000_000_000_000_000)
+        // Two of them: the card totals every loaded model, and clamping each one on its own only
+        // moved the trap into that total.
+        let two = #"{"models":[{"name":"huge","size":1e300},{"name":"vast","size":1e300}]}"#
+        let models = try OllamaUsage.parse(Data(two.utf8))
+        #expect(models.count == 2)
+        #expect(OllamaUsage.card(models, now: now)?.detail?.hasPrefix("2 models") == true)
         let copilot = #"{"usageItems":[{"product":"Copilot","sku":"Copilot Premium Request","grossQuantity":1e300}]}"#
         let used = try CopilotUsage.requestsUsed(Data(copilot.utf8))
         #expect(CopilotUsage.card(used: used, plan: .pro, now: now).fraction == 1)

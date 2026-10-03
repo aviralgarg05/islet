@@ -18,7 +18,13 @@ public enum ArtworkDecode {
     /// The longest side to decode a cover at: enough for the largest draw at `scaleAllowance`,
     /// rounded up to a power of two so one picture serves every size. A cover already smaller than
     /// this is kept as it is; nothing is ever enlarged.
-    public static let maxPixels = 512
+    ///
+    /// Worked out rather than written down, so a larger draw can't quietly leave covers soft.
+    public static let maxPixels: Int = {
+        var side = 64
+        while CGFloat(side) < largestDrawn * scaleAllowance { side *= 2 }
+        return side
+    }()
 
     /// Whether `maxPixels` leaves a cover drawn `points` across sharp. The cap must never be the
     /// thing that softens artwork, so this holds for every size the island draws.

@@ -32,6 +32,14 @@ public final class LocalAPIServer {
     public var lingerTimeout: TimeInterval = 5
     /// Most refused connections draining their bodies at once; past that they close at once.
     static let maxLingering = 16
+    /// How much body to read and drop after a head that didn't parse. Its length is unknown, so
+    /// this is only enough for a client still uploading to read the answer that explains it.
+    static let invalidDrainBytes = 16 * 1024
+    /// How long such a refusal waits before closing. A head that didn't parse says nothing about
+    /// whether more is coming, and a peer that wrote nonsense and left the socket open looks
+    /// exactly like one still uploading, so this is long enough to read the answer and no longer:
+    /// a few such sockets would otherwise hold the bridge's connection slots for `lingerTimeout`.
+    static let invalidLinger: TimeInterval = 0.5
     /// Read and changed on `queue`.
     private var connections = ConnectionTally()
     private var lingering = 0
@@ -56,19 +64,21 @@ public final class LocalAPIServer {
     /// refusals draining their bodies and a few clients at work all fit, but a local process
     /// can't hold sockets open until Islet runs out of descriptors.
     public static let loopbackConnectionLimit = 128
-    /// Every process on this Mac shares one client key on loopback, so this is only a little
-    /// below the whole limit: it keeps one address from taking every slot.
-    public static let loopbackConnectionsPerClient = 96
     /// A client sends its headers as soon as it connects, so one that hasn't is idling on a
     /// slot. Longer than the bridge's, since nothing here comes over a network.
     public static let loopbackHeaderTimeout: TimeInterval = 4
 
     /// The loopback listener: every route, with the limits above, as `localNetwork` does for
     /// the bridge. Connections are admitted before the token is checked, so they are counted.
+    ///
+    /// No per-client cap here, unlike the bridge. Every connection arrives from 127.0.0.1, so
+    /// one key would cover all of them: `isletctl`, the MCP server, the status line, agent hooks
+    /// and the held approvals would share a single bucket with any runaway process, be refused
+    /// together, and be told "too many connections from this device". The whole limit does the
+    /// work instead.
     public static func loopback(router: APIRouter) -> LocalAPIServer {
         let server = LocalAPIServer(router: router)
         server.maxConnections = loopbackConnectionLimit
-        server.maxConnectionsPerClient = loopbackConnectionsPerClient
         server.headerTimeout = loopbackHeaderTimeout
         return server
     }
@@ -186,9 +196,14 @@ public final class LocalAPIServer {
                     // gives: a chunked upload is still sending when it gets its 411, and
                     // closing with data unread resets the connection, so the client sees
                     // "connection reset" instead of the answer that explains the problem. The
-                    // head didn't parse, so how much is still coming is unknown; the body limit
-                    // bounds the drain, and `lingerTimeout` bounds the wait.
-                    return self.refuse(conn, .error(status, reason), unread: self.maxBodyBytes)
+                    // head didn't parse, so how much is still coming is unknown: a client that
+                    // has already finished sending gets no linger at all, and one still sending
+                    // gets enough of a drain to read the answer. Without the first of those, a
+                    // malformed request line would hold a connection slot for `lingerTimeout`,
+                    // and a few sockets on the Wi-Fi could keep the bridge's slots occupied.
+                    return self.refuse(conn, .error(status, reason),
+                                       unread: isComplete ? 0 : min(self.maxBodyBytes, Self.invalidDrainBytes),
+                                       linger: Self.invalidLinger)
                 case .head(let head):
                     // A wrong token, a refused route or an oversized body is answered now,
                     // without waiting for the body; what is still coming of it is dropped.
@@ -250,7 +265,7 @@ public final class LocalAPIServer {
     /// resets the connection, and a client that is still uploading (URLSession) loses the
     /// answer. It closes sooner when the client hangs up, and after `lingerTimeout` at most.
     /// Nothing is kept, and the connection counts against the connection limits until it closes.
-    private func refuse(_ conn: NWConnection, _ response: HTTPResponse, unread: Int) {
+    private func refuse(_ conn: NWConnection, _ response: HTTPResponse, unread: Int, linger timeout: TimeInterval? = nil) {
         guard unread > 0, lingering < Self.maxLingering else { return respond(conn, response) }
         lingering += 1
         let linger = Linger(conn) { [weak self] in self?.lingering -= 1 }
@@ -262,7 +277,7 @@ public final class LocalAPIServer {
             linger.drained = true
             if linger.sent { linger.close() }
         }
-        queue.asyncAfter(deadline: .now() + lingerTimeout) { [weak linger] in linger?.close() }
+        queue.asyncAfter(deadline: .now() + min(timeout ?? lingerTimeout, lingerTimeout)) { [weak linger] in linger?.close() }
     }
 
     /// Reads and drops up to `remaining` bytes, a chunk at a time, then calls `done`; sooner if

@@ -159,7 +159,7 @@ public enum OllamaUsage {
     public static func card(_ models: [Model], now: Date) -> ToolUsageCard? {
         guard let first = models.max(by: { $0.bytes < $1.bytes }) else { return nil }
         let name = first.name.hasSuffix(":latest") ? String(first.name.dropLast(":latest".count)) : first.name
-        let total = models.reduce(Int64(0)) { $0 + $1.bytes }
+        let total = models.reduce(Int64(0)) { ToolJSON.sum($0, $1.bytes) }
         var detail: String?
         if models.count > 1 {
             detail = "\(models.count) models, \(Format.bytes(total))"

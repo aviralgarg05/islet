@@ -64,9 +64,9 @@ public final class ScriptPluginRunner {
     }
 
     public func stop() {
+        for t in timers.values { t.cancel() }
         if paused { timers.values.forEach { $0.resume() } }
         paused = false
-        for t in timers.values { t.cancel() }
         timers.removeAll()
         dirWatcher?.cancel()
         dirWatcher = nil
@@ -113,11 +113,13 @@ public final class ScriptPluginRunner {
         let scripts = Self.discover(in: directory)
         let paths = Set(scripts.map(\.path))
         for (path, timer) in timers where !paths.contains(path) {
-            // Resumed before it is let go of, as `stop()` does: releasing the last reference to
-            // a suspended dispatch source traps ("Release of a suspended object"), and the
-            // timers are suspended whenever the screen is locked or asleep.
-            if paused { timer.resume() }
+            // Cancelled before it is resumed: resuming a timer whose deadline went by while the
+            // screen was locked submits its handler at once, and this widget's script has just
+            // been taken away, so it would run once more and come back as a row nothing clears.
+            // Cancelling a suspended source is legal; what traps is releasing the last reference
+            // to one, so it is still resumed before the reference goes.
             timer.cancel()
+            if paused { timer.resume() }
             timers[path] = nil
             onRemoved?(path)
         }
@@ -179,16 +181,23 @@ public final class ScriptPluginRunner {
         var stdoutData = Data(), stderrData = Data()
         DispatchQueue.global().async(group: group) { stdoutData = Self.drain(out.fileHandleForReading, until: deadline) }
         DispatchQueue.global().async(group: group) { stderrData = Self.drain(err.fileHandleForReading, until: deadline) }
+        // Stopped at the deadline whatever its pipes are doing, so `waitUntilExit` below always
+        // comes back. A script that closes or redirects its own output and keeps working drains
+        // in milliseconds, and waiting on it would freeze the one queue every widget runs on.
+        let timer = DispatchWorkItem { Self.halt(p) }
+        DispatchQueue.global().asyncAfter(deadline: deadline, execute: timer)
         // Both reads stop themselves at the deadline, so this comes back either way; the grace
         // is only for the hand-off.
         _ = group.wait(timeout: deadline + .seconds(1))
-        guard DispatchTime.now() < deadline else {
+        let ranOut = DispatchTime.now() >= deadline
+        p.waitUntilExit()
+        timer.cancel()
+        guard !ranOut else {
             // Out of time: whatever it printed is dropped, as it always was. The script itself
             // may already have gone, leaving a child holding the pipe.
             Self.halt(p)
             return ("", "timed out after \(Int(timeout)) s")
         }
-        p.waitUntilExit()
         let stdout = String(decoding: stdoutData, as: UTF8.self)
         if p.terminationStatus != 0 {
             let stderr = String(decoding: stderrData, as: UTF8.self)

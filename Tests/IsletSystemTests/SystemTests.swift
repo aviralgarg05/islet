@@ -32,7 +32,7 @@ actor MemoryBackend: IsletBackend {
 func startServer(lan: Bool = false, limit: Int? = nil,
                  configure: (LocalAPIServer) -> Void = { _ in }) async throws -> (LocalAPIServer, UInt16) {
     let router = APIRouter(token: "tok", version: "t", backend: MemoryBackend(), scope: lan ? .lan : .local)
-    let server = lan ? LocalAPIServer.localNetwork(router: router) : LocalAPIServer(router: router)
+    let server = lan ? LocalAPIServer.localNetwork(router: router) : LocalAPIServer.loopback(router: router)
     if let limit { server.rateLimiter = RateLimiter(limit: limit, window: 60) }
     configure(server)
     let port: UInt16 = try await withCheckedThrowingContinuation { cont in
@@ -161,11 +161,12 @@ func request(_ port: UInt16, _ method: String, _ path: String, token: String? = 
         let server = LocalAPIServer.loopback(router: APIRouter(token: "tok", version: "t", backend: MemoryBackend()))
         defer { server.stop() }
         #expect(server.maxConnections == LocalAPIServer.loopbackConnectionLimit)
-        #expect(server.maxConnectionsPerClient == LocalAPIServer.loopbackConnectionsPerClient)
         #expect(server.headerTimeout == LocalAPIServer.loopbackHeaderTimeout)
+        // No per-client cap: every process on this Mac connects from 127.0.0.1, so one would
+        // put every honest client in a single bucket and refuse them together.
+        #expect(server.maxConnectionsPerClient == nil)
         // A header timeout only applies while it is shorter than the request timeout.
         #expect(LocalAPIServer.loopbackHeaderTimeout < server.requestTimeout)
-        #expect(LocalAPIServer.loopbackConnectionsPerClient <= LocalAPIServer.loopbackConnectionLimit)
         // Room for every long-poll, every refusal draining its body and clients still at work.
         #expect(LocalAPIServer.loopbackConnectionLimit > server.maxHeldRequests + LocalAPIServer.maxLingering)
     }
