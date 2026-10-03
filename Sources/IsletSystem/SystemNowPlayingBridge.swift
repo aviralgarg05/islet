@@ -109,7 +109,7 @@ public final class SystemNowPlayingBridge {
             DispatchQueue.main.async { self?.ingest(data) }
         }
         p.terminationHandler = { [weak self] proc in
-            DispatchQueue.main.async { self?.helperExited(status: proc.terminationStatus) }
+            DispatchQueue.main.async { self?.helperExited(proc, status: proc.terminationStatus) }
         }
         do {
             try p.run()
@@ -139,7 +139,13 @@ public final class SystemNowPlayingBridge {
         lines.reset()
     }
 
-    private func helperExited(status: Int32) {
+    /// Ignores an exit from a helper that is no longer ours. `stop()` lets go of the process
+    /// before it has finished shutting down, so a `start()` in between (Now Playing switched
+    /// off and on, or Settings → Now Playing → Try again) would otherwise have the old
+    /// process's handler tear down the new helper, orphan it, and charge `HelperRestarts` a
+    /// failure it never had.
+    private func helperExited(_ proc: Process, status: Int32) {
+        guard proc === process else { return }
         stdout?.readabilityHandler = nil
         process = nil
         stdin = nil
