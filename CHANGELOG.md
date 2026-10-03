@@ -72,6 +72,14 @@
 - After a smaller size, the closed island starts at the new width instead of shrinking to it, and bubbles moved to the left of the notch can be clicked at once.
 - Opening the lid of a Mac that started with it closed shows Islet’s brightness display when you change the brightness.
 
+### Performance
+- Islet does far less while music plays and while a coding agent works. Both used to tell Islet the same thing over and over — a player reports its position about once a second, and an agent’s hooks fire a couple of times a second — and each report redrew the whole island although nothing on it had changed. Now a report that says nothing new leaves the island exactly as it is, while a seek, a pause, a new track, a new step or any other real change still shows at once.
+- The island works out the order of what it shows once per change instead of once per thing that asks, and its right-click menu is built when you right-click rather than on every update.
+- A coding agent’s hooks are quicker to take in: the patterns that hide secrets and read a command are prepared once instead of for every event.
+- Full screen detection skips its Accessibility checks when the windows haven’t moved, and reading the menu bar no longer goes through every running app each time.
+- Cover art is decoded at the size the island draws it, so a 3000 pixel cover no longer costs tens of megabytes of memory while its track plays, and Music’s cover art is no longer decoded twice.
+- `make perf` now measures two more states, with a client reporting throughout, so this can’t quietly come back.
+
 ## 0.2.0 (2 October 2026)
 
 Islet now shows the Live Activities your iPhone sends to the Mac, lets you answer coding agents' permission requests in the island, runs timers, and asks Apple Intelligence, Claude or ChatGPT. It also stays beside the notch and shrinks to the free space in the menu bar.
