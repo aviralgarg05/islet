@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (3 October 2026)
+
+Islet now covers the Live Activities macOS draws in the menu bar, so each one shows in the island rather than twice, and it reads them properly: two at once are two rows, a pill that names no app is titled by what it says, and a countdown runs in the island instead of waiting on the menu bar. Music and videos playing in a browser show again, the icons beside the song offer every player macOS lists, and the island does far less work while music plays or a coding agent works.
 
 ### New
 - **Hide the menu bar’s own** (Settings → Live Activities, on to begin with) covers each Live Activity macOS draws in the menu bar, so it shows in the island only instead of twice. While it’s on, every activity shows in the island, whether or not the notch hides it.
