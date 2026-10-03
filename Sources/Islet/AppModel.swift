@@ -1070,6 +1070,7 @@ final class AppModel {
             idleSticker: showsMedia && Presenter.showsIdleSticker(settings)
         )
         inputs.ignoresHUD = ignoringHUD
+        inputs.orderedActivities = order.ordered(center, now: now)
         let p = Presenter.present(inputs)
         // "Only on hover" on a display without a notch: nothing until the pointer is there.
         if settings.notchlessStyle == .hover, notchlessDisplays.contains(display), hoverDisplay != display {
@@ -1116,7 +1117,13 @@ final class AppModel {
         )
     }
 
-    var activities: [Activity] { center.ordered(now: Date()) }
+    /// The activities in display order. One update asks for this several times over, so the order
+    /// is worked out once per change and reused (`ActivityOrder`).
+    var activities: [Activity] { order.ordered(center, now: Date()) }
+
+    /// Not observed: `activities` is read while a view's body is evaluated, and an observed
+    /// property written there would invalidate the view that just read it.
+    @ObservationIgnored private var order = ActivityOrder()
 
     /// How wide the closed island's wings are on a display: always full width, or the measured
     /// automatic placement (narrow wings, at most `MenuBarLayoutEngine.unmeasuredWing`, until the

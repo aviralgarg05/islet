@@ -45,6 +45,9 @@ public struct PresenterInputs: Sendable {
     /// Leave a HUD out: what the island shows under it. A swipe over a volume HUD acts on that
     /// (sideways over music changes track).
     public var ignoresHUD = false
+    /// The activities in display order, when the caller already has them (`ActivityOrder`), so
+    /// one update doesn't sort the same list over and over. Left out, they come from `center`.
+    public var orderedActivities: [Activity]?
 
     public init(now: Date, center: ActivityCenter, nowPlaying: NowPlaying? = nil, batteryEvent: BatteryEvent? = nil,
                 isExpanded: Bool = false, isSuppressed: Bool = false, pausedMedia: PausedMediaShow = .hidden,
@@ -71,7 +74,7 @@ public enum Presenter {
         if let sneak { return .sneak(sneak) }
         if let song = i.songPeek { return .songPeek(song) }
 
-        let ordered = i.center.ordered(now: i.now)
+        let ordered = i.orderedActivities ?? i.center.ordered(now: i.now)
         let others = max(0, ordered.count - 1)
         // A swiped-to activity stays forward, except over a critical one (a critical battery warning, say).
         if let id = i.focusedActivityID, let focused = ordered.first(where: { $0.id == id }),

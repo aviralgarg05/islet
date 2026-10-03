@@ -39,12 +39,17 @@ public enum ActivityLimits: Sendable {
 /// Owns every live activity plus the transient HUD / sneak-peek state.
 /// A value type with an injected clock, so every rule here is unit-testable.
 public struct ActivityCenter: Sendable {
-    public private(set) var activities: [String: Activity] = [:]
+    public private(set) var activities: [String: Activity] = [:] {
+        didSet { revision &+= 1 }
+    }
     public private(set) var hud: HUDEvent?
     /// The activity currently being "sneak peeked" (briefly expanded) and until when.
     public private(set) var sneak: (id: String, until: Date)?
     /// When `expire` last ran: moments up to then have been dealt with (`nextDeadline`).
     private var expiredThrough: Date?
+    /// Counts changes to `activities`. `ActivityOrder` reuses an order while this stands still;
+    /// it counts the changes of one value, so a cache belongs to one centre.
+    public private(set) var revision: UInt64 = 0
 
     public var maxActivities: Int
     public var sneakDuration: TimeInterval
@@ -314,6 +319,18 @@ public struct ActivityCenter: Sendable {
 
     public func primary(now: Date) -> Activity? { ordered(now: now).first }
 
+    /// `ordered(now:)`, and the next moment its answer could change of its own accord: the
+    /// earliest expiry or staleness still ahead. Nothing else about the order depends on the
+    /// clock, so the same list holds for every moment from `now` until then (`ActivityOrder`).
+    public func orderedUntilChange(now: Date) -> (activities: [Activity], validUntil: Date?) {
+        var next: Date?
+        for a in activities.values {
+            if let d = a.expiresAt, d > now, next.map({ d < $0 }) ?? true { next = d }
+            if let d = a.staleAt, d > now, next.map({ d < $0 }) ?? true { next = d }
+        }
+        return (ordered(now: now), next)
+    }
+
     public mutating func showHUD(_ kind: HUDKind, value: Double, muted: Bool = false, label: String? = nil, now: Date) {
         hud = HUDEvent(kind: kind, value: value, muted: muted, label: label, until: now.addingTimeInterval(hudDuration))
     }
@@ -352,5 +369,36 @@ public struct ActivityCenter: Sendable {
             guard let end = a.endsAt else { return false }
             return end > now.addingTimeInterval(-1)
         }
+    }
+}
+
+/// The activities in display order, worked out once and reused while it must still hold.
+///
+/// One update asks for the same order several times over: the presenter, the island's bubbles
+/// (twice over while the shell changes shape), the panel's hit regions, its trigger window and
+/// its menu bar measurement each ask, and a layout change runs several of those per display.
+/// Filtering and sorting the list for each was the most repeated piece of work in an update.
+///
+/// The order holds while two things hold: the activities haven't changed (`ActivityCenter
+/// .revision`) and no expiry or staleness moment has passed (`orderedUntilChange`). Nothing else
+/// comes into it, so a settings change, a display appearing or anything else elsewhere in the app
+/// cannot make what is in hand wrong. One entry is enough: the callers all ask about the same
+/// moment.
+public struct ActivityOrder: Sendable {
+    private var revision: UInt64?
+    private var from = Date.distantPast
+    private var until: Date?
+    private var cached: [Activity] = []
+
+    public init() {}
+
+    public mutating func ordered(_ center: ActivityCenter, now: Date) -> [Activity] {
+        if revision == center.revision, now >= from, until.map({ now < $0 }) ?? true { return cached }
+        let (list, validUntil) = center.orderedUntilChange(now: now)
+        revision = center.revision
+        from = now
+        until = validUntil
+        cached = list
+        return list
     }
 }
