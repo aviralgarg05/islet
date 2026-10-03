@@ -182,7 +182,13 @@ public final class LocalAPIServer {
                     break
                 case .invalid(let status, let reason):
                     exchange.received = true
-                    return self.respond(conn, .error(status, reason))
+                    // Through `refuse` like the two refusals below, for the reason its comment
+                    // gives: a chunked upload is still sending when it gets its 411, and
+                    // closing with data unread resets the connection, so the client sees
+                    // "connection reset" instead of the answer that explains the problem. The
+                    // head didn't parse, so how much is still coming is unknown; the body limit
+                    // bounds the drain, and `lingerTimeout` bounds the wait.
+                    return self.refuse(conn, .error(status, reason), unread: self.maxBodyBytes)
                 case .head(let head):
                     // A wrong token, a refused route or an oversized body is answered now,
                     // without waiting for the body; what is still coming of it is dropped.
