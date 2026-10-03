@@ -2,9 +2,9 @@
 
 **A free, open-source Dynamic Island for the Mac notch.** Music, calls, timers, your iPhone's Live Activities, coding agents and anything a script can send show up around the notch, and stay out of the way when nothing's happening.
 
-<img src="docs/images/closed-states.png" width="500" alt="The closed island: music with other activities in bubbles, a ride mirrored from the iPhone, a live score, an agent waiting, a timer, an agent's plan and a usage alert">
+![The island open on Home: a song playing, with a meeting, a build and a coding agent beside it](docs/images/expanded-home.png)
 
-![The expanded island on Home](docs/images/expanded-home.png)
+<img src="docs/images/closed-states.png" width="560" alt="The closed island in five states: music with everything else in bubbles, a ride mirrored from the iPhone, a coding agent waiting, an agent's plan at step 3 of 5, and a usage limit alert">
 
 ## What it does
 

@@ -43,38 +43,44 @@ extension Snapshots {
                                                                       resetsAt: now.addingTimeInterval(72 * 60)), threshold: 90)
         let usage = activity(alert.activity(now: now))
 
+        // Five states, not every state: beside a notch the compact island has room for an icon and
+        // a value, so a ride, a score and a timer all look alike there. One of each kind says more
+        // than all of them, and the sneak peeks below carry the detail.
+        _ = (score, timer)
         let rows: [(String, IslandPresentation, CGFloat)] = [
-            ("Music playing, with other activities in bubbles", .compact(.nowPlaying(model.nowPlaying!)), 42),
+            ("Music, with everything else in bubbles", .compact(.nowPlaying(model.nowPlaying!)), 42),
             ("A ride from your iPhone, mirrored from the menu bar", .compact(.activity(ride, others: 0)), 42),
-            ("A live score", .compact(.activity(score, others: 0)), 42),
             ("A coding agent waiting for you", .compact(.activity(waiting, others: 0)), 42),
-            ("A timer", .compact(.activity(timer, others: 0)), 42),
             ("An agent's plan, step 3 of 5", .sneak(plan), 100),
-            ("A usage limit alert", .sneak(usage), 98),
+            ("A usage limit, before you hit it", .sneak(usage), 98),
         ]
         model.closedPlacements[1] = ClosedPlacement(wing: metrics.wingWidth, slack: .infinity)
         var images: [(String, NSImage)] = []
         for (caption, presentation, height) in rows {
             model.forcedPresentation = presentation
+            // Room below the island so it sits in the strip rather than being cut off by it.
             let view = IslandView(model: model, display: 1, metrics: metrics)
-                .frame(width: 500, height: height, alignment: .top)
-                .background(backdrop(metrics: metrics))
+                .frame(width: Readme.strip, height: height + Readme.room, alignment: .top)
+                .background(readmeBackdrop(metrics: metrics))
                 .clipped()
             if let image = image(view) { images.append((caption, image)) }
         }
+        // One state to a card, each the same width, with the caption quiet above it. The space
+        // between them is what makes a list of seven things read calmly.
         let sheet = VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(images.enumerated()), id: \.offset) { _, row in
+            ForEach(Array(images.enumerated()), id: \.offset) { index, row in
                 Text(row.0)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.85))
-                    .padding(.horizontal, 8)
-                    .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
-                    .background(Color(white: 0.12))
-                Image(nsImage: row.1)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.45))
+                    .padding(.top, index == 0 ? 0 : 26)
+                    .padding(.bottom, 9)
+                Image(nsImage: row.1).clipShape(RoundedRectangle(cornerRadius: Readme.corner, style: .continuous))
             }
         }
-        .frame(width: 500)
-        write(sheet, to: out.appendingPathComponent("closed-states.png"))
+        .padding(Readme.margin)
+        .frame(width: Readme.strip + Readme.margin * 2, alignment: .leading)
+        .background(Readme.page)
+        writeOpaque(sheet, to: out.appendingPathComponent("closed-states.png"))
 
         // The expanded island at each size, on Home.
         model.closedPlacements[1] = nil
@@ -84,17 +90,61 @@ extension Snapshots {
             model.settings.sizePreset = preset
             let m = NotchGeometry.metrics(for: screen, expandedSize: CGSize(width: model.settings.expandedSize.width, height: model.settings.expandedSize.height),
                                           wingWidth: model.settings.effectiveWingWidth)
+            // Wider than the island and taller than it needs, so it has somewhere to sit.
             let view = IslandView(model: model, display: 1, metrics: m)
-                .frame(width: 760, height: m.expanded.height + 30 + PageSwitcher.band)
-                .background(backdrop(metrics: m))
-            write(view, to: out.appendingPathComponent("\(name).png"))
+                .frame(width: m.expanded.width + 240, height: m.expanded.height + 38 + PageSwitcher.band, alignment: .top)
+                .background(readmeBackdrop(metrics: m))
+                .clipShape(RoundedRectangle(cornerRadius: Readme.corner, style: .continuous))
+                .padding(Readme.margin)
+                .background(Readme.page)
+            writeOpaque(view, to: out.appendingPathComponent("\(name).png"))
         }
+    }
+
+    /// The README's images are drawn on an opaque page, so they are rendered without an alpha
+    /// channel: a third off the file a stranger downloads before reading a word.
+    static func writeOpaque<V: View>(_ view: V, to url: URL) {
+        let renderer = ImageRenderer(content: view.environment(\.colorScheme, .dark).environment(\.snapshotMode, true))
+        renderer.scale = 2
+        renderer.isOpaque = true
+        guard let image = renderer.nsImage, let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:]) else { return write(view, to: url) }
+        try? png.write(to: url)
     }
 
     private static func image<V: View>(_ view: V) -> NSImage? {
         let renderer = ImageRenderer(content: view.environment(\.colorScheme, .dark).environment(\.snapshotMode, true))
         renderer.scale = 2
         return renderer.nsImage
+    }
+}
+
+/// The look of the README's pictures: one page colour, one card radius, one margin, and a
+/// backdrop quiet enough that the island is the thing you look at. Kept here rather than in the
+/// island's own styles because it describes the page the pictures sit on, not the app.
+enum Readme {
+    static let page = Color(red: 0.055, green: 0.055, blue: 0.063)
+    static let corner: CGFloat = 12
+    static let margin: CGFloat = 22
+    /// How wide one closed-island card is, and how much room the island is given below it.
+    static let strip: CGFloat = 560
+    static let room: CGFloat = 9
+}
+
+@MainActor
+extension Snapshots {
+    /// A desktop behind the island: a soft, desaturated gradient instead of a bright wallpaper,
+    /// so the island reads as the subject. The menu bar row and the notch are drawn as they are
+    /// on a real Mac, which is what makes the picture legible at a glance.
+    static func readmeBackdrop(metrics: IslandMetrics) -> some View {
+        ZStack(alignment: .top) {
+            LinearGradient(colors: [Color(red: 0.24, green: 0.28, blue: 0.38), Color(red: 0.38, green: 0.31, blue: 0.39)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+            Rectangle().fill(Color.white.opacity(0.08)).frame(height: metrics.notch.height)
+            UnevenRoundedRectangle(bottomLeadingRadius: 8, bottomTrailingRadius: 8)
+                .fill(Color.black)
+                .frame(width: metrics.notch.width, height: metrics.notch.height)
+        }
     }
 }
 
