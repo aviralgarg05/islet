@@ -642,7 +642,7 @@ struct IslandView: View {
                 LinearKeyframe(1.0, duration: 0.01)
             }
         }
-        .contextMenu { islandMenu(p) }
+        .contextMenu { IslandContextMenu(model: model, display: display, presentation: p) }
     }
 
     /// The closed island (compact, a HUD in the row) keeps its urgent glow inside its edge, so
@@ -824,14 +824,7 @@ struct IslandView: View {
                 .zIndex(-Double(slot.index))
                 .transition(bubbleTransition(slot, shape: goo))
                 .onTapGesture { model.setExpanded(display) }
-                .contextMenu {
-                    if case .activity(let a) = slot.bubble {
-                        Button("Dismiss") { model.remove(activityID: a.id) }
-                        if MutedSources.canMute(a.source) {
-                            Button("Mute “\(AppModel.mutedName(a.source))”") { model.mute(source: a.source) }
-                        }
-                    }
-                }
+                .contextMenu { BubbleContextMenu(bubble: slot.bubble, model: model) }
                 .spokenButton(slot.bubble.spokenLabel, value: slot.bubble.spokenValue,
                               hint: "Opens the island") { model.setExpanded(display) }
                 .modifier(DismissAction(activity: slot.bubble.activity, model: model))
@@ -892,24 +885,6 @@ struct IslandView: View {
         model.activateClosedIsland(display, presentation: p)
     }
 
-    @ViewBuilder
-    private func islandMenu(_ p: IslandPresentation) -> some View {
-        if let a = model.focusedActivity(for: p) {
-            if model.canOpen(a) { Button("Open") { model.openActivity(a) } }
-            Button("Dismiss “\(a.title)”") { model.remove(activityID: a.id) }
-            if MutedSources.canMute(a.source) {
-                Button("Mute “\(AppModel.mutedName(a.source))”") { model.mute(source: a.source) }
-            }
-            Divider()
-        }
-        Button(model.expandedScreen == nil ? "Open island" : "Close island") {
-            model.setExpanded(model.expandedScreen == nil ? display : nil)
-        }
-        Button("Settings…") { AppActions.openSettings() }
-        Divider()
-        Button("Quit Islet") { NSApp.terminate(nil) }
-    }
-
     /// - Parameter row: in a frozen frame whose content stays the row, the frame, so the row
     ///   can draw its own swaps at their progress.
     @ViewBuilder
@@ -953,6 +928,49 @@ extension IslandView {
         case .compact(.activity(_, let others)): return model.settings.maxConcurrent == 1 ? others : counted
         case .compact(.nowPlaying): return counted
         default: return 0
+        }
+    }
+}
+
+/// The island's right-click menu. A view of its own rather than a `@ViewBuilder` closure: a
+/// closure is called as part of the island's body, so five to eight buttons, the dismissed
+/// activity's title and the muted source's name were built on every update although nobody had
+/// right-clicked. Making this value is all the island does now; its body is asked for when the
+/// menu opens.
+struct IslandContextMenu: View {
+    let model: AppModel
+    let display: CGDirectDisplayID
+    let presentation: IslandPresentation
+
+    var body: some View {
+        if let a = model.focusedActivity(for: presentation) {
+            if model.canOpen(a) { Button("Open") { model.openActivity(a) } }
+            Button("Dismiss “\(a.title)”") { model.remove(activityID: a.id) }
+            if MutedSources.canMute(a.source) {
+                Button("Mute “\(AppModel.mutedName(a.source))”") { model.mute(source: a.source) }
+            }
+            Divider()
+        }
+        Button(model.expandedScreen == nil ? "Open island" : "Close island") {
+            model.setExpanded(model.expandedScreen == nil ? display : nil)
+        }
+        Button("Settings…") { AppActions.openSettings() }
+        Divider()
+        Button("Quit Islet") { NSApp.terminate(nil) }
+    }
+}
+
+/// A bubble’s right-click menu, its own view for the same reason as `IslandContextMenu`.
+struct BubbleContextMenu: View {
+    let bubble: IslandBubble
+    let model: AppModel
+
+    var body: some View {
+        if case .activity(let a) = bubble {
+            Button("Dismiss") { model.remove(activityID: a.id) }
+            if MutedSources.canMute(a.source) {
+                Button("Mute “\(AppModel.mutedName(a.source))”") { model.mute(source: a.source) }
+            }
         }
     }
 }
