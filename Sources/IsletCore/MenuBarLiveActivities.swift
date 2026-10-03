@@ -147,8 +147,19 @@ public enum MenuBarLiveActivities {
     }
 
     /// The source of one app's mirrored activities: "live-activity:uber".
-    public static func source(for appName: String) -> String {
-        let slug = appName.lowercased().unicodeScalars
+    ///
+    /// Only an app the catalogue knows, spelled as the catalogue spells it, gets a source of its
+    /// own. Everything else uses the plain `source`, which the master mute ("live-activity",
+    /// `IsletSettings.isMuted(source:)`) covers.
+    ///
+    /// An app name is never slugged straight out of a pill. What a pill says is a score, a street
+    /// or a status, and it changes on the next read: "live-activity:ind-245-3" names a different
+    /// thing on the next ball, so Mute would never match the same activity twice. Mute also
+    /// appends the source to `mutedSources` and saves it, and what someone's iPhone is showing
+    /// has no business being written to `config.json`.
+    public static func source(for appName: String?) -> String {
+        guard let appName, let look = LiveActivityCatalog.exact(appName) else { return source }
+        let slug = look.app.lowercased().unicodeScalars
             .map { CharacterSet.alphanumerics.contains($0) ? String($0) : "-" }.joined()
             .split(separator: "-").joined(separator: "-")
         return slug.isEmpty ? source : source + ":" + slug

@@ -227,7 +227,16 @@ private func decode(_ json: String) -> IsletSettings { IsletSettings.decodeLenie
     @Test func eachAppHasItsOwnSource() {
         #expect(MenuBarLiveActivities.source(for: "Uber") == "live-activity:uber")
         #expect(MenuBarLiveActivities.source(for: "Uber Eats") == "live-activity:uber-eats")
-        #expect(MenuBarLiveActivities.source(for: "Live Activity") == "live-activity:live-activity")
+        // The catalogue's own spelling, from whatever the pill spelled it as.
+        #expect(MenuBarLiveActivities.source(for: "  flighty ") == "live-activity:flighty")
+        #expect(MenuBarLiveActivities.source(for: "com.ubercab.UberClient") == "live-activity:uber")
+        // Anything the catalogue doesn't know shares the plain source, so the master mute in
+        // Settings covers it. Pill text is never slugged in: a cricket score would give
+        // "live-activity:ind-245-3", which changes on the next ball and is saved to config.json.
+        #expect(MenuBarLiveActivities.source(for: "Live Activity") == "live-activity")
+        #expect(MenuBarLiveActivities.source(for: "IND 245/3") == "live-activity")
+        #expect(MenuBarLiveActivities.source(for: "On time") == "live-activity")
+        #expect(MenuBarLiveActivities.source(for: "12 Acacia Avenue") == "live-activity")
         #expect(MenuBarLiveActivities.source(for: "  ") == "live-activity")
         #expect(MenuBarLiveActivities.isMirroredSource("live-activity:uber"))
         #expect(MenuBarLiveActivities.isMirroredSource("live-activity"))
