@@ -787,17 +787,20 @@ public struct ApprovalQueue: Sendable {
     static func handOffKey(_ r: ApprovalRequest) -> String { sessionPrefix(r.provider, r.sessionID) + r.callKey }
 }
 
-/// What the island goes back to once the last card has gone. Cards hold the island open (pinned)
-/// while they wait: when none is left, an island a card opened closes again, and one that was
-/// already open gets back the pin it had. Closing the island any other way (the shortcut, a
-/// swipe, Hide) ends the hold, so a later answer neither pins a closed island nor closes one
-/// opened since.
-public struct ApprovalIslandHold: Equatable, Sendable {
-    /// What to do to the island once the last card has gone.
+/// The pin something that must be seen takes while it waits, and what the island is left as
+/// when it lets go. An approval card or a ringing timer opens the island and pins it: when it
+/// is done, an island it opened closes again, and one that was already open gets back the pin
+/// it had. Closing the island any other way (the shortcut, a swipe, Hide) ends the hold, so
+/// finishing later neither pins a closed island nor unpins one opened since.
+///
+/// Separate from `IslandHold`, which is what keeps an open island open while the pointer is
+/// away from it.
+public struct IslandPinHold: Equatable, Sendable {
+    /// What to do to the island once the hold is done.
     public enum Restore: Equatable, Sendable {
         /// Leave it as it is.
         case nothing
-        /// A card opened it: close it.
+        /// It was opened for this: close it.
         case close
         /// It was open before the cards: give it back this pin.
         case pin(Bool)
@@ -809,7 +812,7 @@ public struct ApprovalIslandHold: Equatable, Sendable {
 
     public init() {}
 
-    /// A card is on show and holds the island. Only the first card notes how the island was.
+    /// Something is on show and holds the island. Only the first holder notes how it was.
     public mutating func hold(islandWasOpen: Bool, pinned: Bool) {
         guard !isHolding else { return }
         isHolding = true
@@ -820,7 +823,7 @@ public struct ApprovalIslandHold: Equatable, Sendable {
     /// The island closed, by whatever means: there is nothing left to put back.
     public mutating func islandClosed() { isHolding = false }
 
-    /// The last card has gone.
+    /// The last holder has gone.
     public mutating func release(islandOpen: Bool) -> Restore {
         guard isHolding else { return .nothing }
         isHolding = false

@@ -469,9 +469,9 @@ enum HookFixtures {
     }
 }
 
-@Suite struct ApprovalIslandHoldTests {
+@Suite struct IslandPinHoldTests {
     @Test func aCardThatOpenedTheIslandClosesItAgain() {
-        var hold = ApprovalIslandHold()
+        var hold = IslandPinHold()
         hold.hold(islandWasOpen: false, pinned: false)
         #expect(hold.isHolding)
         #expect(hold.release(islandOpen: true) == .close)
@@ -480,12 +480,12 @@ enum HookFixtures {
     }
 
     @Test func anIslandAlreadyOpenGetsItsOwnPinBack() {
-        var hold = ApprovalIslandHold()
+        var hold = IslandPinHold()
         hold.hold(islandWasOpen: true, pinned: true)
         // A second card doesn't overwrite what the first noted (the island is pinned by then).
         hold.hold(islandWasOpen: true, pinned: false)
         #expect(hold.release(islandOpen: true) == .pin(true))
-        var hovered = ApprovalIslandHold()
+        var hovered = IslandPinHold()
         hovered.hold(islandWasOpen: true, pinned: false)
         #expect(hovered.release(islandOpen: true) == .pin(false))
     }
@@ -493,20 +493,35 @@ enum HookFixtures {
     @Test func closingTheIslandAnotherWayEndsTheHold() {
         // Opened with the shortcut (pinned), a card arrives, the shortcut closes it, then the
         // agent is answered in the terminal: a closed island must not be pinned.
-        var shortcut = ApprovalIslandHold()
+        var shortcut = IslandPinHold()
         shortcut.hold(islandWasOpen: true, pinned: true)
         shortcut.islandClosed()
         #expect(shortcut.release(islandOpen: false) == .nothing)
         // The card opened it, a swipe closed it, a hover opened it again: the answer leaves
         // the island the pointer is on open.
-        var swiped = ApprovalIslandHold()
+        var swiped = IslandPinHold()
         swiped.hold(islandWasOpen: false, pinned: false)
         swiped.islandClosed()
         #expect(swiped.release(islandOpen: true) == .nothing)
         // A closed island is never pinned, even if nothing said it closed.
-        var unannounced = ApprovalIslandHold()
+        var unannounced = IslandPinHold()
         unannounced.hold(islandWasOpen: true, pinned: true)
         #expect(unannounced.release(islandOpen: false) == .nothing)
+    }
+
+    /// A ringing timer holds the island the same way. The timer rings, the island opens pinned,
+    /// the user closes it, opens it again and clicks Keep open: when the timer rings out, the
+    /// pin is the user's and stays.
+    @Test func aPinSetAfterTheIslandClosedIsNotTakenAway() {
+        var alarm = IslandPinHold()
+        alarm.hold(islandWasOpen: false, pinned: false)
+        alarm.islandClosed()
+        // Open again, and pinned by hand.
+        #expect(alarm.release(islandOpen: true) == .nothing)
+        // Still ringing when the island is closed and opened: the same again.
+        var again = IslandPinHold()
+        again.hold(islandWasOpen: false, pinned: false)
+        #expect(again.release(islandOpen: true) == .close)
     }
 }
 

@@ -25,7 +25,9 @@ final class TimerController {
     @ObservationIgnored private var shown: [String: ActivitySpec] = [:]
     @ObservationIgnored private var syncing = false
     /// The island was opened by a ringing timer; it may close again once that is dealt with.
-    @ObservationIgnored private var openedForAlarm = false
+    /// Closing the island any other way ends the hold (`islandDidCollapse`), so a pin set by
+    /// hand after that is not taken away when the timer stops ringing.
+    @ObservationIgnored private var alarmHold = IslandPinHold()
 
     init(model: AppModel) {
         self.model = model
@@ -139,7 +141,7 @@ final class TimerController {
 
     private func changed(announce: Set<String> = []) {
         sync(announce: announce)
-        if openedForAlarm, !engine.isRinging { alarmHandled() }
+        if alarmHold.isHolding, !engine.isRinging { alarmHandled() }
         if let storeURL, canSave { try? engine.save(to: storeURL) }
         scheduleWakeUp()
         // A focus round starting, pausing or giving way to a break moves the focus sound.
@@ -184,10 +186,14 @@ final class TimerController {
     private func openForAlarm() {
         guard model.expandedScreen == nil, let display = alarmDisplay, !islandHidden(on: display) else { return }
         model.select(tab: .home)
+        alarmHold.hold(islandWasOpen: false, pinned: model.pinned)
         model.pinned = true
         model.setExpanded(display)
-        openedForAlarm = true
     }
+
+    /// The island closed, by whatever means: the ringing timer no longer holds it, so what the
+    /// user does with it next is theirs to keep.
+    func islandDidCollapse() { alarmHold.islandClosed() }
 
     /// The main screen when it has an island, else a display that does (with "Show island on:
     /// the notched screen", the main screen can be an external display with no island).
@@ -203,10 +209,14 @@ final class TimerController {
         model.isSuppressed(display)
     }
 
-    /// Nothing rings any more: let the island close normally when the pointer leaves.
+    /// Nothing rings any more: let an island the alarm opened close normally when the pointer
+    /// leaves, and leave one opened since as the user left it.
     private func alarmHandled() {
-        openedForAlarm = false
-        if model.expandedScreen != nil { model.pinned = false }
+        switch alarmHold.release(islandOpen: model.expandedScreen != nil) {
+        case .nothing: break
+        case .close: model.pinned = false
+        case .pin(let pinned): model.pinned = pinned
+        }
     }
 
     private func playSound() {

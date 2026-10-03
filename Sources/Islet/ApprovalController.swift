@@ -25,7 +25,7 @@ final class ApprovalController {
     @ObservationIgnored private var expiries: [String: DispatchWorkItem] = [:]
     @ObservationIgnored private var showWork: DispatchWorkItem?
     /// Island state to put back when the last card goes, while cards hold the island open.
-    @ObservationIgnored private var hold = ApprovalIslandHold()
+    @ObservationIgnored private var hold = IslandPinHold()
     /// The card on top and when it got there. Clicks just after a card appears are ignored, so
     /// the second click of a double-click can't answer the next card before it has been seen.
     @ObservationIgnored private var front: (id: String?, since: Date) = (nil, .distantPast)
