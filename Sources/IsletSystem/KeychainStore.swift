@@ -19,9 +19,16 @@ public struct KeychainError: Error, LocalizedError, Equatable {
 }
 
 /// API keys as generic passwords in the login keychain: service `dev.islet.Islet.ai`, one
-/// account per provider, readable only while the Mac is unlocked. The default access list
-/// trusts only the app that created the item. Keys never go to config.json, logs or child
-/// processes.
+/// account per provider, readable only while the Mac is unlocked. Keys never go to config.json,
+/// logs or child processes.
+///
+/// The items keep the keychain's default access list, which trusts whatever satisfies the
+/// designated requirement of the app that saved them. With a Developer ID that is this app
+/// signed by that certificate; an ad-hoc build's requirement is its identifier alone, so
+/// another ad-hoc binary claiming `dev.islet.Islet` is trusted too (SECURITY.md says so).
+/// `kSecUseDataProtectionKeychain` is deliberately not set: it is a separate store, so keys
+/// saved by an earlier build would read as missing, and on macOS it needs an
+/// application-identifier entitlement an ad-hoc signature can't carry.
 public final class KeychainStore: SecretStore {
     public static let defaultService = "dev.islet.Islet.ai"
     public let service: String

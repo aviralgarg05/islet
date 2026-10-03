@@ -118,10 +118,10 @@ If a CLI isn't signed in, the Ask box says so; run `claude` or `codex` once in T
 
 - Create a key at platform.claude.com or platform.openai.com and paste it into Settings → Ask & AI.
 - Islet checks its shape (`sk-ant-…` for Anthropic, `sk-…` for OpenAI), then calls `GET /v1/models` once to make sure it works, and only then stores it.
-- Keys are stored in your **login keychain** as generic passwords: service `dev.islet.Islet.ai`, accounts `anthropic` and `openai`, readable only while your Mac is unlocked. By default only the app that created the item can read it without asking.
+- Keys are stored in your **login keychain** as generic passwords: service `dev.islet.Islet.ai`, accounts `anthropic` and `openai`, readable only while your Mac is unlocked. The item keeps the keychain's default access list, so only code that satisfies Islet's own code-signing requirement reads it without asking.
 - Afterwards Settings shows only the key's last four characters. **Replace** swaps it for a new one; **Remove** deletes the Keychain item.
 - A key is never written to `config.json`, never logged, never put in a URL, and never passed to a child process. Requests only go to `api.anthropic.com` and `api.openai.com` over HTTPS, redirects are refused (so the key header can't follow one), and the connection keeps no cache, cookies or credentials.
-- Builds signed with a Developer ID add a code-identity check. Ad-hoc builds rely on the login keychain alone.
+- Builds signed with a Developer ID tie that requirement to the certificate. An ad-hoc build, which is what `make app` and the releases produce, is identified by its code-signing identifier alone, so another ad-hoc binary claiming `dev.islet.Islet` would be trusted as well: see [Ad-hoc signing](../SECURITY.md#ad-hoc-signing).
 
 To look at or delete the items yourself:
 
