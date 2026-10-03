@@ -52,6 +52,8 @@ enum AppActions {
             p.executableURL = URL(fileURLWithPath: exe.hasPrefix("/") ? exe : "/usr/bin/env")
             p.arguments = exe.hasPrefix("/") ? Array(argv.dropFirst()) : argv
             p.currentDirectoryURL = URL(fileURLWithPath: plugin.path).deletingLastPathComponent()
+            // The same scrubbed environment a scheduled run gets: none of Islet's own.
+            p.environment = ScriptPlugins.environment(parent: ProcessInfo.processInfo.environment)
             try? p.run()
         }
         if line.refreshOnClick { model.runPlugin(plugin.path) }
