@@ -5,10 +5,14 @@ extension AppActions {
     /// `islet://ask`: open the Ask tab with the question filled in and the field focused.
     /// It never sends: a link or a script must not be able to spend money on the user's key.
     static func openAsk(_ model: AppModel, query: String?, provider: AskProviderKind?) {
+        // The display is settled first, as the other call sites do: with no island anywhere,
+        // `setExpanded(nil)` returns at once on a closed island and the pin would be left on
+        // with nothing on screen.
+        guard let display = model.expandedScreen ?? model.targetDisplay() else { return }
         model.ask.prefill(query, provider: provider)
         model.select(tab: .ask)
         model.pinned = true
-        model.setExpanded(model.expandedScreen ?? model.targetDisplay())
+        model.setExpanded(display)
         model.ask.requestKeyboard()
     }
 
