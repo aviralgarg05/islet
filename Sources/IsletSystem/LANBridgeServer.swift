@@ -73,14 +73,6 @@ public enum LANTokenStore {
     }
 
     static func write(_ token: String, to url: URL) throws {
-        let fm = FileManager.default
-        try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let data = try JSONEncoder().encode(LANTokenFile(token: token))
-        // Create with 0600 before writing so the token is never world-readable.
-        if !fm.fileExists(atPath: url.path) {
-            fm.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600])
-        }
-        try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-        try data.write(to: url)
+        try TokenFileWriter.write(try JSONEncoder().encode(LANTokenFile(token: token)), to: url)
     }
 }

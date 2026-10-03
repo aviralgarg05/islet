@@ -120,6 +120,55 @@ func request(_ port: UInt16, _ method: String, _ path: String, token: String? = 
         APIDiscoveryStore.remove(at: url, ownedBy: 42)
         #expect(!FileManager.default.fileExists(atPath: url.path))
     }
+
+    /// A symlink left where a token file goes used to be followed: created through, chmod-ed
+    /// through and written through. The file is renamed into place over the link instead.
+    @Test func aSymlinkAtTheTokenFileIsReplacedNotFollowed() throws {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("islet-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: dir) }
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        let target = dir.appendingPathComponent("target.json")
+        #expect(fm.createFile(atPath: target.path, contents: Data("{}".utf8), attributes: [.posixPermissions: 0o644]))
+
+        let api = dir.appendingPathComponent("api.json")
+        let lan = dir.appendingPathComponent("lan.json")
+        try fm.createSymbolicLink(atPath: api.path, withDestinationPath: target.path)
+        try fm.createSymbolicLink(atPath: lan.path, withDestinationPath: target.path)
+        try APIDiscoveryStore.write(APIDiscovery(port: 1234, token: "abc", pid: 42), to: api)
+        try LANTokenStore.write("a-token-for-the-bridge", to: lan)
+
+        // Real files now, not links, and the file the links pointed at is untouched.
+        for url in [api, lan] {
+            let attributes = try fm.attributesOfItem(atPath: url.path)
+            #expect(attributes[.type] as? FileAttributeType == .typeRegular, "\(url.lastPathComponent)")
+            #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600, "\(url.lastPathComponent)")
+        }
+        let left = try String(contentsOf: target, encoding: .utf8)
+        #expect(left == "{}")
+        #expect(APIDiscoveryStore.read(from: api)?.port == 1234)
+        #expect(LANTokenStore.read(from: lan) == "a-token-for-the-bridge")
+        // No temporary sibling left behind.
+        let names = try fm.contentsOfDirectory(atPath: dir.path).sorted()
+        #expect(names == ["api.json", "lan.json", "target.json"])
+    }
+}
+
+@Suite struct LoopbackServerLimitsTests {
+    /// Connections are admitted before the token is checked, so the loopback listener caps them
+    /// and drops one whose headers never arrive, as the bridge's does.
+    @Test func theLoopbackListenerIsBounded() {
+        let server = LocalAPIServer.loopback(router: APIRouter(token: "tok", version: "t", backend: MemoryBackend()))
+        defer { server.stop() }
+        #expect(server.maxConnections == LocalAPIServer.loopbackConnectionLimit)
+        #expect(server.maxConnectionsPerClient == LocalAPIServer.loopbackConnectionsPerClient)
+        #expect(server.headerTimeout == LocalAPIServer.loopbackHeaderTimeout)
+        // A header timeout only applies while it is shorter than the request timeout.
+        #expect(LocalAPIServer.loopbackHeaderTimeout < server.requestTimeout)
+        #expect(LocalAPIServer.loopbackConnectionsPerClient <= LocalAPIServer.loopbackConnectionLimit)
+        // Room for every long-poll, every refusal draining its body and clients still at work.
+        #expect(LocalAPIServer.loopbackConnectionLimit > server.maxHeldRequests + LocalAPIServer.maxLingering)
+    }
 }
 
 @Suite struct ParserTests {

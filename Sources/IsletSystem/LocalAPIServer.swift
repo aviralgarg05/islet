@@ -52,6 +52,27 @@ public final class LocalAPIServer {
         self.router = router
     }
 
+    /// Connections open at once on loopback. Generous: `maxHeldRequests` long-polls, the
+    /// refusals draining their bodies and a few clients at work all fit, but a local process
+    /// can't hold sockets open until Islet runs out of descriptors.
+    public static let loopbackConnectionLimit = 128
+    /// Every process on this Mac shares one client key on loopback, so this is only a little
+    /// below the whole limit: it keeps one address from taking every slot.
+    public static let loopbackConnectionsPerClient = 96
+    /// A client sends its headers as soon as it connects, so one that hasn't is idling on a
+    /// slot. Longer than the bridge's, since nothing here comes over a network.
+    public static let loopbackHeaderTimeout: TimeInterval = 4
+
+    /// The loopback listener: every route, with the limits above, as `localNetwork` does for
+    /// the bridge. Connections are admitted before the token is checked, so they are counted.
+    public static func loopback(router: APIRouter) -> LocalAPIServer {
+        let server = LocalAPIServer(router: router)
+        server.maxConnections = loopbackConnectionLimit
+        server.maxConnectionsPerClient = loopbackConnectionsPerClient
+        server.headerTimeout = loopbackHeaderTimeout
+        return server
+    }
+
     /// Start listening. Pass 0 for an ephemeral port (tests). The completion runs on the
     /// server queue with the bound port or the error.
     /// - Parameters:
@@ -291,18 +312,34 @@ private final class HeldCount: @unchecked Sendable {
     }
 }
 
+/// Writes a file that holds a token (`api.json`, `lan.json`) safely: a fresh sibling created at
+/// `0600`, written, then renamed into place. Creating, chmod-ing or writing the path itself all
+/// follow a symlink already sitting there, which would hand the token to whoever made it and set
+/// the mode on their file; `rename` replaces the link instead. Same pattern as
+/// `AgentConfigFile.write`.
+enum TokenFileWriter {
+    static func write(_ data: Data, to url: URL) throws {
+        let fm = FileManager.default
+        let folder = url.deletingLastPathComponent()
+        try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        let temp = folder.appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString)")
+        guard fm.createFile(atPath: temp.path, contents: nil, attributes: [.posixPermissions: 0o600]) else {
+            throw CocoaError(.fileWriteNoPermission, userInfo: [NSFilePathErrorKey: temp.path])
+        }
+        do {
+            try data.write(to: temp)
+            guard rename(temp.path, url.path) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        } catch {
+            try? fm.removeItem(at: temp)
+            throw error
+        }
+    }
+}
+
 /// Writes the discovery file that `isletctl` and other clients read.
 public enum APIDiscoveryStore {
     public static func write(_ discovery: APIDiscovery, to url: URL = IsletPaths.apiDiscoveryFile) throws {
-        let fm = FileManager.default
-        try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let data = try JSONEncoder().encode(discovery)
-        // Create with 0600 before writing so the token is never world-readable.
-        if !fm.fileExists(atPath: url.path) {
-            fm.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600])
-        }
-        try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-        try data.write(to: url)
+        try TokenFileWriter.write(try JSONEncoder().encode(discovery), to: url)
     }
 
     public static func read(from url: URL = IsletPaths.apiDiscoveryFile) -> APIDiscovery? {

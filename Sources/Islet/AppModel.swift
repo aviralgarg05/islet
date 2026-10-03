@@ -790,7 +790,7 @@ final class AppModel {
     private func startAPI() {
         let token = apiToken
         let router = APIRouter(token: token, version: Self.version, backend: self)
-        let server = LocalAPIServer(router: router)
+        let server = LocalAPIServer.loopback(router: router)
         self.server = server
         let preferred = UInt16(settings.apiPort)
         server.start(port: preferred) { [weak self] result in
