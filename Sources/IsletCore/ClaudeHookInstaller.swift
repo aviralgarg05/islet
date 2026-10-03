@@ -251,8 +251,8 @@ public enum ClaudeHookInstaller {
         return Int(args[i + 1])
     }
 
-    /// Quotes a path for the shell Claude Code runs hooks with.
-    static func quoted(_ path: String) -> String {
-        path.contains(where: { " '\"\\$`!&;|()<>*?".contains($0) }) ? "'" + path.replacingOccurrences(of: "'", with: #"'\''"#) + "'" : path
-    }
+    /// Quotes a path for the shell Claude Code runs hooks with. The status line's allow-list
+    /// (`ClaudeStatusLineSetup.shellQuote`) rather than a list of characters to look out for,
+    /// which left a newline, a tab, `~`, `#`, a brace or a bracket bare.
+    static func quoted(_ path: String) -> String { ClaudeStatusLineSetup.shellQuote(path) }
 }

@@ -153,4 +153,18 @@ import Testing
         #expect(ClaudeStatusLineSetup.parseInstalled("isletctl statusline -- a b").original == "a b")
         #expect(ClaudeStatusLineSetup.parseInstalled("isletctl hook claude").installed == false)
     }
+
+    /// Hook commands are quoted by the same allow-list as the status line's, so nothing the
+    /// shell would act on is left bare. A list of characters to look out for used to miss these.
+    @Test func hookPathsAreQuotedByTheSameAllowList() {
+        #expect(ClaudeHookInstaller.quoted("/Applications/Islet.app/Contents/MacOS/isletctl")
+                == "/Applications/Islet.app/Contents/MacOS/isletctl")
+        for path in ["/tmp/a\nb/isletctl", "/tmp/a\tb/isletctl", "~/bin/isletctl", "/tmp/a#b/isletctl",
+                     "/tmp/{a,b}/isletctl", "/tmp/[ab]/isletctl", "/tmp/a b/isletctl", "/tmp/a$b/isletctl"] {
+            let quoted = ClaudeHookInstaller.quoted(path)
+            #expect(quoted == ClaudeStatusLineSetup.shellQuote(path), "\(path)")
+            #expect(quoted.hasPrefix("'") && quoted.hasSuffix("'"), "\(path)")
+            #expect(ClaudeStatusLineSetup.shellWords(quoted) == [path], "\(path)")
+        }
+    }
 }
