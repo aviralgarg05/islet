@@ -42,6 +42,14 @@ public enum URLCommand: Equatable, Sendable {
 
     static func namespaced(_ id: String) -> String { id.hasPrefix(idPrefix) ? id : idPrefix + id }
 
+    /// The Focus pill a link asks for. Its id goes under `url-` like any other activity from a
+    /// link, so `islet://focus` can't replace the pill Islet shows for the Mac's own Focus.
+    public static func focusSpec(name: String, on: Bool) -> ActivitySpec {
+        var spec = FocusPill.activity(name: name, on: on)
+        spec.id = spec.id.map(namespaced)
+        return spec
+    }
+
     /// Any source but the one kept for Live Activities mirrored from the menu bar.
     static func source(_ raw: String?) throws -> String {
         guard let raw else { return "url" }

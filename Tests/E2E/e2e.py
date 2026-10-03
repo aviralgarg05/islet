@@ -341,7 +341,7 @@ def run_suite(e, app, windows_bin):
         got = wait_for(lambda: any(a["title"] == "From URL" for a in activities(e).values()), timeout=6)
         check("islet:// URL creates a notification", got)
         subprocess.run(["open", "-g", "islet://focus?name=Sleep&state=on"], capture_output=True)
-        got = wait_for(lambda: activities(e).get("focus", {}).get("title") == "Sleep", timeout=6)
+        got = wait_for(lambda: activities(e).get("url-focus", {}).get("title") == "Sleep", timeout=6)
         check("islet://focus from a Shortcuts automation", got)
         # Menu bar items can only be pressed by a click in Islet, never through a URL.
         subprocess.run(["open", "-g", "islet://menubar-activity?key=id:x"], capture_output=True)

@@ -428,7 +428,7 @@ public struct APIRouter: Sendable {
 
         case ("POST", 1, "focus"):
             let f = try decode(FocusPush.self, from: r)
-            return .json(try await apply(FocusPill.activity(name: f.name ?? "Focus", on: f.on ?? true)), status: 201)
+            return .json(try await apply(admitted(FocusPill.activity(name: f.name ?? "Focus", on: f.on ?? true))), status: 201)
 
         case ("POST", 2, "hooks"):
             let provider = sub

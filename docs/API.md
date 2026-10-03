@@ -298,7 +298,7 @@ Off by default. When enabled (Settings → Advanced → iPhone bridge), a second
 | Route | Limits |
 |---|---|
 | `GET /v1/health` | No token needed. |
-| `POST /v1/notify`, `POST /v1/timer`, `POST /v1/focus` | Priority tops out at `high`. Timer ids get a `lan-` prefix. |
+| `POST /v1/notify`, `POST /v1/timer`, `POST /v1/focus` | Priority tops out at `high`. Timer ids and the Focus pill's id get a `lan-` prefix, so the bridge shows its own pill rather than replacing the Mac's. |
 | `POST /v1/activities`, `PUT /v1/activities/{id}` | Ids get a `lan-` prefix (a new id when none is given). `url` and `actions` are dropped. `icon`, `trackerIcon` and `stageSymbols` keep only symbols, emoji and app icons. Priority tops out at `high`. |
 
 Everything else is `403`: the bridge can't read activities or state, remove anything, send agent hooks, or control media, the HUD, keep awake or the island.
@@ -382,7 +382,7 @@ islet://open   islet://close   islet://toggle   islet://settings
 
 Any app or web page can open these URLs, and they carry no token, so they are limited:
 
-- Activities they create or dismiss get ids starting with `url-` (`id=deploy` becomes `url-deploy`), so a link can't replace or remove an activity made by Islet, the API or the Live Activity mirror. `source=live-activity` is refused.
+- Activities they create or dismiss get ids starting with `url-` (`id=deploy` becomes `url-deploy`, and `islet://focus` makes `url-focus`), so a link can't replace or remove an activity made by Islet, the API or the Live Activity mirror. `source=live-activity` is refused.
 - `url` and `actionURL` must be `https`.
 - Icons are limited to `sf:`, `emoji:` and `app:`.
 - `priority=critical` is treated as `high`.

@@ -201,7 +201,7 @@ enum AppActions {
             case .timerCommand(let command): try model.timers.perform(command)
             case .hud(let kind, let value, let muted): Task { await model.showHUD(kind: kind, value: value, muted: muted, label: nil) }
             case .media(let cmd): model.send(cmd)
-            case .focus(let name, let on): try model.applyLocal(FocusPill.activity(name: name, on: on))
+            case .focus(let name, let on): try model.applyLocal(URLCommand.focusSpec(name: name, on: on))
             case .open: model.setExpanded(model.targetDisplay())
             case .awake(let change): model.setKeepAwake(change, announce: true)
             case .ask(let query, let provider): openAsk(model, query: query, provider: provider)

@@ -23,6 +23,19 @@ public struct HUDEvent: Equatable, Sendable, Codable {
     }
 }
 
+/// How long the text in a client's spec may be. Anything longer is shortened rather than
+/// refused: the island gives a title, a subtitle and a trailing value one line each, so a
+/// caller over the API, the local network or a link can't push a kilobyte into the layout.
+public enum ActivityLimits: Sendable {
+    public static let title = 120
+    public static let subtitle = 160
+    public static let trailing = 40
+    public static let source = 64
+
+    /// One line, trimmed and no longer than `limit`, as `AgentHooks` shortens a tool's words.
+    public static func capped(_ s: String, _ limit: Int) -> String { AgentHooks.truncate(s, limit) }
+}
+
 /// Owns every live activity plus the transient HUD / sneak-peek state.
 /// A value type with an injected clock, so every rule here is unit-testable.
 public struct ActivityCenter: Sendable {

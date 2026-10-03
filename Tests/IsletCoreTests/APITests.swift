@@ -145,6 +145,14 @@ actor FakeBackend: IsletBackend {
         #expect(r.status == 200)
     }
 
+    /// On loopback the Focus pill keeps its plain id: `isletctl focus` drives the Mac's own.
+    @Test func focusOnLoopbackKeepsItsID() async {
+        let b = FakeBackend(now: t0)
+        let rt = router(b)
+        #expect(await rt.handle(request("POST", "/v1/focus", body: #"{"name":"Work","on":true}"#)).status == 201)
+        #expect(await b.center.activities["focus"]?.title == "Work")
+    }
+
     @Test func authIsEnforced() async {
         let rt = router(FakeBackend(now: t0))
         #expect(await rt.handle(request("GET", "/v1/activities", token: nil)).status == 401)

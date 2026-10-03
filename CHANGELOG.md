@@ -6,6 +6,7 @@
 - **Hide the menu bar’s own** (Settings → Live Activities, on to begin with) covers each Live Activity macOS draws in the menu bar, so it shows in the island only instead of twice. While it’s on, every activity shows in the island, whether or not the notch hides it.
 
 ### Fixes
+- A Focus pill set by a link or by your iPhone now shows as its own pill rather than replacing the one Islet shows for the Mac’s Focus, and a very long Focus name is shortened to fit the island.
 - Live Activities from your iPhone show in the island again. macOS builds the menu bar’s Live Activity differently from every other item, so Islet read an empty part of it and passed over it.
 - Music and videos playing in a browser show on the island again. A live stream, or a video whose length the browser doesn’t know, used to stop Now Playing for every app until the Mac slept and woke.
 - The app icons beside the song now offer every player macOS lists, such as Spotify paused a while ago beside a video playing in Chrome. For a player macOS hasn’t given the controls to, a press says which app has them and offers to open the player, instead of doing nothing.

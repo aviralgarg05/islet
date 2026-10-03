@@ -484,8 +484,13 @@ public enum FirstRunHint {
 // MARK: - Focus
 
 public enum FocusPill {
-    /// iPhone-style Focus pill ("Work · On").
+    /// Islet's own Focus pill keeps this id, so each Focus change replaces the last one.
+    public static let id = "focus"
+
+    /// iPhone-style Focus pill ("Work · On"). `name` becomes the title and comes from a link
+    /// or the iPhone bridge, so it is capped like any other text a client sends.
     public static func activity(name: String, on: Bool) -> ActivitySpec {
+        let name = ActivityLimits.capped(name, ActivityLimits.title)
         let lower = name.lowercased()
         let symbol: String
         switch lower {
@@ -500,7 +505,7 @@ public enum FocusPill {
         default: symbol = "moon.fill"
         }
         return ActivitySpec(
-            id: "focus", source: "focus", title: name.isEmpty ? "Focus" : name,
+            id: id, source: "focus", title: name.isEmpty ? "Focus" : name,
             icon: .symbol(on ? symbol : "moon"), trailing: on ? "On" : "Off",
             state: .info, tint: on ? "indigo" : "gray", priority: .normal, ttl: 3, sneak: true
         )

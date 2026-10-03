@@ -172,9 +172,26 @@ import Testing
         #expect(FocusPill.activity(name: "Work", on: false).trailing == "Off")
     }
 
+    /// The name becomes the title, and a link or the bridge supplies it, so it is capped.
+    @Test func focusPillCapsTheName() {
+        let long = String(repeating: "W", count: 500)
+        let spec = FocusPill.activity(name: long, on: true)
+        #expect(spec.title?.count == ActivityLimits.title)
+        #expect(FocusPill.activity(name: "  Work\n\n", on: true).title == "Work")
+    }
+
     @Test func focusURL() throws {
         #expect(try URLCommand.parse(URL(string: "islet://focus?name=Work&state=on")!) == .focus(name: "Work", on: true))
         #expect(try URLCommand.parse(URL(string: "islet://focus?name=Work&state=off")!) == .focus(name: "Work", on: false))
+    }
+
+    /// A link's Focus pill is namespaced like every other activity a link makes, so a web page
+    /// can't replace the pill Islet shows for the Mac's own Focus.
+    @Test func focusFromALinkIsNamespaced() {
+        let spec = URLCommand.focusSpec(name: "Work", on: true)
+        #expect(spec.id == URLCommand.idPrefix + FocusPill.id)
+        #expect(spec.title == "Work")
+        #expect(URLCommand.focusSpec(name: "Work", on: true).id == "url-focus")
     }
 
     @Test func symbolSanitizer() {
