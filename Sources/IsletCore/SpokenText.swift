@@ -136,12 +136,19 @@ public enum SpokenText {
     }
 
     /// Seconds in a clock as `Format.clock` writes it ("4:05", "1:02:03"); nil for anything else.
+    ///
+    /// Worked out in `Double`, as `MenuBarLiveActivities.clockSeconds(in:)` is: the text can
+    /// come from a link or a script, which leave the leading field unbounded, and the same sum
+    /// in `Int` overflows and traps.
     static func clockSeconds(_ text: String) -> Double? {
         let parts = text.split(separator: ":", omittingEmptySubsequences: false)
-        guard (2...3).contains(parts.count), parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isASCII) }) else { return nil }
-        let numbers = parts.compactMap { Int($0) }
-        guard numbers.count == parts.count, numbers.dropFirst().allSatisfy({ (0..<60).contains($0) }) else { return nil }
-        return Double(numbers.reduce(0) { $0 * 60 + $1 })
+        guard (2...3).contains(parts.count),
+              parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy { $0.isASCII && $0.isNumber } }),
+              parts.dropFirst().allSatisfy({ $0.count == 2 }) else { return nil }
+        let numbers = parts.compactMap { Double($0) }
+        guard numbers.count == parts.count, numbers.dropFirst().allSatisfy({ $0 < 60 }) else { return nil }
+        let seconds = numbers.reduce(0) { $0 * 60 + $1 }
+        return seconds.isFinite ? seconds : nil
     }
 
     /// Status words already said by `state(of:)`: "Waiting" after "waiting for you".

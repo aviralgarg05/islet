@@ -164,6 +164,27 @@ import Testing
         #expect(SpokenText.clockSeconds("Paused") == nil && SpokenText.clockSeconds("4:75") == nil && SpokenText.clockSeconds(":5") == nil)
     }
 
+    /// `trailing` comes from a link or a script unchecked, so the sum has to hold whatever is in
+    /// it: `200000000000000000:00` overflowed `Int` and ended Islet, with no token involved.
+    @Test func aClockNoSongCouldHoldIsReadWithoutOverflowing() throws {
+        #expect(SpokenText.clockSeconds("200000000000000000:00") == 1.2e19)
+        // Wider than `Double` as well: not a clock.
+        #expect(SpokenText.clockSeconds(String(repeating: "9", count: 400) + ":00") == nil)
+        // Not a clock at all: a sign, a single-digit tail, or digits that aren't ASCII.
+        #expect(SpokenText.clockSeconds("-1:00") == nil)
+        #expect(SpokenText.clockSeconds("4:5") == nil)
+        #expect(SpokenText.clockSeconds("٤:٠٥") == nil)
+
+        // The whole way in: a link sets a timer-sourced activity's trailing value, and the
+        // island reads it for VoiceOver whether or not VoiceOver is running.
+        guard case .activity(let spec) = try URLCommand.parse(
+            URL(string: "islet://activity?source=timer&state=info&title=x&trailing=200000000000000000:00")!
+        ) else { Issue.record("expected activity"); return }
+        var c = ActivityCenter()
+        let a = try c.apply(spec, now: now)
+        #expect(SpokenText.value(a, now: now) != nil)
+    }
+
     @Test func timersOnHome() {
         let running = TimerItem(id: "t", title: "Tea", duration: 300, endsAt: now.addingTimeInterval(271.2), createdAt: now)
         #expect(SpokenText.timer(running, now: now) == "4 minutes 32 seconds left")
