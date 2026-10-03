@@ -411,7 +411,7 @@ Scripts get `ISLET=1`, `SWIFTBAR=1`, `XBARDarkMode=true` and Homebrew on `PATH`,
 
 ## Settings file
 
-Everything in Settings lives in `~/.config/islet/config.json` (or `$XDG_CONFIG_HOME/islet/config.json`) and reloads live when edited, so it can live in your dotfiles. Unknown keys are ignored and kept; a bad value falls back to its default without breaking the rest, and a file that doesn't parse is never written over (see the end of this section). Example:
+Everything in Settings lives in `~/.config/islet/config.json` (or `$XDG_CONFIG_HOME/islet/config.json`) and reloads live when edited, so it can live in your dotfiles. A symlink at that path is followed to the file it points at, so a save changes your repo's own file and leaves the link alone. Unknown keys are ignored and kept; a bad value falls back to its default without breaking the rest, and a file that doesn't parse is never written over (see the end of this section). Example:
 
 ```json
 {

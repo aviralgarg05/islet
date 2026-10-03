@@ -6,6 +6,27 @@
 - **Hide the menu bar’s own** (Settings → Live Activities, on to begin with) covers each Live Activity macOS draws in the menu bar, so it shows in the island only instead of twice. While it’s on, every activity shows in the island, whether or not the notch hides it.
 
 ### Fixes
+- A link such as `islet://activity?title=x&steps=1e300` no longer ends Islet. Every number in an `islet://` link is now checked before it is used, and one too big for Islet to hold is refused like any other bad value.
+- A pill whose value reads like a clock no longer ends Islet when the figure in front of the colon is absurdly large, whether it came from a link, a script or your iPhone.
+- A song whose lyrics file holds an absurd timestamp no longer ends Islet. Anyone can upload lyrics to LRCLIB, so one bad line used to crash Islet for everyone who played that song.
+- Sales figures, model sizes, request counts and a temperature reading from a service that sends something absurd no longer end Islet.
+- Typing in the island and then letting your Mac sleep no longer leaves the island holding the keyboard. Before, after waking (or after a display change, or a change to the island’s size in Settings) the island never closed when you moved away, and it took keystrokes meant for the app you were in.
+- A scrub or volume drag interrupted by waking, or by a display change, no longer leaves the island open for good.
+- When a timer rings, opens the island and you then close it, reopen it and choose **Keep open**, the island stays open when the timer stops ringing instead of losing the pin you set.
+- `config.json` kept in your dotfiles as a symlink stays a symlink: the first change in Settings used to replace it with an ordinary file, after which Islet and your repo quietly held different settings.
+- A focus sound keeps playing when you connect or disconnect AirPods, instead of going silent for the rest of the round while Islet still showed it as playing.
+- A video or live stream whose player reports no real length no longer stops Now Playing from letting go of the track.
+- Switching Now Playing off and on quickly, or using **Try again**, no longer leaves a stray helper behind or counts a failure against the restart limit.
+- Turning the privacy indicators off and on during a video call brings the camera dot back, instead of leaving it off for the rest of the call.
+- Deleting a script widget while the screen is locked or asleep no longer ends Islet, and a widget that leaves something running in the background (`foo &`, ssh, a daemon) no longer ties up a little more of Islet on every run.
+- A shortcut that leaves something running in the background now reports back instead of never finishing.
+- Muting a Live Activity mirrored from the menu bar no longer leaves a black rectangle over the menu bar’s own pill, which hid it altogether.
+- A request waiting for an answer in the notch is only ever shown on a display that has an island, so an agent is no longer left waiting with no card anywhere after your Mac wakes or the displays change.
+- A busy Exchange or Google calendar no longer makes the island hitch while it is read.
+- The iPhone bridge can no longer fill the island with pills that never go: each one lasts at most an hour unless it is sent again.
+- Download pills keep working after the Downloads folder is replaced or restored from the Trash.
+- An `islet://ask` link opened with no island on any display no longer leaves the island pinned shut.
+- A chunked upload to the local API gets its `411` with an explanation instead of a reset connection.
 - Spotify cover art is fetched the way every other request Islet sends is: nothing kept between songs, nothing written to disk.
 - A title, subtitle, trailing value or source sent by a script, a link or your iPhone is cut to one line of what the island can draw, instead of stretching the row.
 - The local API caps how many connections it keeps at once, and lets go of one whose request never arrives, so another program on this Mac can’t tie it up.
@@ -29,9 +50,9 @@
 - Swiping to move through a live stream, or skipping 15 s from a script, no longer takes it back to its start.
 - Lyrics for a song in a browser show even when the browser sends the video’s length a moment after its title.
 - Opera Beta, Opera Developer, Opera Air, Helium, SigmaOS, Waterfox, LibreWolf, Tor Browser, Mullvad Browser, Yandex Browser and DuckDuckGo from the App Store count as web browsers, for Now Playing’s **Web browsers** switch, lyrics and calls in a browser.
-- Settings changed from the island (time left, a Pomodoro length, a tool's **Turn on**, Lyrics, Mute, turning on the calendar) are saved and applied at once, and Settings shows them straight away.
+- Settings changed from the island (time left, a Pomodoro length, a tool’s **Turn on**, Lyrics, Mute, turning on the calendar) are saved and applied at once, and Settings shows them straight away.
 - A change made just after Islet saved something else, such as a slider still moving in Settings, is no longer undone a moment later.
-- Switching to a busy app no longer makes the island hitch while Islet starts following that app's windows for full screen.
+- Switching to a busy app no longer makes the island hitch while Islet starts following that app’s windows for full screen.
 - With an island on every display, moving from the open island onto another display closes it after the usual moment instead of leaving it open.
 - With Shelf off, files dropped on the notch are refused rather than kept on a hidden shelf.
 - Turning off **Answer requests in the island** sends waiting requests back to the terminal at once, and lets go of the island.
@@ -39,17 +60,17 @@
 - **Fit the menu bar** fits the wings again as soon as a menu bar item appears or widens, with Live Activities off too.
 - The Clipboard page goes back to All once its filter has nothing left, and stays there when such a clip comes back.
 - With Accessibility, a video or game that goes full screen without switching apps is noticed, and so is it leaving, for **In full screen**.
-- The Ask chip in the island now changes the provider in Settings → Ask & AI, and it's kept after a restart. A link's provider lasts until the island closes.
-- Changes made while `config.json` has a typo are kept when it's fixed, rather than lost.
+- The Ask chip in the island now changes the provider in Settings → Ask & AI, and it’s kept after a restart. A link’s provider lasts until the island closes.
+- Changes made while `config.json` has a typo are kept when it’s fixed, rather than lost.
 - Edits to `config.json` by hand always load, including undoing one and a config folder replaced by a dotfiles tool. With Settings open, Islet no longer rewrites a file you edited by hand.
-- **Mute** in the island now silences Islet's own cards too: battery, sound output, keep awake and welcome back. A battery about to run out still warns you.
+- **Mute** in the island now silences Islet’s own cards too: battery, sound output, keep awake and welcome back. A battery about to run out still warns you.
 - An app muted from the island shows as muted in its row on the Apps page, and a muted feature, such as meeting reminders, is listed on its own page with **Unmute**.
 - Unmuting brings back a running timer, stopwatch, meeting reminder or keep awake at once, and so does **Reset**.
-- Settings follows Accessibility, camera and location changes made in System Settings while it's open.
-- Turning Accessibility off and on again no longer hands the volume and brightness keys back to macOS's display.
-- Turning on Lyrics shows the playing song's lyrics at once, not from the next song.
+- Settings follows Accessibility, camera and location changes made in System Settings while it’s open.
+- Turning Accessibility off and on again no longer hands the volume and brightness keys back to macOS’s display.
+- Turning on Lyrics shows the playing song’s lyrics at once, not from the next song.
 - After a smaller size, the closed island starts at the new width instead of shrinking to it, and bubbles moved to the left of the notch can be clicked at once.
-- Opening the lid of a Mac that started with it closed shows Islet's brightness display when you change the brightness.
+- Opening the lid of a Mac that started with it closed shows Islet’s brightness display when you change the brightness.
 
 ## 0.2.0 (2 October 2026)
 
