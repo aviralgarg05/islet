@@ -36,9 +36,15 @@ extension APIRouter {
 
     static func lanNamespaced(_ id: String) -> String { id.hasPrefix(lanIDPrefix) ? id : lanIDPrefix + id }
 
+    /// The longest an activity from the local network lives without being sent again. An
+    /// omitted ttl, or one of 0, means "until it is dismissed" everywhere else, so a peer with
+    /// the bridge token could fill all 64 slots in about twenty seconds and push out the user's
+    /// own pills. On the network every pill expires.
+    public static let lanMaxTTL: Double = 3600
+
     /// On the local network: the id goes under `lan-` (a new one when there is none), links and
-    /// buttons are dropped, image files and remote images are dropped, and priority tops out at
-    /// high. Elsewhere the spec is unchanged.
+    /// buttons are dropped, image files and remote images are dropped, priority tops out at
+    /// high, and the ttl at `lanMaxTTL`. Elsewhere the spec is unchanged.
     func admitted(_ spec: ActivitySpec) -> ActivitySpec {
         guard scope == .lan else { return spec }
         var s = spec
@@ -49,6 +55,8 @@ extension APIRouter {
         s.trackerIcon = admitted(s.trackerIcon)
         if s.stageSymbols?.contains(where: { admitted($0) == nil }) == true { s.stageSymbols = nil }
         s.priority = s.priority.map { min($0, .high) }
+        let ttl = s.ttl ?? Self.lanMaxTTL
+        s.ttl = ttl > 0 && ttl.isFinite ? min(ttl, Self.lanMaxTTL) : Self.lanMaxTTL
         return s
     }
 

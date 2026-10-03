@@ -125,6 +125,25 @@ import Testing
         #expect(fresh?.icon == .emoji("🍕"))
     }
 
+    /// Every pill from the network expires. Without a ceiling a peer with the token could fill
+    /// all 64 slots in about twenty seconds with pills that never go, pushing out the Mac's own.
+    @Test func everyActivityFromTheNetworkExpires() async throws {
+        let b = FakeBackend(now: t0)
+        let rt = lan(b)
+        let ceiling = t0.addingTimeInterval(APIRouter.lanMaxTTL)
+        // No ttl at all, and a ttl of 0, both mean "until dismissed" elsewhere.
+        #expect(activity(await rt.handle(req("POST", "/v1/activities", token: lanToken, body: #"{"id":"a","title":"A"}"#)))?.expiresAt == ceiling)
+        #expect(activity(await rt.handle(req("POST", "/v1/activities", token: lanToken, body: #"{"id":"b","title":"B","ttl":0}"#)))?.expiresAt == ceiling)
+        #expect(activity(await rt.handle(req("POST", "/v1/activities", token: lanToken, body: #"{"id":"c","title":"C","ttl":999999}"#)))?.expiresAt == ceiling)
+        // A shorter ttl is kept as it is, and a renewal pushes it out again.
+        #expect(activity(await rt.handle(req("POST", "/v1/activities", token: lanToken, body: #"{"id":"d","title":"D","ttl":30}"#)))?.expiresAt
+                == t0.addingTimeInterval(30))
+        #expect(activity(await rt.handle(req("PUT", "/v1/activities/lan-d", token: lanToken, body: #"{"title":"D2"}"#)))?.expiresAt == ceiling)
+        // The loopback API is unchanged: a script on this Mac can still put up a pill that stays.
+        let loopback = local(b)
+        #expect(activity(await loopback.handle(req("POST", "/v1/activities", token: apiToken, body: #"{"id":"e","title":"E"}"#)))?.expiresAt == nil)
+    }
+
     @Test func notificationsAndTimersAreLimitedToo() async throws {
         let b = FakeBackend(now: t0)
         let rt = lan(b)
