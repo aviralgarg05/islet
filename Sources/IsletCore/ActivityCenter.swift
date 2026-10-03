@@ -146,6 +146,19 @@ public struct ActivityCenter: Sendable {
             // Back from done or failed to working: the automatic dismissal no longer applies.
             let revived = (previousState == .success || previousState == .failure) && existing.state != previousState
             existing.expiresAt = expiry(ttl: spec.ttl, state: existing.state, previous: revived ? nil : existing.expiresAt, now: now)
+            // The same thing said again (an agent's hooks fire a couple of times a second, a
+            // build posts the progress it already posted) leaves the activity exactly as it is:
+            // it keeps the moment it last really changed, which `ordered(now:)` sorts by, and the
+            // island has nothing to draw again. Only the two deadlines may have moved, and one
+            // pushed further out waits until it is near enough to matter (`keptDeadline`).
+            if Self.saysNothingNew(existing, as: before) {
+                existing.expiresAt = Self.keptDeadline(before.expiresAt, asked: existing.expiresAt, now: now)
+                existing.staleAt = Self.keptDeadline(before.staleAt, asked: existing.staleAt, now: now)
+                if existing != before { activities[id] = existing }
+                // A client that explicitly asked for a peek still gets one.
+                if spec.sneak == true { sneak = (id, now.addingTimeInterval(sneakDuration)) }
+                return existing
+            }
             existing.updatedAt = now
             activities[id] = existing
             let becameTerminal = existing.state != previousState && (existing.state == .success || existing.state == .failure)
@@ -188,6 +201,34 @@ public struct ActivityCenter: Sendable {
             sneak = (id, now.addingTimeInterval(sneakDuration))
         }
         return activity
+    }
+
+    /// Whether a merged activity says nothing the one before it already said, so the island has
+    /// nothing to draw again. The two deadlines are left out of the comparison: a client
+    /// re-arming one says nothing in itself, and `keptDeadline` decides what to do with it.
+    static func saysNothingNew(_ merged: Activity, as before: Activity) -> Bool {
+        var masked = merged
+        masked.expiresAt = before.expiresAt
+        masked.staleAt = before.staleAt
+        masked.updatedAt = before.updatedAt
+        return masked == before
+    }
+
+    /// How far short of where a client asked for it a deadline may be left: three per cent of its
+    /// own span, and never less than a second. A quarter of an hour of staleness is kept within
+    /// half a minute, a half-minute ttl within a second.
+    static let deadlineSlack = 0.03
+
+    /// The deadline to keep when a client asks for `asked`, `stored` is already in hand and
+    /// nothing else about the activity changed. One brought forward, taken away or newly given is
+    /// always honoured, since each of those changes when something happens. One pushed further out
+    /// is left where it is while it is within `deadlineSlack` of where it was asked for: writing it
+    /// would have the island draw again to no visible end, and a client that keeps re-arming it is
+    /// never cut short by more than that slack.
+    static func keptDeadline(_ stored: Date?, asked: Date?, now: Date) -> Date? {
+        guard let asked, let stored, asked > stored else { return asked }
+        let slack = max(1, asked.timeIntervalSince(now) * deadlineSlack)
+        return asked.timeIntervalSince(stored) > slack ? asked : stored
     }
 
     private func expiry(ttl: Double?, state: ActivityState, previous: Date?, now: Date) -> Date? {
