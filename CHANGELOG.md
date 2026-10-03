@@ -16,6 +16,7 @@
 - A Live Activity that names no app is titled by what it says, so the island reads “Delivered” rather than “Live Activity” above “Delivered”. Most pills expose one short label and no app name, so this is the usual case.
 - A pill whose words merely hold an app’s name no longer takes that app’s name, symbol and layout: “Man United 2 - 1 Arsenal” was titled with the whole phrase and drawn as a flight. An address with a comma in it is no longer split into a title and a subtitle either.
 - A countdown the island animates stops as soon as Islet can no longer tell which way the time is going, instead of counting down to a moment that is no longer true.
+- A Live Activity that shows its countdown with the unit beside it, such as “13:01 min”, counts down in the island, instead of showing a number that moved only when the menu bar did. Islet reads the time wherever it sits in the pill’s words rather than only at the end.
 - A link such as `islet://activity?title=x&steps=1e300` no longer ends Islet. Every number in an `islet://` link is now checked before it is used, and one too big for Islet to hold is refused like any other bad value.
 - A pill whose value reads like a clock no longer ends Islet when the figure in front of the colon is absurdly large, whether it came from a link, a script or your iPhone.
 - A song whose lyrics file holds an absurd timestamp no longer ends Islet. Anyone can upload lyrics to LRCLIB, so one bad line used to crash Islet for everyone who played that song.
@@ -46,7 +47,7 @@
 - Oversized request headers are refused however they arrive.
 - Lyrics and weather requests refuse redirects, so a song’s title or a place you typed can’t be carried to another site.
 - Scripts can no longer read the text of the notifications Islet mirrors. Banner titles and text now need **Let scripts read Live Activities and notifications** (Settings → Advanced → Local API), the same setting as the Live Activities Islet mirrors, instead of showing in `GET /v1/activities` and `GET /v1/state` whatever the setting said.
-- A Focus pill set by a link or by your iPhone now shows as its own pill rather than replacing the one Islet shows for the Mac’s Focus, and a very long Focus name is shortened to fit the island.
+- A Focus pill set by a link now shows as its own pill rather than replacing the one Islet shows for the Mac’s Focus, and a very long Focus name is shortened to fit the island. A Focus from your iPhone still shares that pill, so only one Focus shows at a time.
 - Live Activities from your iPhone show in the island again. macOS builds the menu bar’s Live Activity differently from every other item, so Islet read an empty part of it and passed over it.
 - Music and videos playing in a browser show on the island again. A live stream, or a video whose length the browser doesn’t know, used to stop Now Playing for every app until the Mac slept and woke.
 - The app icons beside the song now offer every player macOS lists, such as Spotify paused a while ago beside a video playing in Chrome. For a player macOS hasn’t given the controls to, a press says which app has them and offers to open the player, instead of doing nothing.
@@ -81,6 +82,20 @@
 - Turning on Lyrics shows the playing song’s lyrics at once, not from the next song.
 - After a smaller size, the closed island starts at the new width instead of shrinking to it, and bubbles moved to the left of the notch can be clicked at once.
 - Opening the lid of a Mac that started with it closed shows Islet’s brightness display when you change the brightness.
+- Dismissing a Live Activity from the island uncovers the pill it came from, instead of leaving a black rectangle in the menu bar with the activity nowhere to be seen until the pill went away on its own.
+- A Live Activity you muted is no longer covered for a moment after Islet starts, which showed as a black rectangle in the menu bar on an otherwise quiet Mac.
+- A timer that rings while there is no island anywhere just rings, instead of pinning a display that draws nothing.
+- A coding agent’s request that arrives in the first second after waking waits for the island rather than going straight back to the terminal.
+- An `islet://ask` link or ⌃⌥A with no island on screen keeps the question for the next time the island opens, instead of dropping it.
+- A Downloads folder sent to the Trash and put back is followed again, rather than leaving download pills off for the rest of the session.
+- A script widget removed while the screen is locked no longer leaves a row behind that nothing clears, and a widget whose script keeps working after closing its own output no longer stops every other widget.
+- The Shortcuts page says it couldn’t read your shortcuts rather than showing an empty list as though you had none.
+- Scripts can no longer count or clear the notifications Islet mirrors while **Let scripts read Live Activities and notifications** is off. A count alone said how many banners were on screen.
+- A script’s `source` is taken as written: one with a stray space is refused for the names Islet keeps for itself, instead of slipping through and then escaping **Mute**, and one too long to hold is refused rather than shortened into a name that **Mute** and `?source=` would never match again.
+- `config.json` linked into a dotfiles repo that isn’t set up yet stays a link, and the first change in Settings writes the repo’s file and makes its folder.
+- A client using a short `ttl` as a liveness window, re-armed every second, keeps its activity on the island instead of losing it between two of its own reports.
+- `isletctl` reports a number it can’t hold as a mistake in the command, and the MCP server ignores one instead of stopping.
+- Agendas are read with their own handle on your calendar, so a busy Exchange or Google account can’t clash with the month view on Today.
 
 ### Performance
 - Islet does far less while music plays and while a coding agent works. Both used to tell Islet the same thing over and over — a player reports its position about once a second, and an agent’s hooks fire a couple of times a second — and each report redrew the whole island although nothing on it had changed. Now a report that says nothing new leaves the island exactly as it is, while a seek, a pause, a new track, a new step or any other real change still shows at once.

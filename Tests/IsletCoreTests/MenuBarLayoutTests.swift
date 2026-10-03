@@ -441,6 +441,47 @@ import Testing
         #expect(MenuBarLiveActivities.clockSeconds(in: "4 min") == nil)
         #expect(MenuBarLiveActivities.clockSeconds(in: "2:75") == nil)
         #expect(MenuBarLiveActivities.clockSeconds(in: "IND 245/3") == nil)
+        // The clock is not always the last word. A real delivery pill shows the countdown and
+        // its unit as two labels, which join into one detail.
+        #expect(MenuBarLiveActivities.clockSeconds(in: "13:01 min") == 781)
+        #expect(MenuBarLiveActivities.clockSeconds(in: "0:42 left") == 42)
+        #expect(MenuBarLiveActivities.clockSeconds(in: "8 \u{092E}\u{093F}\u{0928}\u{091F}") == nil)
+        #expect(MenuBarLiveActivities.clockSeconds(in: "Arriving \u{00B7} 4 min") == nil)
+        // Two clock-shaped words: the later one, which on a pill is the one that moves. A
+        // departure time read on its own costs nothing, since a clock only starts animating
+        // once a reading ticks with it (`clockDirectionNeverSettlesOnATimeOfDay`).
+        #expect(MenuBarLiveActivities.clockSeconds(in: "Boards 18:30 \u{00B7} 12:05") == 725)
+        #expect(MenuBarLiveActivities.clockSeconds(in: "Boards 18:30") == 1110)
+    }
+
+    /// A time of day sits there unchanged, so it never looks like a running clock: two equal
+    /// readings a second apart lose the direction rather than settle one.
+    @Test func clockDirectionNeverSettlesOnATimeOfDay() {
+        var clock = LiveActivityClock()
+        let t = Date(timeIntervalSince1970: 1_000_000)
+        for second in 0...5 {
+            #expect(clock.update(key: "f", detail: "Boards 18:30", now: t.addingTimeInterval(Double(second))) == nil,
+                    "second \(second)")
+        }
+    }
+
+    /// The countdown and its unit arrive as two labels, so the detail reads "13:01 min" and the
+    /// clock is not the last word. Islet still has to read it: otherwise the island shows a
+    /// number that sits still between menu bar reads, and nothing animates in the wing.
+    @Test func aClockThatArrivesInTwoLabelsIsStillRead() throws {
+        var mirror = MenuBarMirror()
+        let k = key(0x5151)
+        // The shape this Mac really exposes: the app's own picture, the time, the unit, Expanded.
+        try mirror.read([pill(["food_di_preparing_icon", "13:01", "min"])], keys: [k], now: t0)
+        let id = MenuBarLiveActivities.activityID(k)
+        #expect(mirror.centre.activities[id]?.subtitle == nil)
+        #expect(mirror.centre.activities[id]?.title == "13:01 min")
+        // One reading can't give a direction; the next one can.
+        #expect(mirror.centre.activities[id]?.endsAt == nil)
+        try mirror.read([pill(["food_di_preparing_icon", "13:00", "min"])], keys: [k], now: t0.addingTimeInterval(1))
+        let running = mirror.centre.activities[id]
+        #expect(running?.endsAt == t0.addingTimeInterval(1 + 780))
+        #expect(running?.resolvedTemplate == .timer)
     }
 
     @Test func clockDirectionFromTwoReadings() {

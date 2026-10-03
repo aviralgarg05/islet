@@ -462,10 +462,28 @@ public enum MenuBarLiveActivities {
         return last
     }
 
-    /// Seconds in a clock-style value at the end of the text: "4:59", "1:02:03", "Boarding 0:42".
+    /// Seconds in a clock-style value somewhere in the text: "4:59", "1:02:03", "Boarding 0:42",
+    /// "13:01 min".
+    ///
+    /// The last clock-shaped word, not the last word. A pill shows its countdown and the unit
+    /// that belongs to it as two separate labels, which `joined` puts back together as
+    /// "13:01 min", so the clock is not where the text ends; reading only the end left the island
+    /// with a number that sat still between reads of the menu bar and nothing animating in the
+    /// wing. Last rather than first because a pill can carry a time of day and a countdown at
+    /// once ("Boards 18:30 · 12:05"), and the countdown is the one that moves. Picking up a time
+    /// of day on its own costs nothing: `LiveActivityClock` settles a direction only once a
+    /// reading ticks along with the clock, and a departure time never does.
     public static func clockSeconds(in text: String) -> TimeInterval? {
-        guard let token = text.split(whereSeparator: { $0 == " " || $0 == "\u{00A0}" }).last else { return nil }
-        let parts = token.split(separator: ":", omittingEmptySubsequences: false)
+        for word in text.split(whereSeparator: { $0 == " " || $0 == "\u{00A0}" }).reversed() {
+            if let seconds = clockWord(word) { return seconds }
+        }
+        return nil
+    }
+
+    /// Seconds in one word, when it is a clock: two or three numbers divided by colons, with
+    /// every part after the first exactly two digits and under sixty.
+    private static func clockWord(_ word: Substring) -> TimeInterval? {
+        let parts = word.split(separator: ":", omittingEmptySubsequences: false)
         guard (2...3).contains(parts.count), parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isNumber) }),
               parts.dropFirst().allSatisfy({ $0.count == 2 }) else { return nil }
         let n = parts.compactMap { Double($0) }
