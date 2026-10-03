@@ -43,6 +43,10 @@ private func track(elapsed: Double? = 60, duration: Double? = 200, playing: Bool
         #expect(MediaSeek.parsePosition("1:") == nil)
         #expect(MediaSeek.parsePosition("0x10") == nil)
         #expect(MediaSeek.parsePosition("soon") == nil)
+        // The leading field has no length cap, so the sum has to stay a number: the branches
+        // either side of the clock one already check.
+        #expect(MediaSeek.parsePosition(String(repeating: "9", count: 400) + ":00") == nil)
+        #expect(MediaSeek.parsePosition("200000000000000000:00") == 1.2e19)
     }
 
     @Test func scrubberGeometry() {

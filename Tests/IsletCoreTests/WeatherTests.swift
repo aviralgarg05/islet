@@ -76,6 +76,10 @@ import Testing
         #expect(TemperatureUnit.automatic.resolved(usesUSMeasures: true) == .fahrenheit)
         #expect(TemperatureUnit.automatic.resolved(usesUSMeasures: false) == .celsius)
         #expect(TemperatureUnit.celsius.resolved(usesUSMeasures: true) == .celsius)
+        // The reading comes from the service: `Int(_:)` traps beyond its range.
+        #expect(TemperatureUnit.celsius.format(1e300) == "9000000000000000000\u{00B0}")
+        #expect(TemperatureUnit.fahrenheit.format(-1e300) == "-9000000000000000000\u{00B0}")
+        #expect(TemperatureUnit.celsius.format(.nan) == "0\u{00B0}")
     }
 
     @Test func codesHaveWordsAndSymbols() {

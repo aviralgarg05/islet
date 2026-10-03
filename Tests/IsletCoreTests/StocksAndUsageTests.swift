@@ -176,6 +176,16 @@ import Testing
         #expect(CopilotUsage.card(used: 400, plan: .pro, now: now).fraction == 1)
     }
 
+    /// These figures come from someone else's API, so none of them reaches `Int(_:)` or
+    /// `Int64(_:)` unclamped: both trap beyond their range.
+    @Test func afigureNoServiceCouldReportIsClampedRatherThanTrapping() throws {
+        let json = #"{"models":[{"name":"huge","size":1e300,"size_vram":1e300}]}"#
+        #expect(try OllamaUsage.parse(Data(json.utf8)).first?.bytes == 9_000_000_000_000_000_000)
+        let copilot = #"{"usageItems":[{"product":"Copilot","sku":"Copilot Premium Request","grossQuantity":1e300}]}"#
+        let used = try CopilotUsage.requestsUsed(Data(copilot.utf8))
+        #expect(CopilotUsage.card(used: used, plan: .pro, now: now).fraction == 1)
+    }
+
     @Test func eachSourceHasItsOwnFreshnessAndNoSignInIsRead() {
         #expect(ToolUsageSource.openRouter.keyAccount == "openrouter")
         #expect(ToolUsageSource.copilot.keyAccount == "github-copilot")

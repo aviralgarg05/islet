@@ -466,7 +466,13 @@ extension Activity {
     public var currentStage: Int? {
         guard let count = stageCount, count > 0 else { return nil }
         if let step { return min(max(step, 1), count) }
-        if let p = clampedProgress { return min(max(Int((p * Double(count)).rounded(.up)), 1), count) }
+        if let p = clampedProgress {
+            // `steps` comes from a client, so the stage is worked out in `Double` and clamped
+            // before the conversion: `Double(Int.max)` rounds up to one past it, and `Int(_:)`
+            // traps on that.
+            let stage = ToolJSON.whole((p * Double(count)).rounded(.up))
+            return Int(min(max(stage, 1), Int64(count)))
+        }
         return 1
     }
 

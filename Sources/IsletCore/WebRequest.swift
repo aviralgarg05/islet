@@ -106,6 +106,14 @@ enum ToolJSON {
 
     static func number(_ v: Any?) -> Double? { UsageJSON.number(v) }
 
+    /// A whole number from someone else's API. Clamped, because `Int64(_:)` traps beyond its
+    /// range and these figures are whatever the service sent: a field in the wrong unit, a
+    /// value in the smallest currency unit of a currency that has none, or plain nonsense.
+    static func whole(_ v: Double) -> Int64 {
+        guard v.isFinite else { return 0 }
+        return Int64(min(max(v, -9e18), 9e18))
+    }
+
     static func date(_ v: Any?) -> Date? {
         if let s = v as? String { return UsageJSON.iso(s) ?? isoWithoutZone(s) }
         return UsageJSON.date(v)

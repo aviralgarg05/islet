@@ -58,7 +58,10 @@ public enum MediaSeek {
             guard clock.count <= 3,
                   clock.allSatisfy({ !$0.isEmpty && $0.allSatisfy { $0.isASCII && $0.isNumber } }),
                   clock.dropFirst().allSatisfy({ $0.count == 2 && Int($0)! < 60 }) else { return nil }
-            return clock.reduce(0) { $0 * 60 + Double($1)! }
+            // Finite, as the branches either side of this one check: the leading field has no
+            // length cap, and a seek to an infinite position goes nowhere good.
+            let seconds = clock.reduce(0) { $0 * 60 + Double($1)! }
+            return seconds.isFinite ? seconds : nil
         }
         let words = t.split(whereSeparator: \.isWhitespace).map(String.init)
         let scanner = DurationParser.Scanner(tokens: DurationParser.tokenize(words), now: Date(), calendar: .current)

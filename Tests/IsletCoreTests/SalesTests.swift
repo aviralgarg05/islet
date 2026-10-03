@@ -83,6 +83,26 @@ import Testing
         #expect(page.next == .after("ch_4"))
     }
 
+    /// Figures come from someone else's API, so nothing from one reaches `Int64(_:)`, whose
+    /// precondition traps beyond its range.
+    @Test func afigureNoShopCouldTakeIsClampedRatherThanTrapping() throws {
+        let stripe = """
+        {"object":"list","has_more":false,"data":[
+          {"id":"ch_1","paid":true,"status":"succeeded","amount":1e300,"amount_captured":1e300,"amount_refunded":0,"currency":"gbp"}]}
+        """
+        let page = try SalesAPI.parse(.stripe, data: Data(stripe.utf8), since: Self.since)
+        #expect(page.figures.orders == 1)
+        #expect(page.figures.amounts["GBP"] == 9_000_000_000_000_000_000)
+        // Gumroad and Paddle read their own fields the same way.
+        let gumroad = #"{"success":true,"sales":[{"created_at":"2026-10-01T08:00:00Z","price":1e300,"currency":"usd"}]}"#
+        #expect(try SalesAPI.parse(.gumroad, data: Data(gumroad.utf8), since: Self.since).figures.orders == 1)
+        let paddle = """
+        {"data":[{"created_at":"2026-10-01T08:00:00Z","currency_code":"USD","status":"completed",
+          "details":{"totals":{"grand_total":1e300,"currency_code":"USD"}}}]}
+        """
+        #expect(try SalesAPI.parse(.paddle, data: Data(paddle.utf8), since: Self.since).figures.orders == 1)
+    }
+
     @Test func shopifySkipsCancelledAndTestOrdersAndReadsDecimals() throws {
         let json = """
         {"data":{"orders":{"pageInfo":{"hasNextPage":false,"endCursor":"c1"},"nodes":[

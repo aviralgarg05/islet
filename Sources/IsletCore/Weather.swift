@@ -19,7 +19,9 @@ public enum TemperatureUnit: String, Codable, Sendable, CaseIterable {
     /// Celsius; resolve it first.
     public func format(_ celsius: Double) -> String {
         let value = self == .fahrenheit ? celsius * 9 / 5 + 32 : celsius
-        let whole = Int(value.rounded())
+        // The reading comes from the weather service, so it is clamped: `Int(_:)` traps on
+        // anything beyond its range, and on a reading that isn't a number at all.
+        let whole = Int(ToolJSON.whole(value.rounded()))
         return "\(whole == 0 ? 0 : whole)°"
     }
 }

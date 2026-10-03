@@ -151,7 +151,7 @@ public enum OllamaUsage {
         return models.compactMap { m in
             guard let name = (m["name"] as? String) ?? (m["model"] as? String) else { return nil }
             let bytes = ToolJSON.number(m["size_vram"]).flatMap { $0 > 0 ? $0 : nil } ?? ToolJSON.number(m["size"]) ?? 0
-            return Model(name: name, bytes: Int64(bytes), unloadsAt: ToolJSON.date(m["expires_at"]))
+            return Model(name: name, bytes: ToolJSON.whole(bytes), unloadsAt: ToolJSON.date(m["expires_at"]))
         }
     }
 
@@ -219,7 +219,7 @@ public enum CopilotUsage {
     }
 
     public static func card(used: Double, plan: CopilotPlan, now: Date) -> ToolUsageCard {
-        let count = Int(used.rounded())
+        let count = Int(ToolJSON.whole(used.rounded()))
         return ToolUsageCard(source: .copilot, headline: "\(count) of \(plan.rawValue) requests", detail: "Premium, this month",
                              fraction: used / Double(plan.rawValue), updatedAt: now)
     }

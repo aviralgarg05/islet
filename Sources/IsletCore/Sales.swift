@@ -278,7 +278,7 @@ public enum SalesAPI {
             for c in items {
                 guard c["paid"] as? Bool == true, c["status"] as? String == "succeeded", let currency = c["currency"] as? String else { continue }
                 let captured = ToolJSON.number(c["amount_captured"]) ?? ToolJSON.number(c["amount"]) ?? 0
-                let net = Int64(captured - (ToolJSON.number(c["amount_refunded"]) ?? 0))
+                let net = ToolJSON.whole(captured - (ToolJSON.number(c["amount_refunded"]) ?? 0))
                 guard net > 0 else { continue }
                 figures.add(net, currency: currency)
                 figures.orders += 1
@@ -315,7 +315,7 @@ public enum SalesAPI {
                 if created < since { reachedEarlier = true; continue }
                 guard a["test_mode"] as? Bool != true, let status = a["status"] as? String,
                       status == "paid" || status == "partial_refund", let currency = a["currency"] as? String else { continue }
-                let net = Int64((ToolJSON.number(a["total"]) ?? 0) - (ToolJSON.number(a["refunded_amount"]) ?? 0))
+                let net = ToolJSON.whole((ToolJSON.number(a["total"]) ?? 0) - (ToolJSON.number(a["refunded_amount"]) ?? 0))
                 guard net > 0 else { continue }
                 figures.add(net, currency: currency)
                 figures.orders += 1
@@ -333,7 +333,7 @@ public enum SalesAPI {
                 if s["refunded"] as? Bool == true || s["chargedback"] as? Bool == true || s["disputed"] as? Bool == true { continue }
                 guard let price = ToolJSON.number(s["price"]), price > 0 else { continue }
                 let currency = (s["currency"] as? String) ?? currency(symbol: s["currency_symbol"] as? String)
-                figures.add(Int64(price), currency: currency)
+                figures.add(ToolJSON.whole(price), currency: currency)
                 figures.orders += 1
             }
             return SalesPage(figures: figures, next: (o["next_page_key"] as? String).flatMap { $0.isEmpty ? nil : .after($0) })
@@ -344,7 +344,7 @@ public enum SalesAPI {
                 guard (p["status"] as? String).map({ $0 == "succeeded" }) ?? true, p["refund_status"] as? String != "full",
                       let currency = p["currency"] as? String, let total = ToolJSON.number(p["total_amount"]), total > 0 else { continue }
                 if let created = ToolJSON.date(p["created_at"]), created < since { continue }
-                figures.add(Int64(total), currency: currency)
+                figures.add(ToolJSON.whole(total), currency: currency)
                 figures.orders += 1
             }
             let current = page ?? 0
@@ -357,7 +357,7 @@ public enum SalesAPI {
                       let currency = order["currency"] as? String else { continue }
                 if let created = ToolJSON.date(order["created_at"]), created < since { continue }
                 let total = ToolJSON.number(order["total_amount"]) ?? ToolJSON.number(order["amount"]) ?? 0
-                let net = Int64(total - (ToolJSON.number(order["refunded_amount"]) ?? 0))
+                let net = ToolJSON.whole(total - (ToolJSON.number(order["refunded_amount"]) ?? 0))
                 guard net > 0 else { continue }
                 figures.add(net, currency: currency)
                 figures.orders += 1
@@ -374,7 +374,7 @@ public enum SalesAPI {
                 guard let currency = (t["currency_code"] as? String) ?? (totals["currency_code"] as? String) else { continue }
                 if let created = ToolJSON.date(t["created_at"]), created < since { continue }
                 let raw = totals["grand_total"] ?? totals["total"]
-                let minor = (raw as? String).flatMap { Int64($0) } ?? ToolJSON.number(raw).map { Int64($0) } ?? 0
+                let minor = (raw as? String).flatMap { Int64($0) } ?? ToolJSON.number(raw).map(ToolJSON.whole) ?? 0
                 guard minor > 0 else { continue }
                 figures.add(minor, currency: currency)
                 figures.orders += 1
