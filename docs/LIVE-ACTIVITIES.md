@@ -56,6 +56,7 @@ The text Islet reads stays in memory. It isn't written to disk or logs. `GET /v1
 - **iPhone timers and stopwatches don't reach the Mac.** macOS doesn't send them, so Islet can't show them.
 - **Hiding an activity** (*Hide Live Activity*, from macOS 27.2) may also hide it from Islet.
 - **Hide the menu bar's own needs an island on the display with the menu bar.** With *Where it shows* set so there is none there, nothing is covered, rather than leaving black over a menu bar Islet isn't on.
+- **It stops in full screen.** With *In full screen* set to hide the island, Islet shows the activity nowhere, so it leaves macOS's pill alone: pull the menu bar down over a full screen app and the pills are there as usual.
 - **It does nothing while the menu bar hides itself** (*Automatically hide and show the menu bar* in System Settings). The menu bar isn't there to cover, and macOS brings it back without telling Islet.
 
 ## Checking what Islet sees
