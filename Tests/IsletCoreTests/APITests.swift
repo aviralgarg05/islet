@@ -143,6 +143,8 @@ actor FakeBackend: IsletBackend {
     @Test func healthNeedsNoToken() async {
         let r = await router(FakeBackend(now: t0)).handle(request("GET", "/v1/health", token: nil))
         #expect(r.status == 200)
+        // Loopback gives the version; the bridge's reply leaves it out (LANBridgeTests).
+        #expect(String(decoding: r.body, as: UTF8.self).contains("\"version\":\"1.0-test\""))
     }
 
     /// On loopback the Focus pill keeps its plain id: `isletctl focus` drives the Mac's own.

@@ -237,7 +237,9 @@ public struct APIRouter: Sendable {
         if let refusal = preflight(request) { return refusal }
         let seg = request.segments
         if Self.isHealthCheck(request) {
-            return .json(["ok": "true", "version": version])
+            // The bridge answers this without a token and advertises itself over Bonjour, so it
+            // says only that Islet is here. The exact version stays on loopback.
+            return .json(scope == .lan ? ["ok": "true"] : ["ok": "true", "version": version])
         }
         do {
             return try await route(request, seg)

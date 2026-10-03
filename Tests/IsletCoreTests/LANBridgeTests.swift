@@ -68,6 +68,14 @@ import Testing
         #expect(await b.awake == nil)
     }
 
+    /// The bridge answers the health check without a token and is advertised over Bonjour, so
+    /// its reply says only that Islet is there. Loopback still gives the version.
+    @Test func lanHealthLeavesOutTheVersion() async {
+        let b = FakeBackend(now: t0)
+        let bridge = String(decoding: await lan(b).handle(req("GET", "/v1/health", token: nil)).body, as: UTF8.self)
+        #expect(bridge.contains("\"ok\"") && !bridge.contains("version"))
+    }
+
     @Test func acceptsNotifyTimerFocusAndActivities() async {
         let b = FakeBackend(now: t0)
         let rt = lan(b)
