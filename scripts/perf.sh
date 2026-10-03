@@ -68,7 +68,7 @@ ctl clear --source timer; ctl set p --title Progress --progress 0.4 --sneak fals
 ctl rm p; ctl set s --title Spinner --progress -1 --sneak false; measure "compact: indeterminate spinner" 1.5
 ctl rm s; api POST /v1/media '{"title":"Perf","artist":"Bench","isPlaying":true,"duration":200,"elapsed":1}'; measure "compact: music playing" 1.5
 api DELETE /v1/media;                              feeding "compact: music reported each second" 1.5 media_feed
-api DELETE /v1/media; ctl rm agent;                feeding "compact: agent hooks reporting" 1.5 activity_feed
+api DELETE /v1/media;                              feeding "compact: agent hooks reporting" 1.5 activity_feed
 ctl rm agent; api POST /v1/media '{"title":"Perf","artist":"Bench","isPlaying":true,"duration":200,"elapsed":1}'
 ctl open;                                          measure "expanded: now playing" 3
 api DELETE /v1/media; ctl close;                   measure "idle again" 0.5
