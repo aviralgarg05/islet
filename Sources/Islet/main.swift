@@ -8,6 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let model: AppModel
     private var controllers: [IslandWindowController] = []
     private lazy var pointer = PointerCoordinator(model: model)
+    /// The black covers over the menu bar's own Live Activity pills ("Hide the menu bar's own").
+    private lazy var menuBarCovers = MenuBarCoverController(model: model)
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
     /// The page Settings shows, kept for the session.
@@ -40,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppActions.openSettingsHandler = { [weak self] page, anchor in self?.showSettings(page, at: anchor) }
         EditMenu.install()
         IslandContrast.increased = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        model.onMenuBarCoversChanged = { [weak self] in self?.menuBarCovers.update() }
         model.start()
         if demo { model.loadDemo() }
         setUpHUD()
@@ -59,6 +62,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         nc.addObserver(forName: .isletMenuBarChanged, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.scheduleMenuBarMeasure(after: 0.1) }
+        }
+        // The island's silhouette changed, so it may have been hidden on the display that
+        // carries the menu bar (a full screen app, an app rule): the covers follow it.
+        nc.addObserver(forName: .isletLayoutChanged, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.menuBarCovers.update() }
         }
         nc.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.accessibilityMayHaveChanged() }
@@ -179,6 +187,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keys.stop()
             pointer.stop()
         }
+        // In the background session nothing is read and nothing is drawn over the menu bar.
+        menuBarCovers.update()
     }
 
     /// What Islet last knew about its Accessibility permission.
@@ -190,6 +200,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func accessibilityMayHaveChanged() {
         model.recheckAccessibility()
         let trusted = model.accessibilityTrusted
+        // Without Accessibility the menu bar can't be read again, so nothing stays covered.
+        menuBarCovers.update()
         let rebuildTap = SessionWork.rebuildsKeyTap(wasTrusted: lastTrusted, isTrusted: trusted)
         defer { lastTrusted = trusted }
         if SessionWork.restartsOnTrustChange(wasTrusted: lastTrusted, isTrusted: trusted, settings: model.settings) {
@@ -232,6 +244,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// - Parameter force: make the panels again even when the displays look the same (after
     ///   waking, when a panel may no longer draw though nothing about the display changed).
     private func rebuildPanels(force: Bool = false) {
+        // The displays, and the island's place among them, decide where the covers over the menu
+        // bar's own Live Activities go, and whether there are any.
+        defer { menuBarCovers.update() }
         // The built-in display may have come online (the lid opened without sleeping): its
         // brightness is watched from now on. Nothing happens once it is.
         if model.sessionActive, model.settings.brightnessHUDEnabled { brightness.start() }
@@ -284,6 +299,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setUpHotkey()
         pointer.applySettings()
         setUpHUD()
+        menuBarCovers.update()
         // Only geometry changes need fresh panels; everything else updates in place.
         let panels = PanelSettings(model.settings)
         guard panels != panelSettings else {
