@@ -126,6 +126,21 @@ import Testing
         #expect(MenuBarLiveActivities.shortTrailing("IND 245/3 · AUS 198") == nil)
         #expect(MenuBarLiveActivities.shortTrailing("Arriving · 4 min") == "4 min")
         #expect(MenuBarLiveActivities.shortTrailing("4 min") == "4 min")
+        // A tied score, once both numbers survive the read: two sides, so neither is the wing.
+        #expect(MenuBarLiveActivities.shortTrailing("1 · CHE · 1") == nil)
+    }
+
+    /// The wing takes a value, and a word on its own isn't one in any language. "मिनट" is
+    /// Hindi for minutes with no number beside it; the rest are statuses and a team.
+    @Test func aBareWordNeverReachesTheWing() {
+        for word in ["मिनट", "Arriving", "Boarding", "On time", "CHE", "Delivered"] {
+            #expect(MenuBarLiveActivities.shortTrailing(word) == nil, "\(word)")
+            #expect(MenuBarLiveActivities.shortTrailing("Uber · " + word) == nil, "\(word)")
+        }
+        // With its number it is a value again, and the two arrive joined rather than dotted.
+        #expect(MenuBarLiveActivities.shortTrailing("8 मिनट") == "8 मिनट")
+        #expect(MenuBarLiveActivities.shortTrailing("12 min") == "12 min")
+        #expect(MenuBarLiveActivities.shortTrailing("2 – 1") == "2 – 1")
     }
 
     @Test func valueTextReadsOnBlack() throws {

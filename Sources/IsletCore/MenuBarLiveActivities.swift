@@ -33,12 +33,19 @@ public struct MenuBarItemInfo: Codable, Equatable, Sendable {
         self.customActions = customActions; self.owner = owner; self.x = x; self.width = width; self.hidden = hidden
     }
 
-    /// Every non-empty piece of text the item exposes, de-duplicated, in a stable order.
+    /// Every non-empty piece of text the item exposes, in a stable order.
+    ///
+    /// Only the four attributes are de-duplicated, against each other: an item repeats itself
+    /// across them often. `texts` is positional, one label per piece of the pill, so a repeat
+    /// there is a piece of what the pill says: ["ARS", "1", "CHE", "1"] is a tied score, and
+    /// dropping the second "1" left "1 · CHE", which put a team abbreviation in the wing.
     public var allText: [String] {
         var seen = Set<String>()
-        return ([description, title, value, help].compactMap { $0 } + texts)
+        let attributes = [description, title, value, help].compactMap { $0 }
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty && seen.insert($0).inserted }
+        let labels = texts.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        return attributes + labels
     }
 }
 
@@ -210,27 +217,61 @@ public enum MenuBarLiveActivities {
         }
     }
 
+    /// The words apps put in the name of a picture. None of them says what an activity is, so
+    /// they are both what marks a name as an asset's and what `words(fromAssetName:)` drops
+    /// before the symbol matcher reads the rest.
+    static let assetWords: Set<String> = ["icon", "image", "img", "asset", "glyph", "badge", "ic", "bg", "logo", "pic"]
+
     /// Whether a piece of text is an app's name for one of its own pictures rather than words for
     /// a person: `food_di_preparing_icon`, `ic_delivery`, `statusIconSmall`. Several apps give an
     /// image in their Live Activity an accessibility description like that, and showing it as the
-    /// activity's title is worse than showing nothing. A real title has a space, or punctuation,
-    /// or a capital at the front and nothing underscored.
+    /// activity's title is worse than showing nothing.
+    ///
+    /// One of `assetWords` has to be a word of the name. An underscore on its own isn't enough:
+    /// `washing_machine`, `front_door`, `morning_routine`, `IND_vs_AUS`, `lofi_beats` and
+    /// `voice_memo_3` are what someone named a thing, and dropping them left the activity with no
+    /// title at all. In camelCase the word has to stand alone beside something else that is
+    /// named, so `theBadgers`, `eBadge` and `myImagery` stay too.
     static func isAssetName(_ text: String) -> Bool {
         guard !text.isEmpty, text.count <= 64, !text.contains(" ") else { return false }
         let scalars = text.unicodeScalars
         guard scalars.allSatisfy({ CharacterSet.alphanumerics.contains($0) || $0 == "_" }) else { return false }
-        if text.contains("_") { return true }
-        // camelCase with one of the words apps use for a picture, and no spaces anywhere.
-        let lower = text.lowercased()
+        if text.contains("_") {
+            return text.lowercased().split(separator: "_").contains { assetWords.contains(String($0)) }
+        }
         guard text.contains(where: \.isUppercase), text.first?.isUppercase == false else { return false }
-        return ["icon", "image", "img", "asset", "glyph", "badge"].contains(where: lower.contains)
+        let words = camelCaseWords(text)
+        return words.contains { assetWords.contains($0) }
+            && words.contains { $0.count >= 2 && !assetWords.contains($0) }
+    }
+
+    /// `statusIconSmall` as ["status", "icon", "small"].
+    static func camelCaseWords(_ text: String) -> [String] {
+        var out: [String] = []
+        var word = ""
+        for ch in text {
+            if ch.isUppercase, !word.isEmpty {
+                out.append(word.lowercased())
+                word = ""
+            }
+            word.append(ch)
+        }
+        if !word.isEmpty { out.append(word.lowercased()) }
+        return out
     }
 
     /// How two pieces of an activity's text are joined. A number and the unit that belongs to it
     /// arrive as separate labels ("13:01" then "min"), and a dot between them reads as two facts
     /// rather than one: "13:01 · min". Everything else keeps the dot.
     static func joined(_ pieces: [String]) -> String {
-        pieces.reduce(into: "") { out, piece in
+        // A number and a bare word on their own are one phrase in any language: "8", "मिनट" reads
+        // "8 मिनट", which `unit`'s English list can't know. Only on their own, and only when the
+        // number stands alone: ["1", "CHE", "1"] is a score, where joining would read "1 CHE".
+        if pieces.count == 2, let first = pieces.first, let second = pieces.last,
+           !first.contains(" "), first.last?.isNumber == true, bareWord(second) {
+            return first + " " + second
+        }
+        return pieces.reduce(into: "") { out, piece in
             guard !out.isEmpty else { return out = piece }
             // "4", "min", "away" is one phrase: each piece carries on from a number or from the
             // unit that followed one. Anything else is a separate fact and keeps the dot.
@@ -249,14 +290,25 @@ public enum MenuBarLiveActivities {
             if ch == "_" { out += " " } else if ch.isUppercase, !out.isEmpty { out += " " + ch.lowercased() } else { out.append(ch) }
         }
         return out.lowercased().split(separator: " ")
-            .filter { !["icon", "image", "img", "asset", "glyph", "badge"].contains(String($0)) }
+            .filter { !assetWords.contains(String($0)) }
             .joined(separator: " ")
     }
 
-    /// A bare unit that belongs to the number before it.
+    /// A bare unit that belongs to the number before it. The list is English, which is what most
+    /// pills use; a unit in another language reaches the same place through `bareWord`.
     static func unit(_ text: String) -> Bool {
         ["min", "mins", "minute", "minutes", "sec", "secs", "h", "hr", "hrs", "hour", "hours",
          "km", "mi", "m", "ft", "%", "°", "left", "away", "remaining"].contains(text.lowercased())
+    }
+
+    /// A word that can only be the unit of the number before it: letters alone, short, and not an
+    /// abbreviation in capitals. "min", "Minuten" and "मिनट" are units; "CHE" and "IND" are teams,
+    /// and a two-letter abbreviation ("KM") is a unit again.
+    static func bareWord(_ text: String) -> Bool {
+        guard (1...12).contains(text.count),
+              text.unicodeScalars.allSatisfy({ CharacterSet.letters.contains($0) }) else { return false }
+        let capitals = text.contains(where: \.isUppercase) && !text.contains(where: \.isLowercase)
+        return !capitals || text.count <= 2
     }
 
     /// Turn an item into the app name and compact text Islet shows.
@@ -383,12 +435,16 @@ public enum MenuBarLiveActivities {
     /// The part of the detail that fits the compact wing: a trailing number, time or score.
     /// Nothing for a two-sided score ("IND 245/3 · AUS 198"): one side alone would make that
     /// team the story, so the peek and Home show the whole score instead.
+    ///
+    /// The candidate has to hold a digit. `trailing` is short text like "42%" or "3/5", and a
+    /// bare word is not a value in any language: "मिनट" (minutes, with no number), "Arriving",
+    /// "Boarding", "On time" and "CHE" all used to end up in the wing on their own.
     static func shortTrailing(_ detail: String?) -> String? {
         guard let detail else { return nil }
         let parts = detail.components(separatedBy: " · ")
         if parts.filter({ $0.contains(where: \.isNumber) }).count >= 2 { return nil }
-        let last = parts.last ?? detail
-        return last.count <= 8 ? last : nil
+        guard let last = parts.last, last.count <= 8, last.contains(where: \.isNumber) else { return nil }
+        return last
     }
 
     /// Seconds in a clock-style value at the end of the text: "4:59", "1:02:03", "Boarding 0:42".
