@@ -307,6 +307,10 @@ public struct BridgeReport: Equatable, Sendable {
 /// 8. An app Islet doesn't know as a player, reporting nothing but a title (a voice note, a
 ///    sound in a chat app, a muted preview), shows only once it has played for `settle`
 ///    seconds, so a short clip doesn't take over.
+/// 9. A report that says nothing new (`saysNothingNew`) keeps the moment and position of the one
+///    before it, so the arbiter gives back the very same value and the island has no reason to
+///    draw again. A player that plays on says nothing new: the island works the position out
+///    from the last report. A seek, a pause, another track or a changed rate does.
 ///
 /// Several players can be live at once, one per app (`available`): every player macOS lists
 /// (a Chrome video, a Safari tab, Spotify), Spotify's and Music's own, and one pushed through the API.
@@ -370,6 +374,7 @@ public struct MediaArbiter: Sendable {
 
     /// A report from Music's or Spotify's own integration, or from the API.
     public mutating func update(_ snapshot: NowPlaying) {
+        let snapshot = Self.carriedOn(snapshot, from: snapshots[snapshot.source])
         let id = Self.playerID(snapshot)
         let was = reportsPlaying(id)
         snapshots[snapshot.source] = snapshot
@@ -403,13 +408,11 @@ public struct MediaArbiter: Sendable {
             }
             next[id] = s
         }
-        // A paused player reported again unchanged keeps the moment it paused, so it neither
-        // becomes "the newest" nor outstays `pausedTimeout` by being reported again.
-        for (id, s) in next {
-            guard let old = bridge[id], !s.isPlaying, !old.isPlaying, old.trackKey == s.trackKey,
-                  old.elapsed == s.elapsed, old.timestamp < s.timestamp else { continue }
-            next[id]?.timestamp = old.timestamp
-        }
+        // A player reported again with nothing new to say keeps its old moment and position
+        // (`carriedOn`): a paused one neither becomes "the newest" nor outstays `pausedTimeout`
+        // by being reported again, and a playing one, whose position the island works out for
+        // itself, gives the same value as before, so nothing redraws.
+        for (id, s) in next { next[id] = Self.carriedOn(s, from: bridge[id]) }
         let was = Dictionary(uniqueKeysWithValues: next.keys.map { ($0, reportsPlaying($0)) })
         bridge = next
         for s in next.values { noteChange(s) }
@@ -432,6 +435,54 @@ public struct MediaArbiter: Sendable {
     /// written now would reach whichever app macOS has given them to meanwhile.
     public mutating func bridgeInterrupted() {
         bridgeCurrent = nil
+    }
+
+    // MARK: The same report again (rule 9)
+
+    /// How far a playing player's position may be from where the last report had it heading
+    /// before it counts as a seek. A second's worth of reports is a little out either way (the
+    /// helper samples, players round), so the window rides that out while staying far below any
+    /// jump a finger makes on the bar.
+    public static let positionTolerance: TimeInterval = 0.75
+
+    /// `s` with the moment and position of `old` when it says nothing new (`saysNothingNew`), so
+    /// it compares equal to what is already shown and the island has no reason to draw again.
+    static func carriedOn(_ s: NowPlaying, from old: NowPlaying?) -> NowPlaying {
+        guard let old, saysNothingNew(s, as: old) else { return s }
+        var carried = s
+        carried.elapsed = old.elapsed
+        carried.timestamp = old.timestamp
+        return carried
+    }
+
+    /// Whether `s` says nothing about its player that `old` didn't, beyond time having passed:
+    /// the same track, the same state, the same length and rate, everything else about it the
+    /// same, and a position that is where `old`'s was heading.
+    ///
+    /// A paused player must not have moved at all, since that is a seek. A playing one is where
+    /// it was going when its position is within `positionTolerance` of the one `old` already
+    /// shows at that moment, and then the report adds nothing: `NowPlaying.position(at:)` works
+    /// the position out from `old` and `SongRingNSView` runs the ring to the end of the track in
+    /// Core Animation, so the figures and the fill are already right. A seek, a pause, another
+    /// track, a changed rate and new artwork all say something new and come straight through.
+    static func saysNothingNew(_ s: NowPlaying, as old: NowPlaying) -> Bool {
+        guard old.timestamp <= s.timestamp, old.isPlaying == s.isPlaying, old.trackKey == s.trackKey,
+              old.duration == s.duration, old.playbackRate == s.playbackRate, holdsPosition(s, as: old) else { return false }
+        // Everything else (artwork, the app, shuffle and repeat, the commands offered) must match
+        // too, which this says once rather than field by field.
+        var carried = s
+        carried.elapsed = old.elapsed
+        carried.timestamp = old.timestamp
+        return carried == old
+    }
+
+    /// Whether `s` would show the position `old` already shows at `s.timestamp`. Both go through
+    /// `position(at:)`, so a track whose player sits at its end, as a browser leaves a finished
+    /// video, matches the length it is already clamped to rather than looking like a seek.
+    private static func holdsPosition(_ s: NowPlaying, as old: NowPlaying) -> Bool {
+        guard s.isPlaying, let reported = s.position(at: s.timestamp),
+              let expected = old.position(at: s.timestamp) else { return old.elapsed == s.elapsed }
+        return abs(reported - expected) <= positionTolerance
     }
 
     // MARK: When each player last changed (rule 2)
