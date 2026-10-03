@@ -42,6 +42,17 @@ import Testing
         #expect(LRC.parse("no tags here\n[xx:yy]bad\n[1:99]bad seconds\n[00:01.abc]bad fraction").isEmpty)
         #expect(LRC.parse("[length: 03:20]\n[by:someone]").isEmpty)
     }
+
+    /// Anyone can upload a file to LRCLIB, so a minutes field wide enough to overflow
+    /// `minutes * 60` is not a tag: it used to end Islet for everyone playing that song.
+    @Test func anAbsurdMinutesFieldIsNotATag() {
+        #expect(LRC.parse("[200000000000000000:00]Words").isEmpty)
+        #expect(LRC.parse("[9223372036854775807:00.00]Words").isEmpty)
+        // A word tag that isn't a time stays in the line rather than being stripped.
+        #expect(LRC.parse("[00:01.00]a <200000000000000000:00> b").map(\.text) == ["a <200000000000000000:00> b"])
+        // Six digits still read, which is longer than any recording.
+        #expect(LRC.parse("[999999:00]Words").map(\.time) == [59_999_940])
+    }
 }
 
 @Suite struct SongLyricsTests {

@@ -95,9 +95,13 @@ public enum LRC {
     }
 
     /// "mm:ss", "mm:ss.xx" or "mm:ss.xxx" (a colon before the fraction also occurs) in seconds.
+    ///
+    /// The minutes are capped at six digits, as the seconds are at two: these files come from
+    /// LRCLIB, where anyone can upload one, and `minutes * 60` overflows and traps once the
+    /// field is wide enough.
     static func time(_ tag: Substring) -> Double? {
         let parts = tag.split(separator: ":", omittingEmptySubsequences: false)
-        guard parts.count == 2 || parts.count == 3,
+        guard parts.count == 2 || parts.count == 3, parts[0].count <= 6,
               let minutes = Int(parts[0]), minutes >= 0, parts[0].allSatisfy(\.isNumber) else { return nil }
         var secondsText = String(parts[1])
         if parts.count == 3 { secondsText += "." + parts[2] }
