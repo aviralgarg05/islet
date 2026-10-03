@@ -71,6 +71,21 @@ extension AppModel {
         if controls.soundViewers == 0 { controls.outputWatcher.stop() }
     }
 
+    /// What the island's own views hold while they are on screen, let go of in one place.
+    ///
+    /// Each of these is normally released by an `onDisappear`, which closing an `NSWindow`
+    /// never calls (`PermissionsSettings` notes the same thing about Settings). So the island
+    /// closing, and a panel rebuild on wake, on a display change or on a change to the island's
+    /// size in Settings, have to let them go here. Left held, the panel goes on taking the
+    /// keyboard from the app in front, hovering out never closes the island again, and the
+    /// audio watcher keeps running with nobody watching.
+    func releaseViewHolds() {
+        IslandKeyboard.giveBack()
+        controls.holdsOpen = false
+        controls.soundViewers = 0
+        controls.outputWatcher.stop()
+    }
+
     func refreshSound() {
         let list = AudioOutputs.all()
         if list != controls.outputs { controls.outputs = list }

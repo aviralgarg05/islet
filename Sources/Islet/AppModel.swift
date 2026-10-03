@@ -195,6 +195,16 @@ final class AppModel {
     /// Mirrored activity id → the menu bar item it came from. Clicking one presses that item;
     /// this never goes through a URL, so nothing outside Islet can trigger the press.
     private var mirroredActivityKeys: [String: String] = [:]
+    /// Menu bar item key → the source its mirrored activity uses, for every Live Activity in
+    /// the menu bar whether or not it is mirrored, so the covers can tell a muted pill apart
+    /// (`mutedMenuBarPillKeys`).
+    @ObservationIgnored private var mirroredSources: [String: String] = [:]
+
+    /// Keys of menu bar pills whose activity is muted. Nothing shows in the island in their
+    /// place, so `MenuBarCovers` leaves them uncovered rather than hiding them altogether.
+    var mutedMenuBarPillKeys: Set<String> {
+        Set(mirroredSources.filter { settings.isMuted(source: $0.value) }.keys)
+    }
 
     /// Where the menu bar's own Live Activity pills are now, in global Accessibility
     /// coordinates. Empty unless something is being mirrored. "Hide the menu bar's own" lays a
@@ -436,6 +446,10 @@ final class AppModel {
     /// Show the menu bar's Live Activities (iPhone and Mac) as island activities.
     private func syncMenuBarActivities(_ all: [MirroredLiveActivity]) {
         let now = Date()
+        // Every item in the menu bar, mirrored or not: a muted one is left out of `list` below
+        // but its pill is still there to be covered.
+        mirroredSources = Dictionary(all.map { ($0.key, MenuBarLiveActivities.source(for: $0.appName)) },
+                                     uniquingKeysWith: { a, _ in a })
         // A dismissed item stays away while it is in the menu bar, whatever its text does.
         let shown = mirrorTracker.sync(all, now: now).show
         let list = mirrorsOnlyHidden ? shown.filter(\.hidden) : shown
@@ -1139,7 +1153,9 @@ final class AppModel {
         return islandDisplays.first
     }
 
-    func setExpanded(_ display: CGDirectDisplayID?) {
+    /// Opens the island on `display`, or closes it. `haptics` is off where nobody asked for the
+    /// island to open (an approval card arriving).
+    func setExpanded(_ display: CGDirectDisplayID?, haptics: Bool = true) {
         guard expandedScreen != display else { return }
         expandedScreen = display
         DispatchQueue.main.async { NotificationCenter.default.post(name: .isletLayoutChanged, object: nil) }
@@ -1151,7 +1167,7 @@ final class AppModel {
             agentUsage.refreshClaudeHint()
             // Access may have come from System Settings without Islet becoming active.
             if calendarIsBlocked { recheckCalendarAccess() }
-            Haptics.play(.open)
+            if haptics { Haptics.play(.open) }
             if tab == .stats && settings.systemStatsEnabled { statsSampler.start() }
             toolsIslandOpened()
         } else {
@@ -1163,6 +1179,10 @@ final class AppModel {
             pinned = false
             ask.islandDidCollapse()
             approvals.islandDidCollapse()
+            timers.islandDidCollapse()
+            // The fields and sliders in the island have gone with it, whether or not SwiftUI
+            // called their `onDisappear`.
+            releaseViewHolds()
             controlHint = nil
         }
     }
@@ -1570,6 +1590,8 @@ final class AppModel {
         // Calls follow app mutes either way.
         updateCalls()
         reschedule()
+        // A muted Live Activity leaves the island, so its pill in the menu bar is uncovered.
+        onMenuBarCoversChanged?()
     }
 
     /// An unmuted source shows what it has now. Sources whose activities only arrive (a

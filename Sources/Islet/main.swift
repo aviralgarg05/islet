@@ -256,6 +256,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             controllers.forEach { $0.panel.orderFrontRegardless() }
             return
         }
+        // Closing an NSWindow never calls the views' `onDisappear`, so what they hold while they
+        // are on screen (the keyboard, the pointer holds, the audio watcher) is let go of here
+        // instead: the panels about to close are the ones holding it.
+        model.releaseViewHolds()
         controllers.forEach { $0.close() }
         controllers = screens.map { IslandWindowController(model: model, screen: $0) }
         pointer.controllers = controllers
