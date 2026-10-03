@@ -436,7 +436,15 @@ public struct APIRouter: Sendable {
 
         case ("POST", 1, "focus"):
             let f = try decode(FocusPush.self, from: r)
-            return .json(try await apply(admitted(FocusPill.activity(name: f.name ?? "Focus", on: f.on ?? true))), status: 201)
+            // The iPhone's Focus is the Mac's Focus, so this one keeps the shared id rather than
+            // going under `lan-`: your phone changing Focus should move the pill already there,
+            // not add a second one beside it. Everything else `admitted` does still applies, and
+            // the bridge has no route that removes an activity, so a peer can't take the pill
+            // away. Namespacing wouldn't have stopped a peer showing whatever text it liked here
+            // anyway; it would only have put that text on a pill of its own.
+            var spec = admitted(FocusPill.activity(name: f.name ?? "Focus", on: f.on ?? true))
+            spec.id = FocusPill.id
+            return .json(try await apply(spec), status: 201)
 
         case ("POST", 2, "hooks"):
             let provider = sub

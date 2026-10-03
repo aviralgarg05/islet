@@ -87,9 +87,11 @@ import Testing
         #expect(await rt.handle(req("POST", "/v1/activities", token: lanToken, body: #"{"id":"a","title":"A"}"#)).status == 201)
         #expect(await rt.handle(req("PUT", "/v1/activities/b", token: lanToken, body: #"{"title":"B"}"#)).status == 200)
         #expect(await rt.handle(req("POST", "/v1/activities/c", token: lanToken, body: #"{"title":"C"}"#)).status == 200)
-        // Focus goes under lan-, so the iPhone's Focus can't replace the Mac's own Focus pill.
-        #expect(await b.center.activities["lan-focus"]?.title == "Work")
-        #expect(await b.center.activities["focus"] == nil)
+        // Focus keeps its fixed id: the iPhone's Focus is the Mac's Focus pill, so it moves the
+        // one already there rather than adding a second beside it. The rest of the admission
+        // still applies, and the bridge has no route that removes an activity.
+        #expect(await b.center.activities["focus"]?.title == "Work")
+        #expect(await b.center.activities["lan-focus"] == nil)
     }
 
     @Test func activitiesAreNamespacedAndStripped() async throws {
