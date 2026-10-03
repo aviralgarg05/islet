@@ -77,7 +77,8 @@ final class MenuBarCoverController {
             // A full screen app over that display takes the menu bar with it.
             menuBarShows: display.map { model.fullscreenApps[$0] == nil } ?? false,
             menuBarHeight: height,
-            menuBarTop: screen.frame.maxY
+            menuBarTop: screen.frame.maxY,
+            mutedKeys: model.mutedMenuBarPillKeys
         )
         return MenuBarCovers.covers(pills: model.menuBarPills, input)
     }

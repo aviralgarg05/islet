@@ -50,9 +50,13 @@ public enum MenuBarCovers {
         public var menuBarHeight: CGFloat
         /// The AppKit y of the top of that display (its `frame.maxY`), where AX y is 0.
         public var menuBarTop: CGFloat
+        /// Keys of pills whose mirrored source the user has muted. The island shows nothing in
+        /// their place, so a cover over them would hide the Live Activity altogether.
+        public var mutedKeys: Set<String>
 
         public init(hideOwn: Bool, mirroring: Bool, supported: Bool, trusted: Bool, inFront: Bool,
-                    islandShows: Bool, menuBarShows: Bool, menuBarHeight: CGFloat, menuBarTop: CGFloat) {
+                    islandShows: Bool, menuBarShows: Bool, menuBarHeight: CGFloat, menuBarTop: CGFloat,
+                    mutedKeys: Set<String> = []) {
             self.hideOwn = hideOwn
             self.mirroring = mirroring
             self.supported = supported
@@ -62,6 +66,7 @@ public enum MenuBarCovers {
             self.menuBarShows = menuBarShows
             self.menuBarHeight = menuBarHeight
             self.menuBarTop = menuBarTop
+            self.mutedKeys = mutedKeys
         }
     }
 
@@ -69,11 +74,12 @@ public enum MenuBarCovers {
     /// to right. Empty whenever a cover would be wrong: the setting off, nothing mirrored,
     /// Accessibility gone, this session in the background, the island hidden on that display, or
     /// no menu bar to cover. A pill the notch has collapsed into the overflow isn't drawn, so it
-    /// isn't covered either.
+    /// isn't covered either, and nor is one whose source is muted: the island shows nothing in
+    /// its place, so covering it would hide the activity altogether.
     public static func covers(pills: [MenuBarActivityPill], _ input: Input) -> [CGRect] {
         guard input.hideOwn, input.mirroring, input.supported, input.trusted, input.inFront,
               input.islandShows, input.menuBarShows, input.menuBarHeight > 0 else { return [] }
-        return pills.filter { !$0.hidden }
+        return pills.filter { !$0.hidden && !input.mutedKeys.contains($0.key) }
             .sorted { $0.frame.minX < $1.frame.minX }
             .compactMap { windowFrame(pill: $0.frame, menuBarTop: input.menuBarTop, menuBarHeight: input.menuBarHeight) }
     }
