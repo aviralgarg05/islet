@@ -474,6 +474,11 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     public var mirrorMenuBarActivities = true
     /// Mirror only the activities the notch hides (collapsed into the menu bar's overflow).
     public var mirrorOnlyHiddenActivities = false
+    /// Cover the menu bar's own Live Activity pills with black, so each activity shows in the
+    /// island only. macOS offers no way to hide one, and Islet reads the pill to mirror it, so
+    /// the pill stays and Islet covers it (`MenuBarCovers`). Overrides
+    /// `mirrorOnlyHiddenActivities`: a covered pill has to be mirrored.
+    public var hideMenuBarActivities = false
     /// Include mirrored Live Activities, which often hold addresses, names and scores, in API responses.
     public var shareMirroredActivities = false
     /// Claude Code plan limits, from the status line (`isletctl statusline`). Local files only.
