@@ -68,29 +68,29 @@ public enum AgentHooks {
         return oneLine.count > n ? String(oneLine.prefix(n - 1)) + "…" : oneLine
     }
 
+    /// The patterns `redactSecrets` applies, with what each match is replaced by. Compiled once:
+    /// a hook event would otherwise build four of them, and ICU takes a good fraction of a
+    /// millisecond over each.
+    private static let secretPatterns: [(NSRegularExpression, String)] = [
+        (#"(?i)\b([A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASS|AUTH)[A-Z0-9_]*=)("[^"]*"|'[^']*'|\S+)"#, "$1•••"),
+        (#"(?i)(--?(?:api-?key|token|password|secret|auth)[= ])("[^"]*"|'[^']*'|\S+)"#, "$1•••"),
+        (#"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}"#, "$1 •••"),
+        (#"\b(?:sk-(?:ant-)?[A-Za-z0-9_-]{8,}|gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,}|xox[abprs]-[A-Za-z0-9-]{8,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{20,})"#, "•••"),
+    ].map { (try! NSRegularExpression(pattern: $0.0), $0.1) }
+
     /// Hide values that look like credentials before a command is shown in the notch, where
     /// screen recordings and the API can see it: `API_KEY=…`, `--token …`, `Bearer …`, and
     /// well-known key prefixes.
     public static func redactSecrets(_ command: String) -> String {
         var s = command
-        let patterns = [
-            #"(?i)\b([A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASS|AUTH)[A-Z0-9_]*=)("[^"]*"|'[^']*'|\S+)"#,
-            #"(?i)(--?(?:api-?key|token|password|secret|auth)[= ])("[^"]*"|'[^']*'|\S+)"#,
-            #"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}"#,
-            #"\b(?:sk-(?:ant-)?[A-Za-z0-9_-]{8,}|gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,}|xox[abprs]-[A-Za-z0-9-]{8,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{20,})"#,
-        ]
-        for (i, p) in patterns.enumerated() {
-            guard let re = try? NSRegularExpression(pattern: p) else { continue }
-            let template: String
-            switch i {
-            case 0, 1: template = "$1•••"
-            case 2: template = "$1 •••"
-            default: template = "•••"
-            }
+        for (re, template) in secretPatterns {
             s = re.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: template)
         }
         return s
     }
+
+    /// A leading `cd <folder> &&` or `cd <folder>;`.
+    private static let leadingCD = try! NSRegularExpression(pattern: #"^cd\s+(?:"[^"]*"|'[^']*'|[^\s;&|]+)\s*(?:&&|;)\s*"#)
 
     /// A command as the island shows it, in at most `limit` characters: secrets hidden, a
     /// leading `cd <folder> &&` left out (agents often start there, and it pushed the command
@@ -98,20 +98,36 @@ public enum AgentHooks {
     /// folder written ~, so `cd "/Users/me/code/app" && swift build` reads "swift build".
     public static func displayCommand(_ command: String, cwd: String?, home: String = NSHomeDirectory(), limit: Int = 44) -> String {
         var s = redactSecrets(command).trimmingCharacters(in: .whitespacesAndNewlines)
-        let cdFirst = #"^cd\s+(?:"[^"]*"|'[^']*'|[^\s;&|]+)\s*(?:&&|;)\s*"#
-        while let r = s.range(of: cdFirst, options: .regularExpression), r.upperBound < s.endIndex {
+        while let m = leadingCD.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)),
+              let r = Range(m.range, in: s), r.upperBound < s.endIndex {
             s.removeSubrange(r)
         }
         var project = cwd?.trimmingCharacters(in: .whitespaces) ?? ""
         while project.count > 1, project.hasSuffix("/") { project.removeLast() }
         if project.count > 1 { s = s.replacingOccurrences(of: project + "/", with: "") }
-        var homes = [#"\$\{HOME\}"#, #"\$HOME(?![A-Za-z0-9_])"#]
-        if home.count > 1 { homes.append(NSRegularExpression.escapedPattern(for: home) + #"(?=/|$|[\s"';:)])"#) }
-        for pattern in homes {
-            guard let re = try? NSRegularExpression(pattern: pattern) else { continue }
-            s = re.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "~")
+        // The home folder written ~, however it was spelled. Plain scans: the folder's own name
+        // would need a pattern built and compiled for every command shown.
+        s = s.replacingOccurrences(of: "${HOME}", with: "~")
+        s = replacingToken(s, "$HOME", with: "~") { !($0.isASCII && ($0.isLetter || $0.isNumber) || $0 == "_") }
+        if home.count > 1 {
+            s = replacingToken(s, home, with: "~") { $0 == "/" || $0.isWhitespace || #""';:)"#.contains($0) }
         }
         return truncate(s, limit)
+    }
+
+    /// `s` with each `token` replaced by `replacement`, but only where the character after it
+    /// passes `ends` (and always where the text ends there).
+    static func replacingToken(_ s: String, _ token: String, with replacement: String,
+                               ends: (Character) -> Bool) -> String {
+        guard !token.isEmpty, s.contains(token) else { return s }
+        var out = ""
+        var rest = Substring(s)
+        while let r = rest.range(of: token) {
+            out += rest[..<r.lowerBound]
+            out += rest[r.upperBound...].first.map { ends($0) ? replacement : token } ?? replacement
+            rest = rest[r.upperBound...]
+        }
+        return out + rest
     }
 
     /// The server and tool of an MCP tool's name, `mcp__<server>__<tool>`; nil for any other name.
@@ -128,10 +144,13 @@ public enum AgentHooks {
         words(mcpParts(name)?.tool ?? name)
     }
 
+    /// A long run of hex and dashes: a connector's UUID rather than a name.
+    private static let opaqueID = try! NSRegularExpression(pattern: "^[0-9a-fA-F-]{16,}$")
+
     /// An MCP server's name in words ("claude in chrome"), or nil when it is an id nobody
     /// would know it by, such as a connector's UUID.
     static func serverWords(_ server: String) -> String? {
-        guard server.range(of: "^[0-9a-fA-F-]{16,}$", options: .regularExpression) == nil else { return nil }
+        guard opaqueID.firstMatch(in: server, range: NSRange(server.startIndex..., in: server)) == nil else { return nil }
         let w = words(server)
         return w.isEmpty ? nil : w
     }
@@ -342,6 +361,9 @@ public enum AgentHooks {
         return .upsert(spec)
     }
 
+    /// The first file an `apply_patch` names.
+    private static let patchedFile = try! NSRegularExpression(pattern: #"\*\*\* (?:Add|Update|Delete) File: \S+"#)
+
     /// A Codex tool call in a few words. Its shell tool takes the command as a list
     /// (`["bash", "-lc", "git status"]`), and `apply_patch` names the files in the patch.
     static func describeCodexTool(_ name: String, input: Any?, cwd: String? = nil) -> String {
@@ -352,7 +374,8 @@ public enum AgentHooks {
             return "Running " + displayCommand(command, cwd: cwd)
         case "apply_patch":
             let patch = object["input"] as? String ?? object["patch"] as? String ?? input as? String ?? ""
-            if let r = patch.range(of: #"\*\*\* (?:Add|Update|Delete) File: \S+"#, options: .regularExpression) {
+            if let m = patchedFile.firstMatch(in: patch, range: NSRange(patch.startIndex..., in: patch)),
+               let r = Range(m.range, in: patch) {
                 let path = String(patch[r]).components(separatedBy: "File: ").last ?? ""
                 return "Editing " + URL(fileURLWithPath: path).lastPathComponent
             }

@@ -123,6 +123,38 @@ import Testing
         #expect(shown("cd /x && API_TOKEN=abcdefgh123 make") == "API_TOKEN=••• make")
     }
 
+    /// The home folder is written ~ wherever a path ends, and only there.
+    @Test func theHomeFolderIsWrittenWhereverItEnds() {
+        let home = "/Users/me"
+        func shown(_ c: String) -> String { AgentHooks.displayCommand(c, cwd: nil, home: home) }
+        #expect(shown("echo $HOME") == "echo ~")
+        #expect(shown("echo ${HOME}/x") == "echo ~/x")
+        #expect(shown("echo $HOME_DIR") == "echo $HOME_DIR")
+        #expect(shown(#"echo "/Users/me""#) == #"echo "~""#)
+        #expect(shown("echo /Users/me:/usr/bin") == "echo ~:/usr/bin")
+        #expect(shown("echo '/Users/me'") == "echo '~'")
+        #expect(shown("echo (/Users/me)") == "echo (~)")
+        #expect(shown("echo /Users/me;ls") == "echo ~;ls")
+        #expect(shown("cp /Users/me/a /Users/me/b") == "cp ~/a ~/b")
+        #expect(shown("echo /Users/mentor") == "echo /Users/mentor")
+        // No home to speak of: the text is left alone.
+        #expect(AgentHooks.displayCommand("echo /", cwd: nil, home: "/") == "echo /")
+    }
+
+    /// `VAR=value` before a program name, without a pattern for every token.
+    @Test func assignmentsAreRecognisedWithoutARegex() {
+        #expect(RiskRules.isAssignment("FOO=bar"))
+        #expect(RiskRules.isAssignment("_x=1"))
+        #expect(RiskRules.isAssignment("A="))
+        #expect(RiskRules.isAssignment("FOO=bar=baz"))
+        #expect(!RiskRules.isAssignment("1A=x"))
+        #expect(!RiskRules.isAssignment("=x"))
+        #expect(!RiskRules.isAssignment("FOO"))
+        #expect(!RiskRules.isAssignment("FO-O=x"))
+        #expect(!RiskRules.isAssignment("\u{C9}T=1"))
+        #expect(RiskRules.commandStarts(["FOO=bar", "swift", "build"]) == [1])
+    }
+
     @Test func claudeCommandsDropTheProjectFolder() throws {
         let home = NSHomeDirectory()
         let input = try JSONSerialization.data(withJSONObject: [

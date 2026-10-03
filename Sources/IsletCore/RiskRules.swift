@@ -42,19 +42,22 @@ public enum RiskRules {
     static let outside = "Writes outside the project folder"
     static let secrets = "Touches a file that often holds secrets"
 
+    /// Whole-line patterns: pipelines and constructs a token scan can't see. Compiled once,
+    /// so judging a command doesn't build six of them.
+    static let linePatterns: [(NSRegularExpression, String)] = [
+        (#":\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:"#, "Fork bomb: starts processes until the Mac stalls"),
+        (#"\b(curl|wget|fetch)\b[^|;\n]*\|\s*(sudo\s+(-\S+\s+)*)?(env\s+)?(ba|z|da|k|fi)?sh\b"#, "Runs a script downloaded from the internet"),
+        (#"\b(curl|wget|fetch)\b[^|;\n]*\|\s*(sudo\s+)?(python3?|perl|ruby|node)\b"#, "Runs a script downloaded from the internet"),
+        (#"\b(ba|z)?sh\s+(-\S+\s+)*(<\(|["']?\$\()\s*(curl|wget)\b"#, "Runs a script downloaded from the internet"),
+        (#"\beval\s+["']?\$\(\s*(curl|wget)\b"#, "Runs a script downloaded from the internet"),
+        (#"(?i)\b(drop\s+(table|database|schema)|truncate\s+table)\b"#, "Drops database tables"),
+    ].map { (try! NSRegularExpression(pattern: $0.0), $0.1) }
+
     /// Reasons for a shell command line, in the order found, without duplicates.
     public static func reasons(command: String, cwd: String?, home: String = NSHomeDirectory()) -> [String] {
         var out: [String] = []
-        // Whole-line patterns: pipelines and constructs a token scan can't see.
-        let patterns: [(String, String)] = [
-            (#":\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:"#, "Fork bomb: starts processes until the Mac stalls"),
-            (#"\b(curl|wget|fetch)\b[^|;\n]*\|\s*(sudo\s+(-\S+\s+)*)?(env\s+)?(ba|z|da|k|fi)?sh\b"#, "Runs a script downloaded from the internet"),
-            (#"\b(curl|wget|fetch)\b[^|;\n]*\|\s*(sudo\s+)?(python3?|perl|ruby|node)\b"#, "Runs a script downloaded from the internet"),
-            (#"\b(ba|z)?sh\s+(-\S+\s+)*(<\(|["']?\$\()\s*(curl|wget)\b"#, "Runs a script downloaded from the internet"),
-            (#"\beval\s+["']?\$\(\s*(curl|wget)\b"#, "Runs a script downloaded from the internet"),
-            (#"(?i)\b(drop\s+(table|database|schema)|truncate\s+table)\b"#, "Drops database tables"),
-        ]
-        for (pattern, reason) in patterns where command.range(of: pattern, options: .regularExpression) != nil {
+        let whole = NSRange(command.startIndex..., in: command)
+        for (re, reason) in linePatterns where re.firstMatch(in: command, range: whole) != nil {
             out.append(reason)
         }
         for seg in segments(of: command) {
@@ -178,11 +181,20 @@ public enum RiskRules {
         "if": [], "then": [], "else": [], "elif": [], "do": [], "while": [], "until": [], "!": [],
     ]
 
+    /// Whether a token is a `VAR=value` prefix: an identifier, then `=`. A plain scan, since this
+    /// is asked of every token of every command.
+    static func isAssignment(_ t: String) -> Bool {
+        guard let eq = t.firstIndex(of: "="), eq > t.startIndex else { return false }
+        let name = t[t.startIndex..<eq]
+        func isWordCharacter(_ c: Character) -> Bool { c.isASCII && (c.isLetter || c.isNumber) || c == "_" }
+        guard let first = name.first, !first.isNumber else { return false }
+        return name.allSatisfy(isWordCharacter)
+    }
+
     /// Positions in a simple command where a program name stands: the first word after any
     /// `VAR=value`, after wrappers such as `sudo` or `xargs`, after shell keywords such as `do`,
     /// after `sh -c` and after `find -exec`.
     static func commandStarts(_ seg: [String]) -> [Int] {
-        func isAssignment(_ t: String) -> Bool { t.range(of: #"^[A-Za-z_][A-Za-z0-9_]*="#, options: .regularExpression) != nil }
         var starts: [Int] = []
         var expectCommand = true
         var i = 0
@@ -240,14 +252,14 @@ public enum RiskRules {
         return segments.filter { !$0.isEmpty }
     }
 
+    private static let redirect = try! NSRegularExpression(pattern: #"(?<![0-9&<>])>{1,2}\|?\s*([^\s;&|<>()]+)"#)
+
     /// Files written by `>`, `>>` and `tee`.
     static func redirectTargets(_ command: String) -> [String] {
         var targets: [String] = []
         let ns = command as NSString
-        if let re = try? NSRegularExpression(pattern: #"(?<![0-9&<>])>{1,2}\|?\s*([^\s;&|<>()]+)"#) {
-            for m in re.matches(in: command, range: NSRange(location: 0, length: ns.length)) where m.numberOfRanges > 1 {
-                targets.append(ns.substring(with: m.range(at: 1)))
-            }
+        for m in redirect.matches(in: command, range: NSRange(location: 0, length: ns.length)) where m.numberOfRanges > 1 {
+            targets.append(ns.substring(with: m.range(at: 1)))
         }
         for seg in segments(of: command) {
             for (i, token) in seg.enumerated() where (token as NSString).lastPathComponent == "tee" {
