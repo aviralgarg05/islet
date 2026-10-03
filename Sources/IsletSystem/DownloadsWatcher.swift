@@ -23,11 +23,27 @@ public final class DownloadsWatcher {
         let fd = open(directory.path, O_EVTONLY)
         guard fd >= 0 else { return }
         let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete], queue: .main)
-        src.setEventHandler { [weak self] in self?.scan() }
+        src.setEventHandler { [weak self] in
+            guard let self else { return }
+            // The folder itself was replaced or restored (a restore from the Trash, a different
+            // volume): follow the path, not the folder that has gone, as the settings and usage
+            // watchers do. Without this, download pills stopped for the rest of the session.
+            if !(self.source?.data ?? []).isDisjoint(with: [.delete, .rename]) { return self.rearm() }
+            self.scan()
+        }
         src.setCancelHandler { close(fd) }
         src.resume()
         source = src
         scan()
+    }
+
+    /// Watch the path again. `start()` ends with a scan of its own; a path with no folder at it
+    /// still gets one, so a download that has gone is reported.
+    private func rearm() {
+        source?.cancel()
+        source = nil
+        start()
+        if source == nil { scan() }
     }
 
     public func stop() {
