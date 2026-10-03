@@ -257,6 +257,40 @@ func request(_ port: UInt16, _ method: String, _ path: String, token: String? = 
         return d
     }
 
+    /// `readDataToEndOfFile` comes back only once every writer has closed the pipe, and a
+    /// widget whose child inherits stdout (`foo &`, ssh, a daemon) never closes it: a blocking
+    /// read parked a global queue thread for good, once every interval.
+    @Test func drainingAPipeGivesUpAtItsDeadline() throws {
+        let open = Pipe()
+        // Nothing is written and the write end stays open, as a child holding stdout leaves it.
+        let started = Date()
+        #expect(ScriptPluginRunner.drain(open.fileHandleForReading, until: .now() + 0.3).isEmpty)
+        #expect(Date().timeIntervalSince(started) < 3)
+
+        // What is there is read, and the writer closing ends the read at once rather than at
+        // the deadline.
+        let closed = Pipe()
+        try closed.fileHandleForWriting.write(contentsOf: Data("hello".utf8))
+        try closed.fileHandleForWriting.close()
+        let read = Date()
+        #expect(String(decoding: ScriptPluginRunner.drain(closed.fileHandleForReading, until: .now() + 30),
+                       as: UTF8.self) == "hello")
+        #expect(Date().timeIntervalSince(read) < 3)
+    }
+
+    /// A script that leaves a child holding stdout is still answered, and the script itself is
+    /// killed rather than left to its own devices.
+    @Test func aScriptWhoseChildKeepsStdoutOpenStillFinishes() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("daemon.sh")
+        try "#!/bin/sh\nsleep 5 &\necho started\n".write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+        let started = Date()
+        #expect(ScriptPluginRunner.run(url, timeout: 1).error?.contains("timed out") == true)
+        #expect(Date().timeIntervalSince(started) < 5)
+    }
+
     @Test func scriptRunnerCapturesOutputExitCodesAndTimeouts() throws {
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }

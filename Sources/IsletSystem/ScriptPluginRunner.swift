@@ -32,6 +32,8 @@ public final class ScriptPluginRunner {
     public var onRemoved: ((String) -> Void)?
     public var defaultInterval: TimeInterval = 300
     public var timeout: TimeInterval = 15
+    /// How long a script that has had SIGTERM is given before SIGKILL.
+    public static let killGrace: TimeInterval = 2
     public private(set) var directory: URL
 
     private var timers: [String: DispatchSourceTimer] = [:]
@@ -111,6 +113,10 @@ public final class ScriptPluginRunner {
         let scripts = Self.discover(in: directory)
         let paths = Set(scripts.map(\.path))
         for (path, timer) in timers where !paths.contains(path) {
+            // Resumed before it is let go of, as `stop()` does: releasing the last reference to
+            // a suspended dispatch source traps ("Release of a suspended object"), and the
+            // timers are suspended whenever the screen is locked or asleep.
+            if paused { timer.resume() }
             timer.cancel()
             timers[path] = nil
             onRemoved?(path)
@@ -164,13 +170,22 @@ public final class ScriptPluginRunner {
             return ("", "could not start: \(error.localizedDescription)")
         }
         let deadline = DispatchTime.now() + timeout
-        // Drain both pipes concurrently so a chatty script can't deadlock on a full buffer.
+        // Drain both pipes concurrently so a chatty script can't deadlock on a full buffer, and
+        // give each read the deadline too. `readDataToEndOfFile` comes back only once every
+        // writer has closed the pipe, and a script whose child inherits stdout (`foo &`, ssh, a
+        // daemon) never closes it: one such widget parked two global queue threads for good,
+        // once every interval, until libdispatch ran out of them.
         let group = DispatchGroup()
         var stdoutData = Data(), stderrData = Data()
-        DispatchQueue.global().async(group: group) { stdoutData = out.fileHandleForReading.readDataToEndOfFile() }
-        DispatchQueue.global().async(group: group) { stderrData = err.fileHandleForReading.readDataToEndOfFile() }
-        if group.wait(timeout: deadline) == .timedOut {
-            p.terminate()
+        DispatchQueue.global().async(group: group) { stdoutData = Self.drain(out.fileHandleForReading, until: deadline) }
+        DispatchQueue.global().async(group: group) { stderrData = Self.drain(err.fileHandleForReading, until: deadline) }
+        // Both reads stop themselves at the deadline, so this comes back either way; the grace
+        // is only for the hand-off.
+        _ = group.wait(timeout: deadline + .seconds(1))
+        guard DispatchTime.now() < deadline else {
+            // Out of time: whatever it printed is dropped, as it always was. The script itself
+            // may already have gone, leaving a child holding the pipe.
+            Self.halt(p)
             return ("", "timed out after \(Int(timeout)) s")
         }
         p.waitUntilExit()
@@ -181,6 +196,45 @@ public final class ScriptPluginRunner {
             return (stdout, "exit \(p.terminationStatus)" + (msg.isEmpty ? "" : ": \(msg.prefix(200))"))
         }
         return (stdout, nil)
+    }
+
+    /// Reads everything `handle` gives until every writer has closed the pipe or `deadline`
+    /// passes. Unlike `readDataToEndOfFile` it gives up: a script's child can hold the pipe open
+    /// long after the script itself has gone, and a blocked read parks its thread for good.
+    static func drain(_ handle: FileHandle, until deadline: DispatchTime) -> Data {
+        let fd = handle.fileDescriptor
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+        while true {
+            let now = DispatchTime.now()
+            guard now < deadline else { return data }
+            let leftMilliseconds = (deadline.uptimeNanoseconds - now.uptimeNanoseconds) / 1_000_000
+            var poller = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+            let ready = poll(&poller, 1, Int32(max(1, min(leftMilliseconds, 250))))
+            if ready < 0 {
+                if errno == EINTR { continue }
+                return data
+            }
+            guard ready > 0 else { continue }
+            let read = buffer.withUnsafeMutableBytes { Darwin.read(fd, $0.baseAddress, $0.count) }
+            if read > 0 {
+                data.append(contentsOf: buffer[0..<read])
+            } else if read == 0 {
+                return data
+            } else if errno != EINTR && errno != EAGAIN {
+                return data
+            }
+        }
+    }
+
+    /// SIGTERM, then SIGKILL after a grace period if it is still there, as `CLIChild.stop()` does.
+    static func halt(_ p: Process) {
+        guard p.isRunning else { return }
+        let pid = p.processIdentifier
+        p.terminate()
+        DispatchQueue.global().asyncAfter(deadline: .now() + killGrace) {
+            if p.isRunning { kill(pid, SIGKILL) }
+        }
     }
 
     private func watchDirectory() {
