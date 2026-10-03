@@ -19,6 +19,9 @@ public final class FullscreenDetector {
     public var onChange: (([CGDirectDisplayID: String], String?) -> Void)?
     private var observers: [NSObjectProtocol] = []
     private var lastResult: ([CGDirectDisplayID: String], String?)?
+    /// What the last look read, with the answer it gave (`coveringApps()`).
+    private var lastLook: (windows: [ScreenWindow], displays: [DisplayArea], menuBarAutoHides: Bool,
+                           trusted: Bool, covered: [CGDirectDisplayID: pid_t])?
     private var followUps: [DispatchWorkItem] = []
     /// Follows the windows of the app in front (`watchFrontApp`).
     private var windowObserver: AXObserver?
@@ -151,7 +154,7 @@ public final class FullscreenDetector {
     public func evaluate() {
         let front = NSWorkspace.shared.frontmostApplication
         var covered: [CGDirectDisplayID: String] = [:]
-        for (display, pid) in Self.coveringApps() {
+        for (display, pid) in coveringApps() {
             covered[display] = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? ""
         }
         let result = (covered, front?.bundleIdentifier)
@@ -160,15 +163,56 @@ public final class FullscreenDetector {
         onChange?(covered, front?.bundleIdentifier)
     }
 
+    /// The app covering each display, worked out again only when something it rests on has
+    /// changed. A window event fires for every move, resize and title change of the app in front,
+    /// and each is looked at twice (`FullscreenCoverage.windowChangeLooks`), so most looks read
+    /// the very same windows; the answer then follows, and the costly part can be skipped. That
+    /// part is asking Accessibility about every window that fills a display, which has a timeout
+    /// of its own and happens on the main thread.
+    ///
+    /// Everything the answer rests on is compared, not hashed, so nothing can be missed: the
+    /// windows, the displays, whether the menu bar hides itself and whether Accessibility is
+    /// allowed (a grant must take effect at the next look, as it did before). A window
+    /// Accessibility couldn't answer about keeps nothing, so the second look does ask again.
+    private func coveringApps() -> [CGDirectDisplayID: pid_t] {
+        let (windows, displays) = Self.windowsAndDisplays()
+        let autoHides = Self.menuBarAutoHides
+        let trusted = AXIsProcessTrusted()
+        if let last = lastLook, last.windows == windows, last.displays == displays,
+           last.menuBarAutoHides == autoHides, last.trusted == trusted {
+            return last.covered
+        }
+        var unanswered = false
+        let covered = FullscreenCoverage.coveringApps(
+            windows: windows, displays: displays, menuLevel: Int(CGWindowLevelForKey(.mainMenuWindow)),
+            menuBarAutoHides: autoHides,
+            isFullscreen: { pid, bounds in
+                let answer = Self.axFullScreen(pid: pid, bounds: bounds)
+                if answer == nil { unanswered = true }
+                return answer
+            }
+        )
+        lastLook = unanswered ? nil : (windows, displays, autoHides, trusted, covered)
+        return covered
+    }
+
     /// The app (pid) covering each display now (`FullscreenCoverage`).
     public static func coveringApps() -> [CGDirectDisplayID: pid_t] {
-        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
-        else { return [:] }
+        let (windows, displays) = windowsAndDisplays()
+        return FullscreenCoverage.coveringApps(windows: windows, displays: displays,
+                                               menuLevel: Int(CGWindowLevelForKey(.mainMenuWindow)),
+                                               menuBarAutoHides: menuBarAutoHides, isFullscreen: axFullScreen)
+    }
+
+    /// The windows on screen and the displays they lie on, as the window list gives them.
+    static func windowsAndDisplays() -> (windows: [ScreenWindow], displays: [DisplayArea]) {
         var count: UInt32 = 0
         CGGetActiveDisplayList(0, nil, &count)
         var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
         CGGetActiveDisplayList(count, &ids, &count)
         let displays = ids.map { DisplayArea(id: $0, bounds: CGDisplayBounds($0)) }
+        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
+        else { return ([], displays) }
         let windows: [ScreenWindow] = list.compactMap { w in
             guard let b = w[kCGWindowBounds as String] as? [String: CGFloat],
                   let x = b["X"], let y = b["Y"], let width = b["Width"], let height = b["Height"],
@@ -176,9 +220,7 @@ public final class FullscreenDetector {
             return ScreenWindow(bounds: CGRect(x: x, y: y, width: width, height: height),
                                 layer: w[kCGWindowLayer as String] as? Int ?? 0, pid: pid)
         }
-        return FullscreenCoverage.coveringApps(windows: windows, displays: displays,
-                                               menuLevel: Int(CGWindowLevelForKey(.mainMenuWindow)),
-                                               menuBarAutoHides: menuBarAutoHides, isFullscreen: axFullScreen)
+        return (windows, displays)
     }
 
     /// How long one Accessibility call about a window may take before it gives up.
