@@ -284,6 +284,20 @@ public final class AppleMusicProvider: ScriptablePlayerProvider {
 public final class SpotifyProvider: ScriptablePlayerProvider {
     private var artworkCache: [String: URL] = [:]
 
+    /// The cover-art lookup, on an ephemeral session like every other request Islet sends: no
+    /// cookies, no cache and no credential store, so open.spotify.com can't leave anything
+    /// behind between songs or on disk.
+    private lazy var session: URLSession = {
+        let c = URLSessionConfiguration.ephemeral
+        c.urlCache = nil
+        c.httpCookieStorage = nil
+        c.httpShouldSetCookies = false
+        c.urlCredentialStorage = nil
+        c.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        c.timeoutIntervalForRequest = 15
+        return URLSession(configuration: c)
+    }()
+
     public init() {
         super.init(source: .spotify, bundleID: "com.spotify.client", appName: "Spotify", permission: .automationSpotify,
                    notificationName: "com.spotify.client.PlaybackStateChanged")
@@ -326,7 +340,7 @@ public final class SpotifyProvider: ScriptablePlayerProvider {
         }
         onUpdate?(np)
         guard enrich, let id = lastTrackID, let url = Self.oEmbedURL(trackID: id) else { return }
-        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+        session.dataTask(with: url) { [weak self] data, _, _ in
             guard let data,
                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let thumb = (obj["thumbnail_url"] as? String).flatMap(URL.init(string:)) else { return }
