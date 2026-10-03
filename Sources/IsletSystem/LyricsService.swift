@@ -3,8 +3,9 @@ import IsletCore
 
 /// Looks up time-synced lyrics on LRCLIB. Only the song's title, artist, album and length are
 /// sent (for a browser's song, as `BrowserSong` reads its title), over an ephemeral session (no
-/// cookies, no cache), and each song's answer is kept in `cache` so it is asked once. Used only
-/// while the user has lyrics turned on.
+/// cookies, no cache) that refuses redirects, so the song can't be carried to another host, and
+/// each song's answer is kept in `cache` so it is asked once. Used only while the user has
+/// lyrics turned on.
 public final class LyricsService {
     public let cache: LyricsCache
     private let userAgent: String
@@ -20,7 +21,7 @@ public final class LyricsService {
         c.urlCache = nil
         c.httpAdditionalHeaders = ["User-Agent": userAgent]
         if !protocolClasses.isEmpty { c.protocolClasses = protocolClasses + (c.protocolClasses ?? []) }
-        session = URLSession(configuration: c)
+        session = URLSession(configuration: c, delegate: NoRedirects(), delegateQueue: nil)
     }
 
     /// The saved answer for a song, without going online.

@@ -11,6 +11,8 @@ final class MockTools: URLProtocol {
         var body = ""
         /// Fail as if offline.
         var offline = false
+        /// Where a 3xx reply points, so a test can check the redirect isn't followed.
+        var location: String?
     }
 
     private static let lock = NSLock()
@@ -39,8 +41,13 @@ final class MockTools: URLProtocol {
             client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
             return
         }
+        var headers = ["content-type": "application/json"]
+        if let location = reply.location { headers["Location"] = location }
         let response = HTTPURLResponse(url: request.url!, statusCode: reply.status, httpVersion: "HTTP/1.1",
-                                       headerFields: ["content-type": "application/json"])!
+                                       headerFields: headers)!
+        if (300..<400).contains(reply.status), let location = reply.location, let to = URL(string: location) {
+            client?.urlProtocol(self, wasRedirectedTo: URLRequest(url: to), redirectResponse: response)
+        }
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(reply.body.utf8))
         client?.urlProtocolDidFinishLoading(self)
@@ -98,6 +105,21 @@ final class MockTools: URLProtocol {
         #expect(s.cached(q) == .missing)
     }
 
+    /// A redirect could carry the song's title to a third party, so it isn't followed.
+    @Test func redirectsAreNotFollowed() async throws {
+        let (s, dir) = service()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let title = "Redirect \(UUID().uuidString)"
+        let elsewhere = "https://example.com/steal?track_name=\(title.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
+        MockTools.script(title, ["/api/get": .init(status: 302, location: elsewhere)])
+        let q = LyricsQuery(title: title, artist: "Band", duration: 200)
+        guard case .failure = await lookUp(s, q) else { Issue.record("expected a failure"); return }
+        let sent = MockTools.requests(title)
+        #expect(sent.count == 1)
+        #expect(sent.first?.url?.host == "lrclib.net")
+        #expect(s.cached(q) == nil)
+    }
+
     @Test func aNetworkFailureIsNotRemembered() async throws {
         let (s, dir) = service()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -126,6 +148,20 @@ final class MockTools: URLProtocol {
         let url = try #require(MockTools.requests("12.35").first?.url)
         #expect(url.absoluteString.contains("longitude=45.68"))
         #expect(!url.absoluteString.contains("12.3456"))
+    }
+
+    /// A redirect could carry a rounded position or a typed place to a third party, so it isn't
+    /// followed.
+    @Test func redirectsAreNotFollowed() async throws {
+        let s = WeatherService(version: "test", protocolClasses: [MockTools.self])
+        MockTools.script("33.33", ["/v1/forecast": .init(status: 302, location: "https://example.com/steal?latitude=33.33")])
+        let result: Result<WeatherReport, Error> = await withCheckedContinuation { done in
+            s.forecast(latitude: 33.3333, longitude: 44.4444) { done.resume(returning: $0) }
+        }
+        #expect((try? result.get()) == nil)
+        let sent = MockTools.requests("33.33")
+        #expect(sent.count == 1)
+        #expect(sent.first?.url?.host == OpenMeteo.forecastHost)
     }
 
     @Test func findsPlacesAndReportsFailures() async throws {

@@ -2,8 +2,9 @@ import CoreLocation
 import Foundation
 import IsletCore
 
-/// Fetches forecasts and finds places on Open-Meteo, over an ephemeral session. Used only while
-/// the user has the weather turned on.
+/// Fetches forecasts and finds places on Open-Meteo, over an ephemeral session that refuses
+/// redirects, so a typed place or a rounded position can't be carried to another host. Used only
+/// while the user has the weather turned on.
 public final class WeatherService {
     private let session: URLSession
 
@@ -15,7 +16,7 @@ public final class WeatherService {
         c.urlCache = nil
         c.httpAdditionalHeaders = ["User-Agent": "Islet \(version) (https://github.com/aviralgarg05/islet)"]
         if !protocolClasses.isEmpty { c.protocolClasses = protocolClasses + (c.protocolClasses ?? []) }
-        session = URLSession(configuration: c)
+        session = URLSession(configuration: c, delegate: NoRedirects(), delegateQueue: nil)
     }
 
     /// The forecast for a position (rounded before it is sent). Completes on the main thread.

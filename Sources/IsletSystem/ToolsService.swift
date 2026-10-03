@@ -8,6 +8,16 @@ import IsletCore
 /// an Islet with every tool off never makes one. Each request must be HTTPS to the hosts its
 /// tool names (or HTTP to Ollama on 127.0.0.1), and redirects are refused, so a key header
 /// can't follow a redirect anywhere else. Nothing is logged.
+/// Refuses every redirect, for a session that isn't its own delegate. The reply to the request
+/// Islet made is what counts: a redirect could carry what the request says, a song's title or a
+/// place's name, to a host the user never agreed to.
+final class NoRedirects: NSObject, URLSessionTaskDelegate {
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        completionHandler(nil)
+    }
+}
+
 public final class ToolsService: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     public struct Reply: Sendable {
         public var status: Int
