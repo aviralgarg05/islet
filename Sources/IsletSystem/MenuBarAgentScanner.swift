@@ -19,7 +19,8 @@ public enum MenuBarAgentScanner {
         public var element: AXUIElement
         public var info: MenuBarItemInfo
         public var kind: MenuBarItemKind
-        /// Stable while the item exists: its identifier, or the element's hash.
+        /// Stable while the item exists: a Live Activity's element (every pill shares one
+        /// identifier), any other item's identifier. See `MenuBarLiveActivities.key`.
         public var key: String
     }
 
@@ -115,7 +116,7 @@ public enum MenuBarAgentScanner {
                 info.texts = texts
             }
             let kind = MenuBarLiveActivities.classify(info, labels: labels)
-            let key = info.identifier.flatMap { $0.isEmpty ? nil : "id:\($0)" } ?? "el:\(String(CFHash(target), radix: 36))"
+            let key = MenuBarLiveActivities.key(kind: kind, identifier: info.identifier, elementHash: CFHash(target))
             result.append(Slot(frame: frame, element: target, info: info, kind: kind, key: key))
         }
         // Items collapsed into the overflow are stacked on the chevron.

@@ -296,6 +296,25 @@ public enum MenuBarLiveActivities {
 
     public static func isMirrored(id: String) -> Bool { id.hasPrefix(idPrefix) }
 
+    /// The key a scan follows one menu bar item by, from what the scan already knows about it.
+    ///
+    /// A Live Activity is keyed on its element and nothing else. Every pill on this Mac carries
+    /// the identifier `live-activity-pill-com.apple.chrono.WidgetRenderer-Activities`: the suffix
+    /// is the bundle id of the process that draws every pill, so it names the renderer, never the
+    /// activity, and two pills on screen at once share it exactly. The element is one per pill and
+    /// lives as long as the pill does, while everything readable on a pill moves while it runs: a
+    /// score on every ball, the minutes every minute, and even the app's own name for its picture
+    /// carries the phase (`food_di_preparing_icon`). Folding any of that in would cost the
+    /// identity the key is for, so none of it is folded in.
+    ///
+    /// Every other item has an identifier of its own (`com.apple.menuextra.battery`), which
+    /// survives the item being rebuilt, so it is preferred there.
+    public static func key(kind: MenuBarItemKind, identifier: String?, elementHash: UInt) -> String {
+        let element = "el:" + String(elementHash, radix: 36)
+        guard kind != .liveActivity, let identifier, !identifier.isEmpty else { return element }
+        return "id:" + identifier
+    }
+
     /// Mirrored activities often hold addresses, names and scores, so scripts only read them
     /// when the user shares them.
     public static func isMirrored(_ activity: Activity) -> Bool {
