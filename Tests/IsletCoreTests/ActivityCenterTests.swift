@@ -8,15 +8,22 @@ let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 @Suite struct ActivityTextLimitTests {
     @Test func longTextIsCutToOneLine() throws {
         var c = ActivityCenter()
-        let a = try c.apply(ActivitySpec(id: "big", source: String(repeating: "s", count: 300),
+        let a = try c.apply(ActivitySpec(id: "big", source: String(repeating: "s", count: ActivityLimits.source),
                                         title: String(repeating: "t", count: 5000),
                                         subtitle: String(repeating: "u", count: 5000),
                                         trailing: String(repeating: "v", count: 500)), now: t0)
         #expect(a.title.count == ActivityLimits.title)
         #expect(a.subtitle?.count == ActivityLimits.subtitle)
         #expect(a.trailing?.count == ActivityLimits.trailing)
-        #expect(a.source.count == ActivityLimits.source)
         #expect(a.title.hasSuffix("\u{2026}"))
+        // A source is a name, not text to draw: it is kept whole, and one too long to hold is
+        // refused rather than shortened into a name Mute and ?source= would never match.
+        #expect(a.source.count == ActivityLimits.source)
+        #expect(!a.source.hasSuffix("\u{2026}"))
+        #expect(throws: ActivityError.longSource(ActivityLimits.source + 1)) {
+            try c.apply(ActivitySpec(id: "bigger", source: String(repeating: "s", count: ActivityLimits.source + 1),
+                                     title: "x"), now: t0)
+        }
     }
 
     /// Newlines would turn one row into several, so the text is put on one line. An update is

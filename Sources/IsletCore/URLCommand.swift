@@ -58,8 +58,10 @@ public enum URLCommand: Equatable, Sendable {
     /// Any source but the one kept for Live Activities mirrored from the menu bar.
     static func source(_ raw: String?) throws -> String {
         guard let raw else { return "url" }
-        guard !MenuBarLiveActivities.isMirroredSource(raw) else { throw ParseError.invalid("source", raw) }
-        return raw
+        let source = ActivityLimits.normalized(source: raw)
+        guard !source.isEmpty else { return "url" }
+        guard !MenuBarLiveActivities.isMirroredSource(source) else { throw ParseError.invalid("source", raw) }
+        return source
     }
 
     /// Only https links: a click on the notch opens them, so no files or app-launching schemes.

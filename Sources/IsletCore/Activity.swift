@@ -286,6 +286,9 @@ public enum ActivityError: Error, Equatable, CustomStringConvertible {
     case invalidID(String)
     /// A write to a Live Activity mirrored from the menu bar. The same whether or not it exists.
     case mirrored
+    /// A source over `ActivityLimits.source`. Refused rather than shortened, because Mute and
+    /// `DELETE ?source=` match on the whole thing.
+    case longSource(Int)
 
     public var description: String {
         switch self {
@@ -294,8 +297,10 @@ public enum ActivityError: Error, Equatable, CustomStringConvertible {
         case .invalidTint(let t): return "'tint' must be a hex color like #34C759 or a named color, got '\(t)'"
         case .notFound(let id): return "No activity with id '\(id)'"
         case .invalidID(let id): return "Invalid id '\(id)': use 1-128 characters from [A-Za-z0-9._:-]"
+        case .longSource(let n):
+            return "'source' must be at most \(ActivityLimits.source) characters, got \(n): it is the name Mute and ?source= match on, so it is never shortened"
         case .mirrored:
-            return "ids starting with '\(MenuBarLiveActivities.idPrefix)' and sources starting with '\(MenuBarLiveActivities.source)' are kept for Live Activities mirrored from the menu bar, which scripts can't create, change or remove"
+            return "ids starting with '\(MenuBarLiveActivities.idPrefix)' or '\(MirroredNotification.idPrefix)' and sources starting with '\(MenuBarLiveActivities.source)' are kept for Live Activities mirrored from the menu bar and for notification banners, which scripts can't create, change or remove"
         }
     }
 }

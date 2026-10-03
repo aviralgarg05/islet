@@ -214,5 +214,53 @@ import Testing
             == t0.addingTimeInterval(10))
         #expect(ActivityCenter.keptDeadline(t0.addingTimeInterval(10), asked: t0.addingTimeInterval(12), now: now)
             == t0.addingTimeInterval(12))
+        // The slack never goes below a second, so for a ttl of a second or two the stored
+        // deadline can come round before a re-arm would write one. Those are honoured at once:
+        // keeping them would have the island drop the activity between two of its own reports.
+        #expect(ActivityCenter.keptDeadline(t0.addingTimeInterval(1), asked: t0.addingTimeInterval(2), now: now)
+            == t0.addingTimeInterval(2))
+        #expect(ActivityCenter.keptDeadline(t0.addingTimeInterval(0.5), asked: t0.addingTimeInterval(1.4), now: now)
+            == t0.addingTimeInterval(1.4))
+    }
+
+    /// A client using a short ttl as a liveness window, re-arming it every second. The activity
+    /// has to stay put: it used to be expired between two reports, vanish, and come back with a
+    /// sneak peek every couple of seconds.
+    @Test func aShortTTLReArmedEverySecondStays() throws {
+        var c = ActivityCenter()
+        var spec = Self.working()
+        spec.ttl = 2
+        try c.apply(spec, now: t0)
+        for second in 1...30 {
+            let now = t0.addingTimeInterval(Double(second))
+            #expect(c.expire(now: now).isEmpty, "second \(second)")
+            try c.apply(spec, now: now)
+            #expect(c.activities["claude-abc"] != nil, "second \(second)")
+            // Still dismisses itself on time: never further out than the ttl it asked for.
+            #expect(c.activities["claude-abc"]?.expiresAt ?? now <= now.addingTimeInterval(2), "second \(second)")
+        }
+        // And it still goes when the client stops.
+        #expect(c.expire(now: t0.addingTimeInterval(33)) == ["claude-abc"])
+    }
+
+    /// The same end again is not a change. Working the span out through how far the track had got
+    /// lands a float ulp above the span in hand, and `max` took the larger: every report from a
+    /// countdown then read as a change and had the island sort and draw again.
+    @Test func theSameEndAgainLeavesTheTrackAlone() throws {
+        var c = ActivityCenter()
+        var spec = Self.working()
+        spec.endsAt = t0.addingTimeInterval(600)
+        let first = try c.apply(spec, now: t0)
+        #expect(first.trackSpan == 600)
+        for second in 1...120 {
+            let again = try c.apply(spec, now: t0.addingTimeInterval(Double(second)))
+            #expect(again.trackSpan == 600, "second \(second)")
+            #expect(again == first, "second \(second)")
+        }
+        #expect(c.revision == 1)
+        // An end that really moves out still stretches the span, so the tracker never goes back.
+        spec.endsAt = t0.addingTimeInterval(900)
+        let stretched = try c.apply(spec, now: t0.addingTimeInterval(120))
+        #expect((stretched.trackSpan ?? 0) > 600)
     }
 }

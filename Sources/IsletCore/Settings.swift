@@ -648,7 +648,10 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// Whether a right-click muted this source. Muting "live-activity" in an older version
     /// muted every mirrored Live Activity, and still does.
     public func isMuted(source: String) -> Bool {
-        mutedSources.contains(source)
+        // Normalised first: a client's source is trimmed on the way in, so an untrimmed one
+        // reaching this gate would otherwise be admitted and then stored as the muted name.
+        let source = ActivityLimits.normalized(source: source)
+        return mutedSources.contains(source)
             || (MenuBarLiveActivities.isMirroredSource(source) && mutedSources.contains(MenuBarLiveActivities.source))
     }
 

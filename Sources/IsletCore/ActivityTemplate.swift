@@ -414,6 +414,10 @@ extension Activity {
             trackSpan = remaining
             return
         }
+        // The same end again. The arithmetic below reduces to the span already in hand, but
+        // computes it a float ulp above, and `max` takes the larger: every repeated report from a
+        // countdown would then read as a change and have the island sort and draw again.
+        guard newEnd != oldEnd else { return }
         let done = min(1, max(0, 1 - oldEnd.timeIntervalSince(now) / span))
         trackSpan = done >= 1 ? remaining : max(span, remaining / (1 - done))
     }

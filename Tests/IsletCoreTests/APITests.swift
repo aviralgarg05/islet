@@ -396,10 +396,67 @@ extension APIRouterTests {
         #expect(try APIJSON.decoder.decode([Activity].self, from: await rt.handle(request("GET", "/v1/activities")).body)
                 .map(\.id) == ["build"])
 
+        // Counting them says how many banners are on screen right now, and clearing them
+        // dismisses someone's messages, so neither is a script's to do while they can't be read.
+        let cleared = await rt.handle(request("DELETE", "/v1/activities?source=com.apple.MobileSMS"))
+        #expect(cleared.status == 200)
+        #expect(try APIJSON.decoder.decode([String: Int].self, from: cleared.body) == ["removed": 0])
+        #expect(await b.center.activities[spec.id ?? ""] != nil)
+        // And a script can't take a banner's id for itself, which would make an activity it
+        // then can't read back.
+        let taken = await rt.handle(request("POST", "/v1/activities", body: #"{"id":"notif-mine","title":"x"}"#))
+        #expect(taken.status == 403)
+
         await b.share(true)
         for r in await reads() {
             #expect(String(decoding: r.body, as: UTF8.self).contains("spare key"))
         }
+        // Shared, a script may clear them like anything else.
+        let shared = await rt.handle(request("DELETE", "/v1/activities?source=com.apple.MobileSMS"))
+        #expect(try APIJSON.decoder.decode([String: Int].self, from: shared.body) == ["removed": 1])
+    }
+
+    /// `source` is the name Mute and `DELETE ?source=` match on, not text the island draws, so
+    /// it is put on one line and trimmed before anything tests it, and a long one is refused
+    /// rather than shortened into a name that would match nothing.
+    @Test func aSourceIsNormalisedBeforeItIsJudgedAndNeverShortened() async throws {
+        let b = FakeBackend(now: t0)
+        let rt = router(b)
+
+        // A leading space used to slip past the guard and then be trimmed into the very source
+        // it was refused for, which also put it beyond "mute all Live Activities". The escapes
+        // are JSON's, so what reaches the router carries a real tab or newline.
+        for raw in [" live-activity:uber", "live-activity ", #"\tlive-activity"#,
+                    #" live-activity:uber\n"#, #" live-activity"#] {
+            let body = #"{"id":"mine","source":"\#(raw)","title":"x"}"#
+            let r = await rt.handle(request("POST", "/v1/activities", body: body))
+            #expect(r.status == 403, "\(raw)")
+            #expect(String(decoding: r.body, as: UTF8.self).contains("mirrored from the menu bar"), "\(raw)")
+        }
+        #expect(await b.center.activities.isEmpty)
+        // And the rule itself, since a source is a key: one line, trimmed, nothing cut.
+        #expect(ActivityLimits.normalized(source: "  live-activity:uber \n") == "live-activity:uber")
+        #expect(ActivityLimits.normalized(source: "a\nb") == "a b")
+        #expect(ActivityLimits.normalized(source: String(repeating: "s", count: 300)).count == 300)
+
+        // A source longer than the limit is refused, so what is stored is always what a later
+        // delete or a Mute will be matching against.
+        let long = String(repeating: "a", count: ActivityLimits.source + 1)
+        let tooLong = await rt.handle(request("POST", "/v1/activities", body: #"{"id":"mine","source":"\#(long)","title":"x"}"#))
+        #expect(tooLong.status == 422)
+        #expect(String(decoding: tooLong.body, as: UTF8.self).contains("never shortened"))
+
+        // One at the limit is kept whole, and deleting by that same name finds it.
+        let ok = String(repeating: "a", count: ActivityLimits.source)
+        #expect(await rt.handle(request("POST", "/v1/activities", body: #"{"id":"mine","source":"\#(ok)","title":"x"}"#)).status == 201)
+        #expect(await b.center.activities["mine"]?.source == ok)
+        let removed = await rt.handle(request("DELETE", "/v1/activities?source=\(ok)"))
+        #expect(try APIJSON.decoder.decode([String: Int].self, from: removed.body) == ["removed": 1])
+
+        // A delete is normalised the same way a write is, so an untidy query still matches.
+        #expect(await rt.handle(request("POST", "/v1/activities", body: #"{"id":"two","source":"ci","title":"x"}"#)).status == 201)
+        let untidy = await rt.handle(request("DELETE", "/v1/activities?source=%20ci%20"))
+        #expect(try APIJSON.decoder.decode([String: Int].self, from: untidy.body) == ["removed": 1])
     }
 
     @Test func mirroredActivitiesAreReadOnlyWhenShared() async throws {

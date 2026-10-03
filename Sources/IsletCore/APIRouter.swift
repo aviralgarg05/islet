@@ -257,7 +257,11 @@ public struct APIRouter: Sendable {
     /// Every write to an activity goes through here or `remove(id:)`. Mirrored Live Activities
     /// belong to the menu bar mirror, so they are refused, the same way whether or not one exists.
     func apply(_ spec: ActivitySpec) async throws -> Activity {
-        if spec.source.map(MenuBarLiveActivities.isMirroredSource) == true || spec.id.map(MenuBarLiveActivities.isMirrored(id:)) == true {
+        var spec = spec
+        // Normalised before the guard, not after: the store trims a source on the way in, so a
+        // leading space would hide a mirrored one from this check and still be stored as it.
+        spec.source = spec.source.map { ActivityLimits.normalized(source: $0) }
+        if spec.source.map(MenuBarLiveActivities.isMirroredSource) == true || spec.id.map(Self.isReserved(id:)) == true {
             throw ActivityError.mirrored
         }
         if let id = spec.id, await isMeetingReminder(id) { throw ActivityError.notFound(id) }
@@ -265,7 +269,7 @@ public struct APIRouter: Sendable {
     }
 
     func remove(id: String) async throws -> Bool {
-        guard !MenuBarLiveActivities.isMirrored(id: id) else { throw ActivityError.mirrored }
+        guard !Self.isReserved(id: id) else { throw ActivityError.mirrored }
         guard !(await isMeetingReminder(id)) else { return false }
         return await backend.removeActivity(id: id)
     }
@@ -279,16 +283,31 @@ public struct APIRouter: Sendable {
         return await backend.listActivities().contains { $0.id == id && MeetingReminders.isReminder($0) }
     }
 
-    /// `DELETE /v1/activities?source=`: everything from one source, except meeting reminders,
-    /// which share the source `calendar` with what a script may push. A script clearing its own
-    /// `calendar` activities neither dismisses today's meetings nor learns how many are showing.
+    /// `DELETE /v1/activities?source=`: everything from one source, except what a script can't
+    /// read. Meeting reminders share the source `calendar` with what a script may push, and a
+    /// mirrored notification's source is the banner app's own bundle id. A script clearing its
+    /// own `calendar` activities neither dismisses today's meetings nor learns how many are
+    /// showing, and without the sharing setting the same holds for banners: the count alone
+    /// would say whether this person is being messaged right now.
     func removeAll(source: String) async -> Int {
-        guard source == MeetingReminders.source else { return await backend.removeActivities(source: source) }
+        let shares = await backend.sharesMirroredActivities()
+        // Nothing from this source can be held back, so the whole lot goes in one call.
+        if source != MeetingReminders.source, shares {
+            return await backend.removeActivities(source: source)
+        }
         var removed = 0
-        for a in await backend.listActivities() where a.source == source && !MeetingReminders.isReminder(a) {
+        for a in await backend.listActivities() where a.source == source {
+            guard !MeetingReminders.isReminder(a) else { continue }
+            guard shares || !MirroredNotification.isMirrored(a) else { continue }
             if await backend.removeActivity(id: a.id) { removed += 1 }
         }
         return removed
+    }
+
+    /// Ids kept for what Islet mirrors: Live Activities from the menu bar, and notification
+    /// banners. A script writing one of those would make an activity it then can't read back.
+    static func isReserved(id: String) -> Bool {
+        MenuBarLiveActivities.isMirrored(id: id) || MirroredNotification.isMirrored(id: id)
     }
 
     /// What scripts may read: what Islet mirrors, from the menu bar and from notification
@@ -321,7 +340,7 @@ public struct APIRouter: Sendable {
         case ("PUT", 2, "activities"), ("PATCH", 2, "activities"), ("POST", 2, "activities"):
             let id = sub
             // Refused before the body is read, so the answer is the same for any body.
-            guard !MenuBarLiveActivities.isMirrored(id: id) else { throw ActivityError.mirrored }
+            guard !Self.isReserved(id: id) else { throw ActivityError.mirrored }
             var spec = try decode(ActivitySpec.self, from: r)
             spec.id = id
             return .json(try await apply(admitted(spec)))
@@ -331,7 +350,9 @@ public struct APIRouter: Sendable {
             return try await remove(id: id) ? .noContent : .error(404, ActivityError.notFound(id).description)
 
         case ("DELETE", 1, "activities"):
-            guard let source = r.query["source"], !source.isEmpty else {
+            // Normalised the way a write is, so the name that was stored is the one matched.
+            let source = ActivityLimits.normalized(source: r.query["source"] ?? "")
+            guard !source.isEmpty else {
                 return .error(400, "pass ?source=<name> to remove all activities from one source")
             }
             // The count would also say how many are showing.

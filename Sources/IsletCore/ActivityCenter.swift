@@ -30,10 +30,22 @@ public enum ActivityLimits: Sendable {
     public static let title = 120
     public static let subtitle = 160
     public static let trailing = 40
-    public static let source = 64
+    /// Room for every bundle id and every app-name slug Islet itself turns into a source
+    /// (`live-activity:<app>`), with the same ceiling an id has. Over this is refused, not
+    /// shortened, so a tighter one would drop an activity rather than give it an odd name.
+    public static let source = 128
 
     /// One line, trimmed and no longer than `limit`, as `AgentHooks` shortens a tool's words.
     public static func capped(_ s: String, _ limit: Int) -> String { AgentHooks.truncate(s, limit) }
+
+    /// A source as it is stored and compared. Unlike the other three it isn't text the island
+    /// draws, it's the key that Mute, `DELETE ?source=` and the mirrored-source guard all match
+    /// on, so it is only put on one line and trimmed, never shortened: a cut key would match
+    /// nothing, and a leading space would otherwise slip a source past that guard and then be
+    /// trimmed into one. Too long is refused instead (`ActivityError.longSource`).
+    public static func normalized(source: String) -> String {
+        source.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
 /// Owns every live activity plus the transient HUD / sneak-peek state.
@@ -112,7 +124,7 @@ public struct ActivityCenter: Sendable {
         s.title = s.title.map { L.capped($0, L.title) }
         s.subtitle = s.subtitle.map { L.capped($0, L.subtitle) }
         s.trailing = s.trailing.map { L.capped($0, L.trailing) }
-        s.source = s.source.map { L.capped($0, L.source) }
+        s.source = s.source.map { L.normalized(source: $0) }
         return s
     }
 
@@ -122,6 +134,9 @@ public struct ActivityCenter: Sendable {
         let spec = Self.capped(spec)
         let id = spec.id ?? makeID()
         guard Self.isValidID(id) else { throw ActivityError.invalidID(id) }
+        if let source = spec.source, source.count > ActivityLimits.source {
+            throw ActivityError.longSource(source.count)
+        }
         if let tint = spec.tint, RGBA.parse(tint) == nil { throw ActivityError.invalidTint(tint) }
         try spec.validateTemplateFields()
         let progress = try spec.progress.map(Self.normalizeProgress)
@@ -233,6 +248,10 @@ public struct ActivityCenter: Sendable {
     static func keptDeadline(_ stored: Date?, asked: Date?, now: Date) -> Date? {
         guard let asked, let stored, asked > stored else { return asked }
         let slack = max(1, asked.timeIntervalSince(now) * deadlineSlack)
+        // A stored deadline no further off than the slack is honoured anyway. The slack has a
+        // floor of a second, so keeping it would let a client re-arming a ttl of a second or two
+        // be expired between two of its own reports, and the activity would flicker.
+        guard stored.timeIntervalSince(now) > slack else { return asked }
         return asked.timeIntervalSince(stored) > slack ? asked : stored
     }
 

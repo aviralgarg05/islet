@@ -51,7 +51,7 @@ An activity is identified by `id`. Sending the same `id` again **updates** it (f
 | `url` | URL | Opened when the island is clicked while showing this activity. |
 | `actions` | `[{title, url, dismiss?}]` | Buttons in the expanded island (up to 2). `url` may be any scheme: `https`, `shortcuts://`, `raycast://`, `file://`… |
 | `sneak` | bool | Briefly expand to announce the change. Default: on create (normal priority and up) and when a run finishes. |
-| `source` | string | Who sent it; used for grouping, muting and app rules. Use a bundle id to get that app's icon. |
+| `source` | string | Who sent it; used for grouping, muting and app rules. Use a bundle id to get that app's icon. One line, trimmed, at most 128 characters: it is the name `DELETE ?source=` and **Mute** match on, so a longer one is refused with a `422` rather than shortened. |
 
 **What shows in the closed island**, highest first: volume/brightness HUD → a new or updated activity (the "sneak peek") → `high`/`critical` activities → battery events → playing music → other activities. With "Activities shown together" at 2 or 3, the next ones appear as detached bubbles beside the notch, like the iPhone.
 
@@ -194,7 +194,7 @@ echo '{"title":"Lakers at Celtics","teams":[{"abbr":"LAL","score":3},{"abbr":"BO
 | `POST /v1/activities` | activity | `201` + the activity (upsert) |
 | `PUT` / `PATCH /v1/activities/{id}` | partial activity | the updated activity |
 | `DELETE /v1/activities/{id}` | — | `204`, or `404` |
-| `DELETE /v1/activities?source=NAME` | — | `{"removed": n}` |
+| `DELETE /v1/activities?source=NAME` | — | `{"removed": n}`; `NAME` is trimmed, as it is on the way in |
 | `POST /v1/notify` | `{title, subtitle?, icon?, tint?, ttl? (6), priority?, source?}` | a short-lived notification |
 | `POST /v1/timer` (or `/v1/timers`) | `{seconds \| in, title?, id?}` | `201` + the timer; see [Timers](#timers) |
 | `GET /v1/timers` | — | timers: ringing first, then by end time, then paused |
@@ -224,9 +224,9 @@ curl -s -X POST http://127.0.0.1:47831/v1/activities \
 
 `GET /v1/state` (and `isletctl state`) includes `"calendar": {"events": "fullAccess", "reminders": "notDetermined", "upcoming": 3}`: what macOS allows for calendars and for reminders (`notDetermined`, `fullAccess`, `writeOnly` for "Add events only", `denied` or `restricted`), read afresh for each request, and how many timed events are left today. It never includes a title. Meeting reminders (ids starting with `meeting-`, source `calendar`) carry the meeting's title, so `GET /v1/activities` and `/v1/state` always leave them out. To a script they aren't there: changing or removing one by its id gets a `404`, and `DELETE /v1/activities?source=calendar` removes only your own `calendar` activities and counts only those.
 
-Live Activities mirrored from the menu bar (ids starting with `live-`, sources `live-activity` or starting with `live-activity:`, such as `live-activity:uber`) belong to the mirror. Creating, changing or removing one, or sending that source, gets a `403` whether or not the id exists. `GET /v1/activities` and `/v1/state` leave them out, and `/v1/debug/menubar` leaves out their text, unless **Let scripts read Live Activities and notifications** (Settings → Advanced → Local API) is on; see [LIVE-ACTIVITIES.md](LIVE-ACTIVITIES.md).
+Live Activities mirrored from the menu bar (ids starting with `live-`, sources `live-activity` or starting with `live-activity:`, such as `live-activity:uber`) belong to the mirror. Creating, changing or removing one, or sending that source, gets a `403` whether or not the id exists. A source is put on one line and trimmed before this is decided, so `" live-activity:uber"` is refused too. `GET /v1/activities` and `/v1/state` leave them out, and `/v1/debug/menubar` leaves out their text, unless **Let scripts read Live Activities and notifications** (Settings → Advanced → Local API) is on; see [LIVE-ACTIVITIES.md](LIVE-ACTIVITIES.md).
 
-Mirrored notifications (ids starting with `notif-`, source the app's bundle ID) carry a banner's own title and the first 140 characters of its text, so the same setting covers them: `GET /v1/activities` and `/v1/state` leave them out unless it is on. Notification mirroring is off to begin with.
+Mirrored notifications (ids starting with `notif-`, source the app's bundle ID) carry a banner's own title and the first 140 characters of its text, so the same setting covers them: `GET /v1/activities` and `/v1/state` leave them out unless it is on, and `DELETE /v1/activities?source=<bundle id>` neither removes nor counts them (the count alone would say how many banners are on screen). Writing an id starting with `notif-` gets a `403`. Notification mirroring is off to begin with.
 
 ### Media commands
 
@@ -387,7 +387,7 @@ Any app or web page can open these URLs, and they carry no token, so they are li
 - Activities they create or dismiss get ids starting with `url-` (`id=deploy` becomes `url-deploy`, and `islet://focus` makes `url-focus`), so a link can't replace or remove an activity made by Islet, the API or the Live Activity mirror. `source=live-activity` is refused.
 - `url` and `actionURL` must be `https`.
 - Icons are limited to `sf:`, `emoji:` and `app:`.
-- Text is cut to one line: a title at 120 characters, a subtitle at 160, a trailing value at 40 and a source at 64. The same caps apply over the API and the bridge.
+- Text is cut to one line: a title at 120 characters, a subtitle at 160 and a trailing value at 40. The same caps apply over the API and the bridge. A `source` is a name rather than text to draw, so it is only put on one line and trimmed; one over 128 characters is refused.
 - `priority=critical` is treated as `high`.
 
 Use the local API or `isletctl` when you need more.
