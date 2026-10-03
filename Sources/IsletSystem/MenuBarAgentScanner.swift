@@ -49,12 +49,15 @@ public enum MenuBarAgentScanner {
         for slot in children(window) {
             let frame = frame(slot)
             guard frame.width > 0 else { continue }
-            if string(slot, kAXRoleAttribute) == kAXButtonRole {
+            let slotRole = string(slot, kAXRoleAttribute)
+            if slotRole == kAXButtonRole {
                 let info = MenuBarItemInfo(role: kAXButtonRole, x: frame.minX, width: frame.width)
                 result.append(Slot(frame: frame, element: slot, info: info, kind: .overflowButton, key: "overflow"))
                 continue
             }
-            guard let content = children(slot).first else { continue }
+            // A Live Activity is the slot itself: an AXMenuBarItem holding the pill's parts. Every
+            // other item is a container, with the AXMenuBarItem a step or two inside.
+            guard let content = slotRole == "AXMenuBarItem" ? slot : children(slot).first else { continue }
             let owner = pid(content)
             let bundle = bundles[owner] ?? ""
             if owner != agent, !MenuBarLiveActivities.rendererBundleIDs.contains(bundle) {
@@ -116,9 +119,7 @@ public enum MenuBarAgentScanner {
             let p = pid(c)
             // Stay inside MenuBarAgent and the Live Activity renderer.
             guard p == agent || MenuBarLiveActivities.rendererBundleIDs.contains(renderers[p] ?? "") else { continue }
-            if let s = value(c) ?? string(c, kAXDescriptionAttribute) ?? string(c, kAXTitleAttribute), !s.isEmpty {
-                out.append(s)
-            }
+            if let s = text(c) { out.append(s) }
             collectTexts(c, agent: agent, renderers: renderers, depth: depth + 1, budget: &budget, into: &out)
         }
     }
@@ -139,6 +140,23 @@ public enum MenuBarAgentScanner {
         var p: pid_t = 0
         AXUIElementGetPid(e, &p)
         return p
+    }
+
+    /// What an element says, in the order macOS fills in: its value, its description, the
+    /// attributed description a SwiftUI label in the menu bar often has instead, or its title.
+    /// A Live Activity's text is in the attributed one, so leaving it out loses the whole pill.
+    static func text(_ e: AXUIElement) -> String? {
+        for s in [value(e), string(e, kAXDescriptionAttribute), attributed(e), string(e, kAXTitleAttribute)] {
+            if let s, !s.isEmpty { return s }
+        }
+        return nil
+    }
+
+    static func attributed(_ e: AXUIElement) -> String? {
+        var v: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(e, "AXAttributedDescription" as CFString, &v) == .success, let v else { return nil }
+        if let s = v as? NSAttributedString { return s.string }
+        return v as? String
     }
 
     static func value(_ e: AXUIElement) -> String? {

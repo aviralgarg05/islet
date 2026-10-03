@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixes
+- Live Activities from your iPhone show in the island again. macOS builds the menu bar’s Live Activity differently from every other item, so Islet read an empty part of it and passed over it.
 - Music and videos playing in a browser show on the island again. A live stream, or a video whose length the browser doesn’t know, used to stop Now Playing for every app until the Mac slept and woke.
 - The app icons beside the song now offer every player macOS lists, such as Spotify paused a while ago beside a video playing in Chrome. For a player macOS hasn’t given the controls to, a press says which app has them and offers to open the player, instead of doing nothing.
 - A video’s artwork from Chrome no longer blinks off and on while it plays, and the next video no longer keeps the last one’s picture.

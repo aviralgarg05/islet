@@ -205,6 +205,21 @@ import Testing
         #expect(MenuBarLiveActivities.classify(MenuBarItemInfo(role: "AXMenuBarItem")) == .unknown)
     }
 
+    /// macOS 27 draws the pill as the menu bar item itself, with its text only in the segments'
+    /// attributed descriptions. Reading the item a step too far inside left Islet with nothing:
+    /// no identifier, no label and no text, so the activity never reached the island.
+    @Test func theRealPillFromMacOS27IsMirrored() {
+        let pill = MenuBarItemInfo(
+            identifier: "live-activity-pill-com.apple.chrono.WidgetRenderer-Activities", role: "AXMenuBarItem",
+            description: "Live Activity", texts: ["IND 211/6 (20)", "Expanded"], x: 896, width: 110
+        )
+        #expect(MenuBarLiveActivities.classify(pill) == .liveActivity)
+        let mirrored = MenuBarLiveActivities.mirror(pill, key: "id:pill")
+        #expect(mirrored?.detail == "IND 211/6 (20)")
+        // The wrapper Islet used to read instead says nothing at all.
+        #expect(MenuBarLiveActivities.classify(MenuBarItemInfo(x: 896, width: 110)) == .unknown)
+    }
+
     @Test func labelsInEveryLanguage() {
         let labels = MenuBarLabels.from(loctable: [
             "hi": ["liveActivity.accessibilityLabel": "लाइव ऐक्टिविटी", "liveActivity.endLiveActivityMenuItem": "लाइव ऐक्टिविटी समाप्त करें"],
