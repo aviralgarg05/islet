@@ -211,11 +211,11 @@ import Testing
         func req(_ headers: [String: String], body: String = #"{"name":"Work","on":true}"#) -> HTTPRequest {
             HTTPRequest(method: "POST", path: "/v1/focus", headers: headers, body: Data(body.utf8))
         }
-        #expect(await lan.handle(req(["Host": "aviral-mbp.local:47832", "Authorization": "Bearer tok"])).status == 201)
-        #expect(await lan.handle(req(["Host": "aviral-mbp.local:47832"])).status == 401)
+        #expect(await lan.handle(req(["Host": "my-mac.local:47832", "Authorization": "Bearer tok"])).status == 201)
+        #expect(await lan.handle(req(["Host": "my-mac.local:47832"])).status == 401)
         #expect(await lan.handle(req(["Host": "x", "Authorization": "Bearer tok", "Origin": "https://evil.example"])).status == 403)
         let local = APIRouter(token: "tok", version: "t", backend: b, clock: { t0 })
-        #expect(await local.handle(req(["Host": "aviral-mbp.local:47832", "Authorization": "Bearer tok"])).status == 403)
+        #expect(await local.handle(req(["Host": "my-mac.local:47832", "Authorization": "Bearer tok"])).status == 403)
     }
 }
 

@@ -3,7 +3,11 @@
 #
 #   scripts/bundle.sh                 # release build, ad-hoc signed → build/Islet.app
 #   CONFIG=debug scripts/bundle.sh    # debug build
+#   UNIVERSAL=0 scripts/bundle.sh     # this Mac's architecture only (quicker, for your own use)
 #   SIGN_IDENTITY="Developer ID Application: Name (TEAMID)" scripts/bundle.sh   # distributable build
+#
+# A release build is universal, so the zip runs on Intel Macs as well as Apple Silicon. The
+# MediaRemote helper beside it is built for both either way.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -13,11 +17,17 @@ BUILD="${BUILD:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
 BUNDLE_ID="${BUNDLE_ID:-dev.islet.Islet}"
 APP="build/Islet.app"
 
-echo "▸ swift build ($CONFIG)"
+# Both architectures for a release (the zip has to run on Intel too); this Mac's alone for a
+# debug build, where the wait matters more than the reach.
+UNIVERSAL="${UNIVERSAL:-$([ "$CONFIG" = release ] && echo 1 || echo 0)}"
+ARCHS=()
+[ "$UNIVERSAL" = 1 ] && ARCHS=(--arch arm64 --arch x86_64)
+
+echo "▸ swift build ($CONFIG${ARCHS:+, universal})"
 # JOBS=4 make app keeps the build from taking every core.
-swift build -c "$CONFIG" ${JOBS:+-j "$JOBS"} --product Islet
-swift build -c "$CONFIG" ${JOBS:+-j "$JOBS"} --product isletctl
-BIN="$(swift build -c "$CONFIG" --show-bin-path)"
+swift build -c "$CONFIG" ${JOBS:+-j "$JOBS"} "${ARCHS[@]}" --product Islet
+swift build -c "$CONFIG" ${JOBS:+-j "$JOBS"} "${ARCHS[@]}" --product isletctl
+BIN="$(swift build -c "$CONFIG" "${ARCHS[@]}" --show-bin-path)"
 
 echo "▸ MediaRemote helper"
 mkdir -p build/helpers

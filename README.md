@@ -129,3 +129,5 @@ Questions go to [Discussions](https://github.com/aviralgarg05/islet/discussions)
 ## Licence
 
 MIT. See [LICENSE](LICENSE).
+
+Islet is not affiliated with or endorsed by Apple. Dynamic Island, Live Activities, macOS and Mac are trademarks of Apple Inc.
