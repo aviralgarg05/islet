@@ -170,7 +170,7 @@ import Testing
     // Now Playing collapsed into the overflow.
     let observed = [
         MenuBarItemInfo(identifier: "com.apple.menuextra.battery", role: "AXMenuBarItem", subrole: "AXMenuExtra", description: "Battery", value: "80%, charging"),
-        MenuBarItemInfo(identifier: "com.apple.menuextra.wifi", role: "AXMenuBarItem", subrole: "AXMenuExtra", description: "Wi‑Fi, connected, 2 bars"),
+        MenuBarItemInfo(identifier: "com.apple.menuextra.wifi", role: "AXMenuBarItem", subrole: "AXMenuExtra", description: "Wi\u{2011}Fi, connected, 2 bars"),
         MenuBarItemInfo(identifier: "com.apple.menuextra.bluetooth", role: "AXMenuBarItem", subrole: "AXMenuExtra", description: "Bluetooth"),
         MenuBarItemInfo(identifier: "com.apple.menuextra.screen-mirroring", role: "AXMenuBarItem", subrole: "AXMenuExtra", description: "Screen Mirroring"),
         MenuBarItemInfo(identifier: "com.apple.menuextra.controlcenter", role: "AXMenuBarItem", subrole: "AXMenuExtra", description: "Control Center"),
@@ -179,6 +179,24 @@ import Testing
         MenuBarItemInfo(identifier: "com.apple.menuextra.timer", role: "AXMenuBarItem", subrole: "AXMenuExtra", description: "Timer", value: "4:59"),
         MenuBarItemInfo(identifier: "com.apple.menuextra.audiovideo", role: "AXMenuBarItem", subrole: "AXMenuExtra", description: "AV Controls"),
     ]
+
+    /// The identifier every Live Activity pill on this Mac carries. The suffix is the bundle id
+    /// of the process that draws every pill, so it names the renderer and never the activity:
+    /// two pills on screen at the same time carry this very string.
+    static let pillID = "live-activity-pill-com.apple.chrono.WidgetRenderer-Activities"
+
+    /// A pill as macOS 27 exposes it. The menu bar item itself carries the identifier and the
+    /// label "Live Activity"; inside are the app's own picture and one or two short labels, and
+    /// Apple's "Expanded" chevron comes last. `texts` is what the scan collects, in that order.
+    func pill(_ texts: [String], x: CGFloat = 896, width: CGFloat = 110, hidden: Bool = false) -> MenuBarItemInfo {
+        MenuBarItemInfo(identifier: Self.pillID, role: "AXMenuBarItem", description: "Live Activity",
+                        texts: texts + ["Expanded"], x: x, width: width, hidden: hidden)
+    }
+
+    /// The key the scan gives a pill it found at one element, as the scanner builds it.
+    func key(_ element: UInt) -> String {
+        MenuBarLiveActivities.key(kind: .liveActivity, identifier: Self.pillID, elementHash: element)
+    }
 
     @Test func systemItemsAreNotLiveActivities() {
         for item in observed {
@@ -194,8 +212,7 @@ import Testing
     @Test func recognisedByLabelIdentifierMenuOrRenderer() {
         let label = MenuBarItemInfo(role: "AXMenuBarItem", description: "Live Activity", texts: ["Uber", "4 min"])
         #expect(MenuBarLiveActivities.classify(label) == .liveActivity)
-        let pill = MenuBarItemInfo(identifier: "live-activity-pill-3F2A", texts: ["12:40"])
-        #expect(MenuBarLiveActivities.classify(pill) == .liveActivity)
+        #expect(MenuBarLiveActivities.classify(pill(["12:40"])) == .liveActivity)
         let menu = MenuBarItemInfo(identifier: "x.unknown", role: "AXGroup", customActions: ["End Live Activity"])
         #expect(MenuBarLiveActivities.classify(menu) == .liveActivity)
         let rendered = MenuBarItemInfo(texts: ["IND 245/3"], owner: "renderer")
@@ -205,17 +222,52 @@ import Testing
         #expect(MenuBarLiveActivities.classify(MenuBarItemInfo(role: "AXMenuBarItem")) == .unknown)
     }
 
+    /// Every pill carries one identifier, the renderer's bundle id, so the identifier can't be
+    /// the key: two pills on screen at once collapsed into one island row, a click opened
+    /// whichever won, a new activity never got a peek, and a dismissal swallowed the next one.
+    /// The element is one per pill and lives exactly as long as the pill does.
+    @Test func aPillIsKeyedOnItsElementBecauseEveryPillSharesOneIdentifier() {
+        #expect(key(0x1A2B) != key(0x3C4D))
+        // Stable while the pill lives, whatever its text does, and the identifier never shows.
+        #expect(key(0x1A2B) == key(0x1A2B))
+        #expect(!key(0x1A2B).contains(Self.pillID))
+        // A pill with no identifier at all is keyed the same way.
+        #expect(MenuBarLiveActivities.key(kind: .liveActivity, identifier: nil, elementHash: 0x1A2B) == key(0x1A2B))
+        // Every other item has an identifier of its own, which outlives its element.
+        #expect(MenuBarLiveActivities.key(kind: .systemItem, identifier: "com.apple.menuextra.battery", elementHash: 7)
+            == "id:com.apple.menuextra.battery")
+        #expect(MenuBarLiveActivities.key(kind: .systemItem, identifier: nil, elementHash: 7) == "el:7")
+    }
+
+    /// Two pills on screen at the same time, both carrying that one identifier, as seen on this
+    /// Mac: a cricket score and a delivery. They have to reach the island as two activities.
+    @Test func twoPillsAtOnceAreTwoActivities() throws {
+        let pills = [pill(["IND 211/6 (20)"], x: 760), pill(["food_di_preparing_icon", "13:01", "min"], x: 882, width: 85)]
+        let mirrored = try zip(pills, [key(1), key(2)]).map { item, key in
+            try #require(MenuBarLiveActivities.mirror(item, key: key))
+        }
+        #expect(Set(mirrored.map(\.key)).count == 2)
+        #expect(Set(mirrored.map { MenuBarLiveActivities.activityID($0.key) }).count == 2)
+        // Both rows show, and dismissing one leaves the other where it was.
+        var tracker = MirrorTracker()
+        #expect(tracker.sync(mirrored, now: t0).show.count == 2)
+        tracker.dismiss(key: mirrored[0].key)
+        #expect(tracker.sync(mirrored, now: t0).show.map(\.key) == [mirrored[1].key])
+        // Separate clocks, so one pill's time is never the other's.
+        var clock = LiveActivityClock()
+        #expect(clock.update(key: mirrored[0].key, detail: "4:59", now: t0) == nil)
+        #expect(clock.update(key: mirrored[1].key, detail: "4:58", now: t0.addingTimeInterval(1)) == nil)
+    }
+
     /// macOS 27 draws the pill as the menu bar item itself, with its text only in the segments'
     /// attributed descriptions. Reading the item a step too far inside left Islet with nothing:
     /// no identifier, no label and no text, so the activity never reached the island.
-    @Test func theRealPillFromMacOS27IsMirrored() {
-        let pill = MenuBarItemInfo(
-            identifier: "live-activity-pill-com.apple.chrono.WidgetRenderer-Activities", role: "AXMenuBarItem",
-            description: "Live Activity", texts: ["IND 211/6 (20)", "Expanded"], x: 896, width: 110
-        )
-        #expect(MenuBarLiveActivities.classify(pill) == .liveActivity)
-        let mirrored = MenuBarLiveActivities.mirror(pill, key: "id:pill")
-        #expect(mirrored?.detail == "IND 211/6 (20)")
+    @Test func theRealPillFromMacOS27IsMirrored() throws {
+        let item = pill(["IND 211/6 (20)"])
+        #expect(MenuBarLiveActivities.classify(item) == .liveActivity)
+        let mirrored = try #require(MenuBarLiveActivities.mirror(item, key: key(1)))
+        #expect(mirrored.appName == nil)
+        #expect(mirrored.detail == "IND 211/6 (20)")
         // The wrapper Islet used to read instead says nothing at all.
         #expect(MenuBarLiveActivities.classify(MenuBarItemInfo(x: 896, width: 110)) == .unknown)
     }
@@ -224,18 +276,112 @@ import Testing
     /// picture the accessibility description `food_di_preparing_icon`, and the time arrives as two
     /// labels, "13:01" and "min". Islet used to title the activity with the asset name and write
     /// "13:01 · min" under it.
-    @Test func anAppsOwnNameForItsPictureNeverReachesTheIsland() {
-        let pill = MenuBarItemInfo(
-            identifier: "live-activity-pill-com.apple.chrono.WidgetRenderer-Activities", role: "AXMenuBarItem",
-            description: "Live Activity", texts: ["food_di_preparing_icon", "13:01", "min", "Expanded"],
-            x: 882, width: 85
-        )
-        let mirrored = MenuBarLiveActivities.mirror(pill, key: "id:pill")
-        #expect(mirrored?.detail == "13:01 min")
-        #expect(mirrored?.appName == "Live Activity")
-        #expect(mirrored?.detail?.contains("_") == false)
+    @Test func anAppsOwnNameForItsPictureNeverReachesTheIsland() throws {
+        let mirrored = try #require(MenuBarLiveActivities.mirror(pill(["food_di_preparing_icon", "13:01", "min"], width: 85), key: key(1)))
+        #expect(mirrored.detail == "13:01 min")
+        #expect(mirrored.appName == nil)
+        #expect(mirrored.detail?.contains("_") == false)
         // Dropped from the words on screen, kept for choosing the symbol.
-        #expect(mirrored?.hint == "food di preparing")
+        #expect(mirrored.hint == "food di preparing")
+    }
+
+    /// The common pill: one readable label, no app name anywhere. The island used to read
+    /// "Live Activity" with the label under it, and lost the catalogue's layout as well.
+    @Test func aPillWithOneLabelIsTitledByWhatItSays() throws {
+        let mirrored = try #require(MenuBarLiveActivities.mirror(pill(["Delivered"]), key: key(1)))
+        #expect(mirrored.appName == nil)
+        #expect(mirrored.detail == "Delivered")
+        let spec = MenuBarLiveActivities.activity(for: mirrored, look: nil, isNew: true)
+        #expect(spec.title == "Delivered")
+        #expect(spec.subtitle == "")
+        var centre = ActivityCenter()
+        let activity = try centre.apply(spec, now: t0)
+        #expect(activity.title == "Delivered")
+        #expect(activity.subtitle == nil)
+        // Nothing readable at all still says where it came from.
+        let bare = try #require(MenuBarLiveActivities.mirror(pill([]), key: key(2)))
+        #expect(MenuBarLiveActivities.activity(for: bare, look: nil, isNew: true).title == "Live Activity")
+    }
+
+    /// A football pill at one-all: four labels, two of them the same number. De-duplicating the
+    /// labels dropped the second "1", which left "1 · CHE" and put a team in the wing.
+    @Test func aTiedScoreKeepsBothNumbers() throws {
+        let item = pill(["ARS", "1", "CHE", "1"])
+        #expect(item.allText == ["Live Activity", "ARS", "1", "CHE", "1", "Expanded"])
+        let mirrored = try #require(MenuBarLiveActivities.mirror(item, key: key(1)))
+        #expect(mirrored.appName == "ARS")
+        #expect(mirrored.detail == "1 · CHE · 1")
+        // Two sides, so neither number is the wing's.
+        #expect(MenuBarLiveActivities.activity(for: mirrored, look: nil, isNew: false).trailing == "")
+    }
+
+    /// A pill in Hindi, one of this Mac's languages: a number and the word for minutes, as two
+    /// labels. They are one phrase, and the word on its own is not a value for the wing.
+    @Test func aUnitInAnotherLanguageStaysWithItsNumber() throws {
+        let mirrored = try #require(MenuBarLiveActivities.mirror(pill(["8", "मिनट"]), key: key(1)))
+        #expect(mirrored.appName == nil)
+        #expect(mirrored.detail == "8 मिनट")
+        let spec = MenuBarLiveActivities.activity(for: mirrored, look: nil, isNew: false)
+        #expect(spec.title == "8 मिनट")
+        #expect(spec.trailing == "8 मिनट")
+        #expect(MenuBarLiveActivities.joined(["45", "Minuten"]) == "45 Minuten")
+        // A team abbreviation is not a unit, and neither is a number.
+        #expect(MenuBarLiveActivities.joined(["1", "CHE"]) == "1 · CHE")
+        #expect(MenuBarLiveActivities.joined(["Lakers", "102"]) == "Lakers · 102")
+    }
+
+    /// A Home Assistant pill: `washing_machine` is what someone named the thing, not what an app
+    /// named a picture. Dropping anything underscored left the activity with no title at all.
+    @Test func aSnakeCaseTitleIsNotAnAssetName() throws {
+        let mirrored = try #require(MenuBarLiveActivities.mirror(pill(["washing_machine", "42%"]), key: key(1)))
+        #expect(mirrored.appName == "washing_machine")
+        #expect(mirrored.detail == "42%")
+        #expect(mirrored.hint == nil)
+        #expect(MenuBarLiveActivities.activity(for: mirrored, look: nil, isNew: false).trailing == "42%")
+    }
+
+    /// Mute is built from the source, and muting saves the source to `config.json`. A source
+    /// slugged from a pill would name a different thing on the next ball, and would put what
+    /// someone's iPhone is showing on disk.
+    @Test func theSourceNeverCarriesWhatThePillSaid() throws {
+        let score = try #require(MenuBarLiveActivities.mirror(pill(["IND 245/3", "AUS 198"]), key: key(1)))
+        let source = try #require(MenuBarLiveActivities.activity(for: score, look: nil, isNew: true).source)
+        #expect(source == "live-activity")
+        #expect(!source.contains("245"))
+        // Settings' master mute reaches it.
+        var settings = IsletSettings()
+        settings.mutedSources = [MenuBarLiveActivities.source]
+        #expect(settings.isMuted(source: source))
+        #expect(MutedSources.displayName(source) { _ in nil } == "Live Activities")
+        // A catalogued app still gets its own source, spelled as the catalogue spells it.
+        let uber = try #require(MenuBarLiveActivities.mirror(pill(["Uber", "4 min"]), key: key(2)))
+        #expect(MenuBarLiveActivities.activity(for: uber, look: nil, isNew: true).source == "live-activity:uber")
+    }
+
+    /// An app is named only when the text names it exactly. A phrase that merely holds an app's
+    /// name is a phrase: "Man United 2 - 1 Arsenal" used to become the title, with an aeroplane
+    /// and a flight layout, because the catalogue matched on containment.
+    @Test func onlyAnExactNameNamesTheApp() throws {
+        let score = try #require(MenuBarLiveActivities.mirror(pill(["Man United 2 - 1 Arsenal"]), key: key(1)))
+        #expect(score.appName == nil)
+        let spec = MenuBarLiveActivities.activity(for: score, look: nil, isNew: false)
+        #expect(spec.title == "Man United 2 - 1 Arsenal")
+        #expect(spec.template == "")
+        // The catalogue's own spelling, from whatever the pill spelled it as.
+        let flight = try #require(MenuBarLiveActivities.mirror(pill(["  flighty ", "Boarding 12:40"]), key: key(2)))
+        #expect(flight.appName == "Flighty")
+        #expect(MenuBarLiveActivities.activity(for: flight, look: nil, isNew: false).template == "flight")
+    }
+
+    /// "Uber, 4 min" in one label is an app and a detail. "Arriving at <street>, <street>" is one
+    /// sentence, and splitting on the comma made half an address the title.
+    @Test func onlyAKnownAppSplitsOnTheComma() throws {
+        let uber = try #require(MenuBarLiveActivities.mirror(pill(["Uber, 4 min"]), key: key(1)))
+        #expect(uber.appName == "Uber")
+        #expect(uber.detail == "4 min")
+        let route = try #require(MenuBarLiveActivities.mirror(pill(["Arriving at Acacia Avenue, Springfield"]), key: key(2)))
+        #expect(route.appName == nil)
+        #expect(route.detail == "Arriving at Acacia Avenue, Springfield")
     }
 
     @Test func assetNamesAreToldApartFromTitles() {
@@ -243,7 +389,11 @@ import Testing
             #expect(MenuBarLiveActivities.isAssetName(junk), "\(junk) should read as an asset name")
         }
         for real in ["Uber", "Zomato", "Design review", "2 – 1", "13:01", "min", "Flight AA100",
-                     "On the way", "LAL", "Café", "F1", "90%"] {
+                     "On the way", "LAL", "Café", "F1", "90%",
+                     // An underscore is not an asset word: these are what someone named a thing.
+                     "washing_machine", "front_door", "morning_routine", "IND_vs_AUS", "lofi_beats", "voice_memo_3",
+                     // The asset word has to stand alone beside something else that is named.
+                     "theBadgers", "eBadge", "myImagery"] {
             #expect(!MenuBarLiveActivities.isAssetName(real), "\(real) should reach the island")
         }
     }
@@ -257,7 +407,7 @@ import Testing
         #expect(MenuBarLiveActivities.joined([]).isEmpty)
     }
 
-    @Test func labelsInEveryLanguage() {
+    @Test func labelsInEveryLanguage() throws {
         let labels = MenuBarLabels.from(loctable: [
             "hi": ["liveActivity.accessibilityLabel": "लाइव ऐक्टिविटी", "liveActivity.endLiveActivityMenuItem": "लाइव ऐक्टिविटी समाप्त करें"],
             "de": ["avModule.accessibilityLabel": "AV-Steuerung"],
@@ -269,26 +419,20 @@ import Testing
         #expect(MenuBarLiveActivities.classify(MenuBarItemInfo(role: "AXMenuBarItem", description: "AV-Steuerung"), labels: labels) == .avControls)
     }
 
-    @Test func mirroredTextDropsTheGenericLabel() {
+    @Test func mirroredTextDropsTheGenericLabel() throws {
         let a = MenuBarItemInfo(role: "AXMenuBarItem", description: "Live Activity", texts: ["Uber", "Arriving", "4 min"])
         #expect(MenuBarLiveActivities.mirror(a, key: "el:1") == MirroredLiveActivity(key: "el:1", appName: "Uber", detail: "Arriving · 4 min"))
         // Two activities with the same generic label keep separate keys.
-        let b = MenuBarItemInfo(role: "AXMenuBarItem", description: "Live Activity", texts: ["Flighty", "Boards 0:42"])
-        #expect(MenuBarLiveActivities.mirror(b, key: "el:2")?.key == "el:2")
-        // "App, detail" in one string.
-        let c = MenuBarItemInfo(role: "AXMenuBarItem", description: "Flighty, Boarding 12:40")
-        #expect(MenuBarLiveActivities.mirror(c, key: "el:3") == MirroredLiveActivity(key: "el:3", appName: "Flighty", detail: "Boarding 12:40"))
+        let b = pill(["Flighty", "Boards 0:42"])
+        #expect(MenuBarLiveActivities.mirror(b, key: key(2))?.key == key(2))
+        #expect(MenuBarLiveActivities.mirror(b, key: key(3))?.key == key(3))
         // The catalogue recognises the app even when it isn't first.
-        let d = MenuBarItemInfo(identifier: "live-activity-pill-9", texts: ["4 min", "Uber"])
-        #expect(MenuBarLiveActivities.mirror(d, knownApp: { $0 == "Uber" }) == MirroredLiveActivity(key: "live-activity-pill-9", appName: "Uber", detail: "4 min"))
-        // Values alone: say where it came from.
-        let e = MenuBarItemInfo(identifier: "live-activity-pill-10", texts: ["2 – 1"])
-        #expect(MenuBarLiveActivities.mirror(e)?.appName == "Live Activity")
+        let d = pill(["4 min", "Uber"])
+        #expect(MenuBarLiveActivities.mirror(d, key: key(4)) == MirroredLiveActivity(key: key(4), appName: "Uber", detail: "4 min"))
+        // Values alone: the value is all there is to show.
+        #expect(MenuBarLiveActivities.mirror(pill(["2 – 1"]), key: key(5))?.detail == "2 – 1")
         // Hidden in the overflow is carried through.
-        let f = MenuBarItemInfo(role: "AXMenuBarItem", description: "Live Activity", texts: ["Timer", "4:59"], hidden: true)
-        #expect(MenuBarLiveActivities.mirror(f, key: "el:4")?.hidden == true)
-        // Without a key or identifier there's nothing stable to follow.
-        #expect(MenuBarLiveActivities.mirror(a) == nil)
+        #expect(MenuBarLiveActivities.mirror(pill(["Timer", "4:59"], hidden: true), key: key(6))?.hidden == true)
     }
 
     @Test func clockValues() {
@@ -365,17 +509,19 @@ import Testing
         func read(_ detail: String, at s: Double) throws -> Activity {
             let now = t0.addingTimeInterval(s)
             let m = MirroredLiveActivity(key: "k", appName: "Some App", detail: detail)
-            let spec = MenuBarLiveActivities.activity(for: m, look: nil, isNew: false,
-                                                      clock: clock.update(key: m.key, detail: detail, now: now))
-            if MenuBarLiveActivities.clockSeconds(in: detail) == nil { c.clearClock(id: spec.id!) }
+            let reading = clock.update(key: m.key, detail: detail, now: now)
+            let spec = MenuBarLiveActivities.activity(for: m, look: nil, isNew: false, clock: reading)
+            // No reading, no clock, whatever the text still says.
+            if reading == nil { c.clearClock(id: spec.id!) }
             return try c.apply(spec, now: now)
         }
         _ = try read("Closes in 4:59", at: 0)
         let running = try read("Closes in 4:58", at: 1)
         #expect(running.endsAt == t0.addingTimeInterval(299))
         #expect(running.resolvedTemplate == .timer)
-        // A reading that doesn't settle the clock keeps it while the item still shows a time.
-        #expect(try read("Closes in 4:58", at: 1.9).endsAt == t0.addingTimeInterval(299))
+        // A reading that doesn't settle the clock stops it, even though the item still shows a
+        // time: the direction was lost, so the wing would be counting to a moment nobody promised.
+        #expect(try read("Closes in 4:58", at: 1.9).endsAt == nil)
         // The text moves on with no time in it: no countdown is left running in the wing.
         let later = t0.addingTimeInterval(400)
         let closed = try read("Gate closed for boarding", at: 400)
@@ -404,6 +550,64 @@ import Testing
         c.clearClock(id: "a")
         c.clearClock(id: "missing")
         #expect(c.activities.count == 1)
+    }
+
+    /// One activity ends and another begins. The new pill is a new element, so it is a new key:
+    /// it gets its own peek, nothing of the one before it merges into it, and a dismissal of the
+    /// one before doesn't swallow it.
+    @Test func anActivityEndingAndAnotherBeginning() throws {
+        var mirror = MenuBarMirror()
+        // A timer pill, running, dismissed from the island.
+        try mirror.read([pill(["Closes in 4:59"])], keys: [key(1)], now: t0)
+        try mirror.read([pill(["Closes in 4:58"])], keys: [key(1)], now: t0.addingTimeInterval(1))
+        let first = try #require(mirror.centre.activities[MenuBarLiveActivities.activityID(key(1))])
+        #expect(first.endsAt == t0.addingTimeInterval(299))
+        #expect(mirror.centre.sneak?.id == first.id)
+        mirror.tracker.dismiss(key: key(1))
+        try mirror.read([pill(["Closes in 4:57"])], keys: [key(1)], now: t0.addingTimeInterval(2))
+        #expect(mirror.centre.activities.isEmpty)
+
+        // It ends, and a delivery begins at another element.
+        try mirror.read([], keys: [], now: t0.addingTimeInterval(60))
+        try mirror.read([pill(["Delivered"])], keys: [key(2)], now: t0.addingTimeInterval(61))
+        let second = try #require(mirror.centre.activities.values.first)
+        #expect(mirror.centre.activities.count == 1)
+        #expect(second.id != first.id)
+        #expect(second.title == "Delivered")
+        // The dismissal of the one before doesn't reach it, and it gets a peek of its own.
+        #expect(mirror.centre.sneak?.id == second.id)
+        // Nothing of the timer merged in: no countdown is left running in the wing.
+        #expect(second.endsAt == nil)
+        #expect(second.trackSpan == nil)
+        #expect(second.resolvedTemplate != .timer)
+    }
+}
+
+/// `AppModel.syncMenuBarActivities`, as much of it as is pure logic: the tracker, the clock and
+/// the activities the island ends up with, so a test can play a menu bar through the whole path
+/// rather than one function of it.
+struct MenuBarMirror {
+    var tracker = MirrorTracker()
+    var clock = LiveActivityClock()
+    var centre = ActivityCenter()
+    var keys: Set<String> = []
+
+    mutating func read(_ items: [MenuBarItemInfo], keys next: [String], now: Date) throws {
+        let all = zip(items, next).compactMap { item, key in MenuBarLiveActivities.mirror(item, key: key) }
+        let shown = tracker.sync(all, now: now).show
+        let live = Set(shown.map(\.key))
+        for key in keys.subtracting(live) {
+            _ = centre.remove(id: MenuBarLiveActivities.activityID(key))
+            clock.forget(key)
+        }
+        for m in shown {
+            let reading = clock.update(key: m.key, detail: m.detail, now: now)
+            let spec = MenuBarLiveActivities.activity(for: m, look: nil, isNew: !keys.contains(m.key),
+                                                      clock: reading, staleAt: tracker.staleAt(key: m.key))
+            if reading == nil { centre.clearClock(id: spec.id!) }
+            _ = try centre.apply(spec, now: now)
+        }
+        keys = live
     }
 }
 

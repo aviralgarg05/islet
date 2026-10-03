@@ -552,15 +552,21 @@ import Testing
 @Suite struct MirroredTemplateTests {
     @Test func mirroredActivityTakesTemplateAndReadableTint() throws {
         let m = MirroredLiveActivity(key: "k", appName: "Uber", detail: "Arriving · 4 min")
-        let look = LiveActivityCatalog.look(for: m.appName).map { ($0.symbol, $0.tint) }
+        let look = m.appName.flatMap(LiveActivityCatalog.look(for:)).map { ($0.symbol, $0.tint) }
         let spec = MenuBarLiveActivities.activity(for: m, look: look, isNew: true)
         #expect(spec.template == "eta")
         #expect(spec.tint == "#FFFFFF")
         let lyft = MenuBarLiveActivities.activity(for: MirroredLiveActivity(key: "l", appName: "Lyft", detail: "3 min"),
                                                   look: LiveActivityCatalog.look(for: "Lyft").map { ($0.symbol, $0.tint) }, isNew: false)
         #expect(lyft.tint == "#FF00BF")
+        // No entry, so no layout, sent as "" rather than left out: an update has to clear the
+        // layout of whatever the island showed for this pill before.
         let unknown = MenuBarLiveActivities.activity(for: MirroredLiveActivity(key: "u", appName: "Some App", detail: nil), look: nil, isNew: false)
-        #expect(unknown.template == nil)
+        #expect(unknown.template == "")
+        // A phrase that merely holds an app's name is not that app: no flight layout here.
+        let score = MenuBarLiveActivities.activity(for: MirroredLiveActivity(key: "s", appName: "Man United 2 - 1 Arsenal", detail: nil),
+                                                   look: nil, isNew: false)
+        #expect(score.template == "")
         var c = ActivityCenter()
         #expect(try c.apply(spec, now: t0).resolvedTemplate == .eta)
     }

@@ -419,7 +419,9 @@ final class AppModel {
         switch watch {
         case .mirror:
             menuBarActivities.onChange = { [weak self] list in self?.syncMenuBarActivities(list) }
-            menuBarActivities.knownApp = { $0.count <= 24 && LiveActivityCatalog.look(for: $0) != nil }
+            // Exact: a pill reading "Man United 2 - 1 Arsenal" holds an airline's name without
+            // being that airline. The fuzzy match below still chooses the symbol and colour.
+            menuBarActivities.knownApp = { LiveActivityCatalog.exact($0)?.app }
             menuBarActivities.start()
             // The scan only publishes a changed menu bar; the filter changed, so publish it again.
             if onlyHiddenChanged { menuBarActivities.refresh() }
@@ -462,7 +464,9 @@ final class AppModel {
             mirrorClock.forget(key)
         }
         for m in list {
-            let look = LiveActivityCatalog.look(for: m.appName).map { ($0.symbol, $0.tint) }
+            // The symbol and colour may still come from a name found inside the text; only the
+            // name the island shows and the layout it uses need an exact match.
+            let look = LiveActivityCatalog.look(for: m.appName ?? m.detail ?? "").map { ($0.symbol, $0.tint) }
             let clock = mirrorClock.update(key: m.key, detail: m.detail, now: now)
             // An item whose text stops changing dims after a while (`MirrorTracker.staleAfter`).
             let spec = MenuBarLiveActivities.activity(for: m, look: look, isNew: !mirroredKeys.contains(m.key), clock: clock,

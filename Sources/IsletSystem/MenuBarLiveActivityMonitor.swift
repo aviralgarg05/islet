@@ -28,8 +28,8 @@ public final class MenuBarLiveActivityMonitor {
     public var onFrames: (([MenuBarActivityPill]) -> Void)?
     /// Items appeared, went away or moved (the menu bar layout changed).
     public var onStructureChange: (() -> Void)?
-    /// Recognises an app name among an activity's text (the Live Activity catalogue).
-    public var knownApp: (String) -> Bool = { _ in false }
+    /// The catalogue's own spelling of an app an activity's text names exactly, if any.
+    public var knownApp: (String) -> String? = { _ in nil }
     /// Whether Live Activities are read and published. Off, the monitor only follows the menu
     /// bar's layout for `onStructureChange` ("Fit the menu bar"): it reads no item's content
     /// and doesn't listen for Live Activity changes. Changing it while running starts afresh.

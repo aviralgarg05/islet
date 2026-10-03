@@ -99,7 +99,9 @@ public enum MenuBarItemKind: String, Codable, Sendable {
 public struct MirroredLiveActivity: Equatable, Sendable {
     /// Stable key for this activity while it lives.
     public var key: String
-    public var appName: String
+    /// The app the catalogue recognised, or the first of several labels. Nil when the pill named
+    /// no app: `detail` is then all it says, and the island titles it with that.
+    public var appName: String?
     /// The compact content, as text: e.g. "12 min" or "2 – 1".
     public var detail: String?
     /// Hidden in the menu bar's overflow, so the notch is the only place it shows.
@@ -108,7 +110,7 @@ public struct MirroredLiveActivity: Equatable, Sendable {
     /// but are often the only clue to what the activity is, so the right symbol can be chosen.
     public var hint: String?
 
-    public init(key: String, appName: String, detail: String?, hidden: Bool = false, hint: String? = nil) {
+    public init(key: String, appName: String?, detail: String?, hidden: Bool = false, hint: String? = nil) {
         self.key = key
         self.appName = appName
         self.detail = detail
@@ -313,27 +315,31 @@ public enum MenuBarLiveActivities {
 
     /// Turn an item into the app name and compact text Islet shows.
     /// - Parameters:
-    ///   - key: a stable identity for the item (the caller knows the element; the label doesn't
-    ///     tell activities apart). Defaults to the identifier.
-    ///   - knownApp: recognises an app name among the item's text (the Live Activity catalogue).
-    public static func mirror(_ item: MenuBarItemInfo, key: String? = nil, labels: MenuBarLabels = .english,
-                              knownApp: (String) -> Bool = { _ in false }) -> MirroredLiveActivity? {
+    ///   - key: the item's identity, from `key(kind:identifier:elementHash:)`. Required, and
+    ///     never the identifier: every pill carries the same one.
+    ///   - knownApp: the catalogue's own spelling of an app the text names exactly. A phrase that
+    ///     merely holds an app's name is not that app: "Man United 2 - 1 Arsenal" is a score, and
+    ///     a containment match made the whole phrase the title and gave it a flight's look.
+    public static func mirror(_ item: MenuBarItemInfo, key: String, labels: MenuBarLabels = .english,
+                              knownApp: (String) -> String? = { LiveActivityCatalog.exact($0)?.app }) -> MirroredLiveActivity? {
         guard isLiveActivity(item, labels: labels) else { return nil }
         var text = content(item, labels: labels)
-        // "Uber, 4 min" in a single description splits into app and detail.
-        if text.count == 1, let comma = text[0].range(of: ", ") {
+        // "Uber, 4 min" in a single description splits into app and detail, but only when the
+        // catalogue knows what stands before the comma: "Arriving at <street>, <street>" is one
+        // sentence, and splitting it made half an address the title.
+        if text.count == 1, let comma = text[0].range(of: ", "),
+           knownApp(String(text[0][..<comma.lowerBound])) != nil {
             text = [String(text[0][..<comma.lowerBound]), String(text[0][comma.upperBound...])]
         }
-        let app: String
-        if let i = text.firstIndex(where: knownApp) {
-            app = text.remove(at: i)
-        } else if text.count >= 2, !looksLikeValue(text[0]) {
-            app = text.removeFirst()
-        } else {
-            app = "Live Activity"
+        var app: String?
+        for (i, piece) in text.enumerated() {
+            guard let name = knownApp(piece) else { continue }
+            app = name
+            text.remove(at: i)
+            break
         }
+        if app == nil, text.count >= 2, !looksLikeValue(text[0]) { app = text.removeFirst() }
         let detail = joined(text)
-        guard let key = key ?? item.identifier else { return nil }
         // An asset name is never shown, but "food_di_preparing_icon" is the only thing on this
         // pill that says what it is, so it still chooses the symbol.
         let hint = item.allText.first(where: isAssetName).map(words(fromAssetName:))
@@ -407,17 +413,26 @@ public enum MenuBarLiveActivities {
                                 clock: LiveActivityClock.Reading? = nil, staleAt: Date? = nil) -> ActivitySpec {
         // The hint joins the search for a symbol, never the words on screen.
         let searched = [m.detail, m.hint].compactMap { $0 }.joined(separator: " ")
-        let suggestion = look ?? SmartIcon.suggest(title: m.appName, subtitle: searched.isEmpty ? nil : searched)
+        // Most pills expose one readable label and no app name at all, which is the common case
+        // rather than an edge one. The detail is then all the pill says, so it is the title and
+        // nothing goes under it: the island reads "Delivered", not "Live Activity" above it. The
+        // detail still feeds the wing, the clock and the symbol, which is why it stays in `m`.
+        let title = m.appName ?? m.detail ?? "Live Activity"
+        let suggestion = look ?? SmartIcon.suggest(title: title, subtitle: searched.isEmpty ? nil : searched)
             .map { ($0.symbol, $0.tint) }
         let tint = suggestion.flatMap { RGBA.parse($0.1) }.map { $0.readableOnBlack().hex }
         // Updates merge, so text the item no longer shows is sent as "" to clear it: otherwise an
         // old "4 min" would stay in the wing after the item moved on to longer text.
         var spec = ActivitySpec(
-            id: activityID(m.key), source: source(for: m.appName), title: m.appName, subtitle: m.detail ?? "",
+            id: activityID(m.key), source: source(for: m.appName), title: title,
+            subtitle: m.appName == nil ? "" : m.detail ?? "",
             icon: .symbol(suggestion?.0 ?? "dot.radiowaves.left.and.right"), trailing: shortTrailing(m.detail) ?? "",
             state: .running, tint: tint ?? suggestion?.1 ?? "white", priority: .normal, ttl: 0, sneak: isNew
         )
-        spec.template = LiveActivityCatalog.look(for: m.appName)?.template.rawValue
+        // Exactly as for the name: a phrase that happens to hold an app's name mustn't be given
+        // that app's layout. Sent as "" when nothing matches, so an update clears a layout the
+        // activity before it had, the way the text is cleared.
+        spec.template = m.appName.flatMap(LiveActivityCatalog.exact)?.template.rawValue ?? ""
         spec.staleAt = staleAt
         switch clock {
         case .countdown(let end)?:
