@@ -377,7 +377,10 @@ def run_suite(e, app, windows_bin):
         items = None
     check("debug menubar returns the MenuBarAgent items as JSON", p.returncode == 0 and isinstance(items, list), p.stderr.strip())
     system = {"Battery", "Wi‑Fi", "Wi-Fi", "Bluetooth", "Clock", "Control Center", "Screen Mirroring", "Now Playing"}
-    mirrored = [a for a in activities(e).values() if a.get("source") == "live-activity"]
+    # Every mirrored source, not just the plain one: a catalogued app gets "live-activity:uber",
+    # so matching the bare name alone would have let one of those through unchecked.
+    mirrored = [a for a in activities(e).values()
+                if (a.get("source") or "") == "live-activity" or (a.get("source") or "").startswith("live-activity:")]
     check("system menu extras are never mirrored as Live Activities",
           not any(a["title"] in system for a in mirrored), str([a["title"] for a in mirrored]))
 

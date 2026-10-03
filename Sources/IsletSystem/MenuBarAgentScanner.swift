@@ -122,7 +122,13 @@ public enum MenuBarAgentScanner {
                 info.texts = texts
             }
             let kind = MenuBarLiveActivities.classify(info, labels: labels)
-            let key = MenuBarLiveActivities.key(kind: kind, identifier: info.identifier, elementHash: CFHash(target))
+            // Keyed on the slot, not on `target`. Measured on this Mac, over ten scans of a
+            // nineteen-item menu bar: every slot had a hash of its own and kept it, while two
+            // different slots' `children(slot).first` came back as one and the same element
+            // (`CFEqual`), so content hashes were not all distinct. `target` is that child
+            // whenever the role check below doesn't pick the slot, and two pills sharing one
+            // hash is the very fault this key exists to avoid.
+            let key = MenuBarLiveActivities.key(kind: kind, identifier: info.identifier, elementHash: CFHash(slot))
             result.append(Slot(frame: frame, element: target, info: info, kind: kind, key: key))
         }
         // Items collapsed into the overflow are stacked on the chevron.

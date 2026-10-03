@@ -367,11 +367,12 @@ public enum MenuBarLiveActivities {
 
     /// The key a scan follows one menu bar item by, from what the scan already knows about it.
     ///
-    /// A Live Activity is keyed on its element and nothing else. Every pill on this Mac carries
-    /// the identifier `live-activity-pill-com.apple.chrono.WidgetRenderer-Activities`: the suffix
-    /// is the bundle id of the process that draws every pill, so it names the renderer, never the
-    /// activity, and two pills on screen at once share it exactly. The element is one per pill and
-    /// lives as long as the pill does, while everything readable on a pill moves while it runs: a
+    /// A Live Activity is keyed on its menu bar slot and nothing else. Every pill on this Mac
+    /// carries the identifier `live-activity-pill-com.apple.chrono.WidgetRenderer-Activities`: the
+    /// suffix is the bundle id of the process that draws every pill, so it names the renderer,
+    /// never the activity, and two pills on screen at once share it exactly. The slot is one per
+    /// pill and lives as long as the pill does, while everything readable on a pill moves as it
+    /// runs: a
     /// score on every ball, the minutes every minute, and even the app's own name for its picture
     /// carries the phase (`food_di_preparing_icon`). Folding any of that in would cost the
     /// identity the key is for, so none of it is folded in.

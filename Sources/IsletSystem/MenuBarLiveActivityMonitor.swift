@@ -270,6 +270,14 @@ public final class MenuBarLiveActivityMonitor {
 
     private func apply(_ all: [MenuBarAgentScanner.Slot]) {
         guard let observer else { return }
+        // Nothing read at all means the menu bar couldn't be read, not that every item went away:
+        // `slots()` comes back empty when MenuBarAgent has no window for this Space and display
+        // for a moment. Taken at face value it would drop every mirrored row, uncover every pill
+        // and bring back an activity the user had dismissed, since a key missing from a scan is
+        // what tells `MirrorTracker` an item has gone. A menu bar holding no items at all does
+        // not otherwise happen; "no Live Activities" arrives as items with none of this kind.
+        // `stop()` clears the rows through its own path, so nothing depends on an empty apply.
+        guard !all.isEmpty else { return }
         chevron = all.first { $0.kind == .overflowButton }?.element
         let labels = MenuBarAgentScanner.labels
         var found: [(MirroredLiveActivity, MenuBarAgentScanner.Slot)] = []
