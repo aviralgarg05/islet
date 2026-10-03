@@ -1,5 +1,10 @@
 # Islet — builds with the Xcode Command Line Tools alone.
-SWIFT_TEST_FLAGS = -Xswiftc -plugin-path -Xswiftc /Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing
+# swift-testing's macros need the plugin path spelled out when the Command Line Tools are the
+# selected toolchain; with Xcode selected they are found without it. Deriving the path from
+# `xcode-select -p` and adding it only when it is there means one command works either way, so
+# what you run locally is what CI runs.
+TESTING_PLUGINS := $(shell xcode-select -p 2>/dev/null)/usr/lib/swift/host/plugins/testing
+SWIFT_TEST_FLAGS = $(if $(wildcard $(TESTING_PLUGINS)),-Xswiftc -plugin-path -Xswiftc $(TESTING_PLUGINS),)
 
 .PHONY: build app run demo test e2e e2e-media perf snapshots motion-snapshots settings-snapshots check install release clean
 

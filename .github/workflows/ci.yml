@@ -39,9 +39,11 @@ jobs:
           # Islet has no dependencies yet, so there is no Package.resolved; Package.swift stands in.
           key: spm-${{ runner.os }}-${{ steps.xcode.outputs.toolchain }}-${{ hashFiles('Package.swift', 'Package.resolved') }}
 
+      # Through the Makefile, so CI runs exactly what a contributor runs locally. It works out
+      # whether this toolchain needs swift-testing's plugin path spelled out.
       - name: Build
-        run: swift build
+        run: make build
 
       # Unit and system tests only. The end-to-end suite (make e2e) needs a logged-in GUI session.
       - name: Test
-        run: swift test
+        run: make test
