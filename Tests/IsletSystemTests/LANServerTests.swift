@@ -312,7 +312,10 @@ func requestHead(_ method: String, _ path: String, token: String?, length: Int) 
 
     @Test func wrongTokenReachesAClientSendingAMegabyte() async throws {
         for lan in [false, true] {
-            let (server, port) = try await startServer(lan: lan)
+            // Thirteen refusals in a row, and URLSession resends a body it couldn't deliver, so
+            // the bridge's 30-per-10-seconds would answer 429 part way through and this would
+            // look like a lingering bug. The rate limit has its own test; take it out of this one.
+            let (server, port) = try await startServer(lan: lan) { $0.rateLimiter = nil }
             defer { server.stop() }
             for attempt in 1...5 {
                 let started = Date()
