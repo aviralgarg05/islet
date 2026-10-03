@@ -21,7 +21,14 @@ public enum ScriptPlugins {
             self.depth = depth
         }
 
-        public var href: URL? { params["href"].flatMap(URL.init(string:)) }
+        /// Link to open on click. Only `http` and `https`, with a host: a widget printing text
+        /// it fetched could otherwise emit `file://` or an app's own scheme, and a click would
+        /// hand that to macOS. The sibling `shell=` is confirmed by an alert; this isn't.
+        public var href: URL? {
+            guard let url = params["href"].flatMap(URL.init(string:)),
+                  ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host?.isEmpty == false else { return nil }
+            return url
+        }
         public var color: String? { params["color"] }
         public var sfSymbol: String? { params["sfimage"] ?? params["sfsymbol"] }
         public var isDisabled: Bool { params["disabled"] == "true" }

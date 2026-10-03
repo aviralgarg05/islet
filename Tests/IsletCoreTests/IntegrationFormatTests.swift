@@ -334,6 +334,20 @@ import Testing
         #expect(line.shellCommand == nil)
     }
 
+    /// A widget printing text it fetched could emit any scheme, and a click hands it to macOS,
+    /// so only http and https count as a link.
+    @Test func onlyWebLinksCountAsAnHref() {
+        #expect(ScriptPlugins.parseLine("A | href=https://example.com/a").href?.scheme == "https")
+        #expect(ScriptPlugins.parseLine("A | href=http://example.com/a").href?.scheme == "http")
+        #expect(ScriptPlugins.parseLine("A | href=HTTPS://example.com/a").href != nil)
+        for raw in ["file:///Applications/Calculator.app", "x-apple.systempreferences:com.apple.preference",
+                    "shortcuts://run-shortcut?name=Wipe", "javascript:alert(1)", "https:///nohost", "not a url"] {
+            #expect(ScriptPlugins.parseLine("A | href=\(raw)").href == nil, "\(raw)")
+        }
+        // Still not a way to smuggle a command in: the parameter is what counts, not the link.
+        #expect(ScriptPlugins.parseLine("A | href=file:///x shell=/bin/rm param1=-rf").shellCommand == nil)
+    }
+
     @Test func pipeWithoutParamsStaysInText() {
         #expect(ScriptPlugins.parseLine("a | b").text == "a | b")
         #expect(ScriptPlugins.parseLine("plain").params.isEmpty)
