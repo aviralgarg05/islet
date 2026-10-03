@@ -40,6 +40,11 @@ public enum URLCommand: Equatable, Sendable {
     /// Activities created or dismissed through the URL scheme live under this id prefix.
     public static let idPrefix = "url-"
 
+    /// The widest any number in a link may be: about 31 years in seconds, the same cap the
+    /// templates use. A number beyond it is refused rather than clamped, since it can only be a
+    /// mistake, and nothing wider ever reaches `Int(_:)` or a date.
+    public static let numberLimit = TemplateFormat.maxSeconds
+
     static func namespaced(_ id: String) -> String { id.hasPrefix(idPrefix) ? id : idPrefix + id }
 
     /// The Focus pill a link asks for. Its id goes under `url-` like any other activity from a
@@ -100,11 +105,17 @@ public enum URLCommand: Equatable, Sendable {
         let host = (url.host ?? "").lowercased()
         let path = url.path.split(separator: "/").map { $0.lowercased() }
 
+        /// A number parameter, refused when it isn't finite or is wider than `numberLimit`.
+        /// Anyone can open one of these URLs, so nothing from one may reach `Int(_:)`, whose
+        /// precondition traps, or arm a deadline years away (`Format.clock` caps the same way).
         func double(_ key: String) throws -> Double? {
             guard let raw = q[key] else { return nil }
-            guard let v = Double(raw), v.isFinite else { throw ParseError.invalid(key, raw) }
+            guard let v = Double(raw), v.isFinite, abs(v) <= numberLimit else { throw ParseError.invalid(key, raw) }
             return v
         }
+
+        /// A whole-number parameter. Safe to convert: `double` has already bounded it.
+        func int(_ key: String) throws -> Int? { try double(key).map { Int($0) } }
 
         /// A yes/no parameter: present on its own (`&muted`), 1, true, yes or on.
         func flag(_ key: String) throws -> Bool {
@@ -137,8 +148,8 @@ public enum URLCommand: Equatable, Sendable {
             if let title = q["actionTitle"], let u = q["actionURL"] {
                 spec.actions = [ActivityAction(title: title, url: try link(u, "actionURL"))]
             }
-            if let v = try double("steps") { spec.steps = Int(v) }
-            if let v = try double("step") { spec.step = Int(v) }
+            spec.steps = try int("steps")
+            spec.step = try int("step")
             if let s = q["state"] {
                 guard let st = ActivityState(rawValue: s.lowercased()) else { throw ParseError.invalid("state", s) }
                 spec.state = st

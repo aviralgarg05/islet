@@ -302,6 +302,26 @@ import Testing
         #expect(throws: URLCommand.ParseError.unknownCommand("launch-missiles")) { try parse("islet://launch-missiles") }
         #expect(throws: URLCommand.ParseError.wrongScheme("https")) { try parse("https://example.com") }
     }
+
+    /// Anyone can open one of these URLs, so a number in one must never reach `Int(_:)` or a
+    /// date unchecked: `steps=1e300` used to end Islet outright.
+    @Test func hugeNumbersAreRefusedRatherThanConverted() throws {
+        for key in ["steps", "step", "ttl", "progress", "endsIn", "startedAgo"] {
+            #expect(throws: URLCommand.ParseError.invalid(key, "1e300")) { try parse("islet://activity?title=x&\(key)=1e300") }
+            #expect(throws: URLCommand.ParseError.invalid(key, "-1e300")) { try parse("islet://activity?title=x&\(key)=-1e300") }
+            #expect(throws: URLCommand.ParseError.invalid(key, "inf")) { try parse("islet://activity?title=x&\(key)=inf") }
+            #expect(throws: URLCommand.ParseError.invalid(key, "nan")) { try parse("islet://activity?title=x&\(key)=nan") }
+        }
+        #expect(throws: URLCommand.ParseError.invalid("ttl", "1e300")) { try parse("islet://notify?title=x&ttl=1e300") }
+        #expect(throws: URLCommand.ParseError.invalid("value", "1e300")) { try parse("islet://hud?kind=volume&value=1e300") }
+        #expect(throws: URLCommand.ParseError.invalid("seconds", "1e300")) { try parse("islet://timer?seconds=1e300") }
+        #expect(throws: URLCommand.ParseError.invalid("minutes", "1e300")) { try parse("islet://timer?minutes=1e300") }
+        // Everything a person would actually send still goes through.
+        guard case .activity(let s) = try parse("islet://activity?title=x&steps=12&step=3&ttl=60&endsIn=900") else {
+            Issue.record("expected activity"); return
+        }
+        #expect(s.steps == 12 && s.step == 3 && s.ttl == 60)
+    }
 }
 
 @Suite struct ScriptPluginTests {
