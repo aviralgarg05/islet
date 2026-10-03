@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### New
+- **Hide the menu bar’s own** (Settings → Live Activities) covers each Live Activity macOS draws in the menu bar, so it shows in the island only instead of twice. While it’s on, every activity shows in the island, whether or not the notch hides it.
+
 ### Fixes
 - Live Activities from your iPhone show in the island again. macOS builds the menu bar’s Live Activity differently from every other item, so Islet read an empty part of it and passed over it.
 - Music and videos playing in a browser show on the island again. A live stream, or a video whose length the browser doesn’t know, used to stop Now Playing for every app until the Mac slept and woke.

@@ -347,6 +347,8 @@ public enum SettingsIndex {
         SettingsEntry("live.enabled", .liveActivities, "Show Live Activities",
                       keywords: ["iPhone", "rides", "deliveries", "scores", "flights", "Uber"]),
         SettingsEntry("live.hiddenOnly", .liveActivities, "Only when the notch hides them", section: "When to show them", keywords: ["menu bar", "twice"]),
+        SettingsEntry("live.hideOwn", .liveActivities, "Hide the menu bar’s own", section: "When to show them",
+                      keywords: ["menu bar", "twice", "duplicate", "cover", "black", "pill", "only in the island", "clean menu bar"]),
 
         SettingsEntry("calendar.enabled", .calendar, "Calendar", keywords: ["events", "meetings", "join", "agenda"]),
         SettingsEntry("calendar.access", .calendar, "Calendar access",

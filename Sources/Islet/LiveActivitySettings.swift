@@ -49,6 +49,14 @@ struct LiveActivitiesSettings: View {
                     Text("When the menu bar is full, macOS tucks Live Activities behind the notch. Show only those, so nothing appears twice.")
                 }
                 .settingsAnchor("live.hiddenOnly")
+                // Covering the menu bar's own only makes sense while every activity is in the
+                // island, so this switch takes over from the one above and dims it.
+                .disabled(model.settings.hideMenuBarActivities)
+                Toggle(isOn: $model.settings.hideMenuBarActivities) {
+                    Text("Hide the menu bar’s own")
+                    Text("macOS offers no way to hide them, so Islet covers each one in the menu bar with black. Every activity then shows in the island, whether or not the notch hides it.")
+                }
+                .settingsAnchor("live.hideOwn")
             }
             .disabled(!on)
         }

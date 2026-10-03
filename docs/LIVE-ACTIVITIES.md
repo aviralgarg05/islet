@@ -21,6 +21,12 @@ There's no API for this. ActivityKit is unavailable on macOS, so Islet reads wha
 - When an activity's text ends in a running time ("4:59", "1:02:03"), Islet works out from two readings whether it counts down or up and animates it itself, so the menu bar isn't read every second. A time that doesn't change, such as a boarding time, stays as text.
 - Clicking the activity in the island clicks the original, which opens what the menu bar would: Apple's expanded view, or the app through iPhone Mirroring. If the activity is in the overflow, Islet opens the overflow first. Nothing outside Islet can trigger that click: there's no URL or API for it.
 
+## Keeping the menu bar clean
+
+**Hide the menu bar's own** doesn't take the pill away. macOS offers no action for that, and Islet reads the pill to mirror it, so the pill stays and Islet covers it: one borderless black panel per visible pill, exactly over it, in the menu bar row and nowhere else. Nothing is drawn inside, and clicks pass through to macOS's pill underneath, so Apple's own view still opens from the menu bar.
+
+It covers the display that carries the menu bar, the one Islet reads, and only the Live Activity pills, never another menu bar item. A cover goes the moment it would be wrong: the setting off, **Show Live Activities** off, Accessibility gone, the activity gone, the pill collapsed behind the notch (macOS doesn't draw it there), this login session in the background, an app in full screen over that display, or the island hidden there by a full screen app or an app rule. It follows a pill that moves or changes width, on the same events the mirror reads on, and nothing polls.
+
 ## How activities look
 
 Islet looks up the app name in its catalogue of apps with Live Activities, the same one the API uses for templates (see [Templates](API.md#templates)).
@@ -36,9 +42,10 @@ Islet looks up the app name in its catalogue of apps with Live Activities, the s
 |---|---|---|---|
 | Show Live Activities (Settings → Live Activities) | `mirrorMenuBarActivities` | On (needs Accessibility) | Mirror them into the island. |
 | Only when the notch hides them (Settings → Live Activities) | `mirrorOnlyHiddenActivities` | Off | Mirror only the activities macOS has collapsed into the overflow, so nothing shows twice. |
+| Hide the menu bar's own (Settings → Live Activities) | `hideMenuBarActivities` | Off | Cover each Live Activity macOS draws in the menu bar with black, so it shows in the island only. Mirrors every activity, visible or not, and dims the setting above. |
 | Let scripts read Live Activities (Settings → Advanced → Local API) | `shareMirroredActivities` | Off | Include them in `GET /v1/activities` and `GET /v1/state`. They often hold addresses, names and scores, so they're left out unless you allow it. The setting also shows their text in `isletctl debug menubar`. Either way, scripts and links can't change or remove them. |
 
-The second is dimmed while the first is off. Shared activities have a `source` starting with `live-activity`, one per app (for example `"live-activity:uber"`), and an `id` starting with `live-`.
+The middle two are dimmed while the first is off, and **Only when the notch hides them** is dimmed while **Hide the menu bar's own** is on: a covered activity has to be in the island, so covering mirrors them all. Shared activities have a `source` starting with `live-activity`, one per app (for example `"live-activity:uber"`), and an `id` starting with `live-`.
 
 The text Islet reads stays in memory. It isn't written to disk or logs. `GET /v1/debug/menubar` (what `isletctl debug menubar` uses) needs the API token and returns the menu bar's layout even with mirroring off, but leaves out the text of Live Activities unless the sharing setting is on.
 
@@ -48,6 +55,8 @@ The text Islet reads stays in memory. It isn't written to disk or logs. `GET /v1
 - **How much text an activity exposes varies by app.** Some expose their full compact text, some only a label. When Islet can't find an app name, the island titles it "Live Activity"; clicking still opens it.
 - **iPhone timers and stopwatches don't reach the Mac.** macOS doesn't send them, so Islet can't show them.
 - **Hiding an activity** (*Hide Live Activity*, from macOS 27.2) may also hide it from Islet.
+- **Hide the menu bar's own needs an island on the display with the menu bar.** With *Where it shows* set so there is none there, nothing is covered, rather than leaving black over a menu bar Islet isn't on.
+- **It does nothing while the menu bar hides itself** (*Automatically hide and show the menu bar* in System Settings). The menu bar isn't there to cover, and macOS brings it back without telling Islet.
 
 ## Checking what Islet sees
 
