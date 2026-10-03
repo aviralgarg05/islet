@@ -169,6 +169,46 @@ private func scratchFolder(_ name: String) throws -> URL {
         #expect(FileIdentity(path: link.path) == first)
     }
 
+    /// The docs invite keeping config.json in a dotfiles repo with a link. An atomic write
+    /// renames a new file over the destination, and a rename doesn't follow a link, so the link
+    /// used to be replaced by a regular file on the first change in Settings and the repo's own
+    /// copy quietly stopped being the one in use.
+    @Test func aSymlinkedFileIsFollowedToItsTarget() throws {
+        let dir = try scratchFolder("dotfiles")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let repo = dir.appendingPathComponent("dotfiles")
+        let config = dir.appendingPathComponent("islet")
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
+        let target = repo.appendingPathComponent("islet-config.json")
+        let link = config.appendingPathComponent("config.json")
+        try Data("{\n  \"theme\": \"glass\"\n}\n".utf8).write(to: target)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+
+        var file = SettingsFile(url: link)
+        guard case .loaded(let read) = file.read() else { Issue.record("expected loaded"); return }
+        #expect(read.theme == .glass)
+
+        var changed = read
+        changed.hoverToOpen = false
+        #expect(try file.save(changed) == .saved)
+        // Still a link, and the repo's file is the one that changed.
+        let kind = try FileManager.default.attributesOfItem(atPath: link.path)[.type] as? FileAttributeType
+        #expect(kind == .typeSymbolicLink)
+        #expect(try Data(contentsOf: target) == Data(contentsOf: link))
+        #expect(try String(decoding: Data(contentsOf: target), as: UTF8.self).contains("\"hoverToOpen\" : false"))
+
+        // A link that doesn't parse: the replacement lands on the target as well, and the copy
+        // of the broken file goes beside it, where the bytes are.
+        let broken = Data("{ nope".utf8)
+        try broken.write(to: target)
+        try file.replace(with: changed)
+        #expect(try FileManager.default.attributesOfItem(atPath: link.path)[.type] as? FileAttributeType == .typeSymbolicLink)
+        #expect(try Data(contentsOf: target) == Data(contentsOf: link))
+        #expect(file.brokenCopy.lastPathComponent == "islet-config.json.broken")
+        #expect(try Data(contentsOf: file.brokenCopy) == broken)
+    }
+
     @Test func fixingTheFileClearsTheProblem() throws {
         let dir = try scratchFolder("config")
         defer { try? FileManager.default.removeItem(at: dir) }

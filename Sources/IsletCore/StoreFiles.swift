@@ -289,8 +289,20 @@ public struct SettingsFile: Sendable {
         case refused
     }
 
-    /// The copy `replace(with:)` keeps of a file that didn't parse.
-    public var brokenCopy: URL { url.deletingLastPathComponent().appendingPathComponent(url.lastPathComponent + ".broken") }
+    /// The copy `replace(with:)` keeps of a file that didn't parse. Beside the file itself, so
+    /// a symlinked config.json keeps the copy next to what it points at, where the bytes are.
+    public var brokenCopy: URL {
+        let target = writeURL
+        return target.deletingLastPathComponent().appendingPathComponent(target.lastPathComponent + ".broken")
+    }
+
+    /// Where a save lands. An atomic write renames a new file over the destination, and a
+    /// rename doesn't follow a symlink, so a `config.json` symlinked into a dotfiles repo
+    /// (which the docs invite) would be replaced by a regular file and the two would silently
+    /// drift apart. Following the link first writes the repo's own file instead, as
+    /// `ClaudeStatusLineSetup.apply` already does. A symlinked folder needs nothing: the
+    /// rename happens inside it.
+    var writeURL: URL { url.resolvingSymlinksInPath() }
 
     /// Reads the file. `.unreadable` also records the problem, so saving refuses; anything
     /// else clears it.
@@ -337,8 +349,9 @@ public struct SettingsFile: Sendable {
             keepLastGood(data)
             return .unchanged
         }
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try data.write(to: url, options: .atomic)
+        let target = writeURL
+        try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: target, options: .atomic)
         lastWritten = data
         keepLastGood(data)
         return .saved
@@ -358,12 +371,13 @@ public struct SettingsFile: Sendable {
     /// and `settings` are written in its place. A file that parses is saved as usual.
     public mutating func replace(with settings: IsletSettings) throws {
         if case .unreadable = Self.parse(url) {
-            guard BrokenFile.copyAside(url, suffix: "broken") != nil else {
+            let target = writeURL
+            guard BrokenFile.copyAside(target, suffix: "broken") != nil else {
                 throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: brokenCopy.path])
             }
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
             let data = try Self.encode(settings, keeping: [:])
-            try data.write(to: url, options: .atomic)
+            try data.write(to: target, options: .atomic)
             lastWritten = data
             keepLastGood(data)
             problem = nil
