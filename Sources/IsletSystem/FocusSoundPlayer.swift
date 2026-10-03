@@ -10,15 +10,42 @@ public final class FocusSoundPlayer {
     private var fade: DispatchSourceTimer?
     /// Bumped on every start and stop, so a fade that finishes late doesn't stop a newer sound.
     private var generation = 0
+    /// What the current sound plays at, so it comes back at the same volume after the audio
+    /// route changes.
+    private var level: Double = 0
+    private var routeObserver: NSObjectProtocol?
 
-    public init() {}
+    public init() {
+        // AirPods connected or disconnected stops the engine where it stands. Nothing says so
+        // except this notification: without it the sound stays silent for the rest of the
+        // round, `isPlaying` still says true, and setting the volume only moves a mixer on a
+        // dead engine.
+        routeObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: nil, queue: .main
+        ) { [weak self] note in
+            self?.routeChanged(note.object as AnyObject?)
+        }
+    }
+
+    deinit {
+        if let routeObserver { NotificationCenter.default.removeObserver(routeObserver) }
+    }
 
     public var isPlaying: Bool { playing != nil }
+
+    /// The audio route changed under our own engine: build it again and play the same sound.
+    private func routeChanged(_ changed: AnyObject?) {
+        guard let engine, changed == nil || changed === engine, let sound = playing else { return }
+        stopNow()
+        play(sound, volume: level)
+    }
 
     /// Starts `sound` at `volume` (0...1), replacing whatever plays.
     public func play(_ sound: FocusSound, volume: Double) {
         guard sound.isGenerated else { return stop() }
-        if playing == sound, let engine {
+        level = min(1, max(0, volume))
+        // A stopped engine can't be ramped: it is replaced below.
+        if playing == sound, let engine, engine.isRunning {
             ramp(engine, to: Float(volume), stopAfter: false)
             return
         }
@@ -48,19 +75,25 @@ public final class FocusSoundPlayer {
         self.engine = engine
         playing = sound
         generation += 1
-        ramp(engine, to: Float(min(1, max(0, volume))), stopAfter: false)
+        ramp(engine, to: Float(level), stopAfter: false)
     }
 
     /// Fades out, then stops the engine.
     public func stop() {
         guard let engine, playing != nil else { return }
         playing = nil
+        // Nothing to fade on an engine that has already stopped itself.
+        guard engine.isRunning else { return stopNow() }
         ramp(engine, to: 0, stopAfter: true)
     }
 
     public func setVolume(_ volume: Double) {
-        guard let engine, playing != nil else { return }
-        ramp(engine, to: Float(min(1, max(0, volume))), stopAfter: false)
+        level = min(1, max(0, volume))
+        guard let sound = playing, let engine else { return }
+        // The engine stopped under us (the audio route changed): start the sound again at the
+        // new volume rather than moving a mixer nobody hears.
+        guard engine.isRunning else { return play(sound, volume: level) }
+        ramp(engine, to: Float(level), stopAfter: false)
     }
 
     private func stopNow() {
