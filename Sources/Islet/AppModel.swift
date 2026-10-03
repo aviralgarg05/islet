@@ -473,9 +473,10 @@ final class AppModel {
                                                       staleAt: mirrorTracker.staleAt(key: m.key))
             let id = MenuBarLiveActivities.activityID(m.key)
             mirroredActivityKeys[id] = m.key
-            // A spec can't clear a date: once the item shows no time at all, stop the clock Islet
-            // animated, or the wing would keep counting.
-            if m.detail.flatMap(MenuBarLiveActivities.clockSeconds(in:)) == nil { center.clearClock(id: id) }
+            // A spec can't clear a date: without a reading, stop the clock Islet animated, or the
+            // wing counts down to a moment nobody promised. Text holding a time isn't enough to
+            // keep it: the pill still shows one after the direction is lost (a new phase, a pause).
+            if clock == nil { center.clearClock(id: id) }
             _ = try? applyLocal(spec)
         }
         mirroredKeys = keys
