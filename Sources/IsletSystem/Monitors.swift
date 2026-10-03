@@ -239,6 +239,11 @@ public final class CameraMonitor {
             CMIOObjectRemovePropertyListenerBlock(CMIOObjectID(kCMIOObjectSystemObject), &hw, DispatchQueue.main, hardwareListener)
             self.hardwareListener = nil
         }
+        // Nothing is known about the camera while nobody watches, so the next `start()` says
+        // what it is doing afresh (`MicUsageMonitor.start` does the same with `force`).
+        // Without this, turning the privacy indicators off and on during a call left the dot
+        // off for the rest of it.
+        last = nil
     }
 
     private func emit() {
