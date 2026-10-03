@@ -75,6 +75,21 @@ private func song(playing: Bool, elapsed: Double? = 60, duration: Double? = 240,
         #expect(late?.remaining == 0)
         #expect(SongProgress(song(playing: false, elapsed: -5), now: t0)?.fraction == 0)
     }
+
+    /// A length that isn't a number counts as no length, as it does for the ring. The
+    /// AppleScript players and `POST /v1/media` read it straight from the player, and an
+    /// infinite date reaches `MediaArbiter`'s deadlines, arming the app's one timer for never.
+    @Test func aTrackWhoseLengthIsNotANumberHasNoEnd() {
+        for duration in [Double.infinity, -.infinity, .nan] {
+            let s = song(playing: true, duration: duration)
+            #expect(s.endsAt == nil, "\(duration)")
+            #expect(s.fraction(at: t0) == nil, "\(duration)")
+        }
+        #expect(song(playing: true, elapsed: .infinity).endsAt == nil)
+        #expect(song(playing: true, rate: .infinity).endsAt == nil)
+        // A real length still ends where it should.
+        #expect(song(playing: true).endsAt == t0.addingTimeInterval(180))
+    }
 }
 
 @Suite struct SongPeekLengthTests {

@@ -383,6 +383,12 @@ public struct APIRouter: Sendable {
 
         case ("POST", 1, "media"):
             let m = try decode(MediaPush.self, from: r)
+            // As `/v1/hud` checks its value. A length or position wider than any recording
+            // puts the song's end at a date no one will see, where it holds the one deadline
+            // timer the app arms and the track never stops counting.
+            func seconds(_ v: Double?) -> Bool { v.map { $0.isFinite && abs($0) <= TemplateFormat.maxSeconds } ?? true }
+            guard seconds(m.duration) else { return .error(422, "'duration' must be a number of seconds") }
+            guard seconds(m.elapsed) else { return .error(422, "'elapsed' must be a number of seconds") }
             let np = NowPlaying(
                 source: .external, bundleID: m.bundleID, appName: m.appName, title: m.title, artist: m.artist,
                 album: m.album, isPlaying: m.isPlaying ?? true, duration: m.duration, elapsed: m.elapsed,

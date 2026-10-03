@@ -242,6 +242,11 @@ actor FakeBackend: IsletBackend {
         #expect(await rt.handle(request("POST", "/v1/media/command", body: #"{"command":"next"}"#)).status == 503)
         #expect(await rt.handle(request("POST", "/v1/media", body: #"{"title":"Song","artist":"X","isPlaying":true}"#)).status == 204)
         #expect(await b.media?.source == .external)
+        // A length or position wider than any recording would put the song's end at a date no
+        // one will see, where it holds the app's one deadline timer.
+        #expect(await rt.handle(request("POST", "/v1/media", body: #"{"title":"Song","duration":1e300}"#)).status == 422)
+        #expect(await rt.handle(request("POST", "/v1/media", body: #"{"title":"Song","elapsed":-1e300}"#)).status == 422)
+        #expect(await rt.handle(request("POST", "/v1/media", body: #"{"title":"Song","duration":243.4,"elapsed":12}"#)).status == 204)
         #expect(await rt.handle(request("POST", "/v1/media/command", body: #"{"command":"next"}"#)).status == 204)
         #expect(await b.commands == [.next, .next])
         #expect(await rt.handle(request("DELETE", "/v1/media")).status == 204)

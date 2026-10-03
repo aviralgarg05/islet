@@ -203,7 +203,7 @@ echo '{"title":"Lakers at Celtics","teams":[{"abbr":"LAL","score":3},{"abbr":"BO
 | `POST /v1/pomodoro` | `{action: start\|stop\|toggle}` | `201` + the Pomodoro timer, or `204` when it stopped |
 | `POST /v1/hud` | `{kind: volume\|brightness\|keyboardBrightness\|microphone, value: 0…1, muted?, label?}` | shows the HUD |
 | `POST /v1/focus` | `{name, on}` | iPhone-style Focus pill |
-| `POST /v1/media` | `{title, artist?, album?, isPlaying?, duration?, elapsed?, bundleID?, appName?, artworkURL?}` | report playback from any player |
+| `POST /v1/media` | `{title, artist?, album?, isPlaying?, duration?, elapsed?, bundleID?, appName?, artworkURL?}` | report playback from any player; `duration` and `elapsed` are seconds and get a `422` beyond a billion of them |
 | `DELETE /v1/media` | — | clear it |
 | `POST /v1/media/command` | `{command: play\|pause\|togglePlayPause\|next\|previous\|seek\|skipForward\|skipBackward\|toggleShuffle\|toggleRepeat, position?}` | controls the player on show: the one picked in the island, or the newest (see [Media commands](#media-commands)) |
 | `GET /v1/awake` | — | keep-awake status |
@@ -301,7 +301,7 @@ Off by default. When enabled (Settings → Advanced → iPhone bridge), a second
 |---|---|
 | `GET /v1/health` | No token needed, so it answers `{"ok": "true"}` and leaves the version out. Loopback gives the version. |
 | `POST /v1/notify`, `POST /v1/timer`, `POST /v1/focus` | Priority tops out at `high`. Timer ids and the Focus pill's id get a `lan-` prefix, so the bridge shows its own pill rather than replacing the Mac's. |
-| `POST /v1/activities`, `PUT /v1/activities/{id}` | Ids get a `lan-` prefix (a new id when none is given). `url` and `actions` are dropped. `icon`, `trackerIcon` and `stageSymbols` keep only symbols, emoji and app icons. Priority tops out at `high`. |
+| `POST /v1/activities`, `PUT /v1/activities/{id}` | Ids get a `lan-` prefix (a new id when none is given). `url` and `actions` are dropped. `icon`, `trackerIcon` and `stageSymbols` keep only symbols, emoji and app icons. Priority tops out at `high`. Every pill expires: `ttl` tops out at 3600 s, and one left out (or `0`, which means "until dismissed" on loopback) gets 3600 s, so the bridge can't fill the island with pills that never go. Sending the pill again gives it another hour. |
 
 Everything else is `403`: the bridge can't read activities or state, remove anything, send agent hooks, or control media, the HUD, keep awake or the island.
 

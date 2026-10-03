@@ -241,14 +241,19 @@ public struct NowPlaying: Codable, Equatable, Sendable {
     }
 
     public func fraction(at now: Date) -> Double? {
-        guard let duration, duration > 0, let pos = position(at: now) else { return nil }
+        guard let duration, duration.isFinite, duration > 0, let pos = position(at: now) else { return nil }
         return pos / duration
     }
 
     /// When a playing track reaches its end, extrapolated from the last report. Nil when it
     /// isn't playing or has no length (a live stream).
+    ///
+    /// A length that isn't a number counts as no length, as it does in `SongProgress`: a player
+    /// reporting an infinite one would give an infinite date, which reaches `MediaArbiter`'s
+    /// deadlines and arms the app's one timer for never.
     public var endsAt: Date? {
-        guard isPlaying, let duration, duration > 0, let elapsed, playbackRate > 0 else { return nil }
+        guard isPlaying, let duration, duration.isFinite, duration > 0,
+              let elapsed, elapsed.isFinite, playbackRate > 0, playbackRate.isFinite else { return nil }
         return timestamp.addingTimeInterval(max(0, duration - elapsed) / playbackRate)
     }
 
