@@ -6,7 +6,7 @@ Islet connects to apps in three ways:
 2. **Push from anything:** the `isletctl` CLI, the local HTTP API, the `islet://` URL scheme and the iPhone bridge. Every app or tool that can run a command, open a URL or make a request can drive the island. The full reference is in [API.md](API.md).
 3. **Script widgets:** any xbar/SwiftBar plugin, or a script that prints an Islet activity as JSON.
 
-Ready-made files live in [`integrations/`](../integrations/). For recipes covering about 50 apps, such as Mail, Things, OmniFocus, Xcode, VS Code, Cursor, iTerm2, Ghostty, Docker, GitHub, Homebrew, OBS, Time Machine and Tailscale, see the [app integration catalogue](research/05-app-integration-catalogue.md).
+Ready-made files live in [`integrations/`](../integrations/).
 
 ---
 

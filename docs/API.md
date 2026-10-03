@@ -300,7 +300,7 @@ Off by default. When enabled (Settings → Advanced → iPhone bridge), a second
 | Route | Limits |
 |---|---|
 | `GET /v1/health` | No token needed, so it answers `{"ok": "true"}` and leaves the version out. Loopback gives the version. |
-| `POST /v1/notify`, `POST /v1/timer`, `POST /v1/focus` | Priority tops out at `high`. Timer ids and the Focus pill's id get a `lan-` prefix, so the bridge shows its own pill rather than replacing the Mac's. |
+| `POST /v1/notify`, `POST /v1/timer`, `POST /v1/focus` | Priority tops out at `high`. Timer ids get a `lan-` prefix, so the bridge shows its own pill rather than replacing the Mac's. Focus keeps the shared id: your iPhone's Focus is the Mac's Focus, so it moves the pill already there instead of adding a second one. The bridge has no route that removes an activity. |
 | `POST /v1/activities`, `PUT /v1/activities/{id}` | Ids get a `lan-` prefix (a new id when none is given). `url` and `actions` are dropped. `icon`, `trackerIcon` and `stageSymbols` keep only symbols, emoji and app icons. Priority tops out at `high`. Every pill expires: `ttl` tops out at 3600 s, and one left out (or `0`, which means "until dismissed" on loopback) gets 3600 s, so the bridge can't fill the island with pills that never go. Sending the pill again gives it another hour. |
 
 Everything else is `403`: the bridge can't read activities or state, remove anything, send agent hooks, or control media, the HUD, keep awake or the island.

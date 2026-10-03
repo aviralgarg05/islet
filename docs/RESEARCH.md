@@ -1,53 +1,29 @@
-# Research: the Mac notch-app market, what's broken, and what Islet does about it
+# Research: what Islet had to work out
 
-*Snapshot: 30 September 2026. The full reports, with sources, are in [`docs/research/`](research/):*
+*Snapshot: 30 September 2026, with the macOS 27 findings re-checked for 0.3.*
 
-| Report | What it covers |
-|---|---|
-| [01: Market analysis](research/01-market-analysis.md) | ~60 apps and libraries, pricing, licences, activity, a 12-app × 35-feature matrix |
-| [02: Pain points](research/02-pain-points.md) | GitHub issues, Reddit, HN and press, ranked by frequency and severity |
-| [03: Integration feasibility](research/03-integrations-feasibility.md) | 17 integrations, exact APIs, permissions, graded A–D, several verified on macOS 27 |
-| [04: Dynamic Island feature catalogue](research/04-dynamic-island-feature-catalog.md) | iPhone (through iOS 27), Mac menu-bar Live Activities, Android equivalents, prioritised synthesis |
-| [05: App integration catalogue](research/05-app-integration-catalogue.md) | ~50 Mac apps: what each exposes (notifications, AppleScript, URL schemes, CLIs, webhooks), a recipe, and what Islet shows; 42 hooks verified on this Mac |
+This is the reasoning behind Islet's design: what macOS actually does, what it refuses to do, and what that
+left Islet to build. The measurements marked [local] were taken on a 14" MacBook Pro running macOS 27.0.1;
+everything else cites a public source. Current performance figures live in [CHANGELOG.md](../CHANGELOG.md),
+measured per release rather than quoted here.
 
-A second round (section 8) looked at feature parity with 22 notch apps, Live Activities on the Mac, AI integrations, Liquid Glass and the macOS 27 menu bar. Its findings are summarised there rather than committed as full reports.
+## 2. What goes wrong in notch apps, and what Islet does
 
----
+| # | What goes wrong in a notch app | What Islet does |
+|---|---|---|
+| 1 | **Now Playing keeps breaking** | Four layers: MediaRemote bridge (own clean-room helper, verified on macOS 27) → Music/Spotify distributed notifications → AppleScript enrichment → `POST /v1/media` push. An end-to-end test drives a fake player through the bridge. |
+| 2 | **CPU, battery, memory drain** | Event-driven everything; one deadline timer instead of polling; perpetual animations run in Core Animation; the pointer is tracked by a trigger window, not a global mouse monitor. **Measured: 0.0% idle, 0.0% with music animating, ≤0.6% with a live countdown, 65–85 MB.** `scripts/perf.sh` enforces budgets. |
+| 3 | **Abandonment, licensing, subscriptions** | MIT licence, clean-room code (no GPL reuse), no accounts, no licence server, config in a plain JSON file. |
+| 4 | **Fullscreen and accidental opening** | Fullscreen detection (window list + menu-bar presence, notch-aware); hover needs a short dwell *and* slow pointer; per-app "hide" and "show in fullscreen" rules; critical items still break through. |
+| 5 | **Multi-monitor, clamshell, notch geometry** | Geometry from `auxiliaryTopLeft/RightArea`; synthetic pill on notchless screens; panels rebuilt (debounced) on display, wake and Space changes; display modes: notched / main / all. |
+| 6 | **HUD replacement conflicts** | Default is observe, don't hijack: CoreAudio volume listener and an event-driven brightness callback, no permission. Replacing the system HUD is an explicit opt-in. |
+| 7 | **Sleep/wake instability** | Rebuild on wake; single-instance guard; discovery file owned per process. |
+| 8 | **Trust and permission friction** | Nothing is requested at launch. Every permission is opt-in from Settings, with a sentence on why. Local build is signed with a stable identity so grants survive rebuilds. |
+| 9 | **Janky animations, bloat** | Five motion styles including Minimal and Off, Reduce Motion honoured, every "wow" has an off switch; modules toggle individually. |
+| 10 | **Menu-bar overlap** | Idle island is invisible (the hardware notch is already there). With Accessibility, Islet measures the menu bar and sizes the wings to the free space, down to icon-only wings that stay in the menu bar row; without it, the wings are capped at 36 pt. Only drawn pixels take clicks (section 8). |
+| 11–12 | Shelf and calendar bugs | Bookmarked shelf items survive renames; all-day events never raise alerts. |
 
-## 1. The market in one page
-
-**Paid and closed:** NotchNook ($25 or $3/mo), Alcove ($14.99), DynamicLake Pro ($13.99, plugin market), Droppy ($9.99, formerly open source), Seam ($19.90), MediaMate (≈$8, HUD-focused), Dynamic Notch ($5.99), plus 15+ smaller apps (MacNotch on Setapp, Perch, NotchNest, NotchBay, Crest, OneNotch, NotchSpace…). Most are one-time purchases between $6 and $25.
-
-**Open source:** Boring Notch (≈10.9k★, GPL-3.0), its fork Atoll (≈4.8k★, GPL-3.0, notched MacBooks only), NotchDrop (MIT, shelf only), SuperIsland (no licence file), DynamicNotch, MewNotch (GPL-3.0), Cyclop (MIT, signed).
-
-**The fastest-growing niche is coding-agent monitoring:** Vibe Island ($19.99), and open-source Vibe Notch (2.5k★), CodeIsland (2.4k★), Open Island (2.0k★), Ping Island and Notchi (1k★ each), all less than a year old.
-
-**What changed in 2026:**
-- **NotchNook is effectively gone.** A dispute took down lo.cafe's domain and licence servers; Setapp dropped it on 22 Sep and Homebrew disabled its cask on 19 Sep. Its paying users are looking for a replacement.
-- **Apple broke Now Playing** for third-party apps in macOS 15.4 (MediaRemote now checks entitlements) and has not added a public API. Almost every app relies on one workaround: the `mediaremote-adapter` trick of running code inside Apple-signed `/usr/bin/perl`.
-- **macOS 27** redrew the menu bar as one window (breaking Bartender and Ice) and added an overflow chevron for items hidden by the notch.
-- **The iPhone 18 Pro** shows up to three Live Activities in a smaller island, and **iOS 27** puts Siri in the island. **macOS 26+** already shows iPhone Live Activities as a menu-bar pill, with no public API to read them.
-- **Licensing risk is real:** Atoll's author had Droppy's repo taken down over GPL-3.0; anything forked from Boring Notch or Atoll inherits GPL.
-
-**The white space** (report 01 §4): no product is at once *permissively licensed, signed, plugin-first, good on non-notch and multi-display setups*, and covers both the classic features and agent monitoring.
-
-## 2. What users complain about (ranked)
-
-| # | Pain point | Evidence (report 02) | Islet's answer |
-|---|---|---|---|
-| 1 | **Now Playing keeps breaking** | boring.notch #417 is its most-voted issue (54 👍, 58 comments); stable release broken for ~8 months | Four layers: MediaRemote bridge (own clean-room helper, verified on macOS 27) → Music/Spotify distributed notifications → AppleScript enrichment → `POST /v1/media` push. An end-to-end test drives a fake player through the bridge. |
-| 2 | **CPU, battery, memory drain** | NotchNook 40–100% CPU; boring.notch 26–41% idle (2,243 leaked timers); Atoll 100%; MediaMate 8 GB leak | Event-driven everything; one deadline timer instead of polling; perpetual animations run in Core Animation; the pointer is tracked by a trigger window, not a global mouse monitor. **Measured: 0.0% idle, 0.0% with music animating, ≤0.6% with a live countdown, 65–85 MB.** `scripts/perf.sh` enforces budgets. |
-| 3 | **Abandonment, licensing, subscriptions** | NotchNook offline; Alcove licence resets stalled; Droppy DMCA | MIT licence, clean-room code (no GPL reuse), no accounts, no licence server, config in a plain JSON file. |
-| 4 | **Fullscreen and accidental opening** | island covers video; opens when reaching for tabs or the menu bar | Fullscreen detection (window list + menu-bar presence, notch-aware); hover needs a short dwell *and* slow pointer; per-app "hide" and "show in fullscreen" rules; critical items still break through. |
-| 5 | **Multi-monitor, clamshell, notch geometry** | notch jumps displays, misplaced after sleep | Geometry from `auxiliaryTopLeft/RightArea`; synthetic pill on notchless screens; panels rebuilt (debounced) on display, wake and Space changes; display modes: notched / main / all. |
-| 6 | **HUD replacement conflicts** | key interception breaks fine steps and external displays; duplicate HUDs | Default is observe, don't hijack: CoreAudio volume listener and an event-driven brightness callback, no permission. Replacing the system HUD is an explicit opt-in. |
-| 7 | **Sleep/wake instability** | disappears after sleep (boring.notch #336) | Rebuild on wake; single-instance guard; discovery file owned per process. |
-| 8 | **Trust and permission friction** | unsigned builds, over-asking | Nothing is requested at launch. Every permission is opt-in from Settings, with a sentence on why. Local build is signed with a stable identity so grants survive rebuilds. |
-| 9 | **Janky animations, bloat** | "wobbly" animation toggle ≈83 👍 | Five motion styles including Minimal and Off, Reduce Motion honoured, every "wow" has an off switch; modules toggle individually. |
-| 10 | **Menu-bar overlap** | covers menu items, fights menu-bar managers | Idle island is invisible (the hardware notch is already there). With Accessibility, Islet measures the menu bar and sizes the wings to the free space, down to icon-only wings that stay in the menu bar row; without it, the wings are capped at 36 pt. Only drawn pixels take clicks (section 8). |
-| 11–12 | Shelf and calendar bugs | file promises, all-day date shifts | Bookmarked shelf items survive renames; all-day events never raise alerts. |
-
-## 3. What people want most (report 02 §2, report 04 §4)
+## 3. What people ask for most
 
 1. **Notifications in the notch**: the top open request. → *Built:* mirroring from every app (including iPhone notifications macOS forwards), opt-in, experimental, with per-app mute, tint and priority, and optional on-device one-line summaries.
 2. **Now Playing from any app** → *Built* (see #1 above).
@@ -58,7 +34,7 @@ A second round (section 8) looked at feature parity with 22 notch apps, Live Act
 7. **AirPods/headphones and output switching** → *Built:* output-device card on connect (no Bluetooth permission needed). *Not built:* per-bud battery (private keys, Bluetooth permission).
 8. Lyrics, more calendar providers, better shelf, external-display brightness, Caffeine, Pomodoro, lock-screen widgets → lyrics, the shelf, keep awake and the Pomodoro are built; the rest are roadmap or script-widget territory.
 
-## 4. The iPhone Dynamic Island, and what carries over (report 04)
+## 4. The iPhone Dynamic Island, and what carries over
 
 Apple's model has four presentations, reused unchanged for CarPlay, the Watch Smart Stack and the Mac menu bar:
 - **compact:** leading and trailing views around the camera;
@@ -83,7 +59,7 @@ Islet adopts the same contract so it feels familiar and could bridge to a Mac Ac
 - It mirrors the iPhone notifications macOS forwards.
 - It accepts events from **iPhone Shortcuts automations** (alarm, Focus, arrive/leave, battery level) over an opt-in, token-protected local-network bridge.
 
-## 5. Feasibility decisions (report 03, plus probes on this machine)
+## 5. Feasibility decisions
 
 | Integration | Approach | Permission | Grade |
 |---|---|---|---|
@@ -104,7 +80,7 @@ Islet adopts the same contract so it feels familiar and could bridge to a Mac Ac
 | Fullscreen | Window list: front app spans the display *and* no menu-bar window there (handles below-notch fullscreen) | none | B |
 | Packaging | SwiftPM + script-assembled bundle; works with Command Line Tools only. macOS 27 SDK turns `@State` into a macro whose plugin only ships with Xcode, so Islet uses the property wrapper type directly. | n/a | n/a |
 
-## 6. Connecting to every app (report 05)
+## 6. Connecting to every app
 
 Four built-in hooks cover most apps with no per-app work:
 - **notification-banner mirroring** (chat, mail, reminders, anything that notifies);
@@ -156,7 +132,7 @@ A catalogue built from 119 apps with evidence of a Live Activity (137 in Islet, 
 - **Siri.** App Intents compile, but the system only finds them through metadata that Xcode generates ([Apple forums](https://developer.apple.com/forums/thread/759160?page=2), [WWDC26 session 345](https://developer.apple.com/videos/play/wwdc2026/345/)). Shortcuts can already run anything Islet exposes, and "Use Model" in Shortcuts gives Apple Intelligence answers with no model code in Islet.
 - **Claude and ChatGPT.** Both stream over plain HTTPS. OpenAI's Responses API stores responses unless told not to, so Islet sends `store: false` ([OpenAI reference](https://developers.openai.com/api/reference/resources/responses/methods/create)). Claude Code and Codex can answer with their own login when run headless ([Claude Code](https://code.claude.com/docs/en/headless), [Codex](https://learn.chatgpt.com/docs/non-interactive-mode)).
 - **Approvals from the notch.** Claude Code's `PermissionRequest` hook takes an allow or deny decision and falls back to the terminal prompt on timeout ([hooks reference](https://code.claude.com/docs/en/hooks)); Codex and Cursor have equivalents ([Codex](https://learn.chatgpt.com/docs/hooks), [Cursor](https://cursor.com/docs/agent/hooks)).
-- **Usage limits.** Claude Code gives its status-line command the 5-hour and weekly percentages ([status line](https://code.claude.com/docs/en/statusline)); Codex writes them into its session logs [local]. Other notch apps read these tools' login tokens and call private endpoints instead, which Anthropic's consumer terms don't allow, so Islet doesn't.
+- **Usage limits.** Claude Code gives its status-line command the 5-hour and weekly percentages ([status line](https://code.claude.com/docs/en/statusline)); Codex writes them into its session logs [local]. Islet reads only what these tools publish for the purpose. It never reads another app's login token or calls an endpoint meant for that tool's own client.
 
 ### Liquid Glass
 
