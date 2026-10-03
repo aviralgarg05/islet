@@ -478,7 +478,7 @@ public struct IsletSettings: Codable, Equatable, Sendable {
     /// island only. macOS offers no way to hide one, and Islet reads the pill to mirror it, so
     /// the pill stays and Islet covers it (`MenuBarCovers`). Overrides
     /// `mirrorOnlyHiddenActivities`: a covered pill has to be mirrored.
-    public var hideMenuBarActivities = false
+    public var hideMenuBarActivities = true
     /// Include mirrored Live Activities, which often hold addresses, names and scores, in API responses.
     public var shareMirroredActivities = false
     /// Claude Code plan limits, from the status line (`isletctl statusline`). Local files only.

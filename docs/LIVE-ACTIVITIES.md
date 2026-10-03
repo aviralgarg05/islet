@@ -42,7 +42,7 @@ Islet looks up the app name in its catalogue of apps with Live Activities, the s
 |---|---|---|---|
 | Show Live Activities (Settings → Live Activities) | `mirrorMenuBarActivities` | On (needs Accessibility) | Mirror them into the island. |
 | Only when the notch hides them (Settings → Live Activities) | `mirrorOnlyHiddenActivities` | Off | Mirror only the activities macOS has collapsed into the overflow, so nothing shows twice. |
-| Hide the menu bar's own (Settings → Live Activities) | `hideMenuBarActivities` | Off | Cover each Live Activity macOS draws in the menu bar with black, so it shows in the island only. Mirrors every activity, visible or not, and dims the setting above. |
+| Hide the menu bar's own (Settings → Live Activities) | `hideMenuBarActivities` | On | Cover each Live Activity macOS draws in the menu bar with black, so it shows in the island only. Mirrors every activity, visible or not, and dims the setting above. |
 | Let scripts read Live Activities (Settings → Advanced → Local API) | `shareMirroredActivities` | Off | Include them in `GET /v1/activities` and `GET /v1/state`. They often hold addresses, names and scores, so they're left out unless you allow it. The setting also shows their text in `isletctl debug menubar`. Either way, scripts and links can't change or remove them. |
 
 The middle two are dimmed while the first is off, and **Only when the notch hides them** is dimmed while **Hide the menu bar's own** is on: a covered activity has to be in the island, so covering mirrors them all. Shared activities have a `source` starting with `live-activity`, one per app (for example `"live-activity:uber"`), and an `id` starting with `live-`.

@@ -120,7 +120,13 @@ import Testing
         #expect(MenuBarCovers.mirrorsOnlyHidden(onlyHidden: false, hideOwn: false) == false)
     }
 
-    @Test func theSettingStartsOff() {
-        #expect(IsletSettings().hideMenuBarActivities == false)
+    /// Showing an activity twice is the odd state, so Islet covers the menu bar's own from the
+    /// start. Turning it off puts the pill back.
+    @Test func theSettingStartsOn() {
+        #expect(IsletSettings().hideMenuBarActivities == true)
+        // It overrides "Only when the notch hides them", so a fresh Islet mirrors every activity.
+        let fresh = IsletSettings()
+        #expect(MenuBarCovers.mirrorsOnlyHidden(onlyHidden: fresh.mirrorOnlyHiddenActivities,
+                                                hideOwn: fresh.hideMenuBarActivities) == false)
     }
 }
