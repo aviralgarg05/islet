@@ -103,7 +103,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             wnc.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
                 if let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication {
                     if note.name == NSWorkspace.didLaunchApplicationNotification { MenuBarInspector.appLaunched(app.processIdentifier) }
-                    if note.name == NSWorkspace.didTerminateApplicationNotification { MenuBarInspector.appTerminated(app.processIdentifier) }
+                    if note.name == NSWorkspace.didTerminateApplicationNotification {
+                        MenuBarInspector.appTerminated(app.processIdentifier)
+                        MenuBarAgentScanner.appTerminated(app.processIdentifier)
+                    }
                 }
                 MainActor.assumeIsolated { self?.scheduleMenuBarMeasure() }
             }

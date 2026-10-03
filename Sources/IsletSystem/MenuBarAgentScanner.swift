@@ -35,6 +35,37 @@ public enum MenuBarAgentScanner {
         NSRunningApplication.runningApplications(withBundleIdentifier: agentBundleID).first?.processIdentifier
     }
 
+    /// Which app a pid belongs to, filled in as items are seen rather than by enumerating every
+    /// running app on each scan: a ticking Live Activity scans every few seconds, driven by an
+    /// Accessibility observer per mirrored pill and a safety timer, and
+    /// `NSWorkspace.shared.runningApplications` builds an object for every app each time.
+    ///
+    /// An app Islet can't name isn't kept, so it is asked about again next time, and `appTerminated`
+    /// forgets one that quit, so a pid the system gives to another process later is never read from
+    /// here. A new app needs nothing: it is looked up when it is first seen.
+    private static let ownersLock = NSLock()
+    private static var owners: [pid_t: String] = [:]
+
+    static func bundleID(of pid: pid_t) -> String {
+        ownersLock.lock()
+        let known = owners[pid]
+        ownersLock.unlock()
+        if let known { return known }
+        let id = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? ""
+        guard !id.isEmpty else { return id }
+        ownersLock.lock()
+        owners[pid] = id
+        ownersLock.unlock()
+        return id
+    }
+
+    /// An app quit: forget its pid (`main.swift` calls this from the notification it observes).
+    public static func appTerminated(_ pid: pid_t) {
+        ownersLock.lock()
+        owners[pid] = nil
+        ownersLock.unlock()
+    }
+
     /// The slots of the menu bar on one display.
     /// - Parameters:
     ///   - display: the display's frame in AX coordinates (top-left origin); nil for the main display.
@@ -43,8 +74,6 @@ public enum MenuBarAgentScanner {
         let app = AXUIElementCreateApplication(agent)
         AXUIElementSetMessagingTimeout(app, 0.2)
         guard let window = menuBarWindow(app, display: display) else { return [] }
-        let bundles = Dictionary(NSWorkspace.shared.runningApplications.map { ($0.processIdentifier, $0.bundleIdentifier ?? "") },
-                                 uniquingKeysWith: { a, _ in a })
         var result: [Slot] = []
         for slot in children(window) {
             let frame = frame(slot)
@@ -59,7 +88,7 @@ public enum MenuBarAgentScanner {
             // other item is a container, with the AXMenuBarItem a step or two inside.
             guard let content = slotRole == "AXMenuBarItem" ? slot : children(slot).first else { continue }
             let owner = pid(content)
-            let bundle = bundles[owner] ?? ""
+            let bundle = bundleID(of: owner)
             if owner != agent, !MenuBarLiveActivities.rendererBundleIDs.contains(bundle) {
                 let info = MenuBarItemInfo(owner: bundle.isEmpty ? "unknown" : bundle, x: frame.minX, width: frame.width)
                 result.append(Slot(frame: frame, element: content, info: info, kind: .thirdParty, key: "app:\(bundle):\(frame.minX)"))
@@ -82,7 +111,7 @@ public enum MenuBarAgentScanner {
                 info.customActions = customActions(target)
                 var texts: [String] = []
                 var budget = 40
-                collectTexts(target, agent: agent, renderers: bundles, depth: 0, budget: &budget, into: &texts)
+                collectTexts(target, agent: agent, depth: 0, budget: &budget, into: &texts)
                 info.texts = texts
             }
             let kind = MenuBarLiveActivities.classify(info, labels: labels)
@@ -111,16 +140,16 @@ public enum MenuBarAgentScanner {
         }
     }
 
-    static func collectTexts(_ e: AXUIElement, agent: pid_t, renderers: [pid_t: String], depth: Int, budget: inout Int, into out: inout [String]) {
+    static func collectTexts(_ e: AXUIElement, agent: pid_t, depth: Int, budget: inout Int, into out: inout [String]) {
         guard depth < 6, budget > 0 else { return }
         for c in children(e) {
             budget -= 1
             guard budget > 0 else { return }
             let p = pid(c)
             // Stay inside MenuBarAgent and the Live Activity renderer.
-            guard p == agent || MenuBarLiveActivities.rendererBundleIDs.contains(renderers[p] ?? "") else { continue }
+            guard p == agent || MenuBarLiveActivities.rendererBundleIDs.contains(bundleID(of: p)) else { continue }
             if let s = text(c) { out.append(s) }
-            collectTexts(c, agent: agent, renderers: renderers, depth: depth + 1, budget: &budget, into: &out)
+            collectTexts(c, agent: agent, depth: depth + 1, budget: &budget, into: &out)
         }
     }
 
