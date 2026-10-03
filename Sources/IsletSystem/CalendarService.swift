@@ -20,6 +20,8 @@ public final class CalendarService {
         return s
     }
     private var observer: NSObjectProtocol?
+    /// Bumped on every agenda fetch, so one overtaken by a newer one is dropped.
+    private var agendaGeneration = 0
 
     public init() {}
     deinit { stop() }
@@ -92,14 +94,28 @@ public final class CalendarService {
     }
 
     /// Events from an hour ago until the end of tomorrow, and incomplete reminders due by then.
+    ///
+    /// `events(matching:)` is a long synchronous EventKit fetch, and this is called from
+    /// `.EKEventStoreChanged`, `.NSCalendarDayChanged` and `applyModules`, all on the main
+    /// thread: a busy Exchange or Google account made the island hitch. It runs off the main
+    /// thread and the agenda comes back on it, as `refreshReminders()` already does.
     public func refresh() {
         refreshReminders()
         guard Self.eventAccess.canRead else { return }
         let now = Date()
         let end = Calendar.current.date(byAdding: .day, value: 2, to: Calendar.current.startOfDay(for: now)) ?? now.addingTimeInterval(86400)
-        let predicate = store.predicateForEvents(withStart: now.addingTimeInterval(-3600), end: end, calendars: nil)
-        let items = store.events(matching: predicate).map(Self.item(from:))
-        onAgenda?(items)
+        let store = self.store
+        agendaGeneration += 1
+        let mine = agendaGeneration
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let predicate = store.predicateForEvents(withStart: now.addingTimeInterval(-3600), end: end, calendars: nil)
+            let items = store.events(matching: predicate).map(Self.item(from:))
+            DispatchQueue.main.async {
+                // A fetch overtaken by a newer one would put back an older agenda.
+                guard let self, self.agendaGeneration == mine else { return }
+                self.onAgenda?(items)
+            }
+        }
     }
 
     /// Events between two moments from every calendar (the month calendar on Today reads a
