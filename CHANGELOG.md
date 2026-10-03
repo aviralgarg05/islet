@@ -7,6 +7,15 @@
 
 ### Fixes
 - A Live Activity whose app names its own picture something like `food_di_preparing_icon` no longer shows that as its title, and a time that arrives in two pieces reads as “13:01 min” rather than “13:01 · min”.
+- Two Live Activities on screen at once show as two rows in the island instead of collapsing into one, and clicking one opens the one you clicked. Every pill macOS draws carries the same identifier, so Islet follows each by the pill itself.
+- A Live Activity that begins just after another ends gets its own sneak peek, isn’t swallowed by the activity you dismissed before it, and no longer inherits its countdown or its layout.
+- Muting a Live Activity from an app Islet doesn’t know mutes Live Activities, instead of muting a name taken from the pill’s own words: a cricket score gave `live-activity:ind-245-3`, which stopped matching on the next ball, and a flight gave `live-activity:on-time`. Nothing a pill says is written to `config.json`.
+- A level score keeps both numbers: one-all reads “1 · CHE · 1” rather than “1 · CHE”, and the compact wing no longer shows a team’s abbreviation in place of a value.
+- A unit in a language other than English stays with its number (“8 मिनट”, not “8 · मिनट”), and a word with no number in it, such as “Arriving”, “Boarding” or “On time”, no longer sits in the compact wing as though it were a value.
+- A Live Activity whose title has an underscore in it, such as a Home Assistant entity (`washing_machine`) or a shortcut’s name (`morning_routine`), keeps its title instead of reaching the island with none.
+- A Live Activity that names no app is titled by what it says, so the island reads “Delivered” rather than “Live Activity” above “Delivered”. Most pills expose one short label and no app name, so this is the usual case.
+- A pill whose words merely hold an app’s name no longer takes that app’s name, symbol and layout: “Man United 2 - 1 Arsenal” was titled with the whole phrase and drawn as a flight. An address with a comma in it is no longer split into a title and a subtitle either.
+- A countdown the island animates stops as soon as Islet can no longer tell which way the time is going, instead of counting down to a moment that is no longer true.
 - A link such as `islet://activity?title=x&steps=1e300` no longer ends Islet. Every number in an `islet://` link is now checked before it is used, and one too big for Islet to hold is refused like any other bad value.
 - A pill whose value reads like a clock no longer ends Islet when the figure in front of the colon is absurdly large, whether it came from a link, a script or your iPhone.
 - A song whose lyrics file holds an absurd timestamp no longer ends Islet. Anyone can upload lyrics to LRCLIB, so one bad line used to crash Islet for everyone who played that song.

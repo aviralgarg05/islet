@@ -31,9 +31,10 @@ It covers the display that carries the menu bar, the one Islet reads, and only t
 
 Islet looks up the app name in its catalogue of apps with Live Activities, the same one the API uses for templates (see [Templates](API.md#templates)).
 
-- A match gives the activity that app's symbol, brand colour and template: `eta` for Uber, `flight` for Flighty, `score` for Apple Sports. A brand colour too dark to read on the black island is lightened, keeping its hue (black and near-greys become white).
-- Without a match, the symbol and colour come from keywords in the text (the rules smart icons use), or else a generic symbol in white. The template is then `timer` when Islet has worked out a running clock, and the generic `progress` otherwise.
-- The last part of the text, when it's 8 characters or fewer ("4 min", "2-1"), becomes the activity's `trailing` value for the right-hand wing. When it's longer, the wing is cleared rather than keeping an older value, and when the text is gone the subtitle goes too. While Islet animates a clock, the wing shows the time from that instead, and once the text shows no time the clock stops.
+- The app is named only when a piece of the text names it exactly. A match gives the activity that app's name as the catalogue spells it, its symbol, its brand colour and its template: `eta` for Uber, `flight` for Flighty, `score` for Apple Sports. A brand colour too dark to read on the black island is lightened, keeping its hue (black and near-greys become white). A phrase that merely holds an app's name is a phrase: "Man United 2 - 1 Arsenal" is a score, not an airline.
+- Without an exact match the symbol and colour may still come from an app name found inside the text, or from keywords in it (the rules smart icons use), or else a generic symbol in white. The template is then `timer` when Islet has worked out a running clock, and the generic `progress` otherwise.
+- With no app named, what the pill says becomes the title and nothing goes under it, so the island reads "Delivered" rather than "Live Activity" above "Delivered". Most pills expose one short label and no app name, so this is the usual case.
+- The last part of the text becomes the activity's `trailing` value for the right-hand wing when it holds a digit and is 8 characters or fewer ("4 min", "2-1"). A word with no number in it is not a value, in any language, so "Arriving", "On time" and "मिनट" leave the wing alone. When the text is longer the wing is cleared rather than keeping an older value, and when the text is gone the subtitle goes too. While Islet animates a clock, the wing shows the time from that instead, and the clock stops as soon as Islet can no longer tell which way the time is going.
 - A new activity gets a sneak peek. Later changes to it don't.
 
 ## Settings
@@ -45,14 +46,14 @@ Islet looks up the app name in its catalogue of apps with Live Activities, the s
 | Hide the menu bar's own (Settings → Live Activities) | `hideMenuBarActivities` | On | Cover each Live Activity macOS draws in the menu bar with black, so it shows in the island only. Mirrors every activity, visible or not, and dims the setting above. |
 | Let scripts read Live Activities and notifications (Settings → Advanced → Local API) | `shareMirroredActivities` | Off | Include them, and mirrored notifications, in `GET /v1/activities` and `GET /v1/state`. What Islet mirrors often holds addresses, names and what someone wrote, so it's left out unless you allow it. The setting also shows their text in `isletctl debug menubar`. Either way, scripts and links can't change or remove them. |
 
-The middle two are dimmed while the first is off, and **Only when the notch hides them** is dimmed while **Hide the menu bar's own** is on: a covered activity has to be in the island, so covering mirrors them all. Shared activities have a `source` starting with `live-activity`, one per app (for example `"live-activity:uber"`), and an `id` starting with `live-`.
+The middle two are dimmed while the first is off, and **Only when the notch hides them** is dimmed while **Hide the menu bar's own** is on: a covered activity has to be in the island, so covering mirrors them all. Shared activities have an `id` starting with `live-` and a `source` starting with `live-activity`: an app the catalogue knows gets one of its own (for example `"live-activity:uber"`), and every other activity uses the plain `live-activity`, which muting Live Activities covers. Nothing a pill says is ever part of a source, because a muted source is written to `config.json`.
 
 The text Islet reads stays in memory. It isn't written to disk or logs. `GET /v1/debug/menubar` (what `isletctl debug menubar` uses) needs the API token and returns the menu bar's layout even with mirroring off, but leaves out the text of Live Activities unless the sharing setting is on.
 
 ## Limits
 
 - **Built and tested on macOS 27.** macOS 26 draws the menu bar differently and hasn't been tested.
-- **How much text an activity exposes varies by app.** Some expose their full compact text, some only a label. When Islet can't find an app name, the island titles it "Live Activity"; clicking still opens it.
+- **How much text an activity exposes varies by app.** Some expose their full compact text, some only a label. When Islet can't name an app, the island shows what the pill says as the title; clicking still opens it. A pill with nothing readable at all is titled "Live Activity".
 - **iPhone timers and stopwatches don't reach the Mac.** macOS doesn't send them, so Islet can't show them.
 - **Hiding an activity** (*Hide Live Activity*, from macOS 27.2) may also hide it from Islet.
 - **Hide the menu bar's own needs an island on the display with the menu bar.** With *Where it shows* set so there is none there, nothing is covered, rather than leaving black over a menu bar Islet isn't on.
