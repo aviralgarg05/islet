@@ -6,6 +6,7 @@
 - **Hide the menu bar’s own** (Settings → Live Activities, on to begin with) covers each Live Activity macOS draws in the menu bar, so it shows in the island only instead of twice. While it’s on, every activity shows in the island, whether or not the notch hides it.
 
 ### Fixes
+- A Live Activity whose app names its own picture something like `food_di_preparing_icon` no longer shows that as its title, and a time that arrives in two pieces reads as “13:01 min” rather than “13:01 · min”.
 - A link such as `islet://activity?title=x&steps=1e300` no longer ends Islet. Every number in an `islet://` link is now checked before it is used, and one too big for Islet to hold is refused like any other bad value.
 - A pill whose value reads like a clock no longer ends Islet when the figure in front of the colon is absurdly large, whether it came from a link, a script or your iPhone.
 - A song whose lyrics file holds an absurd timestamp no longer ends Islet. Anyone can upload lyrics to LRCLIB, so one bad line used to crash Islet for everyone who played that song.

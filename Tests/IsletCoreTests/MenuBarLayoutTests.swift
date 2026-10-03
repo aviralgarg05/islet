@@ -220,6 +220,43 @@ import Testing
         #expect(MenuBarLiveActivities.classify(MenuBarItemInfo(x: 896, width: 110)) == .unknown)
     }
 
+    /// A real food-delivery pill, read off the menu bar on 3 October 2026. The app gives its
+    /// picture the accessibility description `food_di_preparing_icon`, and the time arrives as two
+    /// labels, "13:01" and "min". Islet used to title the activity with the asset name and write
+    /// "13:01 · min" under it.
+    @Test func anAppsOwnNameForItsPictureNeverReachesTheIsland() {
+        let pill = MenuBarItemInfo(
+            identifier: "live-activity-pill-com.apple.chrono.WidgetRenderer-Activities", role: "AXMenuBarItem",
+            description: "Live Activity", texts: ["food_di_preparing_icon", "13:01", "min", "Expanded"],
+            x: 882, width: 85
+        )
+        let mirrored = MenuBarLiveActivities.mirror(pill, key: "id:pill")
+        #expect(mirrored?.detail == "13:01 min")
+        #expect(mirrored?.appName == "Live Activity")
+        #expect(mirrored?.detail?.contains("_") == false)
+        // Dropped from the words on screen, kept for choosing the symbol.
+        #expect(mirrored?.hint == "food di preparing")
+    }
+
+    @Test func assetNamesAreToldApartFromTitles() {
+        for junk in ["food_di_preparing_icon", "ic_delivery", "statusIconSmall", "bg_image_2", "liveGlyph"] {
+            #expect(MenuBarLiveActivities.isAssetName(junk), "\(junk) should read as an asset name")
+        }
+        for real in ["Uber", "Zomato", "Design review", "2 – 1", "13:01", "min", "Flight AA100",
+                     "On the way", "LAL", "Café", "F1", "90%"] {
+            #expect(!MenuBarLiveActivities.isAssetName(real), "\(real) should reach the island")
+        }
+    }
+
+    @Test func aUnitStaysWithItsNumber() {
+        #expect(MenuBarLiveActivities.joined(["13:01", "min"]) == "13:01 min")
+        #expect(MenuBarLiveActivities.joined(["4", "min", "away"]) == "4 min away")
+        #expect(MenuBarLiveActivities.joined(["Uber", "4 min"]) == "Uber · 4 min")
+        #expect(MenuBarLiveActivities.joined(["Lakers", "102"]) == "Lakers · 102")
+        #expect(MenuBarLiveActivities.joined(["min"]) == "min")
+        #expect(MenuBarLiveActivities.joined([]).isEmpty)
+    }
+
     @Test func labelsInEveryLanguage() {
         let labels = MenuBarLabels.from(loctable: [
             "hi": ["liveActivity.accessibilityLabel": "लाइव ऐक्टिविटी", "liveActivity.endLiveActivityMenuItem": "लाइव ऐक्टिविटी समाप्त करें"],

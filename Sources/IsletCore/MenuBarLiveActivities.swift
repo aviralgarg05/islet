@@ -97,12 +97,16 @@ public struct MirroredLiveActivity: Equatable, Sendable {
     public var detail: String?
     /// Hidden in the menu bar's overflow, so the notch is the only place it shows.
     public var hidden: Bool
+    /// Words from the app's own name for its picture ("food di preparing"), which are never shown
+    /// but are often the only clue to what the activity is, so the right symbol can be chosen.
+    public var hint: String?
 
-    public init(key: String, appName: String, detail: String?, hidden: Bool = false) {
+    public init(key: String, appName: String, detail: String?, hidden: Bool = false, hint: String? = nil) {
         self.key = key
         self.appName = appName
         self.detail = detail
         self.hidden = hidden
+        self.hint = hint
     }
 }
 
@@ -186,9 +190,62 @@ public enum MenuBarLiveActivities {
         classify(item, labels: labels) == .liveActivity
     }
 
-    /// The item's text without MenuBarAgent's generic words.
+    /// The item's text without MenuBarAgent's generic words, and without the names apps give
+    /// their own pictures (`isAssetName`), which are not written for anyone to read.
     static func content(_ item: MenuBarItemInfo, labels: MenuBarLabels) -> [String] {
-        item.allText.filter { !labels.liveActivity.contains($0) && !labels.generic.contains($0) && !labels.liveActivityActions.contains($0) }
+        item.allText.filter {
+            !labels.liveActivity.contains($0) && !labels.generic.contains($0)
+                && !labels.liveActivityActions.contains($0) && !isAssetName($0)
+        }
+    }
+
+    /// Whether a piece of text is an app's name for one of its own pictures rather than words for
+    /// a person: `food_di_preparing_icon`, `ic_delivery`, `statusIconSmall`. Several apps give an
+    /// image in their Live Activity an accessibility description like that, and showing it as the
+    /// activity's title is worse than showing nothing. A real title has a space, or punctuation,
+    /// or a capital at the front and nothing underscored.
+    static func isAssetName(_ text: String) -> Bool {
+        guard !text.isEmpty, text.count <= 64, !text.contains(" ") else { return false }
+        let scalars = text.unicodeScalars
+        guard scalars.allSatisfy({ CharacterSet.alphanumerics.contains($0) || $0 == "_" }) else { return false }
+        if text.contains("_") { return true }
+        // camelCase with one of the words apps use for a picture, and no spaces anywhere.
+        let lower = text.lowercased()
+        guard text.contains(where: \.isUppercase), text.first?.isUppercase == false else { return false }
+        return ["icon", "image", "img", "asset", "glyph", "badge"].contains(where: lower.contains)
+    }
+
+    /// How two pieces of an activity's text are joined. A number and the unit that belongs to it
+    /// arrive as separate labels ("13:01" then "min"), and a dot between them reads as two facts
+    /// rather than one: "13:01 · min". Everything else keeps the dot.
+    static func joined(_ pieces: [String]) -> String {
+        pieces.reduce(into: "") { out, piece in
+            guard !out.isEmpty else { return out = piece }
+            // "4", "min", "away" is one phrase: each piece carries on from a number or from the
+            // unit that followed one. Anything else is a separate fact and keeps the dot.
+            let previous = out.split(separator: " ").last.map(String.init) ?? ""
+            let carriesOn = unit(piece) && (previous.last?.isNumber == true || unit(previous))
+            out += (carriesOn ? " " : " · ") + piece
+        }
+    }
+
+    /// An asset name as plain words, for the symbol matcher only: `food_di_preparing_icon`
+    /// becomes "food di preparing". The words apps use for a picture are dropped, since every
+    /// asset has them and none of them says what the activity is.
+    static func words(fromAssetName name: String) -> String {
+        var out = ""
+        for ch in name {
+            if ch == "_" { out += " " } else if ch.isUppercase, !out.isEmpty { out += " " + ch.lowercased() } else { out.append(ch) }
+        }
+        return out.lowercased().split(separator: " ")
+            .filter { !["icon", "image", "img", "asset", "glyph", "badge"].contains(String($0)) }
+            .joined(separator: " ")
+    }
+
+    /// A bare unit that belongs to the number before it.
+    static func unit(_ text: String) -> Bool {
+        ["min", "mins", "minute", "minutes", "sec", "secs", "h", "hr", "hrs", "hour", "hours",
+         "km", "mi", "m", "ft", "%", "°", "left", "away", "remaining"].contains(text.lowercased())
     }
 
     /// Turn an item into the app name and compact text Islet shows.
@@ -212,9 +269,13 @@ public enum MenuBarLiveActivities {
         } else {
             app = "Live Activity"
         }
-        let detail = text.joined(separator: " · ")
+        let detail = joined(text)
         guard let key = key ?? item.identifier else { return nil }
-        return MirroredLiveActivity(key: key, appName: app, detail: detail.isEmpty ? nil : detail, hidden: item.hidden)
+        // An asset name is never shown, but "food_di_preparing_icon" is the only thing on this
+        // pill that says what it is, so it still chooses the symbol.
+        let hint = item.allText.first(where: isAssetName).map(words(fromAssetName:))
+        return MirroredLiveActivity(key: key, appName: app, detail: detail.isEmpty ? nil : detail,
+                                    hidden: item.hidden, hint: hint)
     }
 
     /// Numbers, times and scores ("4 min", "12:40", "2 – 1") are values, not app names.
@@ -262,7 +323,10 @@ public enum MenuBarLiveActivities {
     ///   - clock: a running countdown or count-up read from the item, animated locally.
     public static func activity(for m: MirroredLiveActivity, look: (symbol: String, tint: String)?, isNew: Bool,
                                 clock: LiveActivityClock.Reading? = nil, staleAt: Date? = nil) -> ActivitySpec {
-        let suggestion = look ?? SmartIcon.suggest(title: m.appName, subtitle: m.detail).map { ($0.symbol, $0.tint) }
+        // The hint joins the search for a symbol, never the words on screen.
+        let searched = [m.detail, m.hint].compactMap { $0 }.joined(separator: " ")
+        let suggestion = look ?? SmartIcon.suggest(title: m.appName, subtitle: searched.isEmpty ? nil : searched)
+            .map { ($0.symbol, $0.tint) }
         let tint = suggestion.flatMap { RGBA.parse($0.1) }.map { $0.readableOnBlack().hex }
         // Updates merge, so text the item no longer shows is sent as "" to clear it: otherwise an
         // old "4 min" would stay in the wing after the item moved on to longer text.
