@@ -2,6 +2,19 @@ import Foundation
 import Testing
 @testable import IsletCore
 
+/// The cap on a decoded cover must never be what softens one.
+@Suite struct ArtworkDecodeTests {
+    @Test func theCapIsEnoughForEverySizeTheIslandDraws() {
+        // Every size `ArtworkView` and `VinylDisc` are given, largest first.
+        for points in [ArtworkDecode.largestDrawn, 72, 56, 40, 26, 20, 18] {
+            #expect(ArtworkDecode.isSharp(at: points))
+        }
+        // And it is a real cap, not an excuse: a cover drawn across the open island would need more.
+        #expect(!ArtworkDecode.isSharp(at: 900))
+        #expect(ArtworkDecode.maxPixels < 1024)
+    }
+}
+
 /// A player's artwork stays through a report that leaves it out, for the same track only.
 @Suite struct BridgeArtworkTests {
     func video(_ title: String = "Live", app: String? = "com.google.Chrome") -> NowPlaying {

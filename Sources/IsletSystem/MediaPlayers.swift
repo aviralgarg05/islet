@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import ImageIO
 import IsletCore
 
 /// Runs AppleScript off the main thread on one serial queue.
@@ -273,11 +274,21 @@ public final class AppleMusicProvider: ScriptablePlayerProvider {
         guard AppleScriptRunner.isRunning(bundleID) else { return }
         let script = "tell application id \"com.apple.Music\" to if (count of artworks of current track) > 0 then return data of artwork 1 of current track"
         runScript(script) { [weak self] result in
-            guard let self, let data = result?.data, !data.isEmpty, NSImage(data: data) != nil else { return }
+            // Read the header only. `NSImage(data:)` decoded the whole cover (a lossless track's
+            // can be 3000 pixels square, tens of megabytes of bitmap) just to say whether the
+            // bytes were a picture, and then threw it away; the island decodes it again, capped,
+            // when it draws it (`ArtworkDecode`).
+            guard let self, let data = result?.data, !data.isEmpty, Self.isImage(data) else { return }
             var np = base
             np.artworkData = data
             self.onUpdate?(np)
         }
+    }
+
+    /// Whether `data` is a picture, from its header alone: nothing is decoded.
+    static func isImage(_ data: Data) -> Bool {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return false }
+        return CGImageSourceGetType(source) != nil && CGImageSourceGetCount(source) > 0
     }
 }
 

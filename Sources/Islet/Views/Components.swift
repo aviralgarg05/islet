@@ -1,5 +1,6 @@
 import AppKit
 import CoreImage
+import ImageIO
 import IsletCore
 import SwiftUI
 
@@ -289,10 +290,26 @@ enum ArtworkCache {
     static func image(for data: Data) -> NSImage? {
         let key = key(data)
         if let img = images[key] { return img }
-        guard let img = NSImage(data: data) else { return nil }
+        guard let img = decode(data) else { return nil }
         if images.count >= 3 { images.removeAll() }
         images[key] = img
         return img
+    }
+
+    /// A cover at `ArtworkDecode.maxPixels` on its longest side, so a 3000 pixel one doesn't
+    /// become tens of megabytes of bitmap for a picture drawn at 72 points. ImageIO does the
+    /// work while reading, never enlarges a smaller cover, and applies the orientation the file
+    /// asks for, as `NSImage(data:)` does. A format ImageIO won't make a thumbnail of falls back
+    /// to the plain decode, so nothing that showed before stops showing.
+    static func decode(_ data: Data) -> NSImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                  kCGImageSourceCreateThumbnailFromImageAlways: true,
+                  kCGImageSourceCreateThumbnailWithTransform: true,
+                  kCGImageSourceThumbnailMaxPixelSize: ArtworkDecode.maxPixels,
+              ] as CFDictionary)
+        else { return NSImage(data: data) }
+        return NSImage(cgImage: cg, size: CGSize(width: cg.width, height: cg.height))
     }
 
     /// Average color of the artwork, brightened so it reads on black.

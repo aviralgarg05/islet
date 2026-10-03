@@ -916,7 +916,7 @@ struct VinylArtwork: View {
             let key = "url-\(url.absoluteString)"
             if let image = images[key] { return image }
             guard let cached = URLCache.shared.cachedResponse(for: URLRequest(url: url)),
-                  let image = NSImage(data: cached.data)?.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+                  let image = ArtworkCache.decode(cached.data)?.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
             remember(image, key)
             return image
         }
