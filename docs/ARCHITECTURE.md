@@ -157,7 +157,7 @@ An import (`StickerStore.add`) checks the size before reading (5 MB), what the b
 - `LiveActivityClock` works out from two readings whether a clock counts down or up, so Islet animates it itself instead of reading the menu bar every second.
 - `MirrorTracker` keeps an item dismissed in the island hidden until it leaves the menu bar, and dims one whose text hasn't changed for 30 minutes (`staleAt`).
 - Clicking a mirrored activity presses the original item (revealing the overflow first when needed). No URL or API can trigger that press.
-- Mirrored activities are left out of API responses unless `shareMirroredActivities` is on. What is read stays in memory.
+- Mirrored activities are left out of API responses unless `shareMirroredActivities` is on, and so are mirrored notifications (ids under `notif-`), which carry a banner's own words. What is read stays in memory.
 
 See [LIVE-ACTIVITIES.md](LIVE-ACTIVITIES.md).
 

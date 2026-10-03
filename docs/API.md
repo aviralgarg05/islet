@@ -224,7 +224,9 @@ curl -s -X POST http://127.0.0.1:47831/v1/activities \
 
 `GET /v1/state` (and `isletctl state`) includes `"calendar": {"events": "fullAccess", "reminders": "notDetermined", "upcoming": 3}`: what macOS allows for calendars and for reminders (`notDetermined`, `fullAccess`, `writeOnly` for "Add events only", `denied` or `restricted`), read afresh for each request, and how many timed events are left today. It never includes a title. Meeting reminders (ids starting with `meeting-`, source `calendar`) carry the meeting's title, so `GET /v1/activities` and `/v1/state` always leave them out. To a script they aren't there: changing or removing one by its id gets a `404`, and `DELETE /v1/activities?source=calendar` removes only your own `calendar` activities and counts only those.
 
-Live Activities mirrored from the menu bar (ids starting with `live-`, sources `live-activity` or starting with `live-activity:`, such as `live-activity:uber`) belong to the mirror. Creating, changing or removing one, or sending that source, gets a `403` whether or not the id exists. `GET /v1/activities` and `/v1/state` leave them out, and `/v1/debug/menubar` leaves out their text, unless **Let scripts read Live Activities** (Settings → Advanced → Local API) is on; see [LIVE-ACTIVITIES.md](LIVE-ACTIVITIES.md).
+Live Activities mirrored from the menu bar (ids starting with `live-`, sources `live-activity` or starting with `live-activity:`, such as `live-activity:uber`) belong to the mirror. Creating, changing or removing one, or sending that source, gets a `403` whether or not the id exists. `GET /v1/activities` and `/v1/state` leave them out, and `/v1/debug/menubar` leaves out their text, unless **Let scripts read Live Activities and notifications** (Settings → Advanced → Local API) is on; see [LIVE-ACTIVITIES.md](LIVE-ACTIVITIES.md).
+
+Mirrored notifications (ids starting with `notif-`, source the app's bundle ID) carry a banner's own title and the first 140 characters of its text, so the same setting covers them: `GET /v1/activities` and `/v1/state` leave them out unless it is on. Notification mirroring is off to begin with.
 
 ### Media commands
 

@@ -117,8 +117,8 @@ struct AdvancedSettings: View {
             }
             .settingsAnchor("advanced.token")
             Toggle(isOn: $model.settings.shareMirroredActivities) {
-                Text("Let scripts read Live Activities")
-                Text("They often hold addresses, names and scores, so they're left out unless you allow it.")
+                Text("Let scripts read Live Activities and notifications")
+                Text("What Islet mirrors often holds addresses, names and what someone wrote, so it\u{2019}s left out unless you allow it.")
             }
             .settingsAnchor("advanced.shareLive")
             // Moved here from Now Playing's sources: it is the API's, not a player's.

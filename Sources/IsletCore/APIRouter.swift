@@ -289,13 +289,13 @@ public struct APIRouter: Sendable {
         return removed
     }
 
-    /// What scripts may read: mirrored Live Activities only when the user shares them, and
-    /// meeting reminders never (they carry the meeting's title; `calendar` in the state says
-    /// how many events are left instead).
+    /// What scripts may read: what Islet mirrors, from the menu bar and from notification
+    /// banners, only when the user shares it, and meeting reminders never (they carry the
+    /// meeting's title; `calendar` in the state says how many events are left instead).
     func readable(_ activities: [Activity]) async -> [Activity] {
         let shown = activities.filter { !MeetingReminders.isReminder($0) }
         if await backend.sharesMirroredActivities() { return shown }
-        return shown.filter { !MenuBarLiveActivities.isMirrored($0) }
+        return shown.filter { !MenuBarLiveActivities.isMirrored($0) && !MirroredNotification.isMirrored($0) }
     }
 
     private func route(_ r: HTTPRequest, _ seg: [String]) async throws -> HTTPResponse {

@@ -191,6 +191,15 @@ public struct MirroredNotification: Equatable, Sendable {
         [appName ?? "", title, subtitle ?? "", body ?? ""].joined(separator: "\u{1F}")
     }
 
+    /// Every mirrored notification's id starts with this. Such an activity carries a banner's
+    /// own words, so scripts read it only when the user shares what Islet mirrors, just as for a
+    /// mirrored Live Activity (`MenuBarLiveActivities.idPrefix`).
+    public static let idPrefix = "notif-"
+
+    public static func isMirrored(id: String) -> Bool { id.hasPrefix(idPrefix) }
+
+    public static func isMirrored(_ activity: Activity) -> Bool { isMirrored(id: activity.id) }
+
     /// Live activity shown for this notification. macOS shows its own banner at the same
     /// moment, so it peeks below the notch only with `peek` ("Peek at new notifications");
     /// otherwise it sits beside the notch for the time it is shown.
@@ -199,7 +208,7 @@ public struct MirroredNotification: Equatable, Sendable {
         for b in fingerprint.utf8 { h = (h ^ UInt64(b)) &* 1099511628211 }
         let detail = [subtitle, body].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
         return ActivitySpec(
-            id: "notif-\(String(h, radix: 36))", source: bundleID ?? "notifications",
+            id: Self.idPrefix + String(h, radix: 36), source: bundleID ?? "notifications",
             title: appName.map { "\($0): \(title)" } ?? title,
             subtitle: detail.isEmpty ? nil : String(detail.prefix(140)),
             icon: rule?.icon ?? bundleID.map { .app(bundleID: $0) } ?? .symbol("bell.badge.fill"),

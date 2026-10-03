@@ -353,6 +353,35 @@ extension APIRouterTests {
         }
     }
 
+    /// A mirrored banner carries its own words, so it is read only when the user shares what
+    /// Islet mirrors, the same as a mirrored Live Activity.
+    @Test func mirroredNotificationsAreReadOnlyWhenShared() async throws {
+        let b = FakeBackend(now: t0)
+        let banner = MirroredNotification(appName: "Messages", bundleID: "com.apple.MobileSMS",
+                                          title: "Sam", body: "the spare key is under the mat")
+        let spec = banner.activity(rule: nil)
+        #expect(MirroredNotification.isMirrored(id: spec.id ?? ""))
+        _ = try await b.applyActivity(spec)
+        _ = try await b.applyActivity(ActivitySpec(id: "build", source: "ci", title: "Build"))
+        let rt = router(b)
+
+        func reads() async -> [HTTPResponse] {
+            [await rt.handle(request("GET", "/v1/activities")), await rt.handle(request("GET", "/v1/state"))]
+        }
+        await b.share(false)
+        for r in await reads() {
+            let text = String(decoding: r.body, as: UTF8.self)
+            #expect(!text.contains("spare key") && !text.contains("Sam"), "\(text)")
+        }
+        #expect(try APIJSON.decoder.decode([Activity].self, from: await rt.handle(request("GET", "/v1/activities")).body)
+                .map(\.id) == ["build"])
+
+        await b.share(true)
+        for r in await reads() {
+            #expect(String(decoding: r.body, as: UTF8.self).contains("spare key"))
+        }
+    }
+
     @Test func mirroredActivitiesAreReadOnlyWhenShared() async throws {
         #expect(MenuBarLiveActivities.isMirrored(id: MenuBarLiveActivities.activityID("pill")))
         let b = FakeBackend(now: t0)
