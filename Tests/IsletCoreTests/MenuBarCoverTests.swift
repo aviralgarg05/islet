@@ -16,10 +16,10 @@ import Testing
     func input(hideOwn: Bool = true, mirroring: Bool = true, supported: Bool = true, trusted: Bool = true,
                inFront: Bool = true, islandShows: Bool = true, menuBarShows: Bool = true,
                menuBarHeight: CGFloat = menuBar, menuBarTop: CGFloat = top,
-               mutedKeys: Set<String> = []) -> MenuBarCovers.Input {
+               uncoveredKeys: Set<String> = []) -> MenuBarCovers.Input {
         MenuBarCovers.Input(hideOwn: hideOwn, mirroring: mirroring, supported: supported, trusted: trusted,
                             inFront: inFront, islandShows: islandShows, menuBarShows: menuBarShows,
-                            menuBarHeight: menuBarHeight, menuBarTop: menuBarTop, mutedKeys: mutedKeys)
+                            menuBarHeight: menuBarHeight, menuBarTop: menuBarTop, uncoveredKeys: uncoveredKeys)
     }
 
     func pills(hidden: Bool = false) -> [MenuBarActivityPill] {
@@ -108,10 +108,10 @@ import Testing
             MenuBarActivityPill(key: "uber", frame: CGRect(x: 700, y: 0, width: 90, height: 33)),
             MenuBarActivityPill(key: "cricket", frame: CGRect(x: 895.95, y: 0, width: 110.55, height: 33)),
         ]
-        #expect(MenuBarCovers.covers(pills: pills, input(mutedKeys: ["uber"])).map(\.minX) == [895])
-        #expect(MenuBarCovers.covers(pills: pills, input(mutedKeys: ["uber", "cricket"])).isEmpty)
+        #expect(MenuBarCovers.covers(pills: pills, input(uncoveredKeys: ["uber"])).map(\.minX) == [895])
+        #expect(MenuBarCovers.covers(pills: pills, input(uncoveredKeys: ["uber", "cricket"])).isEmpty)
         // A key for a pill that isn't there changes nothing.
-        #expect(MenuBarCovers.covers(pills: pills, input(mutedKeys: ["gone"])).map(\.minX) == [700, 895])
+        #expect(MenuBarCovers.covers(pills: pills, input(uncoveredKeys: ["gone"])).map(\.minX) == [700, 895])
     }
 
     @Test func aPillHiddenBehindTheNotchIsNotCovered() {

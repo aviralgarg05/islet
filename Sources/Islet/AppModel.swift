@@ -197,13 +197,15 @@ final class AppModel {
     private var mirroredActivityKeys: [String: String] = [:]
     /// Menu bar item key → the source its mirrored activity uses, for every Live Activity in
     /// the menu bar whether or not it is mirrored, so the covers can tell a muted pill apart
-    /// (`mutedMenuBarPillKeys`).
+    /// (`uncoveredMenuBarPillKeys`).
     @ObservationIgnored private var mirroredSources: [String: String] = [:]
 
-    /// Keys of menu bar pills whose activity is muted. Nothing shows in the island in their
-    /// place, so `MenuBarCovers` leaves them uncovered rather than hiding them altogether.
-    var mutedMenuBarPillKeys: Set<String> {
+    /// Keys of menu bar pills the island shows nothing for: the source is muted, or the user
+    /// dismissed the activity. `MenuBarCovers` leaves those uncovered rather than hiding the
+    /// Live Activity altogether, with no way to get it back.
+    var uncoveredMenuBarPillKeys: Set<String> {
         Set(mirroredSources.filter { settings.isMuted(source: $0.value) }.keys)
+            .union(mirrorTracker.dismissed)
     }
 
     /// Where the menu bar's own Live Activity pills are now, in global Accessibility
@@ -450,8 +452,14 @@ final class AppModel {
         let now = Date()
         // Every item in the menu bar, mirrored or not: a muted one is left out of `list` below
         // but its pill is still there to be covered.
-        mirroredSources = Dictionary(all.map { ($0.key, MenuBarLiveActivities.source(for: $0.appName)) },
-                                     uniquingKeysWith: { a, _ in a })
+        let sources = Dictionary(all.map { ($0.key, MenuBarLiveActivities.source(for: $0.appName)) },
+                                 uniquingKeysWith: { a, _ in a })
+        if sources != mirroredSources {
+            mirroredSources = sources
+            // The frames are published before this, so the first scan after launch works out the
+            // covers while nothing is known to be muted. Work them out again now that it is.
+            onMenuBarCoversChanged?()
+        }
         // A dismissed item stays away while it is in the menu bar, whatever its text does.
         let shown = mirrorTracker.sync(all, now: now).show
         let list = mirrorsOnlyHidden ? shown.filter(\.hidden) : shown
@@ -1646,7 +1654,11 @@ final class AppModel {
         // A dismissed call stays away until its app lets go of the microphone, and a dismissed
         // Live Activity until it leaves the menu bar.
         calls.dismiss(activityID: activityID)
-        if let key = mirroredActivityKeys[activityID] { mirrorTracker.dismiss(key: key) }
+        if let key = mirroredActivityKeys[activityID] {
+            mirrorTracker.dismiss(key: key)
+            // Its pill stays in the menu bar, and now nothing stands in for it, so uncover it.
+            onMenuBarCoversChanged?()
+        }
         meetingActivityRemoved(activityID)
         reschedule()
         timers.activityRemoved(activityID)
