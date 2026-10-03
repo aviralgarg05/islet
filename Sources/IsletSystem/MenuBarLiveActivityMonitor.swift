@@ -22,6 +22,10 @@ public final class MenuBarLiveActivityMonitor {
 
     /// Current Live Activities, left to right.
     public var onChange: (([MirroredLiveActivity]) -> Void)?
+    /// Where each of those activities sits in the menu bar, in global Accessibility coordinates.
+    /// Published whenever a pill appears, goes, moves or changes width, even when its text is
+    /// the same, so a cover over it can follow (`MenuBarCovers`).
+    public var onFrames: (([MenuBarActivityPill]) -> Void)?
     /// Items appeared, went away or moved (the menu bar layout changed).
     public var onStructureChange: (() -> Void)?
     /// Recognises an app name among an activity's text (the Live Activity catalogue).
@@ -44,6 +48,7 @@ public final class MenuBarLiveActivityMonitor {
     private var chevron: AXUIElement?
     private var watched: [String: AXUIElement] = [:]
     private var last: [MirroredLiveActivity] = []
+    private var lastPills: [MenuBarActivityPill] = []
     private var notifyTokens: [Int32] = []
     private var workspaceObservers: [NSObjectProtocol] = []
     private var safetyTimer: Timer?
@@ -135,6 +140,11 @@ public final class MenuBarLiveActivityMonitor {
         if !last.isEmpty {
             last = []
             onChange?([])
+        }
+        // Nothing is read from here on, so nothing may stay covered.
+        if !lastPills.isEmpty {
+            lastPills = []
+            onFrames?([])
         }
     }
 
@@ -289,6 +299,14 @@ public final class MenuBarLiveActivityMonitor {
             t.tolerance = 3
             RunLoop.main.add(t, forMode: .common)
             safetyTimer = t
+        }
+
+        // Published before the activities, and on its own: a pill that only moved or changed
+        // width leaves the list below unchanged, and a cover over it still has to follow.
+        let pills = found.map { MenuBarActivityPill(key: $0.0.key, frame: $0.1.frame, hidden: $0.1.info.hidden) }
+        if pills != lastPills {
+            lastPills = pills
+            onFrames?(pills)
         }
 
         let list = found.map(\.0)

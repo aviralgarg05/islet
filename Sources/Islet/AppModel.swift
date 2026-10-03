@@ -196,6 +196,20 @@ final class AppModel {
     /// this never goes through a URL, so nothing outside Islet can trigger the press.
     private var mirroredActivityKeys: [String: String] = [:]
 
+    /// Where the menu bar's own Live Activity pills are now, in global Accessibility
+    /// coordinates. Empty unless something is being mirrored. "Hide the menu bar's own" lays a
+    /// black cover over each one (`MenuBarCovers`).
+    @ObservationIgnored private(set) var menuBarPills: [MenuBarActivityPill] = []
+    /// Something the covers depend on changed: the pills, or an app covering the menu bar. The
+    /// app places them again then; nothing polls.
+    @ObservationIgnored var onMenuBarCoversChanged: (() -> Void)?
+
+    private func setMenuBarPills(_ pills: [MenuBarActivityPill]) {
+        guard pills != menuBarPills else { return }
+        menuBarPills = pills
+        onMenuBarCoversChanged?()
+    }
+
     /// Whether clicking the activity opens something.
     func canOpen(_ a: Activity) -> Bool { a.url != nil || mirroredActivityKeys[a.id] != nil }
 
@@ -307,6 +321,8 @@ final class AppModel {
         fullscreen.onChange = { [weak self] apps, bundle in
             self?.fullscreenApps = apps
             self?.frontBundleID = bundle
+            // An app in full screen takes the menu bar with it: nothing may stay covered there.
+            self?.onMenuBarCoversChanged?()
         }
         fullscreen.start()
         applyTiming()
@@ -380,14 +396,15 @@ final class AppModel {
         }
         unlock.onUnlock = { [weak self] in self?.welcomeBack() }
         if settings.unlockSplash { unlock.start() } else { unlock.stop() }
-        let onlyHiddenChanged = lastMirrorOnlyHidden != settings.mirrorOnlyHiddenActivities
-        lastMirrorOnlyHidden = settings.mirrorOnlyHiddenActivities
+        let onlyHiddenChanged = lastMirrorOnlyHidden != mirrorsOnlyHidden
+        lastMirrorOnlyHidden = mirrorsOnlyHidden
         // Items appearing, going or widening in the menu bar re-measure it, so "Fit the menu bar"
         // keeps the wings off them with Live Activities off too.
         let watch = MenuBarLiveActivities.watch(showActivities: settings.mirrorMenuBarActivities, fitsMenuBar: settings.closedLayout == .auto,
                                                 inFront: inFront, supported: liveActivitiesSupported,
                                                 trusted: MenuBarLiveActivityMonitor.isAvailable)
         menuBarActivities.onStructureChange = { NotificationCenter.default.post(name: .isletMenuBarChanged, object: nil) }
+        menuBarActivities.onFrames = { [weak self] pills in self?.setMenuBarPills(pills) }
         menuBarActivities.mirrors = watch == .mirror
         switch watch {
         case .mirror:
@@ -399,12 +416,21 @@ final class AppModel {
         case .layout:
             menuBarActivities.start()
             syncMenuBarActivities([])
+            setMenuBarPills([])
         case .off:
             menuBarActivities.stop()
             syncMenuBarActivities([])
+            setMenuBarPills([])
         }
         agentUsage.apply(settings) { [weak self] spec in _ = try? self?.applyLocal(spec) }
         applyTools()
+    }
+
+    /// Whether only the activities the notch hides are mirrored. "Hide the menu bar's own"
+    /// covers the visible pills, so every activity has to be mirrored and that switch wins.
+    var mirrorsOnlyHidden: Bool {
+        MenuBarCovers.mirrorsOnlyHidden(onlyHidden: settings.mirrorOnlyHiddenActivities,
+                                        hideOwn: settings.hideMenuBarActivities)
     }
 
     /// Show the menu bar's Live Activities (iPhone and Mac) as island activities.
@@ -412,7 +438,7 @@ final class AppModel {
         let now = Date()
         // A dismissed item stays away while it is in the menu bar, whatever its text does.
         let shown = mirrorTracker.sync(all, now: now).show
-        let list = settings.mirrorOnlyHiddenActivities ? shown.filter(\.hidden) : shown
+        let list = mirrorsOnlyHidden ? shown.filter(\.hidden) : shown
         let keys = Set(list.map(\.key))
         for key in mirroredKeys.subtracting(keys) {
             let id = MenuBarLiveActivities.activityID(key)

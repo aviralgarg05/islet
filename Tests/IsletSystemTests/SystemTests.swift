@@ -369,6 +369,22 @@ func request(_ port: UInt16, _ method: String, _ path: String, token: String? = 
         #expect(!MenuBarLiveActivityMonitor.dump().isEmpty)
     }
 
+    /// The AX frames the scanner reports turn into window frames inside the menu bar row, so a
+    /// cover lands on the pill and never hangs below the row. Read-only, against this Mac.
+    @Test func pillFramesTurnIntoCoversInsideTheMenuBarRow() {
+        guard MenuBarLiveActivityMonitor.isAvailable, let agent = MenuBarAgentScanner.agentPID,
+              let screen = NSScreen.screens.first(where: { $0.frame.origin == .zero }) else { return }
+        let height = screen.frame.maxY - screen.visibleFrame.maxY
+        guard height > 0 else { return }
+        for slot in MenuBarAgentScanner.slots(agent: agent, readContent: true) where slot.kind == .liveActivity {
+            guard let cover = MenuBarCovers.windowFrame(pill: slot.frame, menuBarTop: screen.frame.maxY,
+                                                        menuBarHeight: height) else { continue }
+            #expect(cover.maxY <= screen.frame.maxY, "\(cover)")
+            #expect(cover.minY >= screen.frame.maxY - height, "\(cover)")
+            #expect(cover.minX <= slot.frame.minX && cover.maxX >= slot.frame.maxX, "\(cover) vs \(slot.frame)")
+        }
+    }
+
     @Test func inspectorMeasuresTheMenuBar() async {
         guard MenuBarInspector.isAvailable, let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }),
               let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea else { return }
