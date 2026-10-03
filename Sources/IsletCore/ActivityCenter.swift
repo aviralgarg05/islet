@@ -98,9 +98,23 @@ public struct ActivityCenter: Sendable {
         throw ActivityError.invalidProgress(p)
     }
 
+    /// Text a client sent, cut to one line of the length the island can draw
+    /// (`ActivityLimits`). `TemplateLimits` refuses a template field that is too long, but these
+    /// four carry an app's own words (a mirrored banner's title, say), so they are shortened.
+    static func capped(_ spec: ActivitySpec) -> ActivitySpec {
+        typealias L = ActivityLimits
+        var s = spec
+        s.title = s.title.map { L.capped($0, L.title) }
+        s.subtitle = s.subtitle.map { L.capped($0, L.subtitle) }
+        s.trailing = s.trailing.map { L.capped($0, L.trailing) }
+        s.source = s.source.map { L.capped($0, L.source) }
+        return s
+    }
+
     /// Create or update (upsert) an activity from a client spec.
     @discardableResult
     public mutating func apply(_ spec: ActivitySpec, now: Date, makeID: () -> String = { UUID().uuidString.lowercased() }) throws -> Activity {
+        let spec = Self.capped(spec)
         let id = spec.id ?? makeID()
         guard Self.isValidID(id) else { throw ActivityError.invalidID(id) }
         if let tint = spec.tint, RGBA.parse(tint) == nil { throw ActivityError.invalidTint(tint) }

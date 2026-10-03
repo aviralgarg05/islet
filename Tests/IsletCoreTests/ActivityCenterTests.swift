@@ -4,6 +4,43 @@ import Testing
 
 let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 
+/// `ActivityLimits`: text from the API, the bridge or a link is cut to what a row can draw.
+@Suite struct ActivityTextLimitTests {
+    @Test func longTextIsCutToOneLine() throws {
+        var c = ActivityCenter()
+        let a = try c.apply(ActivitySpec(id: "big", source: String(repeating: "s", count: 300),
+                                        title: String(repeating: "t", count: 5000),
+                                        subtitle: String(repeating: "u", count: 5000),
+                                        trailing: String(repeating: "v", count: 500)), now: t0)
+        #expect(a.title.count == ActivityLimits.title)
+        #expect(a.subtitle?.count == ActivityLimits.subtitle)
+        #expect(a.trailing?.count == ActivityLimits.trailing)
+        #expect(a.source.count == ActivityLimits.source)
+        #expect(a.title.hasSuffix("\u{2026}"))
+    }
+
+    /// Newlines would turn one row into several, so the text is put on one line. An update is
+    /// cut the same way as the first write.
+    @Test func textIsPutOnOneLineOnUpdateToo() throws {
+        var c = ActivityCenter()
+        let a = try c.apply(ActivitySpec(id: "lines", title: "Build\nfailed", subtitle: " two\nlines "), now: t0)
+        #expect(a.title == "Build failed")
+        #expect(a.subtitle == "two lines")
+        let again = try c.apply(ActivitySpec(id: "lines", title: String(repeating: "w", count: 300)), now: t0)
+        #expect(again.title.count == ActivityLimits.title)
+    }
+
+    @Test func textThatFitsIsUntouched() throws {
+        var c = ActivityCenter()
+        let a = try c.apply(ActivitySpec(id: "fine", source: "ci", title: "Deploying", subtitle: "step 2 of 5",
+                                        trailing: "12:40"), now: t0)
+        #expect(a.title == "Deploying")
+        #expect(a.subtitle == "step 2 of 5")
+        #expect(a.trailing == "12:40")
+        #expect(a.source == "ci")
+    }
+}
+
 @Suite struct ActivityCenterTests {
     @Test func createRequiresTitle() {
         var c = ActivityCenter()
