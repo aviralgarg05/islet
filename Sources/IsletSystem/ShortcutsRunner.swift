@@ -50,25 +50,30 @@ public final class ShortcutsRunner {
                 // Read while it runs, so a long list can't fill the pipe and stall it.
                 var output = Data(), errors = Data()
                 let group = DispatchGroup()
+                // The reads stop at the same deadline as the shortcut, so a child it leaves
+                // behind holding the pipes can't keep the answer from ever arriving.
+                let deadline = DispatchTime.now() + timeout
                 group.enter()
                 DispatchQueue.global().async {
-                    output = out.fileHandleForReading.readDataToEndOfFile()
+                    output = ScriptPluginRunner.drain(out.fileHandleForReading, until: deadline)
                     group.leave()
                 }
                 group.enter()
                 DispatchQueue.global().async {
-                    errors = err.fileHandleForReading.readDataToEndOfFile()
+                    errors = ScriptPluginRunner.drain(err.fileHandleForReading, until: deadline)
                     group.leave()
                 }
-                let timer = DispatchWorkItem { if process.isRunning { process.terminate() } }
-                DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timer)
+                let timer = DispatchWorkItem { ScriptPluginRunner.halt(process) }
+                DispatchQueue.global().asyncAfter(deadline: deadline, execute: timer)
                 process.waitUntilExit()
                 timer.cancel()
-                group.wait()
+                // The shortcut has gone. A child it left behind may still hold the pipes, so the
+                // rest of its output is waited for only briefly, as `CLIChild` waits on stderr.
+                let read = group.wait(timeout: .now() + 0.5) == .success
                 if process.terminationStatus == 0 {
-                    result = .success(String(decoding: output, as: UTF8.self))
+                    result = .success(read ? String(decoding: output, as: UTF8.self) : "")
                 } else {
-                    result = .failure(.failed(ShortcutsCatalog.failureReason(String(decoding: errors, as: UTF8.self))))
+                    result = .failure(.failed(read ? ShortcutsCatalog.failureReason(String(decoding: errors, as: UTF8.self)) : nil))
                 }
             } catch {
                 result = .failure(.failed(nil))
