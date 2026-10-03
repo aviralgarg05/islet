@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # So a run can be started by hand from the Actions tab, to re-check a flake or a runner change.
+  workflow_dispatch:
 
 permissions:
   contents: read
