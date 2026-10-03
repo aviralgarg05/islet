@@ -6,6 +6,14 @@
 - **Hide the menu bar’s own** (Settings → Live Activities, on to begin with) covers each Live Activity macOS draws in the menu bar, so it shows in the island only instead of twice. While it’s on, every activity shows in the island, whether or not the notch hides it.
 
 ### Fixes
+- Spotify cover art is fetched the way every other request Islet sends is: nothing kept between songs, nothing written to disk.
+- A title, subtitle, trailing value or source sent by a script, a link or your iPhone is cut to one line of what the island can draw, instead of stretching the row.
+- The local API caps how many connections it keeps at once, and lets go of one whose request never arrives, so another program on this Mac can’t tie it up.
+- The iPhone bridge no longer tells anyone on the Wi-Fi Islet’s exact version when they ask whether it’s there.
+- A script widget’s link opens only if it’s a web address, and a command you run from its menu starts with the same scrubbed environment a scheduled run gets.
+- The files holding the API and bridge tokens are written afresh and moved into place, so a link left where one of them goes can’t catch the token.
+- Oversized request headers are refused however they arrive.
+- Lyrics and weather requests refuse redirects, so a song’s title or a place you typed can’t be carried to another site.
 - Scripts can no longer read the text of the notifications Islet mirrors. Banner titles and text now need **Let scripts read Live Activities and notifications** (Settings → Advanced → Local API), the same setting as the Live Activities Islet mirrors, instead of showing in `GET /v1/activities` and `GET /v1/state` whatever the setting said.
 - A Focus pill set by a link or by your iPhone now shows as its own pill rather than replacing the one Islet shows for the Mac’s Focus, and a very long Focus name is shortened to fit the island.
 - Live Activities from your iPhone show in the island again. macOS builds the menu bar’s Live Activity differently from every other item, so Islet read an empty part of it and passed over it.

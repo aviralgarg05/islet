@@ -299,7 +299,7 @@ Off by default. When enabled (Settings → Advanced → iPhone bridge), a second
 
 | Route | Limits |
 |---|---|
-| `GET /v1/health` | No token needed. |
+| `GET /v1/health` | No token needed, so it answers `{"ok": "true"}` and leaves the version out. Loopback gives the version. |
 | `POST /v1/notify`, `POST /v1/timer`, `POST /v1/focus` | Priority tops out at `high`. Timer ids and the Focus pill's id get a `lan-` prefix, so the bridge shows its own pill rather than replacing the Mac's. |
 | `POST /v1/activities`, `PUT /v1/activities/{id}` | Ids get a `lan-` prefix (a new id when none is given). `url` and `actions` are dropped. `icon`, `trackerIcon` and `stageSymbols` keep only symbols, emoji and app icons. Priority tops out at `high`. |
 
@@ -387,6 +387,7 @@ Any app or web page can open these URLs, and they carry no token, so they are li
 - Activities they create or dismiss get ids starting with `url-` (`id=deploy` becomes `url-deploy`, and `islet://focus` makes `url-focus`), so a link can't replace or remove an activity made by Islet, the API or the Live Activity mirror. `source=live-activity` is refused.
 - `url` and `actionURL` must be `https`.
 - Icons are limited to `sf:`, `emoji:` and `app:`.
+- Text is cut to one line: a title at 120 characters, a subtitle at 160, a trailing value at 40 and a source at 64. The same caps apply over the API and the bridge.
 - `priority=critical` is treated as `high`.
 
 Use the local API or `isletctl` when you need more.
