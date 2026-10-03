@@ -159,16 +159,21 @@ final class ApprovalController {
         presented = true
         noteFront()
         if model.expandedScreen == nil {
-            guard let display = Self.islandDisplay(model.settings), model.presentation(for: display) != .hidden else {
+            // The display must be one the app has a panel on, not just one macOS lists: during
+            // the panel-rebuild debounce, or after wake, a card sent anywhere else draws
+            // nothing while `presented` stays true, and the agent waits for the whole timeout
+            // with no card on any screen. `setExpanded` does the rest of the opening, without
+            // the haptic nobody asked for.
+            guard let display = Self.islandDisplay(model.settings), model.islandDisplays.contains(display),
+                  model.presentation(for: display) != .hidden else {
                 for id in queue.entries.map(\.id) { finish(id, with: nil) }
                 return
             }
             hold.hold(islandWasOpen: false, pinned: model.pinned)
             model.pinned = true
-            model.expandedScreen = display
+            model.setExpanded(display, haptics: false)
             // The island opens under whatever the pointer is doing: guard against a stray click.
             front.since = Date()
-            NotificationCenter.default.post(name: .isletLayoutChanged, object: nil)
         } else {
             hold.hold(islandWasOpen: true, pinned: model.pinned)
             model.pinned = true
