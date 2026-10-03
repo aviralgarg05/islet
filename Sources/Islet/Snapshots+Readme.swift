@@ -43,16 +43,14 @@ extension Snapshots {
                                                                       resetsAt: now.addingTimeInterval(72 * 60)), threshold: 90)
         let usage = activity(alert.activity(now: now))
 
-        // Five states, not every state: beside a notch the compact island has room for an icon and
-        // a value, so a ride, a score and a timer all look alike there. One of each kind says more
-        // than all of them, and the sneak peeks below carry the detail.
-        _ = (score, timer)
+        // Three states, not every state. Beside a notch the compact island has room for an icon
+        // and a value, so a ride, a score and a timer all look alike there; one of each kind says
+        // more than a sheet of them, and the pages they live on are where the detail belongs.
+        _ = (score, timer, waiting, usage)
         let rows: [(String, IslandPresentation, CGFloat)] = [
             ("Music, with everything else in bubbles", .compact(.nowPlaying(model.nowPlaying!)), 42),
-            ("A ride from your iPhone, mirrored from the menu bar", .compact(.activity(ride, others: 0)), 42),
-            ("A coding agent waiting for you", .compact(.activity(waiting, others: 0)), 42),
+            ("A ride from your iPhone", .compact(.activity(ride, others: 0)), 42),
             ("An agent's plan, step 3 of 5", .sneak(plan), 100),
-            ("A usage limit, before you hit it", .sneak(usage), 98),
         ]
         model.closedPlacements[1] = ClosedPlacement(wing: metrics.wingWidth, slack: .infinity)
         var images: [(String, NSImage)] = []
@@ -133,14 +131,17 @@ enum Readme {
 
 @MainActor
 extension Snapshots {
-    /// A desktop behind the island: a soft, desaturated gradient instead of a bright wallpaper,
-    /// so the island reads as the subject. The menu bar row and the notch are drawn as they are
-    /// on a real Mac, which is what makes the picture legible at a glance.
+    /// A desktop behind the island. Nearly one colour, a little lighter at the top as a real
+    /// wallpaper is under the menu bar, with a soft lift behind the island so it sits in light
+    /// rather than on a stripe. Restraint is the point: the island is the only thing with hue in
+    /// it, so the page it sits on should have almost none.
     static func readmeBackdrop(metrics: IslandMetrics) -> some View {
         ZStack(alignment: .top) {
-            LinearGradient(colors: [Color(red: 0.24, green: 0.28, blue: 0.38), Color(red: 0.38, green: 0.31, blue: 0.39)],
-                           startPoint: .topLeading, endPoint: .bottomTrailing)
-            Rectangle().fill(Color.white.opacity(0.08)).frame(height: metrics.notch.height)
+            LinearGradient(colors: [Color(red: 0.227, green: 0.247, blue: 0.298), Color(red: 0.133, green: 0.145, blue: 0.180)],
+                           startPoint: .top, endPoint: .bottom)
+            RadialGradient(colors: [Color.white.opacity(0.07), Color.white.opacity(0)],
+                           center: .top, startRadius: 0, endRadius: 320)
+            Rectangle().fill(Color.white.opacity(0.05)).frame(height: metrics.notch.height)
             UnevenRoundedRectangle(bottomLeadingRadius: 8, bottomTrailingRadius: 8)
                 .fill(Color.black)
                 .frame(width: metrics.notch.width, height: metrics.notch.height)

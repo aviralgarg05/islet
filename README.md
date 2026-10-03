@@ -4,29 +4,26 @@
 
 ![The island open on Home: a song playing, with a meeting, a build and a coding agent beside it](docs/images/expanded-home.png)
 
-<img src="docs/images/closed-states.png" width="560" alt="The closed island in five states: music with everything else in bubbles, a ride mirrored from the iPhone, a coding agent waiting, an agent's plan at step 3 of 5, and a usage limit alert">
-
 ## What it does
 
-- **Your iPhone's Live Activities.** Rides, deliveries, scores and flights that macOS shows in the menu bar appear in the island with the app's icon and colour, including the ones the notch hides. 137 apps have their own look. See [Live Activities](docs/LIVE-ACTIVITIES.md).
-- **Now Playing** from any app, browsers included, with a scrubber that seeks, ±15 s, shuffle and repeat, volume and an output picker. Each new song shows for a moment below the notch. Beside the notch, bars, a wave, a pulse, mirrored bars, artwork that turns like a record, or a little animated sticker (five of Islet's own, or a GIF of yours) show that it's playing. With a video in Chrome and a song in Spotify at once, small app icons beside the title switch between every player macOS lists. The controls work for the player macOS gives them to, and for Music and Spotify once you allow Islet to control them; for any other player, the island offers to open its app.
-- **Coding agents.** See what Claude Code, Codex or Cursor is doing, answer their permission requests and questions from the notch, and watch Claude Code's and Codex's usage limits. Those limits are read from files on your Mac, Codex's own session log among them, and only the limit figures are kept; either can be switched off in Settings. Agents can also drive the notch over MCP. See [Integrations](docs/INTEGRATIONS.md) and [MCP](docs/MCP.md).
-- **Ask** Apple Intelligence, Claude, ChatGPT or your command-line agent a quick question. See [AI](docs/AI.md).
-- **Timers and Pomodoro**, started from the island, a phrase like "tea 4m", Siri via Shortcuts ([recipes](docs/SHORTCUTS.md)) or a script.
-- **Calendar and Reminders**: meeting reminders that count down beside the notch and stay until you join, a large Join button, the rest of today, and reminders you can tick off. When macOS hasn't allowed Islet to read your calendar, it says why and opens the right page of System Settings.
-- **Calls, HUDs and system events**: call timers, volume, brightness and microphone HUDs (volume and brightness start off, since macOS shows its own), charging and battery, Focus, keep awake and a summary when you unlock.
-- **A file shelf, clipboard history, download progress and script widgets** (xbar and SwiftBar plugins run unchanged). The clipboard shows links, colours, pictures and files as themselves, with search, filters and pins; the shelf AirDrops a file in one click and lets files go after a day, or when you choose.
-- **Tools you turn on when you want them**: to-dos, a quick note, a unit converter, emoji search, your Shortcuts, the weather, CPU and memory, a camera mirror, a teleprompter just under the camera, a stocks watchlist and today's sales from Stripe, Shopify, Lemon Squeezy, Gumroad, Dodo Payments, Polar and Paddle. Each starts off; turn one on in Settings → Tools and its page appears under More. See [Tools](docs/TOOLS.md).
-- **Extras on the page they belong to**, also off at first: time-synced lyrics (Now Playing), a month calendar on Today, a stopwatch and focus sounds (Timers), and OpenRouter, Copilot and Ollama usage on Home (Coding agents).
-- **Your own activities** from the command line, a local HTTP API, the `islet://` URL scheme or iPhone Shortcuts. See the [API](docs/API.md).
+- **Your iPhone's Live Activities** — rides, deliveries, scores, flights — shown in the notch instead of hidden behind it. 137 apps have their own look. → [Live Activities](docs/LIVE-ACTIVITIES.md)
+- **Now Playing** from any app, browsers included, with synced lyrics, a scrubber that seeks and an output picker. Small app icons switch between every player macOS lists.
+- **Coding agents.** Watch Claude Code, Codex and Cursor work, answer their permission requests from the notch, and keep an eye on usage limits. → [Integrations](docs/INTEGRATIONS.md), [MCP](docs/MCP.md)
+- **Meetings, timers and reminders.** A meeting counts down beside the notch and waits with a Join button until you join it.
+- **A shelf, clipboard history and download progress.** Drop files on the notch, AirDrop one in a click, find that link you copied an hour ago.
+- **Twelve tools, each off until you want it:** to-dos, a note, a converter, emoji, the weather, a camera mirror, a teleprompter, stocks, sales and more. → [Tools](docs/TOOLS.md)
+- **Ask** Apple Intelligence, Claude, ChatGPT or your command-line agent a quick question. → [AI](docs/AI.md)
+- **Your own activities** from a script, the command line, an HTTP API, the `islet://` scheme or iPhone Shortcuts. → [API](docs/API.md)
+
+<img src="docs/images/closed-states.png" width="520" alt="The closed island: music with everything else in bubbles, a ride mirrored from the iPhone, and a coding agent's plan at step 3 of 5">
 
 ## How it stays out of the way
 
-- **It sits beside the notch, like the iPhone's.** It always stays in the menu bar row. With Accessibility it measures the menu bar and shrinks to the free space, down to just an icon each side, so it covers a menu bar icon only when the bar is packed right up to the notch.
+- **It lives in the menu bar row.** With Accessibility it measures the bar and shrinks to the space that's free, so it covers an icon only when the bar is packed right up to the notch.
 - **It costs nothing when idle.** Everything is driven by events, and the pointer isn't watched until it reaches the notch.
 - **It asks for nothing up front.** Each permission is requested when you turn on the feature that needs it.
-- **It keeps things on your Mac.** No account, no telemetry, no licence server. Questions go to an AI provider only when you ask one, with your own key. Lyrics, the weather, sales, stocks and OpenRouter or Copilot usage reach the network only once you turn them on; lyrics and the weather send no more than the song or a rounded position, and Islet never reads another app's sign-in.
-- **It works with VoiceOver and the keyboard.** VoiceOver reads the island in words ("Tea, 4 minutes 32 seconds left"), Increase Contrast firms up its text and edges, and with Keyboard navigation on, Tab reaches every control in Settings.
+- **It keeps things on your Mac.** No account, no telemetry, no licence server. Nothing reaches the network until you switch on something that needs it, and Islet never reads another app's sign-in.
+- **It works with VoiceOver and the keyboard**, and honours Reduce Motion and Increase Contrast.
 - **It's free and MIT-licensed**, written from scratch.
 
 ## Download
