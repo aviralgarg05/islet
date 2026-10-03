@@ -129,6 +129,11 @@ public enum HTTPParser {
         guard let headerEnd = data.range(of: separator) else {
             return data.count > maxHeaderBytes ? .invalid(status: 413, reason: "headers too large") : .incomplete
         }
+        // Checked here too: a server that reads more than the limit in one go would otherwise
+        // parse oversized headers that simply arrived with their terminator.
+        guard data.distance(from: data.startIndex, to: headerEnd.upperBound) <= maxHeaderBytes else {
+            return .invalid(status: 413, reason: "headers too large")
+        }
         guard let head = String(data: data[data.startIndex..<headerEnd.lowerBound], encoding: .utf8) else {
             return .invalid(status: 400, reason: "headers are not UTF-8")
         }

@@ -99,6 +99,19 @@ actor FakeBackend: IsletBackend {
         if case .invalid(let status, _) = HTTPParser.parse(Data(repeating: 65, count: 20_000)) { #expect(status == 413) } else { Issue.record("expected 413 for huge headers") }
     }
 
+    /// The server reads up to 64 KB at a time, so oversized headers can arrive with their
+    /// terminator in one go. They are refused either way.
+    @Test func oversizedHeadersAreRefusedEvenWithTheirTerminator() {
+        let padding = String(repeating: "a", count: HTTPParser.maxHeaderBytes)
+        let raw = "GET / HTTP/1.1\r\nHost: x\r\nX-Pad: \(padding)\r\n\r\n"
+        if case .invalid(let status, _) = HTTPParser.parse(Data(raw.utf8)) { #expect(status == 413) } else { Issue.record("expected 413") }
+        if case .invalid(let status, _) = HTTPParser.parseHead(Data(raw.utf8)) { #expect(status == 413) } else { Issue.record("expected 413") }
+        // Just inside the limit still parses, terminator included.
+        let fits = "GET / HTTP/1.1\r\nHost: x\r\nX-Pad: " + String(repeating: "a", count: HTTPParser.maxHeaderBytes - 40) + "\r\n\r\n"
+        #expect(fits.utf8.count <= HTTPParser.maxHeaderBytes)
+        guard case .complete = HTTPParser.parse(Data(fits.utf8)) else { Issue.record("should parse"); return }
+    }
+
     @Test func percentEncodedSegments() {
         guard case .complete(let r) = HTTPParser.parse(Data("DELETE /v1/activities/a%3Ab HTTP/1.1\r\n\r\n".utf8)) else { Issue.record("x"); return }
         #expect(r.segments == ["v1", "activities", "a:b"])
