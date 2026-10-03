@@ -143,8 +143,12 @@ def main():
     # Config: dedicated port, plugins on, clipboard off.
     os.makedirs(os.path.dirname(e.config_path), exist_ok=True)
     with open(e.config_path, "w") as f:
+        # fullscreenBehaviour: the island hides for a fullscreen app by default, so without this
+        # every sneak-peek check would fail whenever the person running the suite happens to have
+        # a video or an editor filling a screen.
         json.dump({"apiPort": PORT, "pluginsEnabled": True, "hoverToOpen": True,
-                   "lanBridgeEnabled": True, "lanPort": LAN_PORT, "callDetection": True}, f)
+                   "lanBridgeEnabled": True, "lanPort": LAN_PORT, "callDetection": True,
+                   "fullscreenBehaviour": "show"}, f)
     # A plugin that emits Islet JSON, and an xbar-format one.
     with open(os.path.join(e.plugins, "e2e.1m.sh"), "w") as f:
         f.write('#!/bin/sh\necho \'{"id":"plugin-e2e","title":"Plugin says hi","progress":0.5,"priority":"low"}\'\n')
