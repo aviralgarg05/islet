@@ -1,4 +1,4 @@
-// Draws the Islet app icon (1024 px) with AppKit. Usage: swift scripts/make-icon.swift out.png
+// Draws the Casement app icon (1024 px) with AppKit. Usage: swift scripts/make-icon.swift out.png
 import AppKit
 
 let size: CGFloat = 1024

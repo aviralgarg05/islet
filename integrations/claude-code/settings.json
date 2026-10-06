@@ -1,18 +1,18 @@
 {
   "hooks": {
-    "SessionStart":      [{ "hooks": [{ "type": "command", "command": "isletctl hook claude" }] }],
-    "UserPromptSubmit":  [{ "hooks": [{ "type": "command", "command": "isletctl hook claude" }] }],
+    "SessionStart":      [{ "hooks": [{ "type": "command", "command": "casementctl hook claude" }] }],
+    "UserPromptSubmit":  [{ "hooks": [{ "type": "command", "command": "casementctl hook claude" }] }],
     "PreToolUse": [
-      { "hooks": [{ "type": "command", "command": "isletctl hook claude" }] },
+      { "hooks": [{ "type": "command", "command": "casementctl hook claude" }] },
       { "matcher": "AskUserQuestion|ExitPlanMode",
-        "hooks": [{ "type": "command", "command": "isletctl hook claude --wait 300", "timeout": 330 }] }
+        "hooks": [{ "type": "command", "command": "casementctl hook claude --wait 300", "timeout": 330 }] }
     ],
-    "PostToolUse":       [{ "hooks": [{ "type": "command", "command": "isletctl hook claude" }] }],
-    "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "isletctl hook claude --wait 300", "timeout": 330 }] }],
-    "Notification":      [{ "hooks": [{ "type": "command", "command": "isletctl hook claude" }] }],
-    "PreCompact":        [{ "hooks": [{ "type": "command", "command": "isletctl hook claude" }] }],
-    "Stop":              [{ "hooks": [{ "type": "command", "command": "isletctl hook claude" }] }],
-    "SessionEnd":        [{ "hooks": [{ "type": "command", "command": "isletctl hook claude" }] }]
+    "PostToolUse":       [{ "hooks": [{ "type": "command", "command": "casementctl hook claude" }] }],
+    "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "casementctl hook claude --wait 300", "timeout": 330 }] }],
+    "Notification":      [{ "hooks": [{ "type": "command", "command": "casementctl hook claude" }] }],
+    "PreCompact":        [{ "hooks": [{ "type": "command", "command": "casementctl hook claude" }] }],
+    "Stop":              [{ "hooks": [{ "type": "command", "command": "casementctl hook claude" }] }],
+    "SessionEnd":        [{ "hooks": [{ "type": "command", "command": "casementctl hook claude" }] }]
   },
-  "statusLine": { "type": "command", "command": "isletctl statusline" }
+  "statusLine": { "type": "command", "command": "casementctl statusline" }
 }

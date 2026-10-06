@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Builds a release from the newest version in CHANGELOG.md:
-#   build/Islet-<version>.zip, build/Islet-<version>.zip.sha256 and build/release-notes-<version>.md.
+#   build/Casement-<version>.zip, build/Casement-<version>.zip.sha256 and build/release-notes-<version>.md.
 #
 #   scripts/release.sh                       # build, zip, check, and print what would be published
 #   scripts/release.sh --publish             # also create the GitHub release (tag v<version>)
-#   scripts/release.sh --no-build            # use the existing build/Islet.app (CI runs make app first)
+#   scripts/release.sh --no-build            # use the existing build/Casement.app (CI runs make app first)
 #   scripts/release.sh --verify-zip <path>   # only the zip self-check, on a .zip or an .app; builds nothing
 #
 # Every zip is extracted twice, with ditto and with unzip, and the app's signature is checked in each
 # copy; the release stops if either check fails. With SIGN_IDENTITY set (a Developer ID), the app is
-# also notarised with the notarytool keychain profile NOTARY_PROFILE (default islet-notary), stapled,
+# also notarised with the notarytool keychain profile NOTARY_PROFILE (default casement-notary), stapled,
 # re-zipped, and must be accepted by Gatekeeper. --publish and --no-build also stop while the version's
 # CHANGELOG heading says "unreleased" or its notes hold a placeholder line.
 #
@@ -86,9 +86,9 @@ fi
 
 VERSION="${VERSION:-$(sed -n 's/^## \([0-9][0-9.]*\).*/\1/p' CHANGELOG.md | head -1)}"
 [ -n "$VERSION" ] || { echo "No version heading found in CHANGELOG.md" >&2; exit 1; }
-APP="build/Islet.app"
+APP="build/Casement.app"
 NOTES="build/release-notes-$VERSION.md"
-ZIP="build/Islet-$VERSION.zip"
+ZIP="build/Casement-$VERSION.zip"
 
 if [ "$MODE" = --publish ]; then
     git diff --quiet && git diff --cached --quiet || { echo "Commit your changes first." >&2; exit 1; }
@@ -124,7 +124,7 @@ make_zip "$APP" "$ZIP"
 verify_zip "$ZIP" || { echo "$STOP" >&2; exit 1; }
 
 if [ -n "${SIGN_IDENTITY:-}" ]; then
-    PROFILE="${NOTARY_PROFILE:-islet-notary}"
+    PROFILE="${NOTARY_PROFILE:-casement-notary}"
     echo "▸ notarising with keychain profile $PROFILE"
     xcrun notarytool submit "$ZIP" --wait --keychain-profile "$PROFILE"
     # Whatever notarytool's exit status, a rejected submission has no ticket, so stapler fails.
@@ -140,7 +140,7 @@ fi
 ZIP_OK=1
 (cd build && shasum -a 256 "$(basename "$ZIP")" > "$(basename "$ZIP").sha256")
 SHA="$(cut -d' ' -f1 "$ZIP.sha256")"
-printf '\n---\n\n`Islet-%s.zip` SHA-256: `%s`\n' "$VERSION" "$SHA" >> "$NOTES"
+printf '\n---\n\n`Casement-%s.zip` SHA-256: `%s`\n' "$VERSION" "$SHA" >> "$NOTES"
 
 echo "✓ $ZIP"
 echo "  sha256 $SHA ($ZIP.sha256)"
@@ -148,5 +148,5 @@ echo "  notes  $NOTES"
 
 if [ "$MODE" = --publish ]; then
     git push origin HEAD
-    gh release create "v$VERSION" "$ZIP" "$ZIP.sha256" --title "Islet $VERSION" --notes-file "$NOTES" --target "$(git rev-parse HEAD)"
+    gh release create "v$VERSION" "$ZIP" "$ZIP.sha256" --title "Casement $VERSION" --notes-file "$NOTES" --target "$(git rev-parse HEAD)"
 fi

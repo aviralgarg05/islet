@@ -1,10 +1,10 @@
 # Integrations
 
-Islet connects to apps in three ways:
+Casement connects to apps in three ways:
 
 1. **Built in, no setup:** anything playing media (Music, Spotify, browsers, podcasts, video players, via macOS Now Playing), calendar, battery, volume, brightness, audio devices, camera/microphone use, calls, downloads, and notifications from every app (opt-in).
-2. **Push from anything:** the `isletctl` CLI, the local HTTP API, the `islet://` URL scheme and the iPhone bridge. Every app or tool that can run a command, open a URL or make a request can drive the island. The full reference is in [API.md](API.md).
-3. **Script widgets:** any xbar/SwiftBar plugin, or a script that prints an Islet activity as JSON.
+2. **Push from anything:** the `casementctl` CLI, the local HTTP API, the `casement://` URL scheme and the iPhone bridge. Every app or tool that can run a command, open a URL or make a request can drive the island. The full reference is in [API.md](API.md).
+3. **Script widgets:** any xbar/SwiftBar plugin, or a script that prints an Casement activity as JSON.
 
 Ready-made files live in [`integrations/`](../integrations/).
 
@@ -18,7 +18,7 @@ Ready-made files live in [`integrations/`](../integrations/).
 | FaceTime, Zoom, Teams, Slack huddles, Discord, WhatsApp, Webex, Skype, Telegram, Signal, Meet in a browser | Green call pill with a live timer once the app has held the microphone for 3 seconds; video icon when the camera is on. A browser or a chat app first shows a quiet "Microphone in use" until the camera comes on or a minute passes. A dismissed pill stays away until the app lets go of the microphone | nothing |
 | Calendar (iCloud, Google and Exchange accounts added to macOS) | Meeting reminders: from 10 minutes before (5, 15 or 30, or off), the meeting counts down beside the notch with its call app's icon, glows when it starts and stays until you join, dismiss it or it ends. **Join** opens the Zoom, Meet, Teams, Webex or FaceTime link; being in a call in that app (joined up to 10 minutes early) counts as joining. All-day events, cancelled meetings and declined invitations never remind you | Calendar access (full access, not "Add events only") |
 | Battery | Charging splash (the adapter's watts show in the open island), low and critical warnings at levels you choose, an optional "charged to 80%" alert, Low Power Mode on/off | nothing |
-| Volume, brightness, keyboard backlight | HUD in the notch. Volume and brightness start off in a new setup, since macOS shows its own; the keyboard backlight HUD shows only while Islet replaces the system one | nothing (Accessibility to replace the system HUD) |
+| Volume, brightness, keyboard backlight | HUD in the notch. Volume and brightness start off in a new setup, since macOS shows its own; the keyboard backlight HUD shows only while Casement replaces the system one | nothing (Accessibility to replace the system HUD) |
 | AirPods / headphones / displays / speakers | "Connected" card when the output device changes (its own switch, **Sound output changes**) | nothing |
 | Safari, Chrome, Firefox, Edge, Brave, Arc downloads | Progress (real % for Safari), then "Downloaded" with Open/Show | Downloads folder access |
 | Notifications from every app, including iPhone notifications forwarded by macOS | App icon + sender + one line beside the notch (macOS shows its own banner too; **Peek at new notifications** opens it below the notch as well); per-app mute, tint and priority; optional on-device summary | Accessibility (experimental) |
@@ -30,8 +30,8 @@ Ready-made files live in [`integrations/`](../integrations/).
 
 The quickest way: open *Settings → Coding agents* and press **Connect…** beside Claude Code, Codex or Cursor. A sheet lists every change before anything is written, your own hooks and settings stay as they are, and each file is copied to a `.bak` file first. The row then says **Connected**.
 
-- If Islet.app moves (the hooks call the `isletctl` inside it), the row says Islet has moved and the agent can't reach it, and Coding agents gets a dot in the sidebar; **Update…** points the hooks at the new place. Islet checks at launch and whenever the Coding agents page opens. Hooks that call `isletctl` by name, as in the examples below, never count as moved.
-- **Disconnect…** shows what it removes, then takes out Islet's hooks and nothing else.
+- If Casement.app moves (the hooks call the `casementctl` inside it), the row says Casement has moved and the agent can't reach it, and Coding agents gets a dot in the sidebar; **Update…** points the hooks at the new place. Casement checks at launch and whenever the Coding agents page opens. Hooks that call `casementctl` by name, as in the examples below, never count as moved.
+- **Disconnect…** shows what it removes, then takes out Casement's hooks and nothing else.
 - The commands themselves are in *Settings → Advanced → Coding agents*, for dotfiles. The sections below do the same by hand.
 
 All three show each session in the island: *Thinking…* when you send a prompt (Claude Code and Codex), the command or tool that is running, **Waiting** when one needs your approval, and **Done** when the turn ends. Cursor's sessions are its conversations, and a stop with an error shows as one.
@@ -42,21 +42,21 @@ All three show each session in the island: *Thinking…* when you send a prompt 
 - **Waiting** in high priority with a glow when it needs your permission or input;
 - **Done** when the turn ends, before the activity disappears at session end.
 
-**Codex CLI:** add [`integrations/codex/hooks.json`](../integrations/codex/hooks.json) to `~/.codex/hooks.json` and `hooks = true` under `[features]` in `~/.codex/config.toml`, then type `/hooks` in Codex once to trust them. The island shows the same per-session states as for Claude Code. The older `notify = ["isletctl", "hook", "codex"]` in `config.toml` still works and gives a "Turn complete" card with the last message.
+**Codex CLI:** add [`integrations/codex/hooks.json`](../integrations/codex/hooks.json) to `~/.codex/hooks.json` and `hooks = true` under `[features]` in `~/.codex/config.toml`, then type `/hooks` in Codex once to trust them. The island shows the same per-session states as for Claude Code. The older `notify = ["casementctl", "hook", "codex"]` in `config.toml` still works and gives a "Turn complete" card with the last message.
 
 **Cursor:** add [`integrations/cursor/hooks.json`](../integrations/cursor/hooks.json) to `~/.cursor/hooks.json`. Shell commands and MCP tools show as they run, and the conversation shows **Done** (or the error) when it stops.
 
-**Any other agent:** post the generic shape to `/v1/hooks/<name>` or pipe it to `isletctl hook <name>`:
+**Any other agent:** post the generic shape to `/v1/hooks/<name>` or pipe it to `casementctl hook <name>`:
 
 ```bash
-echo '{"agent":"aider","session":"s1","event":"start","message":"Refactoring auth"}' | isletctl hook aider
+echo '{"agent":"aider","session":"s1","event":"start","message":"Refactoring auth"}' | casementctl hook aider
 # events: start | running | tool | thinking | waiting | input | permission | done | error | end
 ```
 
 Plans and multi-step jobs can show a segmented stepper:
 
 ```bash
-isletctl set plan --title "Migrate DB" --steps 5 --step 2 --subtitle "Backfilling users"
+casementctl set plan --title "Migrate DB" --steps 5 --step 2 --subtitle "Backfilling users"
 ```
 
 ### Approvals from the notch
@@ -68,7 +68,7 @@ Claude Code, Codex and Cursor can ask you in the island instead of the terminal:
 | **Allow** | Allowed, this once |
 | **Always** | Allowed, plus the rule Claude suggests (for example `Bash(npm test:*)`) for the rest of this session only. Claude Code only, and only when Claude suggests a rule |
 | **Deny** | Denied, with a short message so the agent knows you said no |
-| **Answer in the terminal** | No answer: the agent asks in the terminal as usual, and Islet brings that terminal forward |
+| **Answer in the terminal** | No answer: the agent asks in the terminal as usual, and Casement brings that terminal forward |
 
 Questions show their options as buttons. When a question takes several answers, tick them and press **Send**. Plans show the Markdown with **Approve** and **Keep planning**. With more requests waiting, the card says how many more ("2 more") and they come one at a time. The chevron hides the card; it comes back when you open the island. While the island is hidden (a fullscreen app, or a rule for the app in front), requests go straight back to the terminal instead of waiting where you can't see them.
 
@@ -77,22 +77,22 @@ Questions show their options as buttons. When a question takes several answers, 
 **Claude Code:** **Connect…** beside Claude Code in Settings → Coding agents lists the hooks it will add to `~/.claude/settings.json` and asks before writing. Your own hooks and settings stay as they are, and the previous file is kept as `settings.json.bak`. Connecting again changes nothing. To do it by hand, merge [`integrations/claude-code/settings.json`](../integrations/claude-code/settings.json). Next to the status hooks it adds:
 
 ```json
-"PermissionRequest": [{"hooks": [{"type": "command", "command": "isletctl hook claude --wait 300", "timeout": 330}]}],
+"PermissionRequest": [{"hooks": [{"type": "command", "command": "casementctl hook claude --wait 300", "timeout": 330}]}],
 "PreToolUse": [{"matcher": "AskUserQuestion|ExitPlanMode",
-                "hooks": [{"type": "command", "command": "isletctl hook claude --wait 300", "timeout": 330}]}]
+                "hooks": [{"type": "command", "command": "casementctl hook claude --wait 300", "timeout": 330}]}]
 ```
 
-The hook's `timeout` is 30 seconds longer than `--wait`, so Islet always answers first. Claude Code's deny and ask rules still apply: an **Allow** from the notch can't override them.
+The hook's `timeout` is 30 seconds longer than `--wait`, so Casement always answers first. Claude Code's deny and ask rules still apply: an **Allow** from the notch can't override them.
 
-**Codex CLI:** **Connect…** beside Codex adds Islet's hooks to `~/.codex/hooks.json` and turns on `hooks = true` under `[features]` in `~/.codex/config.toml`, changing only that line. By hand, follow the Codex steps under [Coding agents](#coding-agents): the same `hooks.json` carries the approval hook. Either way, run `/hooks` in Codex once to trust the new hooks; Codex won't run them until you do.
+**Codex CLI:** **Connect…** beside Codex adds Casement's hooks to `~/.codex/hooks.json` and turns on `hooks = true` under `[features]` in `~/.codex/config.toml`, changing only that line. By hand, follow the Codex steps under [Coding agents](#coding-agents): the same `hooks.json` carries the approval hook. Either way, run `/hooks` in Codex once to trust the new hooks; Codex won't run them until you do.
 
-**Cursor:** **Connect…** beside Cursor adds Islet's hooks to `~/.cursor/hooks.json`. By hand, copy [`integrations/cursor/hooks.json`](../integrations/cursor/hooks.json) there (or to a project's `.cursor/hooks.json`). Shell commands and MCP tool calls then ask in the notch, and **Answer in the terminal** hands the choice back to Cursor's own prompt.
+**Cursor:** **Connect…** beside Cursor adds Casement's hooks to `~/.cursor/hooks.json`. By hand, copy [`integrations/cursor/hooks.json`](../integrations/cursor/hooks.json) there (or to a project's `.cursor/hooks.json`). Shell commands and MCP tool calls then ask in the notch, and **Answer in the terminal** hands the choice back to Cursor's own prompt.
 
-**How it works.** `isletctl hook <agent> --wait N` posts the hook's payload to `/v1/hooks/<agent>?wait=N` and waits (see [API.md](API.md#approvals-long-poll)). The card appears a quarter of a second later, so the terminal can print its own prompt first. Islet holds the request until you answer, for at most N seconds or the wait set in Settings, whichever is shorter, and `isletctl` prints the answer in the form the agent expects. Everything fails open: if Islet isn't running, approvals are off, the wait runs out or you choose **Answer in the terminal**, `isletctl` prints nothing and exits 0, and the agent asks in the terminal as if no hook had run. Only events that ask for a decision wait; every other event is sent and forgotten within 1.5 seconds.
+**How it works.** `casementctl hook <agent> --wait N` posts the hook's payload to `/v1/hooks/<agent>?wait=N` and waits (see [API.md](API.md#approvals-long-poll)). The card appears a quarter of a second later, so the terminal can print its own prompt first. Casement holds the request until you answer, for at most N seconds or the wait set in Settings, whichever is shorter, and `casementctl` prints the answer in the form the agent expects. Everything fails open: if Casement isn't running, approvals are off, the wait runs out or you choose **Answer in the terminal**, `casementctl` prints nothing and exits 0, and the agent asks in the terminal as if no hook had run. Only events that ask for a decision wait; every other event is sent and forgotten within 1.5 seconds.
 
 Cards clear themselves when a later event shows the question is settled: the tool ran (`PostToolUse`), the turn ended (`Stop`), a new prompt arrived (`UserPromptSubmit`) or the session ended. If the agent stops the hook early (its timeout ran out, or it was interrupted), the card goes too.
 
-**Safety.** Answers come only from clicks on the card. No API endpoint, `islet://` URL or script can approve anything, so a script holding the API token can at most show a card. The local-network bridge never shows cards. Each waiting card costs one sleeping `isletctl` process and one open loopback connection; nothing polls.
+**Safety.** Answers come only from clicks on the card. No API endpoint, `casement://` URL or script can approve anything, so a script holding the API token can at most show a card. The local-network bridge never shows cards. Each waiting card costs one sleeping `casementctl` process and one open loopback connection; nothing polls.
 
 **Back to the terminal.** The hook records where the agent runs: `TERM_PROGRAM`, `__CFBundleIdentifier`, the tmux, WezTerm, kitty and Zellij pane variables, and the terminal device. The window button on the card, and **Answer in the terminal**, bring that app forward if it's running and select the tmux pane (or WezTerm pane). This needs no Automation permission. Individual iTerm2 and Terminal tabs are not selected.
 
@@ -106,54 +106,54 @@ The Home tab shows the 5-hour and weekly plan limits of Claude Code and Codex, o
 
 The closed island shows nothing about usage until a window reaches 90%, and again at 100%. Each crossing posts one normal activity ("Claude 5-hour limit at 90%", "Resets 16:40") that leaves on its own. Alerts are armed again when the window resets.
 
-For Claude Code and Codex, Islet reads only what the two tools already write on this Mac. It doesn't read their login tokens, doesn't call their usage endpoints and sends nothing over the network. Switch either source off in Settings → Coding agents → Usage limits (`claudeUsageEnabled` and `codexUsageEnabled` in `config.json`).
+For Claude Code and Codex, Casement reads only what the two tools already write on this Mac. It doesn't read their login tokens, doesn't call their usage endpoints and sends nothing over the network. Switch either source off in Settings → Coding agents → Usage limits (`claudeUsageEnabled` and `codexUsageEnabled` in `config.json`).
 
 The same section can add OpenRouter, Copilot and Ollama to Home, each off until you switch it on ([below](#openrouter-copilot-and-ollama)).
 
 ### Claude Code
 
-Claude Code keeps no usage on disk that Islet can read. It passes plan usage only to its status line command on stdin (`rate_limits.five_hour` and `rate_limits.seven_day`, for Pro and Max plans, after a session's first reply), so the figures update while Claude Code runs in a terminal. `isletctl statusline` records them.
+Claude Code keeps no usage on disk that Casement can read. It passes plan usage only to its status line command on stdin (`rate_limits.five_hour` and `rate_limits.seven_day`, for Pro and Max plans, after a session's first reply), so the figures update while Claude Code runs in a terminal. `casementctl statusline` records them.
 
-While Claude Code is installed (it has a `~/.claude` folder) without Islet's status line, Home shows Claude with a **Show usage** button that opens this part of Settings. Once the status line is in place, Home says "Waiting for Claude Code" until the first figures arrive. The "x" on that row hides it for good (`"claudeUsageHint": false`).
+While Claude Code is installed (it has a `~/.claude` folder) without Casement's status line, Home shows Claude with a **Show usage** button that opens this part of Settings. Once the status line is in place, Home says "Waiting for Claude Code" until the first figures arrive. The "x" on that row hides it for good (`"claudeUsageHint": false`).
 
 In Settings → Coding agents → Usage limits, click **Show usage…** beside Claude Code limits. A sheet shows the `statusLine` command before and after, and nothing is written until you click Add.
 
-- Without a status line, Islet sets one:
+- Without a status line, Casement sets one:
   ```json
-  "statusLine": { "type": "command", "command": "/Applications/Islet.app/Contents/MacOS/isletctl statusline" }
+  "statusLine": { "type": "command", "command": "/Applications/Casement.app/Contents/MacOS/casementctl statusline" }
   ```
   Claude Code then shows a short line such as `Opus 5.5 · 42% context · 5h 62%`.
-- With your own status line, Islet wraps it instead of replacing it:
+- With your own status line, Casement wraps it instead of replacing it:
   ```json
-  "command": "/Applications/Islet.app/Contents/MacOS/isletctl statusline -- '~/.claude/statusline.sh'"
+  "command": "/Applications/Casement.app/Contents/MacOS/casementctl statusline -- '~/.claude/statusline.sh'"
   ```
   Your command gets the same input, and its output and exit code pass through unchanged.
 
-Installing twice changes nothing. Only the `statusLine` value changes: the rest of `~/.claude/settings.json` keeps its order and spacing, and the previous file is kept as `settings.json.bak`. **Remove…** in the same place puts your own command back. By hand, use `isletctl statusline` as the command, or put `isletctl statusline -- ` in front of yours with your command quoted as one argument.
+Installing twice changes nothing. Only the `statusLine` value changes: the rest of `~/.claude/settings.json` keeps its order and spacing, and the previous file is kept as `settings.json.bak`. **Remove…** in the same place puts your own command back. By hand, use `casementctl statusline` as the command, or put `casementctl statusline -- ` in front of yours with your command quoted as one argument.
 
-Claude Code runs the command from the app bundle, so remove the status line (or restore `settings.json.bak`) before you move or delete Islet.
+Claude Code runs the command from the app bundle, so remove the status line (or restore `settings.json.bak`) before you move or delete Casement.
 
-Each run writes `~/Library/Application Support/Islet/usage/claude.json` (mode 0600), and only when a figure changed. Islet watches the file rather than polling it. Other tools can read it too:
+Each run writes `~/Library/Application Support/Casement/usage/claude.json` (mode 0600), and only when a figure changed. Casement watches the file rather than polling it. Other tools can read it too:
 
 ```json
-{"provider":"claude","model":"Opus 5.5","contextPercent":42.4,"costUSD":1.23,"project":"islet","sessionID":"…","updatedAt":1790786093,
+{"provider":"claude","model":"Opus 5.5","contextPercent":42.4,"costUSD":1.23,"project":"casement","sessionID":"…","updatedAt":1790786093,
  "windows":[{"id":"five_hour","usedPercent":62,"windowMinutes":300,"resetsAt":1790790413},
             {"id":"seven_day","usedPercent":31,"windowMinutes":10080,"resetsAt":1791200000}]}
 ```
 
 ### Codex
 
-Codex CLI writes its limits into its session logs (`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`) after each reply, so there is nothing to install. While the setting is on, Islet watches that folder with FSEvents and, after a change, reads only the last 64 KB of the newest log. If Codex hasn't run on this Mac yet, switch the setting off and on again after its first session.
+Codex CLI writes its limits into its session logs (`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`) after each reply, so there is nothing to install. While the setting is on, Casement watches that folder with FSEvents and, after a change, reads only the last 64 KB of the newest log. If Codex hasn't run on this Mac yet, switch the setting off and on again after its first session.
 
 ### OpenRouter, Copilot and Ollama
 
 Each is a line in Home's column with a bar where there is a limit. They are asked for when the island opens, and only if the figures are older than 5 minutes for OpenRouter, 15 minutes for Copilot or 15 seconds for Ollama; nothing runs while the island is closed. None of them raises alerts in the closed island.
 
-- **OpenRouter spending** (`openRouterUsageEnabled`). Paste your OpenRouter key (it starts with `sk-or-`); Islet checks it once and keeps it in the Keychain. Islet asks `GET https://openrouter.ai/api/v1/key` with it: with a limit on the key, Home shows what's left and today's spend; without one, today's and this month's spend; on the free tier, the free requests used today.
-- **Copilot premium requests** (`copilotUsageEnabled`, `copilotPlan`). Make a fine-grained GitHub token with read access to Plan (Settings → Developer settings → Fine-grained tokens) and paste it. Islet learns your login from `GET https://api.github.com/user`, then asks for this month's premium request usage (`GET /users/{login}/settings/billing/premium_request/usage`, with the month in UTC as GitHub bills it) and shows the count against your plan's allowance (Free 50, Pro or Business 300, Enterprise 1,000, Pro+ 1,500).
-- **Ollama models** (`ollamaUsageEnabled`). Islet asks the Ollama running on this Mac (`GET http://127.0.0.1:11434/api/ps`) which models are loaded and how much memory they use. With nothing loaded, or Ollama not running, Home shows nothing.
+- **OpenRouter spending** (`openRouterUsageEnabled`). Paste your OpenRouter key (it starts with `sk-or-`); Casement checks it once and keeps it in the Keychain. Casement asks `GET https://openrouter.ai/api/v1/key` with it: with a limit on the key, Home shows what's left and today's spend; without one, today's and this month's spend; on the free tier, the free requests used today.
+- **Copilot premium requests** (`copilotUsageEnabled`, `copilotPlan`). Make a fine-grained GitHub token with read access to Plan (Settings → Developer settings → Fine-grained tokens) and paste it. Casement learns your login from `GET https://api.github.com/user`, then asks for this month's premium request usage (`GET /users/{login}/settings/billing/premium_request/usage`, with the month in UTC as GitHub bills it) and shows the count against your plan's allowance (Free 50, Pro or Business 300, Enterprise 1,000, Pro+ 1,500).
+- **Ollama models** (`ollamaUsageEnabled`). Casement asks the Ollama running on this Mac (`GET http://127.0.0.1:11434/api/ps`) which models are loaded and how much memory they use. With nothing loaded, or Ollama not running, Home shows nothing.
 
-Islet never reads another app's sign-in. Cursor shares usage only with team admins through its Admin API, and has no documented source for individual plans, so it isn't included; neither is anything that would need Claude's, Codex's or Cursor's own login tokens.
+Casement never reads another app's sign-in. Cursor shares usage only with team admins through its Admin API, and has no documented source for individual plans, so it isn't included; neither is anything that would need Claude's, Codex's or Cursor's own login tokens.
 
 ---
 
@@ -162,20 +162,20 @@ Islet never reads another app's sign-in. Cursor shares usage only with team admi
 **Wrap a command:** it shows while running, then success or failure, and passes the exit code through:
 
 ```bash
-isletctl run -- make release
-isletctl run --title "Train model" -- python train.py --epochs 20
+casementctl run -- make release
+casementctl run --title "Train model" -- python train.py --epochs 20
 ```
 
-**Every long command automatically:** `source` [`integrations/shell/islet.zsh`](../integrations/shell/islet.zsh) in `~/.zshrc`. Commands that take longer than 10 s (`ISLET_MIN_SECONDS`) appear in the notch and report how they ended. Quick commands never flash.
+**Every long command automatically:** `source` [`integrations/shell/casement.zsh`](../integrations/shell/casement.zsh) in `~/.zshrc`. Commands that take longer than 10 s (`CASEMENT_MIN_SECONDS`) appear in the notch and report how they ended. Quick commands never flash.
 
 **Progress from a script:**
 
 ```bash
 for i in $(seq 1 100); do
-  isletctl set upload --title "Uploading photos" --progress $i --subtitle "$i of 100"
+  casementctl set upload --title "Uploading photos" --progress $i --subtitle "$i of 100"
   # ... work ...
 done
-isletctl set upload --state success --subtitle "All done"
+casementctl set upload --state success --subtitle "All done"
 ```
 
 ---
@@ -184,23 +184,23 @@ isletctl set upload --state success --subtitle "All done"
 
 | App | Recipe |
 |---|---|
-| **Shortcuts (Mac)** | "Open URL" `islet://notify?title=…`, or "Run Shell Script" with `isletctl …`. Focus: Automation → *When Work turns on* → Open URL `islet://focus?name=Work&state=on`. |
+| **Shortcuts (Mac)** | "Open URL" `casement://notify?title=…`, or "Run Shell Script" with `casementctl …`. Focus: Automation → *When Work turns on* → Open URL `casement://focus?name=Work&state=on`. |
 | **Siri** | Name a shortcut and say it: "Hey Siri, notch timer". Recipes for timers, the Pomodoro and asking Apple Intelligence with the answer in the notch: [Siri and Shortcuts](SHORTCUTS.md). |
 | **Raycast** | Script commands in [`integrations/raycast/`](../integrations/raycast/) (timer, toggle). Any Raycast deeplink can be an activity `url`. |
-| **Alfred** | Workflow → *Open URL* `islet://timer?minutes={query}`, or *Run Script* `isletctl notify "{query}"`. |
-| **Hammerspoon** | [`integrations/hammerspoon/islet.lua`](../integrations/hammerspoon/islet.lua) posts to the API, with a Wi-Fi-change example. |
-| **BetterTouchTool / Keyboard Maestro** | Action "Open URL" with an `islet://` link, or "Execute shell script" with `isletctl`. Good for trackpad gestures (`islet://toggle`) and hotkeys (`islet://media/next`). |
-| **Stream Deck** | "Website" action with an `islet://` URL (background mode), or a "System: Open" action running `isletctl`. |
-| **Home Assistant** | [`integrations/home-assistant/islet.yaml`](../integrations/home-assistant/islet.yaml): a `rest_command` to the LAN bridge, plus a doorbell automation. |
-| **Makefiles, npm scripts, git hooks** | `isletctl run -- <cmd>` or `isletctl notify`. For example, a `post-merge` hook: `isletctl notify "Pulled $(git rev-parse --short HEAD)" --icon sf:arrow.down.circle`. |
-| **CI (GitHub Actions)** | Watch a run from your Mac: `isletctl run --title "CI main" -- gh run watch --exit-status`. |
-| **A hotkey for the Ask box** | In any of the above, bind a hotkey to Open URL `islet://ask`, or `islet://ask?q={query}` to pass what you typed in Alfred or Raycast. The island opens with the question filled in; you press Return to send. See [AI.md](AI.md). |
+| **Alfred** | Workflow → *Open URL* `casement://timer?minutes={query}`, or *Run Script* `casementctl notify "{query}"`. |
+| **Hammerspoon** | [`integrations/hammerspoon/casement.lua`](../integrations/hammerspoon/casement.lua) posts to the API, with a Wi-Fi-change example. |
+| **BetterTouchTool / Keyboard Maestro** | Action "Open URL" with an `casement://` link, or "Execute shell script" with `casementctl`. Good for trackpad gestures (`casement://toggle`) and hotkeys (`casement://media/next`). |
+| **Stream Deck** | "Website" action with an `casement://` URL (background mode), or a "System: Open" action running `casementctl`. |
+| **Home Assistant** | [`integrations/home-assistant/casement.yaml`](../integrations/home-assistant/casement.yaml): a `rest_command` to the LAN bridge, plus a doorbell automation. |
+| **Makefiles, npm scripts, git hooks** | `casementctl run -- <cmd>` or `casementctl notify`. For example, a `post-merge` hook: `casementctl notify "Pulled $(git rev-parse --short HEAD)" --icon sf:arrow.down.circle`. |
+| **CI (GitHub Actions)** | Watch a run from your Mac: `casementctl run --title "CI main" -- gh run watch --exit-status`. |
+| **A hotkey for the Ask box** | In any of the above, bind a hotkey to Open URL `casement://ask`, or `casement://ask?q={query}` to pass what you typed in Alfred or Raycast. The island opens with the question filled in; you press Return to send. See [AI.md](AI.md). |
 
 ---
 
 ## Gestures
 
-Two-finger swipes on the island work without any permission: Islet reads the scroll events its own windows already receive, and never watches the trackpad elsewhere.
+Two-finger swipes on the island work without any permission: Casement reads the scroll events its own windows already receive, and never watches the trackpad elsewhere.
 
 | Swipe | Where | Does |
 |---|---|---|
@@ -219,23 +219,23 @@ A swipe fires once per flick, after about 24 pt of travel within a quarter of a 
 
 | From | Use |
 |---|---|
-| Terminal | `isletctl awake 2h`, `isletctl awake off`, `isletctl awake status` |
-| A long job | `isletctl awake on && make release; isletctl awake off` |
-| Shortcuts, Raycast, Alfred, Stream Deck | Open URL `islet://awake?for=1h` or `islet://awake/off` |
+| Terminal | `casementctl awake 2h`, `casementctl awake off`, `casementctl awake status` |
+| A long job | `casementctl awake on && make release; casementctl awake off` |
+| Shortcuts, Raycast, Alfred, Stream Deck | Open URL `casement://awake?for=1h` or `casement://awake/off` |
 | HTTP | `POST /v1/awake {"minutes": 60}`, `DELETE /v1/awake` (see [API.md](API.md#keep-awake)) |
 
-Media keys for launchers work the same way: `islet://media/forward`, `islet://media/rewind`, `islet://media/shuffle`, `islet://media/repeat`, or `isletctl media seek 2m`.
+Media keys for launchers work the same way: `casement://media/forward`, `casement://media/rewind`, `casement://media/shuffle`, `casement://media/repeat`, or `casementctl media seek 2m`.
 
 ---
 
 ## <a name="iphone"></a>iPhone → Mac
 
-Apple doesn't let third-party apps read the iPhone's Live Activities (macOS 26+ shows them itself, as a menu-bar pill). Islet complements that in two ways:
+Apple doesn't let third-party apps read the iPhone's Live Activities (macOS 26+ shows them itself, as a menu-bar pill). Casement complements that in two ways:
 
-1. **iPhone notifications.** macOS forwards them to the Mac when iPhone Mirroring or notification forwarding is on, and Islet's notification mirroring picks them up like any other banner.
-2. **iPhone Shortcuts automations → Islet's local-network bridge.**
+1. **iPhone notifications.** macOS forwards them to the Mac when iPhone Mirroring or notification forwarding is on, and Casement's notification mirroring picks them up like any other banner.
+2. **iPhone Shortcuts automations → Casement's local-network bridge.**
 
-To set up the bridge, turn on **Accept requests from this network** in *Settings → Advanced → iPhone bridge* and press **Copy** beside the token. This is the bridge's own token, not the one `isletctl token` prints; neither works in place of the other. In a terminal, `isletctl token --lan` prints the bridge's token. Then on the iPhone: Shortcuts → Automation → **New** → pick a trigger → **Get Contents of URL**:
+To set up the bridge, turn on **Accept requests from this network** in *Settings → Advanced → iPhone bridge* and press **Copy** beside the token. This is the bridge's own token, not the one `casementctl token` prints; neither works in place of the other. In a terminal, `casementctl token --lan` prints the bridge's token. Then on the iPhone: Shortcuts → Automation → **New** → pick a trigger → **Get Contents of URL**:
 - URL: `http://<your-mac>.local:47832/v1/notify`
 - Method: POST
 - Headers: `Authorization: Bearer <bridge token>`
@@ -253,13 +253,13 @@ To set up the bridge, turn on **Accept requests from this network** in *Settings
 
 The bridge is not encrypted: anyone on the same Wi-Fi can read what a Shortcut sends, token included. So it only accepts notifications, timers, Focus and simple activities, and everything else gets `403`. It can't read your notifications, activities or state, control media or the island, or take part in agent approvals. Activities from the bridge have no links or buttons, use symbols, emoji or app icons only, get ids starting with `lan-`, and are at most `high` priority. If the token may have leaked, press **New token** and paste the new one into your Shortcuts.
 
-The bridge also rejects browser origins, rate-limits each client (30 requests / 10 s), limits bodies to 16 KB and serves 8 connections at once, 2 per client. Bonjour advertises it as "Islet", not by your Mac's name. The full list of routes is in [API.md](API.md#local-network-bridge-iphone-shortcuts).
+The bridge also rejects browser origins, rate-limits each client (30 requests / 10 s), limits bodies to 16 KB and serves 8 connections at once, 2 per client. Bonjour advertises it as "Casement", not by your Mac's name. The full list of routes is in [API.md](API.md#local-network-bridge-iphone-shortcuts).
 
 ---
 
 ## Script widgets (xbar-compatible)
 
-Turn on **Run scripts from the plugins folder** in *Settings → Advanced → Script widgets*, then drop executables into `~/.config/islet/plugins/` (**Open folder** there):
+Turn on **Run scripts from the plugins folder** in *Settings → Advanced → Script widgets*, then drop executables into `~/.config/casement/plugins/` (**Open folder** there):
 
 - **Existing xbar/SwiftBar plugins** from [xbarapp.com](https://xbarapp.com) work as-is: the header appears in the Widgets tab, items with `href=` or `shell=` are clickable, and `refresh=true` re-runs.
 - **JSON widgets** become live activities. [`integrations/plugins/cpu.10s.sh`](../integrations/plugins/cpu.10s.sh) turns CPU load into a low-priority activity every 10 s.
@@ -276,4 +276,4 @@ Turn on **Run scripts from the plugins folder** in *Settings → Advanced → Sc
 - **keep the island in full screen** (for example, a call app), whatever *General → In full screen* says;
 - **mute its notifications and calls**.
 
-Right-click any activity in the island to dismiss it or mute its source, Islet's own cards included (battery, sound output, keep awake, welcome back). Muted sources are listed under *Settings → Apps → Muted*, each with **Unmute**. A battery about to run out still warns you while Battery is muted. Each app's Live Activities are a source of their own, so muting one leaves the others, and one you dismiss stays away until it leaves the menu bar.
+Right-click any activity in the island to dismiss it or mute its source, Casement's own cards included (battery, sound output, keep awake, welcome back). Muted sources are listed under *Settings → Apps → Muted*, each with **Unmute**. A battery about to run out still warns you while Battery is muted. Each app's Live Activities are a source of their own, so muting one leaves the others, and one you dismiss stays away until it leaves the menu bar.

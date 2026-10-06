@@ -1,11 +1,11 @@
 name: Feature request
-description: Suggest something Islet could do.
+description: Suggest something Casement could do.
 labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
       value: |
-        Please search the existing issues first. Islet keeps to a few rules: nothing polls while idle, and every new permission sits behind an opt-in setting. Ideas that fit them are the easiest to take on.
+        Please search the existing issues first. Casement keeps to a few rules: nothing polls while idle, and every new permission sits behind an opt-in setting. Ideas that fit them are the easiest to take on.
 
   - type: textarea
     id: problem
@@ -18,7 +18,7 @@ body:
   - type: textarea
     id: proposal
     attributes:
-      label: What you'd like Islet to do
+      label: What you'd like Casement to do
     validations:
       required: true
 
@@ -29,10 +29,10 @@ body:
       description: Another app, a script, or nothing.
 
   - type: input
-    id: islet-version
+    id: casement-version
     attributes:
-      label: Islet version
-      description: "*Settings → About*, or `isletctl health`."
+      label: Casement version
+      description: "*Settings → About*, or `casementctl health`."
 
   - type: input
     id: macos-version

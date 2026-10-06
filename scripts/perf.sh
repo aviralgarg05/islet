@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# Measures Islet's CPU use in each island state (isolated config, own API port). Two states are
+# Measures Casement's CPU use in each island state (isolated config, own API port). Two states are
 # measured while a client keeps reporting, which is how the app really runs; see `feeding`.
 # Budgets: idle ≤ 0.5%, any compact state ≤ 1.5%.   Usage: scripts/perf.sh [seconds]
 set -uo pipefail
 cd "$(dirname "$0")/.."
 SECS="${1:-10}"
 T=$(mktemp -d)
-mkdir -p "$T/cfg/islet"
-echo '{"apiPort":47933,"pluginsEnabled":false}' > "$T/cfg/islet/config.json"
-export ISLET_SUPPORT_DIR="$T/s" XDG_CONFIG_HOME="$T/cfg"
-build/Islet.app/Contents/MacOS/Islet >/dev/null 2>&1 &
+mkdir -p "$T/cfg/casement"
+echo '{"apiPort":47933,"pluginsEnabled":false}' > "$T/cfg/casement/config.json"
+export CASEMENT_SUPPORT_DIR="$T/s" XDG_CONFIG_HOME="$T/cfg"
+build/Casement.app/Contents/MacOS/Casement >/dev/null 2>&1 &
 PID=$!
 FEED=
 trap 'kill $PID $FEED 2>/dev/null; rm -rf "$T"' EXIT
-ctl() { build/Islet.app/Contents/MacOS/isletctl "$@" >/dev/null; }
+ctl() { build/Casement.app/Contents/MacOS/casementctl "$@" >/dev/null; }
 for _ in $(seq 50); do [ -f "$T/s/api.json" ] && break; sleep 0.2; done
 TOKEN=$(python3 -c "import json;print(json.load(open('$T/s/api.json'))['token'])")
 api() { curl -s -o /dev/null -X "$1" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' ${3:+-d "$3"} "http://127.0.0.1:47933$2"; }
@@ -54,7 +54,7 @@ media_feed() {
 # An agent's hook posting the same activity again, as Claude Code's hooks do between tool calls.
 activity_feed() {
     while :; do
-        ctl set agent --source claude-code --title 'Claude · islet' --subtitle 'Running swift build' \
+        ctl set agent --source claude-code --title 'Claude · casement' --subtitle 'Running swift build' \
             --progress -1 --sneak false
         sleep 0.6
     done

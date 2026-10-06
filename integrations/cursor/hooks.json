@@ -1,10 +1,10 @@
 {
   "version": 1,
   "hooks": {
-    "beforeShellExecution": [{ "command": "isletctl hook cursor --wait 300", "timeout": 330 }],
-    "beforeMCPExecution":   [{ "command": "isletctl hook cursor --wait 300", "timeout": 330 }],
-    "afterShellExecution":  [{ "command": "isletctl hook cursor" }],
-    "afterMCPExecution":    [{ "command": "isletctl hook cursor" }],
-    "stop":                 [{ "command": "isletctl hook cursor" }]
+    "beforeShellExecution": [{ "command": "casementctl hook cursor --wait 300", "timeout": 330 }],
+    "beforeMCPExecution":   [{ "command": "casementctl hook cursor --wait 300", "timeout": 330 }],
+    "afterShellExecution":  [{ "command": "casementctl hook cursor" }],
+    "afterMCPExecution":    [{ "command": "casementctl hook cursor" }],
+    "stop":                 [{ "command": "casementctl hook cursor" }]
   }
 }

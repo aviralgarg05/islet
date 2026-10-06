@@ -1,0 +1,2215 @@
+import AppKit
+import Foundation
+import CasementCore
+import CasementSystem
+import Observation
+import os
+
+enum IslandTab: String, CaseIterable, Identifiable {
+    case home, today, shelf, widgets, clipboard, stats
+    case mirror, teleprompter, stocks, sales
+    /// Tools: listed under More once turned on in Settings, and not before.
+    case shortcuts, weather
+    case todos, note, converter, emoji
+    case ask
+    var id: String { rawValue }
+
+    var symbol: String {
+        switch self {
+        case .home: return "house.fill"
+        case .today: return "calendar"
+        case .shelf: return "tray.full.fill"
+        case .widgets: return "square.grid.2x2.fill"
+        case .clipboard: return "doc.on.clipboard.fill"
+        case .stats: return "gauge.with.dots.needle.33percent"
+        case .mirror: return "person.crop.square"
+        case .teleprompter: return "text.alignleft"
+        case .stocks: return "chart.line.uptrend.xyaxis"
+        case .sales: return "banknote"
+        case .shortcuts: return "square.stack.3d.up.fill"
+        case .weather: return "cloud.sun.fill"
+        case .todos: return "checklist"
+        case .note: return "note.text"
+        case .converter: return "arrow.left.arrow.right"
+        case .emoji: return "face.smiling"
+        case .ask: return "sparkles"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .home: return "Home"
+        case .today: return "Today"
+        case .shelf: return "Shelf"
+        case .widgets: return "Widgets"
+        case .clipboard: return "Clipboard"
+        case .stats: return "System"
+        case .mirror: return "Mirror"
+        case .teleprompter: return "Teleprompter"
+        case .stocks: return "Stocks"
+        case .sales: return "Sales"
+        case .shortcuts: return "Shortcuts"
+        case .weather: return "Weather"
+        case .todos: return "To-dos"
+        case .note: return "Note"
+        case .converter: return "Converter"
+        case .emoji: return "Emoji"
+        case .ask: return "Ask"
+        }
+    }
+}
+
+/// Everything the island shows. Views observe this; services and the local API write to it.
+@MainActor
+@Observable
+final class AppModel {
+    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0-dev"
+
+    // State
+    var settings: CasementSettings
+    private(set) var center = ActivityCenter()
+    private(set) var media = MediaArbiter()
+    /// The player the open island shows and the controls reach: the one picked there, or the
+    /// newest (`MediaArbiter.current`).
+    private(set) var nowPlaying: NowPlaying?
+    /// What the closed island shows when that isn't `nowPlaying`: a song that plays on while a
+    /// paused player is picked (`MediaArbiter.closedIsland`).
+    private var playingElsewhere: NowPlaying?
+    /// What the closed island shows: what is playing.
+    var closedNowPlaying: NowPlaying? { playingElsewhere ?? nowPlaying }
+    private(set) var battery: BatteryState?
+    private(set) var batteryEvent: BatteryEvent?
+    private(set) var agenda: [AgendaItem] = []
+    private(set) var reminders: [ReminderItem] = []
+    /// What macOS allows for calendars and reminders, read again when Casement becomes active, when
+    /// an Allow is answered and when the island opens while the calendar isn't working.
+    private(set) var calendarAccess = CalendarAccessState.current
+    /// Calendars or reminders whose Allow macOS answered with no this session: the next press
+    /// opens System Settings instead (macOS doesn't ask twice).
+    private(set) var calendarRefused: Set<PermissionKind> = []
+    /// Meeting reminders: the meetings you joined or dismissed, and those already announced.
+    private(set) var meetings = MeetingReminders()
+    private(set) var shelf = Shelf()
+    /// Shelf items that can't be opened now (their disk or share isn't there): shown dimmed.
+    private(set) var shelfUnavailable: Set<String> = []
+    private(set) var clipboard = ClipboardHistory() {
+        // Thumbnails of pictures that have left the history (removed, cleared, or history
+        // turned off) are forgotten with them.
+        didSet {
+            ClipThumbnails.forget(except: clipboard.entries)
+            // A filter the Clipboard page no longer offers goes back to All, whatever took its
+            // last clip away (unpinned, removed, cleared, trimmed or ignored).
+            if clipboard.filters != oldValue.filters {
+                let page = tools.clipboardPage
+                let filter = clipboard.resolved(page.filter)
+                if filter != page.filter { page.filter = filter }
+            }
+        }
+    }
+    private(set) var stats: SystemStats?
+    private(set) var plugins: [String: PluginResult] = [:]
+    private(set) var micInUse = false
+    private(set) var cameraInUse = false
+    private(set) var outputDeviceName: String?
+
+    /// Display the island is expanded on (nil = collapsed everywhere).
+    var expandedScreen: CGDirectDisplayID?
+    var tab: IslandTab = .home
+    /// The app in full screen on each display that has one (its bundle id, "" without one),
+    /// whichever app is in front.
+    private(set) var fullscreenApps: [CGDirectDisplayID: String] = [:]
+    private(set) var frontBundleID: String?
+    /// Bumped whenever time-driven state changes, so views re-evaluate the presentation.
+    private(set) var tick = 0
+    /// Bumped when a new activity arrives, driving the island's "bounce".
+    private(set) var pulse = 0
+    private(set) var isDraggingFile = false
+    var apiStatus = "Starting…"
+    /// Whether macOS gives Casement Accessibility, as last read: when it says that changed, when
+    /// Casement comes to the front and after an Allow. Settings shows it from here, so a page left
+    /// open follows a change made in System Settings.
+    var accessibilityTrusted = MediaKeyInterceptor.hasAccessibility
+    /// Whether this macOS shows Live Activities in the menu bar (26 and later). Snapshots draw
+    /// the page as an older macOS shows it too.
+    var liveActivitiesSupported = MenuBarLiveActivityMonitor.isSupported
+    var pinned = false
+    /// Snapshot rendering pins the presentation instead of deriving it.
+    var forcedPresentation: IslandPresentation?
+    /// Measured closed-island placement per display, for the automatic layout.
+    var closedPlacements: [CGDirectDisplayID: ClosedPlacement] = [:]
+    /// When a new song shows for a moment below the notch, for as long as "New activities stay
+    /// open for" says.
+    private(set) var songPeek = SongPeek()
+    /// The display whose closed island the pointer rests on (nil when it's elsewhere, or the
+    /// island is open). The island grows a little while it is there.
+    private(set) var hoverDisplay: CGDirectDisplayID?
+    /// The display showing what's playing because the pointer has rested on its notch while
+    /// the island opens on click ("Peek at what's playing"). Ends when the pointer leaves.
+    private(set) var hoverPeekDisplay: CGDirectDisplayID?
+    /// When the music was paused, so the closed island keeps it for `pausedMusicTimeout`.
+    private(set) var pausedMusic = PausedMusic()
+    /// Play or pause just clicked, shown before the player confirms it.
+    private var playbackIntent: PlaybackIntent?
+
+    // Services
+    let shelfService = ShelfService()
+    let battery_ = BatteryMonitor()
+    let audio = AudioMonitor()
+    let camera = CameraMonitor()
+    let music = AppleMusicProvider()
+    let spotify = SpotifyProvider()
+    let systemMedia = SystemNowPlayingBridge()
+    let fullscreen = FullscreenDetector()
+    let calendar = CalendarService()
+    let clipboardMonitor = ClipboardMonitor()
+    let statsSampler = SystemStatsSampler()
+    let micUsage = MicUsageMonitor()
+    let notificationMirror = NotificationMirror()
+    let downloads = DownloadsWatcher()
+    let unlock = UnlockMonitor()
+    let menuBarActivities = MenuBarLiveActivityMonitor()
+    let agentUsage = AgentUsageModel()
+    let controls = IslandControls()
+    /// The tools under "More" and the extra AI usage on Home (ToolModels.swift, AppModel+Tools.swift).
+    let toolsService: ToolsService
+    let sales: SalesModel
+    let stocks: StocksModel
+    let toolUsage: ToolUsageModel
+    let teleprompter: TeleprompterController
+    let mirror = MirrorModel()
+    /// The playing indicator's stickers: Casement's own and the user's (StickerLibrary.swift).
+    let stickers = StickerLibrary(folder: CasementPaths.stickersDirectory)
+    @ObservationIgnored lazy var timers = TimerController(model: self)
+    /// Coding-agent approval cards (ApprovalController.swift).
+    @ObservationIgnored lazy var approvals = ApprovalController(model: self)
+    /// Lyrics, shortcuts, weather, the month calendar, the stopwatch and focus sounds (Tools.swift).
+    @ObservationIgnored lazy var tools = Tools(model: self)
+    let ask: AskController
+    private var mirroredKeys: Set<String> = []
+    private var mirrorClock = LiveActivityClock()
+    /// Dismissed mirrored items, and when each item's text last changed.
+    private var mirrorTracker = MirrorTracker()
+    /// "Only when the notch hides them" as the mirror last filtered with it, so moving the
+    /// switch re-filters what is already in the menu bar instead of waiting for its next change.
+    private var lastMirrorOnlyHidden: Bool?
+    /// Mirrored activity id → the menu bar item it came from. Clicking one presses that item;
+    /// this never goes through a URL, so nothing outside Casement can trigger the press.
+    private var mirroredActivityKeys: [String: String] = [:]
+    /// Menu bar item key → the source its mirrored activity uses, for every Live Activity in
+    /// the menu bar whether or not it is mirrored, so the covers can tell a muted pill apart
+    /// (`uncoveredMenuBarPillKeys`).
+    @ObservationIgnored private var mirroredSources: [String: String] = [:]
+
+    /// Keys of menu bar pills the island shows nothing for: the source is muted, or the user
+    /// dismissed the activity. `MenuBarCovers` leaves those uncovered rather than hiding the
+    /// Live Activity altogether, with no way to get it back.
+    var uncoveredMenuBarPillKeys: Set<String> {
+        Set(mirroredSources.filter { settings.isMuted(source: $0.value) }.keys)
+            .union(mirrorTracker.dismissed)
+    }
+
+    /// Where the menu bar's own Live Activity pills are now, in global Accessibility
+    /// coordinates. Empty unless something is being mirrored. "Hide the menu bar's own" lays a
+    /// black cover over each one (`MenuBarCovers`).
+    @ObservationIgnored private(set) var menuBarPills: [MenuBarActivityPill] = []
+    /// Something the covers depend on changed: the pills, or an app covering the menu bar. The
+    /// app places them again then; nothing polls.
+    @ObservationIgnored var onMenuBarCoversChanged: (() -> Void)?
+
+    private func setMenuBarPills(_ pills: [MenuBarActivityPill]) {
+        guard pills != menuBarPills else { return }
+        menuBarPills = pills
+        onMenuBarCoversChanged?()
+    }
+
+    /// Whether clicking the activity opens something.
+    func canOpen(_ a: Activity) -> Bool { a.url != nil || mirroredActivityKeys[a.id] != nil }
+
+    /// Open what an activity points to: a mirrored Live Activity's original item, or its link.
+    func openActivity(_ a: Activity) {
+        if let key = mirroredActivityKeys[a.id] {
+            menuBarActivities.press(key: key)
+        } else if let url = a.url {
+            NSWorkspace.shared.open(url)
+        }
+    }
+    private var calls = CallDetector()
+    private var lastMicUsers: Set<String> = []
+    /// The iPhone bridge, with its own token (LANBridge.swift).
+    let lan = LANBridge()
+    /// The loopback API's token, created once per launch
+    /// (reusing the previous one so scripts that cached it keep working).
+    @ObservationIgnored private lazy var apiToken = APIDiscoveryStore.loadOrCreateToken()
+    /// While the screen is locked: what happened, for the "welcome back" digest.
+    private var lockedAt: Date?
+    private var lockedDigest: [String: Int] = [:]
+    private(set) var pluginRunner: ScriptPluginRunner?
+    private var server: LocalAPIServer?
+    private var deadlineTimer: Timer?
+    private var batteryDetector = BatteryEventDetector()
+    private var dayObserver: NSObjectProtocol?
+    /// What `applyModules()` has started.
+    private var modules = RunningModules()
+    /// Reminder alerts already shown, by occurrence, with when they were for.
+    private var alertedReminders: [String: Date] = [:]
+    /// Where meeting reminders are kept; nil until `start()`, so snapshots never write it.
+    @ObservationIgnored private var meetingsURL: URL?
+    @ObservationIgnored private var canSaveMeetings = true
+    /// The meeting reminders on show, by activity id, and the spec each was last applied with.
+    @ObservationIgnored private var shownMeetings: [String: (reminder: MeetingReminder, spec: ActivitySpec)] = [:]
+    @ObservationIgnored private var systemObservers: [NSObjectProtocol] = []
+    /// Activities already sent to the on-device model for an icon.
+    private var iconAttempts: Set<String> = []
+    /// The muted sources as what is on screen last followed them (`applyMutes`).
+    @ObservationIgnored private var appliedMutes: Set<String> = []
+    /// config.json, which is never written over while it doesn't parse.
+    @ObservationIgnored private var configFile: SettingsFile
+    /// What config.json is known to hold: written, read or (when it was broken at launch) the
+    /// settings started with. Changes made in memory since are kept when the file is read again.
+    @ObservationIgnored private var diskSettings: CasementSettings
+    /// The settings last saved (or refused while config.json doesn't parse), read or reset. A
+    /// change the Settings window reports that is already one of these isn't an edit to save.
+    @ObservationIgnored private var committedSettings: CasementSettings
+    /// Set while config.json doesn't parse: Casement keeps its last good settings and saves
+    /// nothing until the file is fixed or replaced (Settings → Advanced).
+    private(set) var settingsProblem: FileProblem?
+    /// Where the settings in use came from while `settingsProblem` is set: the last good copy,
+    /// or the defaults when config.json was already broken at launch and there was no copy.
+    private(set) var settingsOrigin: SettingsFile.Origin = .file
+
+    /// With no `settings`, they are read from config.json (or, when it doesn't parse, from the
+    /// copy of the last one that did). `ask` and `secrets` are replaceable so snapshots keep API
+    /// keys in memory instead of the Keychain; `scriptFile` nil keeps the teleprompter's script
+    /// in memory too.
+    init(settings: CasementSettings? = nil, ask: AskController? = nil, secrets: SecretStore? = nil,
+         scriptFile: TeleprompterScriptFile? = .standard) {
+        var file = SettingsFile(url: CasementPaths.configFile, lastGood: CasementPaths.lastGoodConfigFile)
+        var origin = SettingsFile.Origin.file
+        let start: CasementSettings
+        if let settings {
+            start = settings
+        } else {
+            let opened = file.open()
+            start = opened.settings
+            origin = opened.origin
+        }
+        let settings = start
+        configFile = file
+        diskSettings = start
+        committedSettings = start
+        settingsProblem = file.problem
+        settingsOrigin = origin
+        self.settings = settings
+        self.ask = ask ?? AskController()
+        let keys = secrets ?? KeychainStore()
+        let service = ToolsService()
+        toolsService = service
+        sales = SalesModel(service: service, secrets: keys)
+        stocks = StocksModel(service: service)
+        toolUsage = ToolUsageModel(service: service, secrets: keys)
+        teleprompter = TeleprompterController(file: scriptFile)
+        shelf = shelfService.shelf
+        clipboard = ClipboardHistory(limit: settings.clipboardLimit)
+        clipboard.ignoredApps = Set(settings.clipboardIgnoredApps)
+        clipboard.skipsSecrets = settings.clipboardSkipSecrets
+        songPeek.duration = settings.alertDuration
+        appliedMutes = Set(settings.mutedSources)
+    }
+
+    // MARK: Lifecycle
+
+    func start() {
+        Haptics.mode = settings.hapticsMode
+        media.disabled = Set(settings.disabledMediaSources)
+        media.hidden = Set(settings.hiddenMediaApps)
+        shelfService.onChange = { [weak self] s in
+            self?.shelf = s
+            // A file added (or gone) changes when the next one is due off the shelf.
+            self?.reschedule()
+        }
+        shelfService.onAvailability = { [weak self] ids in self?.shelfUnavailable = ids }
+        shelfUnavailable = shelfService.unavailable
+
+        fullscreen.onChange = { [weak self] apps, bundle in
+            self?.fullscreenApps = apps
+            self?.frontBundleID = bundle
+            // An app in full screen takes the menu bar with it: nothing may stay covered there.
+            self?.onMenuBarCoversChanged?()
+        }
+        fullscreen.start()
+        applyTiming()
+        timers.start()
+        tools.stopwatch.start()
+        loadMeetings()
+        startEventSources()
+        // No config.json yet: Casement's first run on this Mac (watching the file writes one).
+        let firstRun = !FileManager.default.fileExists(atPath: CasementPaths.configFile.path)
+        watchSettingsFile()
+        if firstRun { showFirstRunHint() }
+        // Once per launch: hooks left pointing at an casementctl that moved fail silently.
+        checkAgentHooks()
+        // Back from System Settings, calendar access may have changed; it starts at once.
+        systemObservers.append(NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.recheckCalendarAccess() }
+        })
+        systemObservers.append(NotificationCenter.default.addObserver(
+            forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled }
+        })
+        // Timers don't count time asleep: catch up on what fell due (a meeting that started).
+        systemObservers.append(NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.expireNow()
+                // The helper may have given up while the Mac slept (mediaremoted restarts on wake).
+                if self?.systemMedia.gaveUp == true { self?.retryMedia() }
+            }
+        })
+    }
+
+    /// Everything that depends on settings; safe to call again after changes.
+    func startEventSources() {
+        applyModules()
+        if settings.callDetection {
+            micUsage.onChange = { [weak self] users in
+                self?.lastMicUsers = users
+                self?.updateCalls()
+            }
+            micUsage.start()
+            // An app muted or unmuted since: its call pill goes or comes back now, not at the
+            // next change to who uses the microphone.
+            updateCalls()
+        } else {
+            micUsage.stop()
+            lastMicUsers = []
+            for id in calls.active.keys.map(CallDetector.activityID) { remove(activityID: id) }
+            calls = CallDetector()
+        }
+        let inFront = SessionWork.runs(sessionActive: sessionActive)
+        if settings.notificationMirroring && inFront {
+            notificationMirror.onNotification = { [weak self] n in self?.mirrored(n) }
+            notificationMirror.start()
+        } else {
+            notificationMirror.stop()
+        }
+        if settings.downloadsEnabled {
+            downloads.onEvent = { [weak self] e in self?.downloadEvent(e) }
+            downloads.start()
+        } else {
+            downloads.stop()
+        }
+        unlock.onLock = { [weak self] in
+            self?.lockedAt = Date()
+            self?.lockedDigest = [:]
+        }
+        unlock.onUnlock = { [weak self] in self?.welcomeBack() }
+        if settings.unlockSplash { unlock.start() } else { unlock.stop() }
+        let onlyHiddenChanged = lastMirrorOnlyHidden != mirrorsOnlyHidden
+        lastMirrorOnlyHidden = mirrorsOnlyHidden
+        // Items appearing, going or widening in the menu bar re-measure it, so "Fit the menu bar"
+        // keeps the wings off them with Live Activities off too.
+        let watch = MenuBarLiveActivities.watch(showActivities: settings.mirrorMenuBarActivities, fitsMenuBar: settings.closedLayout == .auto,
+                                                inFront: inFront, supported: liveActivitiesSupported,
+                                                trusted: MenuBarLiveActivityMonitor.isAvailable)
+        menuBarActivities.onStructureChange = { NotificationCenter.default.post(name: .casementMenuBarChanged, object: nil) }
+        menuBarActivities.onFrames = { [weak self] pills in self?.setMenuBarPills(pills) }
+        menuBarActivities.mirrors = watch == .mirror
+        switch watch {
+        case .mirror:
+            menuBarActivities.onChange = { [weak self] list in self?.syncMenuBarActivities(list) }
+            // Exact: a pill reading "Man United 2 - 1 Arsenal" holds an airline's name without
+            // being that airline. The fuzzy match below still chooses the symbol and colour.
+            menuBarActivities.knownApp = { LiveActivityCatalog.exact($0)?.app }
+            menuBarActivities.start()
+            // The scan only publishes a changed menu bar; the filter changed, so publish it again.
+            if onlyHiddenChanged { menuBarActivities.refresh() }
+        case .layout:
+            menuBarActivities.start()
+            syncMenuBarActivities([])
+            setMenuBarPills([])
+        case .off:
+            menuBarActivities.stop()
+            syncMenuBarActivities([])
+            setMenuBarPills([])
+        }
+        agentUsage.apply(settings) { [weak self] spec in _ = try? self?.applyLocal(spec) }
+        applyTools()
+    }
+
+    /// Whether only the activities the notch hides are mirrored. "Hide the menu bar's own"
+    /// covers the visible pills, so every activity has to be mirrored and that switch wins.
+    var mirrorsOnlyHidden: Bool {
+        MenuBarCovers.mirrorsOnlyHidden(onlyHidden: settings.mirrorOnlyHiddenActivities,
+                                        hideOwn: settings.hideMenuBarActivities)
+    }
+
+    /// Show the menu bar's Live Activities (iPhone and Mac) as island activities.
+    private func syncMenuBarActivities(_ all: [MirroredLiveActivity]) {
+        let now = Date()
+        // Every item in the menu bar, mirrored or not: a muted one is left out of `list` below
+        // but its pill is still there to be covered.
+        let sources = Dictionary(all.map { ($0.key, MenuBarLiveActivities.source(for: $0.appName)) },
+                                 uniquingKeysWith: { a, _ in a })
+        if sources != mirroredSources {
+            mirroredSources = sources
+            // The frames are published before this, so the first scan after launch works out the
+            // covers while nothing is known to be muted. Work them out again now that it is.
+            onMenuBarCoversChanged?()
+        }
+        // A dismissed item stays away while it is in the menu bar, whatever its text does.
+        let shown = mirrorTracker.sync(all, now: now).show
+        let list = mirrorsOnlyHidden ? shown.filter(\.hidden) : shown
+        let keys = Set(list.map(\.key))
+        for key in mirroredKeys.subtracting(keys) {
+            let id = MenuBarLiveActivities.activityID(key)
+            // Forgotten first, so taking it away doesn't count as the user dismissing it.
+            mirroredActivityKeys[id] = nil
+            remove(activityID: id)
+            mirrorClock.forget(key)
+        }
+        for m in list {
+            // The symbol and colour may still come from a name found inside the text; only the
+            // name the island shows and the layout it uses need an exact match.
+            let look = LiveActivityCatalog.look(for: m.appName ?? m.detail ?? "").map { ($0.symbol, $0.tint) }
+            let clock = mirrorClock.update(key: m.key, detail: m.detail, now: now)
+            // An item whose text stops changing dims after a while (`MirrorTracker.staleAfter`).
+            let spec = MenuBarLiveActivities.activity(for: m, look: look, isNew: !mirroredKeys.contains(m.key), clock: clock,
+                                                      staleAt: mirrorTracker.staleAt(key: m.key))
+            let id = MenuBarLiveActivities.activityID(m.key)
+            mirroredActivityKeys[id] = m.key
+            // A spec can't clear a date: without a reading, stop the clock Casement animated, or the
+            // wing counts down to a moment nobody promised. Text holding a time isn't enough to
+            // keep it: the pill still shows one after the direction is lost (a new phase, a pause).
+            if clock == nil { center.clearClock(id: id) }
+            _ = try? applyLocal(spec)
+        }
+        mirroredKeys = keys
+    }
+
+    func applyTiming() {
+        center.sneakDuration = settings.alertDuration
+        center.hudDuration = settings.hudDuration
+        // A new song stays as long as a new activity does.
+        songPeek.duration = settings.alertDuration
+        Motion.pace = settings.animationSpeed.multiplier
+        // "Hide paused music after" may have moved the moment paused music goes.
+        reschedule()
+    }
+
+    func stop() {
+        releaseKeepAwake()
+        tools.focus.stopAll()
+        // A note typed in the last half second before quitting isn't lost.
+        tools.note.saveNow()
+        ask.stop()  // Quitting stops a running claude/codex rather than leaving it behind.
+        guard server != nil else { return }
+        server?.stop()
+        APIDiscoveryStore.remove()
+    }
+
+    private func startMedia() {
+        systemMedia.onUpdate = { [weak self] report in self?.bridgeUpdate(report) }
+        systemMedia.onUnavailable = { [weak self] reason in
+            // Fall back to per-player enrichment. It uses AppleScript only where Automation is
+            // already allowed, so this never brings up the prompt; Settings → Permissions does.
+            Log.media.error("\(reason, privacy: .public)")
+            self?.bridgeFailed = true
+            self?.syncPlayers()
+        }
+        // Back after a failure (tried again on its own after giving up): the bridge brings
+        // artwork and position again.
+        systemMedia.onRunning = { [weak self] in
+            guard let self, self.bridgeFailed else { return }
+            self.bridgeFailed = false
+            self.syncPlayers()
+        }
+        // The helper exited and starts again: until it reports, no command goes through it.
+        systemMedia.onInterrupted = { [weak self] in
+            self?.media.bridgeInterrupted()
+            self?.mediaChanged()
+        }
+        bridgeFailed = false
+        // Switched on, a fresh set of tries, even if it gave up before Now Playing went off.
+        systemMedia.retry()
+        syncPlayers()
+    }
+
+    /// False while this user's session is in the background (fast user switching): nothing
+    /// reads the menu bar or banners then (`SessionWork`).
+    @ObservationIgnored var sessionActive = true
+    @ObservationIgnored private var volumeFilter = VolumeChangeFilter()
+
+    /// Low Power Mode: the island's loops run at a lower frame rate (`IslandLoops.frameRate`).
+    /// Follows the system's notification; never polled.
+    private(set) var lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+
+    /// The system bridge said it can't deliver (it may still be running), so the players fetch
+    /// their own details. Reset when media starts again or the helper comes back. Settings → Now
+    /// Playing says so, with Try again.
+    private(set) var bridgeFailed = false
+
+    /// Settings → Now Playing → Try again, and waking from sleep after the bridge gave up: a
+    /// fresh set of tries for the system-wide Now Playing helper.
+    func retryMedia() {
+        guard settings.mediaEnabled else { return }
+        bridgeFailed = false
+        systemMedia.retry()
+        syncPlayers()
+    }
+
+    /// Music and Spotify run only while their source is on in Settings; a source switched off
+    /// sends no AppleScript at all, even with the system bridge down.
+    func syncPlayers() {
+        let disabled = media.disabled
+        let bridgeUp = systemMedia.isRunning && !bridgeFailed
+        for p in [music, spotify] as [ScriptablePlayerProvider] {
+            guard PlayerIntegration.runs(p.source, disabled: disabled) else {
+                p.enrich = false
+                p.stop()
+                continue
+            }
+            // Before start(), which begins enriching straight away when asked to.
+            p.enrich = PlayerIntegration.enriches(p.source, disabled: disabled, bridgeRunning: bridgeUp)
+            p.onUpdate = { [weak self, source = p.source] np in self?.mediaUpdate(np, source: source) }
+            p.start()
+        }
+    }
+
+    func startCalendar() {
+        calendar.includeReminders = settings.remindersEnabled
+        calendar.onAgenda = { [weak self] items in
+            self?.agenda = items
+            self?.calendarChanged()
+        }
+        calendar.onReminders = { [weak self] items in
+            self?.reminders = items
+            self?.calendarChanged()
+        }
+        calendar.start()
+        // The agenda covers today and tomorrow; roll it forward when the day changes.
+        if dayObserver == nil {
+            dayObserver = NotificationCenter.default.addObserver(forName: .NSCalendarDayChanged, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.calendar.refresh() }
+            }
+        }
+    }
+
+    /// Events from calendars the user hasn't hidden. Reads `tick`, so what depends on the time
+    /// of day (the next event, what is left today) is drawn again at each deadline.
+    var visibleAgenda: [AgendaItem] {
+        _ = tick
+        return Agenda.visible(agenda, hiding: Set(settings.hiddenCalendars))
+    }
+
+    func completeReminder(_ id: String) {
+        Haptics.play(.tap)
+        if calendar.complete(reminderID: id) { reminders.removeAll { $0.id == id } }
+    }
+
+    var dueReminders: [ReminderItem] { settings.remindersEnabled ? Reminders.dueSoon(reminders, now: Date()) : [] }
+
+    // MARK: Calendar access
+
+    /// What to say about calendar (`.calendars`) or reminders (`.reminders`) access, and the button.
+    func calendarAdvice(_ kind: PermissionKind) -> CalendarAccessAdvice {
+        CalendarAccessAdvice.advice(kind == .reminders ? calendarAccess.reminders : calendarAccess.events, kind: kind,
+                                    refused: calendarRefused.contains(kind))
+    }
+
+    /// "Allow…" for calendars or reminders. macOS is asked when it hasn't been; after a refusal,
+    /// or with "Add events only", System Settings opens at the right page instead, since asking
+    /// again would return at once and look stuck. Access arriving starts the feature straight away
+    /// (and, with `turnOn`, switches it on).
+    func requestCalendarAccess(_ kind: PermissionKind = .calendars, turnOn: Bool = true, answered: (() -> Void)? = nil) {
+        readCalendarAccess()
+        switch calendarAdvice(kind).action {
+        case nil:
+            if turnOn { switchOnCalendarFeature(kind) }
+            answered?()
+        case .openSettings(let url)?:
+            NSWorkspace.shared.open(url)
+            answered?()
+        case .ask?:
+            let done: (Bool) -> Void = { [weak self] granted in
+                guard let self else { return }
+                if !granted { self.calendarRefused.insert(kind) }
+                if granted, turnOn { self.switchOnCalendarFeature(kind) } else { self.recheckCalendarAccess(force: true) }
+                answered?()
+            }
+            if kind == .reminders { calendar.requestReminderAccess(completion: done) } else { calendar.requestAccess(completion: done) }
+        }
+    }
+
+    private func switchOnCalendarFeature(_ kind: PermissionKind) {
+        if kind == .reminders { settings.remindersEnabled = true } else { settings.calendarEnabled = true }
+        saveAndApplySettings()
+        recheckCalendarAccess(force: true)
+    }
+
+    /// Read access again and start (or stop) the calendar to match, without a relaunch.
+    func recheckCalendarAccess(force: Bool = false) {
+        guard readCalendarAccess() || force else { return }
+        applyModules()
+    }
+
+    /// Reads calendar and reminders access. Returns whether either changed. Access just granted
+    /// gives the service a new event store, which a store made before it may need.
+    @discardableResult
+    private func readCalendarAccess() -> Bool {
+        let fresh = CalendarAccessState.current
+        guard fresh != calendarAccess else { return false }
+        let gained = fresh.events.canRead && !calendarAccess.events.canRead || fresh.reminders.canRead && !calendarAccess.reminders.canRead
+        calendarAccess = fresh
+        if fresh.events.canRead { calendarRefused.remove(.calendars) }
+        if fresh.reminders.canRead { calendarRefused.remove(.reminders) }
+        if gained { calendar.accessChanged() }
+        return true
+    }
+
+    /// Whether a calendar feature that is on can't read what it needs (so opening the island
+    /// checks access again).
+    private var calendarIsBlocked: Bool {
+        settings.calendarEnabled && !calendarAccess.events.canRead || settings.remindersEnabled && !calendarAccess.reminders.canRead
+    }
+
+    /// `--settings-snapshot` and `--snapshot` draw the access states without asking macOS.
+    func setCalendarAccessForSnapshot(events: CalendarAccess, reminders: CalendarAccess, refused: Set<PermissionKind> = []) {
+        calendarAccess = CalendarAccessState(events: events, reminders: reminders)
+        calendarRefused = refused
+    }
+
+    /// For `GET /v1/state`: the access and how many timed events are left today, never titles.
+    var calendarStatus: CalendarStatus {
+        let left = settings.calendarEnabled ? Agenda.restOfToday(visibleAgenda, now: Date()).timed.count : 0
+        return CalendarStatus(events: calendarAccess.events, reminders: calendarAccess.reminders, upcoming: left)
+    }
+
+    // MARK: Meeting reminders
+
+    /// The meetings showing as reminders now, earliest first.
+    var liveMeetings: [MeetingReminder] {
+        meetings.live(visibleAgenda, now: Date(), options: MeetingReminderOptions(settings))
+    }
+
+    private func loadMeetings() {
+        let url = CasementPaths.supportDirectory.appendingPathComponent("meetings.json")
+        meetingsURL = url
+        let restored = MeetingReminders.start(from: url)
+        if let saved = restored.value { meetings = saved }
+        canSaveMeetings = restored.canSave
+        if let moved = restored.setAside { Log.files.error("meetings.json couldn't be read; kept as \(moved.lastPathComponent, privacy: .public)") }
+    }
+
+    private func saveMeetings() {
+        guard let url = meetingsURL, canSaveMeetings else { return }
+        do {
+            try meetings.save(to: url)
+        } catch {
+            Log.files.error("couldn't save meetings.json: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// The agenda or reminders changed: show what is due, and wake for what comes next.
+    private func calendarChanged() {
+        let now = Date()
+        syncMeetings(now: now)
+        checkReminderAlerts(now: now)
+        tick &+= 1
+        reschedule()
+    }
+
+    /// Show each meeting due a reminder as an activity, and take away those that are over.
+    /// Only real changes are applied (the countdown once a minute), so the island doesn't redraw
+    /// or reorder for nothing.
+    private func syncMeetings(now: Date) {
+        let options = MeetingReminderOptions(settings)
+        // Worked on a copy, so views watching `meetings` redraw only when something changed.
+        var updated = meetings
+        updated.forget(before: now)
+        var live = updated.live(visibleAgenda, now: now, options: options)
+        // A call already going on in the meeting's app counts as joining it, however it was
+        // joined and however early (within `joinWindow`), so the reminder never glows at you
+        // while you are in the meeting.
+        if settings.callDetection {
+            let joined = MeetingReminders.joinedByCalls(calls.ongoing, live: live)
+            if !joined.isEmpty {
+                for r in joined { updated.join(r.item) }
+                live = updated.live(visibleAgenda, now: now, options: options)
+            }
+        }
+        let announce = updated.announce(live)
+        let changed = updated != meetings
+        if changed { meetings = updated }
+        var shown: [String: (reminder: MeetingReminder, spec: ActivitySpec)] = [:]
+        for r in live {
+            var spec = MeetingReminders.activity(for: r, now: now, icon: MeetingReminders.icon(for: r, installed: AppActions.isInstalled),
+                                                 sneak: false, time: { $0.formatted(date: .omitted, time: .shortened) })
+            if let previous = shownMeetings[r.id], previous.spec == spec, center.activities[r.id] != nil {
+                shown[r.id] = previous
+                continue
+            }
+            let plain = spec
+            spec.sneak = announce.contains(r.key)
+            // A muted calendar shows nothing; it is tried again at the next change.
+            if (try? applyLocal(spec)) != nil { shown[r.id] = (r, plain) }
+        }
+        for id in shownMeetings.keys where shown[id] == nil { center.remove(id: id) }
+        shownMeetings = shown
+        if changed { saveMeetings() }
+    }
+
+    /// The meeting reminder an activity shows, if it is one and still on show (muting the
+    /// calendar takes it away before the next sync).
+    func meetingReminder(for activityID: String) -> MeetingReminder? {
+        guard center.activities[activityID] != nil else { return nil }
+        return shownMeetings[activityID]?.reminder
+    }
+
+    /// Join: open the call link and count the meeting as joined, so its reminder goes.
+    func join(_ item: AgendaItem) {
+        guard let url = item.meetingURL else { return }
+        Haptics.play(.tap)
+        NSWorkspace.shared.open(url)
+        meetings.join(item)
+        saveMeetings()
+        let now = Date()
+        syncMeetings(now: now)
+        reschedule()
+    }
+
+    /// A meeting reminder's activity went (its ×, a swipe, Dismiss, a script): it stays dismissed.
+    private func meetingActivityRemoved(_ id: String) {
+        guard let shown = shownMeetings.removeValue(forKey: id) else { return }
+        meetings.dismiss(shown.reminder.item)
+        saveMeetings()
+    }
+
+    /// `--snapshot`: these events, and the meeting reminders they would show at `now`.
+    func showMeetingsForSnapshot(_ items: [AgendaItem], now: Date) {
+        agenda = items
+        meetings = MeetingReminders()
+        syncMeetings(now: now)
+    }
+
+    private func startClipboard() {
+        clipboardMonitor.onCopy = { [weak self] content, types, bundle, page in
+            self?.clipboard.add(content, types: types, sourceBundleID: bundle, sourceURL: page, now: Date())
+        }
+        clipboardMonitor.start()
+    }
+
+    private func startPlugins() {
+        let dir = settings.pluginDirectory.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) } ?? CasementPaths.pluginsDirectory
+        let runner = ScriptPluginRunner(directory: dir)
+        runner.onResult = { [weak self] r in self?.pluginFinished(r) }
+        runner.onRemoved = { [weak self] path in
+            self?.plugins[path] = nil
+            self?.remove(activityID: "plugin-" + ScriptPlugins.displayName(fromFileName: (path as NSString).lastPathComponent))
+        }
+        runner.start()
+        pluginRunner = runner
+    }
+
+    private func startAPI() {
+        let token = apiToken
+        let router = APIRouter(token: token, version: Self.version, backend: self)
+        let server = LocalAPIServer.loopback(router: router)
+        self.server = server
+        let preferred = UInt16(settings.apiPort)
+        server.start(port: preferred) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let port):
+                    self?.apiReady(port: port, token: token)
+                case .failure:
+                    // Port taken: fall back to an ephemeral port; clients read it from the discovery file.
+                    server.start(port: 0) { r in
+                        DispatchQueue.main.async {
+                            if case .success(let p) = r { self?.apiReady(port: p, token: token) } else { self?.apiStatus = "Could not start API" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func apiReady(port: UInt16, token: String) {
+        apiStatus = "Listening on 127.0.0.1:\(port)"
+        try? APIDiscoveryStore.write(APIDiscovery(port: Int(port), token: token, pid: ProcessInfo.processInfo.processIdentifier))
+    }
+
+    // MARK: Settings
+
+    /// Writes the settings to config.json, keeping keys this build doesn't know. Writes
+    /// nothing while the file doesn't parse (`settingsProblem`); those changes are kept in
+    /// memory and saved with the file's own once it is fixed (`reloadSettingsFromDisk`).
+    func saveSettings() {
+        do {
+            if try configFile.save(settings) != .refused { diskSettings = settings }
+        } catch {
+            Log.files.error("couldn't save config.json: \(error.localizedDescription, privacy: .public)")
+        }
+        committedSettings = settings
+        noteSettingsProblem(configFile.problem)
+        // Saving makes the config folder again when it was deleted: watch the new one.
+        if watchingSettings, FileIdentity(path: CasementPaths.configDirectory.path) != settingsFolder { rearmSettingsWatchers() }
+    }
+
+    /// A change made outside the Settings window (the island's own controls): saved, and applied
+    /// as an edit in Settings is. Settings shows it at once, since it reads the model.
+    func saveAndApplySettings() {
+        saveSettings()
+        NotificationCenter.default.post(name: .casementSettingsChanged, object: nil)
+    }
+
+    /// Settings → Advanced, while config.json doesn't parse: keep a copy of it as
+    /// config.json.broken and write the settings in use over it.
+    func replaceBrokenSettingsFile() {
+        do {
+            try configFile.replace(with: settings)
+            diskSettings = settings
+        } catch {
+            Log.files.error("couldn't replace config.json: \(error.localizedDescription, privacy: .public)")
+        }
+        committedSettings = settings
+        noteSettingsProblem(configFile.problem)
+    }
+
+    /// Settings → Advanced → Reset: every setting back to how Casement came. A config.json that
+    /// doesn't parse is kept as config.json.broken.
+    func resetSettings() {
+        settings = CasementSettings()
+        ask.sessionProvider = nil
+        replaceBrokenSettingsFile()
+        NotificationCenter.default.post(name: .casementSettingsChanged, object: nil)
+    }
+
+    private func noteSettingsProblem(_ problem: FileProblem?) {
+        if settingsProblem != problem { settingsProblem = problem }
+        // A file that parses again (or was replaced) is where the settings come from once more.
+        if problem == nil, settingsOrigin != .file { settingsOrigin = .file }
+    }
+
+    /// `--settings-snapshot` draws Advanced as it looks while config.json has an error.
+    func setSettingsProblemForSnapshot(_ problem: FileProblem?, origin: SettingsFile.Origin = .lastGood) {
+        settingsProblem = problem
+        settingsOrigin = problem == nil ? .file : origin
+    }
+
+    /// Agents whose hooks call an `casementctl` that is gone (Casement.app moved or was deleted).
+    /// Settings shows a dot on Coding agents; Update there fixes it.
+    private(set) var agentsNeedingUpdate: Set<CodingAgent> = []
+
+    /// Reads each agent's hooks file once, off the main thread: at launch and when the Coding
+    /// agents page refreshes. Never writes, never polls.
+    func checkAgentHooks() {
+        let home = CasementPaths.home
+        let exists = AppActions.isExecutable
+        Task { @MainActor in
+            let stale = await Task.detached(priority: .utility) {
+                Set(CodingAgent.allCases.filter { !AgentHookSetup.missingExecutables($0, home: home, exists: exists).isEmpty })
+            }.value
+            if agentsNeedingUpdate != stale { agentsNeedingUpdate = stale }
+        }
+    }
+
+    private static var pendingSettingsCommit: DispatchWorkItem?
+
+    /// A change made in the Settings window. Dragging a slider or typing a shortcut produces a
+    /// change per step, so saving and applying wait for a quarter of a second of quiet.
+    func settingsEdited() {
+        // The Settings window reports every change to `settings`, also ones already saved or
+        // read: the island's own switches, a hand edit of config.json, Reset. Saving those again
+        // would rewrite a hand-edited file in Casement's own form. This comes before the cancel, so
+        // an edit still waiting for its save goes ahead even when the island saved it meanwhile.
+        guard settings != committedSettings else { return }
+        // A new provider, however it was picked, replaces one an casement://ask link picked.
+        if settings.ask.provider != committedSettings.ask.provider { ask.sessionProvider = nil }
+        Self.pendingSettingsCommit?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                self?.saveSettings()
+                NotificationCenter.default.post(name: .casementSettingsChanged, object: nil)
+            }
+        }
+        Self.pendingSettingsCommit = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
+    }
+
+    /// Set once `start()` watches config.json; snapshots never do.
+    @ObservationIgnored private var watchingSettings = false
+    /// The config folder: editors that save by renaming a new file into place change it.
+    @ObservationIgnored private var settingsWatcher: DispatchSourceFileSystemObject?
+    /// Which folder `settingsWatcher` watches; nil while there is none.
+    @ObservationIgnored private var settingsFolder: FileIdentity?
+    /// The folder above it, or the nearest one there is: the config folder deleted, moved, made
+    /// again or swapped for another (stow, chezmoi, a link pointed elsewhere) changes it.
+    @ObservationIgnored private var settingsParentWatcher: DispatchSourceFileSystemObject?
+    /// config.json itself, for editors that write in place.
+    @ObservationIgnored private var fileWatcher: DispatchSourceFileSystemObject?
+
+    /// Live-reload `config.json` when edited by hand or synced from dotfiles. Watches the file
+    /// (in-place writes), its folder (atomic renames) and the folder above (the config folder
+    /// itself replaced). Event-driven throughout: nothing is polled, even while the folder is gone.
+    private func watchSettingsFile() {
+        if !FileManager.default.fileExists(atPath: CasementPaths.configFile.path) { saveSettings() }
+        watchingSettings = true
+        rearmSettingsWatchers()
+    }
+
+    /// Watches the config folder at its path now, and the folder above it, then reads config.json
+    /// in case it changed while nothing watched it. Creates nothing: a missing folder is waited
+    /// for through the folder above, or made by the next save.
+    private func rearmSettingsWatchers() {
+        let folder = CasementPaths.configDirectory
+        settingsWatcher?.cancel()
+        settingsWatcher = nil
+        settingsFolder = nil
+        watchAbove(folder)
+        let fd = open(folder.path, O_EVTONLY)
+        guard fd >= 0 else {
+            fileWatcher?.cancel()
+            fileWatcher = nil
+            return
+        }
+        settingsFolder = FileIdentity(descriptor: fd)
+        let dir = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete], queue: .main)
+        dir.setEventHandler { [weak self] in
+            // The folder itself was deleted or moved: follow the path, not the old folder.
+            if let data = self?.settingsWatcher?.data, !data.isDisjoint(with: [.delete, .rename]) {
+                self?.rearmSettingsWatchers()
+                return
+            }
+            self?.reloadSettingsFromDisk()
+            self?.watchConfigFileItself()
+        }
+        dir.setCancelHandler { close(fd) }
+        dir.resume()
+        settingsWatcher = dir
+        watchConfigFileItself()
+        reloadSettingsFromDisk()
+    }
+
+    /// Watches the nearest existing folder above `folder`. A change there that leaves a different
+    /// config folder at the path (or none) moves the watchers.
+    private func watchAbove(_ folder: URL) {
+        settingsParentWatcher?.cancel()
+        settingsParentWatcher = nil
+        var above = folder.deletingLastPathComponent()
+        var fd = open(above.path, O_EVTONLY)
+        while fd < 0, above.pathComponents.count > 1 {
+            above = above.deletingLastPathComponent()
+            fd = open(above.path, O_EVTONLY)
+        }
+        guard fd >= 0 else { return }
+        let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete], queue: .main)
+        src.setEventHandler { [weak self] in
+            guard let self else { return }
+            let moved = !(self.settingsParentWatcher?.data ?? []).isDisjoint(with: [.delete, .rename])
+            if moved || FileIdentity(path: folder.path) != self.settingsFolder { self.rearmSettingsWatchers() }
+        }
+        src.setCancelHandler { close(fd) }
+        src.resume()
+        settingsParentWatcher = src
+    }
+
+    private func watchConfigFileItself() {
+        fileWatcher?.cancel()
+        fileWatcher = nil
+        let fd = open(CasementPaths.configFile.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .extend, .delete, .rename], queue: .main)
+        src.setEventHandler { [weak self] in
+            self?.reloadSettingsFromDisk()
+            if let data = self?.fileWatcher?.data, !data.isDisjoint(with: [.delete, .rename]) { self?.watchConfigFileItself() }
+        }
+        src.setCancelHandler { close(fd) }
+        src.resume()
+        fileWatcher = src
+    }
+
+    /// A file that doesn't parse (a typo mid-edit) changes nothing: the last good settings stay,
+    /// and Settings → Advanced says which line. A deleted file changes nothing either; the next
+    /// save writes it again.
+    private func reloadSettingsFromDisk() {
+        // Our own save coming back, or a second event for an edit already read: the settings in
+        // memory are the same or newer (a change made since, still waiting for its save), so
+        // there is nothing to load and nothing to undo.
+        if configFile.holdsOwnWrite() { return }
+        let read = configFile.read()
+        noteSettingsProblem(configFile.problem)
+        guard case .loaded(let fresh) = read else { return }
+        // Changes the file never got (saves refused while it didn't parse, or one still waiting
+        // for its save) are kept beside the file's own; where both changed a setting, the file
+        // wins. With nothing unsaved in memory this is just the file.
+        let next = CasementSettings.merged(base: diskSettings, ours: settings, theirs: fresh)
+        diskSettings = fresh
+        if next != settings {
+            if next.ask.provider != settings.ask.provider { ask.sessionProvider = nil }
+            settings = next
+            // The app delegate applies the rest (modules, media sources, clipboard size, hotkey,
+            // panels) on this notification.
+            NotificationCenter.default.post(name: .casementSettingsChanged, object: nil)
+        }
+        committedSettings = settings
+        // The file gets the changes it missed.
+        if next != fresh { saveSettings() }
+    }
+
+    // MARK: Presentation
+
+    /// - Parameter ignoringHUD: what shows under a HUD (`PresenterInputs.ignoresHUD`).
+    func presentation(for display: CGDirectDisplayID, ignoringHUD: Bool = false) -> IslandPresentation {
+        _ = tick
+        if let forcedPresentation { return forcedPresentation }
+        let now = Date()
+        // "Hide music only" over a full screen app: the music goes, everything else stays.
+        let showsMedia = settings.mediaEnabled && fullscreenBehaviour(on: display) != .hideMusic
+        var inputs = PresenterInputs(
+            now: now,
+            center: center,
+            nowPlaying: showsMedia ? closedNowPlaying : nil,
+            batteryEvent: batteryEvent,
+            isExpanded: expandedScreen == display || (isDraggingFile && expandedScreen == display),
+            isSuppressed: isSuppressed(display) && expandedScreen != display,
+            pausedMedia: showsMedia ? pausedMusic.show(timeout: settings.pausedMusicTimeout, now: now) : .hidden,
+            focusedActivityID: controls.focusedActivityID,
+            songPeek: Presenter.hoverPeek(showsMedia ? closedNowPlaying : nil, hovering: hoverPeekDisplay == display, settings: settings)
+                ?? (showsMedia && settings.songChangePeek ? songPeek.current(now: now) : nil),
+            idleSticker: showsMedia && Presenter.showsIdleSticker(settings)
+        )
+        inputs.ignoresHUD = ignoringHUD
+        inputs.orderedActivities = order.ordered(center, now: now)
+        let p = Presenter.present(inputs)
+        // "Only on hover" on a display without a notch: nothing until the pointer is there.
+        if settings.notchlessStyle == .hover, notchlessDisplays.contains(display), hoverDisplay != display {
+            return Presenter.untilHover(p)
+        }
+        return p
+    }
+
+    /// What full screen asks of the island on `display` now (`show` when nothing is in full
+    /// screen there, or the front app's rule keeps the island).
+    func fullscreenBehaviour(on display: CGDirectDisplayID) -> FullscreenBehaviour {
+        // The rule that counts is the full screen app's on that display, not the front app's.
+        settings.fullscreenEffect(isFullscreen: fullscreenApps[display] != nil, frontApp: fullscreenApps[display])
+    }
+
+    /// The pointer reached the closed island on `display`, or left it (nil).
+    func setHover(_ display: CGDirectDisplayID?) {
+        if hoverDisplay != display { hoverDisplay = display }
+        if hoverPeekDisplay != nil, hoverPeekDisplay != display { hoverPeekDisplay = nil }
+    }
+
+    /// The pointer has rested on the notch long enough: peek at what's playing there.
+    func peekOnHover(_ display: CGDirectDisplayID) {
+        guard expandedScreen == nil, hoverDisplay == display, hoverPeekDisplay != display,
+              Presenter.hoverPeek(closedNowPlaying, hovering: true, settings: settings) != nil else { return }
+        hoverPeekDisplay = display
+    }
+
+    /// The island on `display` gets out of the way: an app is in full screen there and "In full
+    /// screen" says to hide everything (unless the app's rule keeps the island), or the front
+    /// app's rule hides it.
+    func isSuppressed(_ display: CGDirectDisplayID) -> Bool {
+        if settings.rule(for: frontBundleID)?.hideIsland == true { return true }
+        return fullscreenBehaviour(on: display) == .hide
+    }
+
+    /// What the island is doing, for deciding whether a new song may show.
+    private func songPeekContext(now: Date) -> SongPeek.Context {
+        SongPeek.Context(
+            enabled: settings.mediaEnabled && settings.songChangePeek,
+            isOpen: expandedScreen != nil,
+            isHidden: !islandDisplays.isEmpty && islandDisplays.allSatisfy { isSuppressed($0) || fullscreenBehaviour(on: $0) == .hideMusic },
+            isBusy: center.currentHUD(now: now) != nil || center.currentSneak(now: now) != nil
+        )
+    }
+
+    /// The activities in display order. One update asks for this several times over, so the order
+    /// is worked out once per change and reused (`ActivityOrder`).
+    var activities: [Activity] { order.ordered(center, now: Date()) }
+
+    /// Not observed: `activities` is read while a view's body is evaluated, and an observed
+    /// property written there would invalidate the view that just read it.
+    @ObservationIgnored private var order = ActivityOrder()
+
+    /// How wide the closed island's wings are on a display: always full width, or the measured
+    /// automatic placement (narrow wings, at most `MenuBarLayoutEngine.unmeasuredWing`, until the
+    /// menu bar has been measured).
+    func placement(for display: CGDirectDisplayID, metrics: IslandMetrics) -> ClosedPlacement {
+        let preference = settings.closedLayout
+        guard let measured = closedPlacements[display] else {
+            return .unmeasured(preference, wing: metrics.wingWidth, hasMenuBar: true)
+        }
+        // A measurement taken before "Always full width" was chosen has narrower wings; until the
+        // next one, keep bubbles out of the row rather than trust its room. One taken before a
+        // smaller size or wing was chosen draws the new width at once instead of shrinking to it.
+        guard let wing = MenuBarLayoutEngine.usableWing(measured: measured.wing, preference: preference,
+                                                        preferredWing: metrics.wingWidth) else {
+            return .unmeasured(preference, wing: metrics.wingWidth, hasMenuBar: true)
+        }
+        return wing == measured.wing ? measured : ClosedPlacement(wing: wing, leftSlack: measured.leftSlack, rightSlack: measured.rightSlack)
+    }
+
+    var upcomingEvent: AgendaItem? { settings.calendarEnabled ? Agenda.upcoming(visibleAgenda, now: Date()) : nil }
+
+    /// Displays that have an island, notched ones first. Set when panels are rebuilt.
+    var islandDisplays: [CGDirectDisplayID] = []
+    /// The displays among them without a notch.
+    var notchlessDisplays: Set<CGDirectDisplayID> = []
+
+    /// Where the island opens when asked from a hotkey, the menu, a URL or the API: the display
+    /// under the pointer if it has one, otherwise the first (notched) one.
+    func targetDisplay() -> CGDirectDisplayID? {
+        let mouse = NSEvent.mouseLocation
+        if let under = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })?.displayID, islandDisplays.contains(under) {
+            return under
+        }
+        return islandDisplays.first
+    }
+
+    /// Opens the island on `display`, or closes it. `haptics` is off where nobody asked for the
+    /// island to open (an approval card arriving).
+    func setExpanded(_ display: CGDirectDisplayID?, haptics: Bool = true) {
+        guard expandedScreen != display else { return }
+        expandedScreen = display
+        DispatchQueue.main.async { NotificationCenter.default.post(name: .casementLayoutChanged, object: nil) }
+        if display != nil {
+            center.cancelSneak()
+            songPeek.cancel()
+            hoverDisplay = nil
+            hoverPeekDisplay = nil
+            agentUsage.refreshClaudeHint()
+            // Access may have come from System Settings without Casement becoming active.
+            if calendarIsBlocked { recheckCalendarAccess() }
+            if haptics { Haptics.play(.open) }
+            if tab == .stats && settings.systemStatsEnabled { statsSampler.start() }
+            toolsIslandOpened()
+        } else {
+            statsSampler.stop()
+            toolsIslandClosed()
+            // The camera only ever starts because someone picked Mirror: closing on it leaves
+            // the island on Home, so a later hover never turns the camera and its light on.
+            if tab == .mirror { tab = .home }
+            pinned = false
+            ask.islandDidCollapse()
+            approvals.islandDidCollapse()
+            timers.islandDidCollapse()
+            // The fields and sliders in the island have gone with it, whether or not SwiftUI
+            // called their `onDisappear`.
+            releaseViewHolds()
+            controlHint = nil
+        }
+    }
+
+    func select(tab: IslandTab) {
+        let previous = self.tab
+        self.tab = tab
+        toolsTabChanged(from: previous)
+        if tab == .stats {
+            statsSampler.onSample = { [weak self] s in self?.stats = s }
+            statsSampler.start()
+        } else {
+            statsSampler.stop()
+        }
+    }
+
+    func setDraggingFile(_ dragging: Bool) { isDraggingFile = dragging }
+
+    func setPlugins(_ results: [PluginResult]) {
+        plugins = Dictionary(uniqueKeysWithValues: results.map { ($0.path, $0) })
+    }
+
+    func setDemoBatteryEvent(_ ev: BatteryEvent) { batteryEvent = ev }
+
+    func clearNowPlayingForSnapshot() {
+        nowPlaying = nil
+        playingElsewhere = nil
+    }
+
+    /// Snapshots: the song paused a moment ago (`pause`), or playing as before.
+    func setPausedForSnapshot(_ pause: Bool, now: Date) {
+        guard var np = nowPlaying else { return }
+        pausedMusic = PausedMusic()
+        np.isPlaying = true
+        pausedMusic.ingest(np, now: now)
+        np.isPlaying = !pause
+        nowPlaying = np
+        pausedMusic.ingest(np, now: now)
+    }
+
+    // MARK: Time
+
+    /// Schedule exactly one timer for the next state change instead of polling.
+    func reschedule() {
+        deadlineTimer?.invalidate()
+        deadlineTimer = nil
+        let now = Date()
+        var candidates: [Date] = []
+        if let d = center.nextDeadline(now: now) { candidates.append(d) }
+        if let d = media.nextDeadline(now: now) { candidates.append(d) }
+        if let d = songPeek.nextDeadline(now: now) { candidates.append(d) }
+        if settings.callDetection, let d = calls.nextDeadline(now: now) { candidates.append(d) }
+        if let d = pausedMusic.nextDeadline(timeout: settings.pausedMusicTimeout, now: now) { candidates.append(d) }
+        if let i = playbackIntent { candidates.append(max(now, i.expires)) }
+        if let b = batteryEvent { candidates.append(b.until) }
+        // The calendar: a meeting reminder showing, starting, counting down or going; a reminder
+        // falling due; an event starting or ending (what Home and Today show changes then).
+        if !agenda.isEmpty {
+            let visible = visibleAgenda
+            if let d = meetings.nextDeadline(visible, now: now, options: MeetingReminderOptions(settings)) { candidates.append(d) }
+            if settings.calendarEnabled, let d = Agenda.nextChange(visible, now: now) { candidates.append(d) }
+        }
+        if settings.remindersEnabled, let d = Reminders.nextDue(reminders, now: now) { candidates.append(d) }
+        candidates += toolDeadlines(now: now)
+        guard let next = candidates.min() else { return }
+        let t = Timer(fire: next.addingTimeInterval(0.01), interval: 0, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.expireNow() }
+        }
+        t.tolerance = 0.05
+        RunLoop.main.add(t, forMode: .common)
+        deadlineTimer = t
+    }
+
+    private func expireNow() {
+        let now = Date()
+        center.expire(now: now)
+        if settings.callDetection, calls.nextDeadline(now: now).map({ $0 <= now }) ?? false { updateCalls() }
+        syncMeetings(now: now)
+        checkReminderAlerts(now: now)
+        if let b = batteryEvent, b.until <= now { batteryEvent = nil }
+        // A paused player timed out: show whatever is left, or nothing. A track that ran past
+        // its end shows as stopped, and a click the player never confirmed shows its real state.
+        // (With no player reporting there is nothing to work out, and the demo's song stays.)
+        if media.expire(now: now) || !media.isEmpty {
+            setNowPlaying(media.current(now: now), now: now)
+        }
+        // A click whose window has ended never arms the timer again, even if the player went.
+        if let i = playbackIntent, now >= i.expires { playbackIntent = nil }
+        songPeek.advance(now: now, context: songPeekContext(now: now))
+        advanceTools(now: now)
+        tick &+= 1
+        reschedule()
+    }
+
+    /// The one way `nowPlaying` changes, so a new song can be shown for a moment and a pause
+    /// can stay in view. A play or pause just clicked shows until the player catches up.
+    private func setNowPlaying(_ reported: NowPlaying?, now: Date) {
+        var next = reported
+        if let intent = playbackIntent {
+            if intent.isSettled(by: reported, now: now) {
+                playbackIntent = nil
+            } else if let r = reported {
+                next = intent.applied(to: r, now: now)
+            }
+        }
+        // The closed island shows what plays. When that is the player on show, or the player on
+        // show plays (a click on Play counts at once), it is the same snapshot.
+        let elsewhere = media.closedIsland(now: now).flatMap { closed -> NowPlaying? in
+            guard let next else { return closed }
+            return next.isPlaying || MediaArbiter.playerID(closed) == MediaArbiter.playerID(next) ? nil : closed
+        }
+        guard next != nowPlaying || elsewhere != playingElsewhere else { return }
+        let shownBefore = closedNowPlaying
+        nowPlaying = next
+        playingElsewhere = elsewhere
+        // A new song peeks, and a pause stays a while, as the closed island sees them.
+        guard closedNowPlaying != shownBefore else { return }
+        songPeek.ingest(closedNowPlaying, now: now)
+        pausedMusic.ingest(closedNowPlaying, now: now)
+    }
+
+    // MARK: Inputs
+
+    private func ingestBattery(_ s: BatteryState) {
+        battery = s
+        keepAwakeBatteryChanged(s)
+        batteryDetector.configure(with: settings)
+        if let ev = batteryDetector.ingest(s, now: Date()) {
+            if ev.kind != .lowPowerOn && ev.kind != .lowPowerOff { batteryEvent = ev }
+            let batterySettings = URL(string: "x-apple.systempreferences:com.apple.Battery-Settings.extension")
+            switch ev.kind {
+            case .critical, .low:
+                let spec = ActivitySpec(
+                    id: "battery-low", source: "battery", title: "Battery at \(s.level)%",
+                    subtitle: s.lowPowerMode ? "Low Power Mode is on" : "Plug in soon, or turn on Low Power Mode",
+                    icon: .symbol(ev.kind == .critical ? "battery.0percent" : "battery.25percent"), state: .warning,
+                    tint: "red", priority: ev.kind == .critical ? .critical : .high, ttl: ev.kind == .critical ? 0 : 6,
+                    url: batterySettings,
+                    actions: [ActivityAction(title: "Battery settings", url: batterySettings)], sneak: true
+                )
+                // A Mac about to run out always says so, even with Battery muted.
+                if ev.kind == .critical { _ = try? commit(spec) } else { _ = try? applyLocal(spec) }
+            case .lowPowerOn, .lowPowerOff:
+                let on = ev.kind == .lowPowerOn
+                _ = try? applyLocal(ActivitySpec(
+                    id: "low-power", source: "battery", title: "Low Power Mode", icon: .symbol(on ? "battery.25percent" : "battery.75percent"),
+                    trailing: on ? "On" : "Off", state: .info, tint: on ? "yellow" : "gray", priority: .normal, ttl: 2.5, sneak: true
+                ))
+            case .pluggedIn:
+                remove(activityID: "battery-low")
+            case .charged:
+                announceCharged(s)
+            default:
+                break
+            }
+            reschedule()
+        }
+    }
+
+    /// A volume key Casement handled (it replaces the system display): changes just after it are its.
+    func volumeKeyHandled() { volumeFilter.keyHandled(at: Date()) }
+
+    private func volumeChanged(_ out: AudioMonitor.Output) {
+        let deviceChanged = out.deviceName != outputDeviceName
+        outputDeviceName = out.deviceName
+        let now = Date()
+        if deviceChanged { volumeFilter.outputChanged(at: now) }
+        if deviceChanged, let name = out.deviceName {
+            // A new output gets its card ("Sound output changes"), not a volume HUD.
+            guard settings.outputChangeCard else { return }
+            let bt = AudioMonitor.isBluetooth(AudioMonitor.defaultDevice(input: false))
+            _ = try? applyLocal(ActivitySpec(
+                id: "audio-route", source: "audio", title: name, subtitle: bt ? "Connected" : "Audio output",
+                icon: .symbol(Self.symbol(forDevice: name, bluetooth: bt)), state: .info, tint: "blue",
+                priority: .normal, ttl: 3, sneak: true
+            ))
+        } else {
+            // A level the new output set for itself, or an app's change while the keys show
+            // their own HUD, isn't shown (`VolumeChangeFilter`).
+            guard settings.hudEnabled, volumeFilter.shows(now: now, replacing: settings.replaceSystemHUD) else { return }
+            center.showHUD(.volume, value: out.volume, muted: out.muted, label: out.deviceName, now: now)
+        }
+        reschedule()
+    }
+
+    static func symbol(forDevice name: String, bluetooth: Bool) -> String {
+        let n = name.lowercased()
+        if n.contains("airpods max") { return "airpodsmax" }
+        if n.contains("airpods pro") { return "airpodspro" }
+        if n.contains("airpods") { return "airpods" }
+        if n.contains("beats") { return "beats.headphones" }
+        if n.contains("homepod") { return "homepod.fill" }
+        if n.contains("headphone") || n.contains("buds") || bluetooth { return "headphones" }
+        if n.contains("display") || n.contains("hdmi") || n.contains("tv") { return "tv" }
+        return "speaker.wave.2.fill"
+    }
+
+    private func mediaUpdate(_ np: NowPlaying?, source: MediaSourceKind) {
+        if let np { media.update(np) } else { media.clear(source) }
+        mediaChanged()
+    }
+
+    /// The system bridge's report: every player macOS lists, replacing what it said before.
+    private func bridgeUpdate(_ report: BridgeReport) {
+        media.updateFromBridge(report)
+        mediaChanged()
+    }
+
+    private func mediaChanged() {
+        let now = Date()
+        setNowPlaying(media.current(now: now), now: now)
+        dropStaleControlHint()
+        reschedule()
+    }
+
+    private func pluginFinished(_ r: PluginResult) {
+        plugins[r.path] = r
+        if case .activity(var spec) = r.output {
+            spec.id = spec.id ?? "plugin-\(r.name)"
+            spec.source = spec.source ?? "plugin:\(r.name)"
+            if spec.sneak == nil { spec.sneak = false }
+            _ = try? applyLocal(spec)
+        }
+    }
+
+    /// A timed reminder reaching its due minute shows once. Woken at the due time (`reschedule`),
+    /// never by checking every minute.
+    private func checkReminderAlerts(now: Date) {
+        guard settings.remindersEnabled else { return }
+        for r in reminders where Reminders.shouldAlert(r, now: now) {
+            let key = "r:\(r.id)@\(Int(r.due?.timeIntervalSince1970 ?? 0))"
+            guard alertedReminders[key] == nil else { continue }
+            alertedReminders[key] = r.due ?? now
+            _ = try? applyLocal(Reminders.activity(for: r))
+        }
+        alertedReminders = alertedReminders.filter { now.timeIntervalSince($0.value) < 86_400 }
+    }
+
+    @discardableResult
+    func applyLocal(_ spec: ActivitySpec) throws -> Activity? {
+        if let source = spec.source, settings.isMuted(source: source) { return nil }
+        return try commit(spec)
+    }
+
+    /// Apply a spec and react like the iPhone does when something new arrives:
+    /// bounce the island and, for things that need you, tap the trackpad.
+    @discardableResult
+    func commit(_ spec: ActivitySpec) throws -> Activity {
+        let now = Date()
+        let before = center.sneak
+        let isNew = spec.id.map { center.activities[$0] == nil } ?? true
+        // An app given a priority on the Apps page ranks its activities there.
+        let a = try center.apply(settings.prioritised(spec), now: now)
+        if let after = center.sneak, after.id != before?.id || after.until != before?.until {
+            pulse &+= 1
+            if a.state == .waiting || a.priority >= .high { Haptics.play(.alert) }
+        }
+        // The digest counts what arrived while locked, not every progress update.
+        if lockedAt != nil, isNew { lockedDigest[a.source, default: 0] += 1 }
+        reschedule()
+        refineIcon(a)
+        return a
+    }
+
+    /// Ask the on-device model for an icon when neither the sender nor the keyword rules chose one.
+    /// Ask the on-device model for an icon once per activity (not on every update), from its
+    /// title and source only, so a changing subtitle can't start a new request each time.
+    private func refineIcon(_ a: Activity) {
+        guard settings.smartIcons, settings.aiAssist, a.icon == nil, !iconAttempts.contains(a.id),
+              SmartIcon.suggest(title: a.title, subtitle: a.subtitle, source: a.source) == nil,
+              AIAssist.shared.isAvailable else { return }
+        if iconAttempts.count > 500 { iconAttempts.removeAll() }
+        iconAttempts.insert(a.id)
+        let text = a.title + " (" + a.source + ")"
+        AIAssist.shared.suggestSymbol(for: text) { [weak self] symbol in
+            guard let self, let symbol, self.center.activities[a.id]?.icon == nil else { return }
+            _ = try? self.center.apply(ActivitySpec(id: a.id, icon: .symbol(symbol), sneak: false), now: Date())
+            self.tick &+= 1
+        }
+    }
+
+    // MARK: iPhone-style events
+
+    private func updateCalls() {
+        guard settings.callDetection else { return }
+        var started = false
+        // Muting an app on the Apps page, or from the island, silences its calls too.
+        let muted = Set(settings.appRules.filter { $0.muteNotifications == true }.map(\.bundleID)).union(settings.mutedSources)
+        for change in calls.update(micUsers: lastMicUsers, cameraOn: cameraInUse, now: Date(), muted: muted) {
+            switch change {
+            case .started(let spec):
+                _ = try? applyLocal(spec)
+                started = true
+            case .updated(let spec): _ = try? applyLocal(spec)
+            case .ended(let id): remove(activityID: id)
+            }
+        }
+        // A call in a meeting's app counts as joining it (`syncMeetings`). An app that has only
+        // just taken the microphone shows once it has held it a moment (`CallDetector.settle`).
+        if started { syncMeetings(now: Date()) }
+        reschedule()
+    }
+
+    private func mirrored(_ n: MirroredNotification) {
+        let rule = settings.rule(for: n.bundleID)
+        if rule?.muteNotifications == true { return }
+        guard let a = try? applyLocal(n.activity(rule: rule, peek: settings.notificationPeek)) else { return }
+        if settings.aiAssist, let body = n.body, body.count > 90 {
+            AIAssist.shared.summarize(body) { [weak self] summary in
+                guard let summary else { return }
+                _ = try? self?.center.apply(ActivitySpec(id: a.id, subtitle: summary, sneak: false), now: Date())
+                self?.tick &+= 1
+            }
+        }
+    }
+
+    private func downloadEvent(_ e: DownloadTracker.Event) {
+        switch e {
+        case .progress(let spec):
+            _ = try? applyLocal(spec)
+        case .finished(var spec, let name):
+            let file = downloads.directory.appendingPathComponent(name)
+            spec.url = file
+            spec.actions = [ActivityAction(title: "Open", url: file), ActivityAction(title: "Show", url: downloads.directory)]
+            _ = try? applyLocal(spec)
+        case .vanished(let id):
+            remove(activityID: id)
+        }
+    }
+
+    /// Once, a moment after the first launch, when the island is on screen: how to open it.
+    private func showFirstRunHint() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let notched = NSScreen.screens.contains { $0.safeAreaInsets.top > 0 }
+                _ = try? self.commit(FirstRunHint.activity(hotkey: self.settings.hotkey, hoverToOpen: self.settings.hoverToOpen,
+                                                           notched: notched))
+            }
+        }
+    }
+
+    private func welcomeBack() {
+        defer {
+            lockedAt = nil
+            lockedDigest = [:]
+        }
+        // Nothing arrived: nothing to say, so the island stays as it was.
+        guard let since = lockedAt,
+              let spec = WelcomeBack.activity(counts: lockedDigest, lockedFor: Date().timeIntervalSince(since),
+                                              name: { WelcomeBack.name($0, appName: Self.appName(bundleID:)) })
+        else { return }
+        _ = try? applyLocal(spec)
+    }
+
+    /// Read Accessibility again: an Allow, or a change in System Settings.
+    func recheckAccessibility() {
+        let trusted = MediaKeyInterceptor.hasAccessibility
+        if accessibilityTrusted != trusted { accessibilityTrusted = trusted }
+    }
+
+    /// The "x" on Home's Claude usage hint: hide it for good.
+    func dismissClaudeUsageHint() {
+        settings.claudeUsageHint = false
+        saveAndApplySettings()
+    }
+
+    /// Silence a source: remove its activities now and ignore it from now on. Saved and applied
+    /// as a change in Settings is.
+    func mute(source: String) {
+        guard MutedSources.canMute(source) else { return }
+        if !settings.mutedSources.contains(source) { settings.mutedSources.append(source) }
+        // Gone at once, even what shows while muted (a battery about to run out).
+        _ = center.removeAll(source: source)
+        applyMutes()
+        reschedule()
+        saveAndApplySettings()
+    }
+
+    /// Settings → Apps → Muted, or a feature's page: hear from a source again. What it has
+    /// now shows at once.
+    func unmute(source: String) {
+        settings.mutedSources.removeAll { $0 == source }
+        applyMutes()
+        saveAndApplySettings()
+    }
+
+    /// Make what is on screen follow the muted sources, however they changed: Mute in the
+    /// island, Unmute in Settings, Reset or an edit of config.json. A source muted since leaves
+    /// at once; one unmuted shows what it has now, rather than at its next change.
+    func applyMutes() {
+        let muted = Set(settings.mutedSources)
+        guard muted != appliedMutes else { return }
+        let unmuted = appliedMutes.subtracting(muted)
+        let added = !muted.subtracting(appliedMutes).isEmpty
+        appliedMutes = muted
+        if added {
+            // Taken off the island without counting as dismissed, so each comes back on Unmute
+            // (a dismissed Live Activity would stay away while it is in the menu bar).
+            for source in Set(center.activities.values.map(\.source)) where settings.isMuted(source: source) {
+                _ = center.removeAll(source: source)
+            }
+        }
+        for source in unmuted { bringBack(source) }
+        // Calls follow app mutes either way.
+        updateCalls()
+        reschedule()
+        // A muted Live Activity leaves the island, so its pill in the menu bar is uncovered.
+        onMenuBarCoversChanged?()
+    }
+
+    /// An unmuted source shows what it has now. Sources whose activities only arrive (a
+    /// notification, a finished download) show their next one.
+    private func bringBack(_ source: String) {
+        if MenuBarLiveActivities.isMirroredSource(source) {
+            menuBarActivities.refresh()
+        } else if source == TimerEngine.source {
+            timers.resync()
+        } else if source == Stopwatch.source {
+            tools.stopwatch.resync()
+        } else if source == MeetingReminders.source {
+            syncMeetings(now: Date())
+        } else if source == KeepAwake.source, let session = controls.awake {
+            _ = try? applyLocal(KeepAwake.activity(for: session, sneak: false) { $0.formatted(date: .omitted, time: .shortened) })
+        }
+    }
+
+    /// How a muted source reads in menus and Settings: an app's name rather than its bundle id.
+    static func mutedName(_ source: String) -> String {
+        MutedSources.displayName(source, appName: appName(bundleID:))
+    }
+
+    /// An installed app's name ("Mail") for its bundle id, if it is installed.
+    static func appName(bundleID: String) -> String? {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+            .map { FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "") }
+    }
+
+    private func startLAN() {
+        lan.start(port: settings.lanPort, backend: self, version: Self.version)
+    }
+
+    private func stopLAN() {
+        lan.stop()
+    }
+
+    func remove(activityID: String) {
+        center.remove(id: activityID)
+        // A dismissed call stays away until its app lets go of the microphone, and a dismissed
+        // Live Activity until it leaves the menu bar.
+        calls.dismiss(activityID: activityID)
+        if let key = mirroredActivityKeys[activityID] {
+            mirrorTracker.dismiss(key: key)
+            // Its pill stays in the menu bar, and now nothing stands in for it, so uncover it.
+            onMenuBarCoversChanged?()
+        }
+        meetingActivityRemoved(activityID)
+        reschedule()
+        timers.activityRemoved(activityID)
+        tools.stopwatch.activityRemoved(activityID)
+    }
+
+    func perform(_ action: ActivityAction, activityID: String) {
+        // A meeting reminder's Join counts as joining, not as dismissing it.
+        if let r = meetingReminder(for: activityID), let link = r.item.meetingURL, action.url == link {
+            join(r.item)
+            return
+        }
+        if let url = action.url {
+            // Casement's own links (keep awake's Turn off, for one) are handled here, not via Launch Services.
+            if url.scheme == "casement" { AppActions.handle(url: url, model: self) } else { NSWorkspace.shared.open(url) }
+        }
+        if action.dismiss ?? true { remove(activityID: activityID) }
+    }
+
+    /// Whether a swipe up or an × may dismiss an activity in the closed island: meeting reminders.
+    func isDismissableReminder(_ a: Activity) -> Bool { meetingReminder(for: a.id) != nil }
+
+    // MARK: Media control
+
+    /// Send a command to the player. Play and pause show at once (`PlaybackIntent`), then
+    /// follow what the player reports.
+    /// - Parameter target: the player to send it to: if nil, the one on show (`nowPlaying`) or,
+    ///   with nothing on show, the one macOS gives the controls to while Casement offers it
+    ///   (`commandTarget`); or the song a swipe on the closed island moved (`closedNowPlaying`).
+    @discardableResult
+    func send(_ command: PlaybackCommand, position: Double? = nil, to target: NowPlaying? = nil) -> Bool {
+        let now = Date()
+        let np = target ?? commandTarget(for: command, now: now)
+        // Only a press on the player on show shows at once.
+        let onShow = np.map(MediaArbiter.playerID) == nowPlaying.map(MediaArbiter.playerID)
+        let intent = onShow ? nowPlaying.flatMap { PlaybackIntent.intended(command, on: $0, at: now) } : nil
+        let sent = route(command, position: position, to: np)
+        // Only for a player that reports back (not the demo's made-up song).
+        if sent, let intent, !media.isEmpty {
+            playbackIntent = intent
+            setNowPlaying(media.current(now: now), now: now)
+            reschedule()
+        }
+        // A press in the open island that went nowhere says why, instead of doing nothing: macOS
+        // hasn't allowed Casement to control Music or Spotify, or another app has the controls. Only
+        // while the island is open, where it shows: said of a link, a script or a swipe beside the
+        // notch, it would wait there and take the transport's place at the next open.
+        guard expandedScreen != nil else { return sent }
+        let hint = np.flatMap { np -> ControlHint? in
+            let r = mediaRoute(for: np)
+            return PlayerIntegration.hint(
+                for: np, route: r, sent: sent, canScript: r == .player(.spotify) ? spotify.canScript : music.canScript,
+                bridgeRunning: systemMedia.isRunning, appName: np.bundleID.flatMap(Self.appName(bundleID:)),
+                holder: controlsHolderName)
+        }
+        if controlHint != hint { controlHint = hint }
+        return sent
+    }
+
+    /// What the open island says after a press there on the player on show went nowhere, until a
+    /// control works, another player is picked, that player gets the controls, another app takes
+    /// them or the island closes.
+    private(set) var controlHint: ControlHint?
+
+    /// `--snapshot` draws the hint.
+    func setControlHintForSnapshot(_ hint: ControlHint?) { controlHint = hint }
+
+    /// The name of the app macOS gives the controls to, if any.
+    private var controlsHolderName: String? {
+        guard systemMedia.isRunning, let id = media.bridgePlayer else { return nil }
+        return media.bridge[id]?.appName ?? media.available(now: Date()).first { MediaArbiter.playerID($0) == id }?.appName
+            ?? Self.appName(bundleID: id)
+    }
+
+    /// "… has the controls" is said only of the player it was said of, while it still has no way
+    /// to be controlled from here and the app it names still has the controls.
+    private func dropStaleControlHint() {
+        guard case .otherApp(let h)? = controlHint,
+              !h.holds(onShow: nowPlaying, route: nowPlaying.map(mediaRoute(for:)), holder: controlsHolderName) else { return }
+        controlHint = nil
+    }
+
+    /// The hint's Allow button: Settings → Permissions, at that player's row.
+    func openControlPermission() {
+        let kind: PermissionKind = controlHint == .allowControl(player: "Spotify") ? .automationSpotify : .automationMusic
+        controlHint = nil
+        AppActions.openSettings(.permissions, at: "permissions.\(kind.rawValue)")
+    }
+
+    /// Focus sounds' "Your music": play the music a command reaches now (`commandTarget`).
+    /// Returns the player the press reached (`MediaArbiter.playerID`), or nil when it went nowhere.
+    func playMusic() -> String? {
+        guard let target = commandTarget(for: .play, now: Date()), send(.play, to: target) else { return nil }
+        return MediaArbiter.playerID(target)
+    }
+
+    /// Focus sounds: pause `player` (`MediaArbiter.playerID`), the one a focus round started, if
+    /// it is still offered and playing. Nothing otherwise.
+    func pauseMusic(player: String) {
+        guard let np = players.first(where: { MediaArbiter.playerID($0) == player && $0.isPlaying }) else { return }
+        send(.pause, to: np)
+    }
+
+    /// The player a command with no target goes to: the one on show or, with nothing on show,
+    /// the one macOS gives the controls to while Casement offers it (Spotify paused an hour ago).
+    /// Never one Casement keeps out of the island, and with no player at all nothing, rather than
+    /// the system's Now Playing, which could start Music. A seek or a 15 s jump goes only to the
+    /// player on show: it moves a place in the track, and a player out of sight has none on show.
+    private func commandTarget(for command: PlaybackCommand, now: Date) -> NowPlaying? {
+        if let nowPlaying { return nowPlaying }
+        guard systemMedia.isRunning, !command.movesPosition else { return nil }
+        return media.controlsHolder(now: now)
+    }
+
+    /// Commands go to the player on show (the one picked in the island, or the newest): the
+    /// bridge only when macOS gives that app the controls, Music and Spotify otherwise through
+    /// their own integration, and any other player nothing at all, since the bridge would reach
+    /// the app with the controls instead. So a press on Spotify never pauses a video in Chrome.
+    private func route(_ command: PlaybackCommand, position: Double?, to target: NowPlaying?) -> Bool {
+        // Nothing on show and no player to take it (`commandTarget`): nowhere to send it.
+        guard let np = target else { return false }
+        let r = mediaRoute(for: np)
+        if let routed = sendControl(command, position: position, bridge: r == .bridge, on: np) { return routed }
+        switch r {
+        case .bridge:
+            // A command the player says it doesn't take (next in a video outside a playlist) would
+            // do nothing: it isn't sent, so the press and the API say it went nowhere.
+            guard np.takes(command) else { return false }
+            return systemMedia.send(command, position: position)
+        case .player(.spotify): return spotify.send(command, position: position)
+        case .player(.appleMusic): return music.send(command, position: position)
+        case .player, .none: return false
+        }
+    }
+
+    func mediaRoute(for np: NowPlaying) -> MediaRoute {
+        MediaRoute.route(for: np, bridgeRunning: systemMedia.isRunning, bridgePlayer: media.bridgePlayer)
+    }
+
+    // MARK: Players
+
+    /// The players to offer, one per app, newest first: every player macOS lists, and Music's,
+    /// Spotify's and the API's while live. More than one shows as chips in the open island.
+    var players: [NowPlaying] {
+        _ = tick
+        return settings.mediaEnabled ? media.available(now: Date()) : []
+    }
+
+    /// The players offered that play now (`MediaArbiter.playerID`).
+    var playingPlayers: Set<String> { Set(players.filter(\.isPlaying).map(MediaArbiter.playerID)) }
+
+    /// A player chip: show and control that player. The closed island keeps showing what plays,
+    /// and follows the pick once it plays.
+    func pickPlayer(_ np: NowPlaying) {
+        Haptics.play(.tap)
+        let now = Date()
+        media.pick(player: MediaArbiter.playerID(np), at: now)
+        controlHint = nil
+        playbackIntent = nil
+        setNowPlaying(media.current(now: now), now: now)
+        reschedule()
+    }
+
+    /// `--snapshot`: several players at once (a Chrome video and a Spotify song), or, with
+    /// none, back to the demo's song alone.
+    func loadPlayersForSnapshot(_ list: [NowPlaying], bridge: NowPlaying?, now: Date, song: NowPlaying? = nil) {
+        loadPlayersForSnapshot(list, bridge: BridgeReport(bridge), now: now, song: song)
+    }
+
+    /// `--snapshot`: every player macOS lists (`bridge`), with Music's and Spotify's own reports.
+    func loadPlayersForSnapshot(_ list: [NowPlaying], bridge: BridgeReport, now: Date, song: NowPlaying? = nil) {
+        media = MediaArbiter(disabled: media.disabled)
+        media.hidden = Set(settings.hiddenMediaApps)
+        for np in list { media.update(np) }
+        media.updateFromBridge(bridge)
+        nowPlaying = song ?? media.current(now: now)
+        playingElsewhere = media.closedIsland(now: now).flatMap { closed in
+            nowPlaying.map(MediaArbiter.playerID) == MediaArbiter.playerID(closed) || nowPlaying?.isPlaying == true ? nil : closed
+        }
+        controlHint = nil
+    }
+
+    /// Brings the player on show forward, or the app with `bundleID` (the hint's Open button).
+    func openPlayer(bundleID: String? = nil) {
+        guard let bundle = bundleID ?? nowPlaying?.bundleID,
+              let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) else { return }
+        controlHint = nil
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+    }
+
+    // MARK: Shelf / clipboard
+
+    func addToShelf(_ urls: [URL]) {
+        // With Shelf off nothing is kept: the files would wait unseen, never leaving, for the
+        // shelf to come back.
+        guard settings.shelfEnabled else { return }
+        Haptics.play(.drop)
+        shelfService.add(urls: urls)
+        _ = try? applyLocal(ActivitySpec(
+            id: "shelf-add", source: "shelf", title: urls.count == 1 ? urls[0].lastPathComponent : "\(urls.count) files",
+            subtitle: "Added to shelf", icon: .symbol("tray.and.arrow.down.fill"), state: .success, tint: "blue",
+            priority: .low, ttl: 2, sneak: false
+        ))
+    }
+
+    func removeFromShelf(_ id: String) { shelfService.remove(id: id) }
+    func clearShelf() { shelfService.removeAll() }
+
+    /// Puts a clip back on the pasteboard as it was copied (text, files or the picture), and
+    /// moves it to the top.
+    func copyClip(_ entry: ClipboardEntry) {
+        clipboardMonitor.copy(entry)
+        clipboard.touch(id: entry.id, now: Date())
+    }
+
+    func togglePinClip(_ id: String) { clipboard.togglePin(id: id) }
+    func removeClip(_ id: String) { clipboard.remove(id: id) }
+    /// "Clear unpinned" on the Clipboard page.
+    func clearClipboard() { clipboard.clear() }
+
+    /// `--snapshot`: clipboard history as given.
+    func setClipboardForSnapshot(_ history: ClipboardHistory) { clipboard = history }
+
+    func runPlugin(_ path: String) { pluginRunner?.runNow(path: path) }
+
+    // MARK: Demo content (used by --demo and snapshot rendering)
+
+    func loadDemo(includeActivities: Bool = true) {
+        let now = Date()
+        nowPlaying = NowPlaying(
+            source: .spotify, bundleID: "com.spotify.client", appName: "Spotify", title: "Midnight City",
+            artist: "M83", album: "Hurry Up, We're Dreaming", isPlaying: true, duration: 243, elapsed: 71, timestamp: now,
+            shuffle: true, repeatMode: .off
+        )
+        battery = BatteryState(level: 76, isCharging: true, isPluggedIn: true, minutesRemaining: 48, adapterWatts: 96)
+        reminders = [
+            ReminderItem(id: "r1", title: "Send the invoice", due: now.addingTimeInterval(-1800), listColor: "#FF9F0A", listTitle: "Work", priority: 1),
+            ReminderItem(id: "r2", title: "Book dentist", due: now.addingTimeInterval(5400), listColor: "#0A84FF", listTitle: "Personal"),
+            ReminderItem(id: "r3", title: "Water the plants", due: Calendar.current.startOfDay(for: now), isAllDay: true, listColor: "#30D158", listTitle: "Home"),
+        ]
+        agenda = [AgendaItem(id: "demo", title: "Design review", start: now.addingTimeInterval(22 * 60), end: now.addingTimeInterval(52 * 60),
+                             calendarColor: "#FF9F0A", meetingURL: URL(string: "https://meet.google.com/abc-defg-hij")),
+                  AgendaItem(id: "demo2", title: "1:1 with Sam", start: now.addingTimeInterval(3 * 3600), end: now.addingTimeInterval(3.5 * 3600),
+                             calendarColor: "#BF5AF2"),
+                  AgendaItem(id: "demo3", title: "Deadline: proposal", start: Calendar.current.startOfDay(for: now),
+                             end: Calendar.current.startOfDay(for: now).addingTimeInterval(86400), isAllDay: true, calendarColor: "#FF453A")]
+        if includeActivities {
+        _ = try? center.apply(ActivitySpec(id: "build", source: "ci", title: "Release build", subtitle: "Compiling 142/310",
+                                           icon: .symbol("hammer.fill"), progress: 0.46, state: .running, tint: "orange", sneak: false), now: now)
+        _ = try? center.apply(ActivitySpec(id: "claude-demo", source: "claude-code", title: "Claude · casement", subtitle: "Running swift test",
+                                           icon: .symbol("sparkle"), progress: -1, state: .running, tint: "#D97757", sneak: false), now: now)
+        }
+        // Demo files stay in memory: whatever folder the shelf is kept in, they never reach it.
+        shelfService.savesToDisk = false
+        shelfService.add(urls: [URL(fileURLWithPath: "/System/Library/CoreServices/Finder.app"),
+                                URL(fileURLWithPath: "/etc/hosts")])
+        // Snapshots never call start(), which keeps `shelf` in step with the service.
+        shelf = shelfService.shelf
+        clipboard.add("https://example.com/casement", types: [], sourceBundleID: "com.apple.Safari", now: now)
+        clipboard.add("swift test --parallel", types: [], sourceBundleID: "com.apple.Terminal", now: now)
+        stats = SystemStats(cpu: 0.23, memoryUsed: 11_800_000_000, memoryTotal: 18_000_000_000)
+        tick &+= 1
+    }
+}
+
+extension Notification.Name {
+    static let casementSettingsChanged = Notification.Name("CasementSettingsChanged")
+}
+
+// MARK: - Local API backend
+
+extension AppModel: CasementBackend {
+    nonisolated func listActivities() async -> [Activity] {
+        await MainActor.run { self.activities }
+    }
+
+    /// The router leaves mirrored Live Activities out of what scripts read unless the user allows it.
+    nonisolated func sharesMirroredActivities() async -> Bool {
+        await MainActor.run { self.settings.shareMirroredActivities }
+    }
+
+    nonisolated func applyActivity(_ spec: ActivitySpec) async throws -> Activity {
+        try await MainActor.run {
+            if let source = spec.source, self.settings.isMuted(source: source) {
+                // Validate and echo back, but show nothing: muted scripts shouldn't error out.
+                var scratch = ActivityCenter()
+                return try scratch.apply(spec, now: Date())
+            }
+            return try self.commit(spec)
+        }
+    }
+
+    nonisolated func removeActivity(id: String) async -> Bool {
+        await MainActor.run {
+            let removed = self.center.remove(id: id) != nil
+            self.meetingActivityRemoved(id)
+            self.reschedule()
+            self.timers.activityRemoved(id)
+            self.tools.stopwatch.activityRemoved(id)
+            return removed
+        }
+    }
+
+    nonisolated func removeActivities(source: String) async -> Int {
+        await MainActor.run {
+            let n = self.center.removeAll(source: source)
+            for id in self.shownMeetings.keys where self.center.activities[id] == nil { self.meetingActivityRemoved(id) }
+            self.reschedule()
+            self.timers.activitiesRemoved(source: source)
+            if source == Stopwatch.source { self.tools.stopwatch.activityRemoved(Stopwatch.activityID) }
+            return n
+        }
+    }
+
+    nonisolated func showHUD(kind: HUDKind, value: Double, muted: Bool, label: String?) async {
+        await MainActor.run {
+            // From the keys, the brightness monitor, the API or a link: each kind has its switch.
+            guard self.settings.showsHUD(kind) else { return }
+            self.center.showHUD(kind, value: value, muted: muted, label: label, now: Date())
+            self.reschedule()
+        }
+    }
+
+    nonisolated func pushMedia(_ media: NowPlaying?) async {
+        await MainActor.run { self.mediaUpdate(media, source: .external) }
+    }
+
+    nonisolated func mediaCommand(_ command: PlaybackCommand, position: Double?) async -> Bool {
+        await MainActor.run { self.send(command, position: position) }
+    }
+
+    nonisolated func setExpanded(_ expanded: Bool) async {
+        await MainActor.run {
+            self.pinned = expanded
+            self.setExpanded(expanded ? self.targetDisplay() : nil)
+        }
+    }
+
+    nonisolated func menuBarItems() async -> [MenuBarItemInfo] {
+        MenuBarLiveActivityMonitor.dump()
+    }
+
+    nonisolated func stateSnapshot() async -> StateSnapshot {
+        await MainActor.run {
+            // Checked from the command line after a change in System Settings: read it afresh.
+            self.recheckCalendarAccess()
+            let display = self.expandedScreen ?? NSScreen.main?.displayID ?? 0
+            return StateSnapshot(
+                version: Self.version,
+                presentation: String(describing: self.presentation(for: display)).components(separatedBy: "(").first ?? "",
+                activities: self.activities,
+                nowPlaying: self.nowPlaying.map { NowPlayingSummary($0, now: Date()) },
+                battery: self.battery,
+                calendar: self.calendarStatus
+            )
+        }
+    }
+}
+
+extension NSScreen {
+    var displayID: CGDirectDisplayID? {
+        (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber).map { CGDirectDisplayID($0.uint32Value) }
+    }
+}
+
+
+/// Calendar and reminders access, as macOS reports it now.
+struct CalendarAccessState: Equatable {
+    var events: CalendarAccess
+    var reminders: CalendarAccess
+
+    static var current: CalendarAccessState {
+        CalendarAccessState(events: CalendarService.eventAccess, reminders: CalendarService.reminderAccess)
+    }
+}
+
+/// Which settings-controlled services are running, so switching a module on or off in Settings
+/// (or in config.json) takes effect at once instead of at the next launch.
+struct RunningModules {
+    var battery = false
+    var audio = false
+    var camera = false
+    var media = false
+    var calendar = false
+    var clipboard = false
+    var pluginDirectory: URL?
+    var apiPort: Int?
+    var lanPort: Int?
+}
+
+@MainActor
+extension AppModel {
+    /// Start or stop every module to match the current settings. Safe to call any number of times.
+    func applyModules() {
+        let s = settings
+
+        if s.batteryEnabled != modules.battery {
+            if s.batteryEnabled {
+                battery_.onChange = { [weak self] b in self?.ingestBattery(b) }
+                battery_.start()
+            } else {
+                battery_.stop()
+                battery = nil
+            }
+            modules.battery = s.batteryEnabled
+        }
+
+        let wantAudio = s.hudEnabled || s.outputChangeCard || s.privacyIndicatorsEnabled
+        if wantAudio != modules.audio {
+            if wantAudio {
+                audio.onOutputChange = { [weak self] out in self?.volumeChanged(out) }
+                audio.onMicrophoneInUse = { [weak self] inUse in
+                    guard let self else { return }
+                    self.micInUse = inUse && self.settings.privacyIndicatorsEnabled
+                }
+                audio.start()
+                outputDeviceName = AudioMonitor.readOutput()?.deviceName
+            } else {
+                audio.stop()
+            }
+            modules.audio = wantAudio
+        }
+        if !s.privacyIndicatorsEnabled { micInUse = false }
+
+        if s.privacyIndicatorsEnabled != modules.camera {
+            if s.privacyIndicatorsEnabled {
+                camera.onChange = { [weak self] on in
+                    self?.cameraInUse = on
+                    self?.updateCalls()
+                }
+                camera.start()
+            } else {
+                camera.stop()
+                cameraInUse = false
+            }
+            modules.camera = s.privacyIndicatorsEnabled
+        }
+
+        if s.mediaEnabled != modules.media {
+            if s.mediaEnabled { startMedia() } else { stopMedia() }
+            modules.media = s.mediaEnabled
+        }
+        // Sources switched off (in Settings or config.json), and the clipboard size, apply without a restart.
+        if Set(s.disabledMediaSources) != media.disabled {
+            media.disabled = Set(s.disabledMediaSources)
+            // Music or Spotify switched off stops altogether; switched on, it starts.
+            if s.mediaEnabled { syncPlayers() }
+            let now = Date()
+            setNowPlaying(media.current(now: now), now: now)
+            reschedule()
+        }
+        if Set(s.hiddenMediaApps) != media.hidden {
+            media.hidden = Set(s.hiddenMediaApps)
+            let now = Date()
+            setNowPlaying(media.current(now: now), now: now)
+        }
+        if clipboard.limit != s.clipboardLimit { clipboard.limit = s.clipboardLimit }
+        if clipboard.ignoredApps != Set(s.clipboardIgnoredApps) { clipboard.ignoredApps = Set(s.clipboardIgnoredApps) }
+        if clipboard.skipsSecrets != s.clipboardSkipSecrets { clipboard.skipsSecrets = s.clipboardSkipSecrets }
+
+        readCalendarAccess()
+        let wantCalendar = s.calendarEnabled && calendarAccess.events.canRead || s.remindersEnabled && calendarAccess.reminders.canRead
+        if wantCalendar != modules.calendar {
+            if wantCalendar { startCalendar() } else { stopCalendar() }
+            modules.calendar = wantCalendar
+        } else if wantCalendar, calendar.includeReminders != s.remindersEnabled {
+            calendar.includeReminders = s.remindersEnabled
+            calendar.refresh()
+        }
+        // Reminder settings or hidden calendars may have changed what shows, and when.
+        syncMeetings(now: Date())
+        reschedule()
+
+        if s.clipboardEnabled != modules.clipboard {
+            if s.clipboardEnabled {
+                startClipboard()
+            } else {
+                clipboardMonitor.stop()
+                // Off means nothing is kept, pinned entries included.
+                clipboard.removeAll()
+            }
+            modules.clipboard = s.clipboardEnabled
+        }
+
+        let pluginDir = s.pluginsEnabled
+            ? s.pluginDirectory.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) } ?? CasementPaths.pluginsDirectory
+            : nil
+        if pluginDir != modules.pluginDirectory {
+            stopPlugins()
+            if pluginDir != nil { startPlugins() }
+            modules.pluginDirectory = pluginDir
+        }
+
+        let apiPort = s.apiEnabled ? s.apiPort : nil
+        if apiPort != modules.apiPort {
+            stopAPI()
+            if apiPort != nil { startAPI() }
+            modules.apiPort = apiPort
+        }
+
+        let lanPort = s.apiEnabled && s.lanBridgeEnabled ? s.lanPort : nil
+        if lanPort != modules.lanPort {
+            stopLAN()
+            if lanPort != nil { startLAN() }
+            modules.lanPort = lanPort
+        }
+
+        // A tab whose module was switched off falls back to Home.
+        if tab == .stats && !s.systemStatsEnabled || tab == .shelf && !s.shelfEnabled
+            || tab == .widgets && !s.pluginsEnabled || tab == .clipboard && !s.clipboardEnabled {
+            select(tab: .home)
+        } else if let page = IslandPage(rawValue: tab.rawValue), !page.isAvailable(s), page != .today {
+            select(tab: .home)
+        }
+    }
+
+    func stopMedia() {
+        systemMedia.stop()
+        for p in [music, spotify] as [ScriptablePlayerProvider] { p.stop() }
+        for source in MediaSourceKind.allCases { media.clear(source) }
+        nowPlaying = nil
+        playingElsewhere = nil
+        // Switched back on, the song already playing is the first one again, not a new one.
+        songPeek.reset()
+        pausedMusic = PausedMusic()
+        playbackIntent = nil
+    }
+
+    func stopCalendar() {
+        calendar.stop()
+        if let o = dayObserver { NotificationCenter.default.removeObserver(o) }
+        dayObserver = nil
+        agenda = []
+        reminders = []
+        syncMeetings(now: Date())
+    }
+
+    func stopPlugins() {
+        guard let runner = pluginRunner else { return }
+        runner.stop()
+        pluginRunner = nil
+        plugins = [:]
+        for a in center.activities.values where a.source.hasPrefix("plugin:") { center.remove(id: a.id) }
+        reschedule()
+    }
+
+    func stopAPI() {
+        guard let server else { return }
+        server.stop()
+        self.server = nil
+        APIDiscoveryStore.remove()
+        apiStatus = "Off"
+    }
+}

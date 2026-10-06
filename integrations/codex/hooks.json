@@ -1,8 +1,8 @@
 {
   "hooks": {
-    "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "isletctl hook codex --wait 300", "timeout": 330 }] }],
-    "PostToolUse":       [{ "hooks": [{ "type": "command", "command": "isletctl hook codex" }] }],
-    "UserPromptSubmit":  [{ "hooks": [{ "type": "command", "command": "isletctl hook codex" }] }],
-    "Stop":              [{ "hooks": [{ "type": "command", "command": "isletctl hook codex" }] }]
+    "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "casementctl hook codex --wait 300", "timeout": 330 }] }],
+    "PostToolUse":       [{ "hooks": [{ "type": "command", "command": "casementctl hook codex" }] }],
+    "UserPromptSubmit":  [{ "hooks": [{ "type": "command", "command": "casementctl hook codex" }] }],
+    "Stop":              [{ "hooks": [{ "type": "command", "command": "casementctl hook codex" }] }]
   }
 }

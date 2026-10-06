@@ -1,12 +1,12 @@
-# Islet API
+# Casement API
 
 Anything that can run a command, open a URL or send an HTTP request can put a **live activity** in the notch. There are four ways in, all backed by the same model:
 
 | Surface | Best for |
 |---|---|
-| `isletctl` CLI | shell scripts, git hooks, Makefiles, coding-agent hooks |
+| `casementctl` CLI | shell scripts, git hooks, Makefiles, coding-agent hooks |
 | HTTP API on `127.0.0.1` | programs, browser extensions, Hammerspoon, Home Assistant |
-| `islet://` URL scheme | Shortcuts, Raycast, Alfred, BetterTouchTool, Stream Deck, Keyboard Maestro |
+| `casement://` URL scheme | Shortcuts, Raycast, Alfred, BetterTouchTool, Stream Deck, Keyboard Maestro |
 | Script widgets | anything you'd write as an xbar/SwiftBar plugin |
 
 ---
@@ -36,7 +36,7 @@ An activity is identified by `id`. Sending the same `id` again **updates** it (f
 | `id` | string, 1–128 of `[A-Za-z0-9._:-]` | Stable identity. Omit to get a generated one. |
 | `title` | string | **Required when creating.** |
 | `subtitle` | string | Second line. Send `""` to clear. |
-| `icon` | string | `sf:<SF Symbol>`, `emoji:🚀`, `app:<bundle id>`, `url:https://…png`, `file:/path.png`, or a bare symbol name / single emoji. Omit it and Islet picks one from the text (smart icons). |
+| `icon` | string | `sf:<SF Symbol>`, `emoji:🚀`, `app:<bundle id>`, `url:https://…png`, `file:/path.png`, or a bare symbol name / single emoji. Omit it and Casement picks one from the text (smart icons). |
 | `trailing` | string | Short text for the right-hand wing (`"42%"`, `"3/5"`, `"Done"`). Default: derived from the countdown, steps or progress. |
 | `progress` | number | `0…1`, or `1…100` (read as a percentage), or negative for an indeterminate spinner. |
 | `steps`, `step` | int | Segmented progress ("step 2 of 5"): a stepper bar and `2/5` in the wing. |
@@ -59,7 +59,7 @@ An activity is identified by `id`. Sending the same `id` again **updates** it (f
 
 A template gives an activity the look of an iPhone Live Activity of its kind: a ride with a moving car, a score with two team badges, a flight board. It changes what the wings, the sneak peek, the bubble and the expanded row show. Every surface follows one rule: what it is on the left, the one value that changes on the right.
 
-Pick one with `template`. Without it, Islet looks up `source` in its catalogue of 137 apps with Live Activities (by bundle id, app name or alias, for example `com.ubercab.UberClient`, `Uber` or `Flighty`) and uses that app's template when the activity has the data for it. Failing that, the fields decide: `teams` → score, `flight` → flight, `route` → route, `stageLabels` → stages, `trackerIcon` or an eta `phase` → eta, `metrics` → workout, only `endsAt` or `startedAt` → timer, anything else → progress (the generic look).
+Pick one with `template`. Without it, Casement looks up `source` in its catalogue of 137 apps with Live Activities (by bundle id, app name or alias, for example `com.ubercab.UberClient`, `Uber` or `Flighty`) and uses that app's template when the activity has the data for it. Failing that, the fields decide: `teams` → score, `flight` → flight, `route` → route, `stageLabels` → stages, `trackerIcon` or an eta `phase` → eta, `metrics` → workout, only `endsAt` or `startedAt` → timer, anything else → progress (the generic look).
 
 | Field | Type and limits | Meaning |
 |---|---|---|
@@ -170,20 +170,20 @@ Numbers roll when they change. Timer rings and waveforms run on Core Animation a
 From the command line, `--template` sets the layout and `--json` sends the richer fields from a file or standard input (flags given with it win):
 
 ```bash
-isletctl set ride --title "Grey Prius" --template eta --ends-in 240 --icon sf:car.fill
+casementctl set ride --title "Grey Prius" --template eta --ends-in 240 --icon sf:car.fill
 echo '{"title":"Lakers at Celtics","teams":[{"abbr":"LAL","score":3},{"abbr":"BOS","score":1}],"period":"Q2"}' \
-  | isletctl set game --json -
+  | casementctl set game --json -
 ```
 
-**Live Activities mirrored from the menu bar** (iPhone activities that macOS shows beside the clock) take the icon, tint and template of their app from the same catalogue. The catalogue is generated from [`research/07-live-activity-apps.json`](research/07-live-activity-apps.json) (119 apps with evidence of a Live Activity) plus Islet's own additions; after editing either, run `scripts/gen-live-activity-apps.py` to regenerate `Sources/IsletCore/LiveActivityApps.swift`.
+**Live Activities mirrored from the menu bar** (iPhone activities that macOS shows beside the clock) take the icon, tint and template of their app from the same catalogue. The catalogue is generated from [`research/07-live-activity-apps.json`](research/07-live-activity-apps.json) (119 apps with evidence of a Live Activity) plus Casement's own additions; after editing either, run `scripts/gen-live-activity-apps.py` to regenerate `Sources/CasementCore/LiveActivityApps.swift`.
 
 ---
 
 ## HTTP API
 
-- **Where:** `http://127.0.0.1:47831` (the port is configurable; if it's taken Islet picks another).
-- **Discovery:** `~/Library/Application Support/Islet/api.json` (mode `0600`) contains `{"port", "token", "pid"}`. `isletctl` reads it for you.
-- **Auth:** every endpoint except `GET /v1/health` needs `Authorization: Bearer <token>` (or `X-Islet-Token: <token>`). `isletctl token` prints it.
+- **Where:** `http://127.0.0.1:47831` (the port is configurable; if it's taken Casement picks another).
+- **Discovery:** `~/Library/Application Support/Casement/api.json` (mode `0600`) contains `{"port", "token", "pid"}`. `casementctl` reads it for you.
+- **Auth:** every endpoint except `GET /v1/health` needs `Authorization: Bearer <token>` (or `X-Casement-Token: <token>`). `casementctl token` prints it.
 - **Safety:** the server binds to loopback only, rejects requests whose `Host` isn't localhost (DNS rebinding) and requests with a web-page `Origin` (CSRF). Browser extensions (`chrome-extension://`, `moz-extension://`, `safari-web-extension://`) are allowed but still need the token. Bodies are JSON, ≤ 1 MB, with `Content-Length`.
 
 | Method & path | Body | Result |
@@ -216,13 +216,13 @@ echo '{"title":"Lakers at Celtics","teams":[{"abbr":"LAL","score":3},{"abbr":"BO
 Errors are JSON: `{"error": "'progress' must be between 0 and 1 …"}` with `400`, `401`, `403`, `404`, `405`, `411`, `413`, `422`, `429` or `503`.
 
 ```bash
-TOKEN=$(isletctl token)
+TOKEN=$(casementctl token)
 curl -s -X POST http://127.0.0.1:47831/v1/activities \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"id":"backup","title":"Backing up","progress":0.3}'
 ```
 
-`GET /v1/state` (and `isletctl state`) includes `"calendar": {"events": "fullAccess", "reminders": "notDetermined", "upcoming": 3}`: what macOS allows for calendars and for reminders (`notDetermined`, `fullAccess`, `writeOnly` for "Add events only", `denied` or `restricted`), read afresh for each request, and how many timed events are left today. It never includes a title. Meeting reminders (ids starting with `meeting-`, source `calendar`) carry the meeting's title, so `GET /v1/activities` and `/v1/state` always leave them out. To a script they aren't there: changing or removing one by its id gets a `404`, and `DELETE /v1/activities?source=calendar` removes only your own `calendar` activities and counts only those.
+`GET /v1/state` (and `casementctl state`) includes `"calendar": {"events": "fullAccess", "reminders": "notDetermined", "upcoming": 3}`: what macOS allows for calendars and for reminders (`notDetermined`, `fullAccess`, `writeOnly` for "Add events only", `denied` or `restricted`), read afresh for each request, and how many timed events are left today. It never includes a title. Meeting reminders (ids starting with `meeting-`, source `calendar`) carry the meeting's title, so `GET /v1/activities` and `/v1/state` always leave them out. To a script they aren't there: changing or removing one by its id gets a `404`, and `DELETE /v1/activities?source=calendar` removes only your own `calendar` activities and counts only those.
 
 Live Activities mirrored from the menu bar (ids starting with `live-`, sources `live-activity` or starting with `live-activity:`, such as `live-activity:uber`) belong to the mirror. Creating, changing or removing one, or sending that source, gets a `403` whether or not the id exists. A source is put on one line and trimmed before this is decided, so `" live-activity:uber"` is refused too. `GET /v1/activities` and `/v1/state` leave them out, and `/v1/debug/menubar` leaves out their text, unless **Let scripts read Live Activities and notifications** (Settings → Advanced → Local API) is on; see [LIVE-ACTIVITIES.md](LIVE-ACTIVITIES.md).
 
@@ -234,10 +234,10 @@ Mirrored notifications (ids starting with `notif-`, source the app's bundle ID) 
 |---|---|
 | `play`, `pause`, `togglePlayPause`, `next`, `previous` | The usual transport controls. |
 | `seek` | Jump to `position` (seconds). |
-| `skipForward`, `skipBackward` | 15 s forward or back, worked out from the current position so it works with any player. If Islet doesn't know the position, or the player doesn't know its length (a live stream), the player's own 15 s skip is used. |
+| `skipForward`, `skipBackward` | 15 s forward or back, worked out from the current position so it works with any player. If Casement doesn't know the position, or the player doesn't know its length (a live stream), the player's own 15 s skip is used. |
 | `toggleShuffle`, `toggleRepeat` | Shuffle on or off; repeat cycles off → all → one. Players that don't report shuffle or repeat may ignore them, and the island only shows these buttons for players that do. |
 
-A `503` means no player is available for the command. With nothing on the island, a command goes to the player macOS gives the controls to, as long as the island would offer it (Spotify paused an hour ago, say); otherwise, such as an app you told Islet to ignore, a source switched off or no player at all, you get a `503`. A `seek`, `skipForward` or `skipBackward` with nothing on the island always gets a `503`: there is no place in a track on show to move. With several players at once, commands go to the one the island shows: through the system's Now Playing when macOS gives that app the controls, otherwise to Music or Spotify directly (which needs Automation for that player, allowed in Settings → Permissions). Any other player that macOS hasn't given the controls to (a paused Safari tab while a Chrome video has them) can't be reached, so the command isn't sent and you get a `503`: sending it through the system's Now Playing would reach the other app instead. A command the player says it doesn't take also gets a `503` without being sent: `next` or `previous` in a browser video outside a playlist, or a 15 s skip the player has no way to make.
+A `503` means no player is available for the command. With nothing on the island, a command goes to the player macOS gives the controls to, as long as the island would offer it (Spotify paused an hour ago, say); otherwise, such as an app you told Casement to ignore, a source switched off or no player at all, you get a `503`. A `seek`, `skipForward` or `skipBackward` with nothing on the island always gets a `503`: there is no place in a track on show to move. With several players at once, commands go to the one the island shows: through the system's Now Playing when macOS gives that app the controls, otherwise to Music or Spotify directly (which needs Automation for that player, allowed in Settings → Permissions). Any other player that macOS hasn't given the controls to (a paused Safari tab while a Chrome video has them) can't be reached, so the command isn't sent and you get a `503`: sending it through the system's Now Playing would reach the other app instead. A command the player says it doesn't take also gets a `503` without being sent: `next` or `previous` in a browser video outside a playlist, or a 15 s skip the player has no way to make.
 
 ### Keep awake
 
@@ -250,11 +250,11 @@ curl -s -X POST http://127.0.0.1:47831/v1/awake -H "Authorization: Bearer $TOKEN
 
 - A new request replaces the current one; `DELETE` ends it early.
 - While it's on, a live activity with a cup icon counts down (or shows "On" when it has no end), with a **Turn off** button.
-- On battery below 20% it turns itself off (and a new request is refused: the reply says `"active": false`). It never outlives Islet: quitting releases it.
+- On battery below 20% it turns itself off (and a new request is refused: the reply says `"active": false`). It never outlives Casement: quitting releases it.
 - `minutes` outside 0–1440 gets a `422`.
 ### Timers
 
-Timers live in Islet rather than in the activity list: they survive a relaunch, can be paused and extended, and ring when they end. Each timer shows up as an activity with the same `id` (source `timer`), and dismissing that activity stops the timer.
+Timers live in Casement rather than in the activity list: they survive a relaunch, can be paused and extended, and ring when they end. Each timer shows up as an activity with the same `id` (source `timer`), and dismissing that activity stops the timer.
 
 ```bash
 curl -s -X POST http://127.0.0.1:47831/v1/timer -H "Authorization: Bearer $TOKEN" \
@@ -279,23 +279,23 @@ curl -s -X POST http://127.0.0.1:47831/v1/timer -H "Authorization: Bearer $TOKEN
 
 **Actions.** `pause` keeps the time left; `resume` counts down from there; `add` adds `seconds` or `in` (default 60), and restarts a ringing timer for just that long; `snooze` rings again in 5 minutes (or `seconds`); `restart` runs the full length again; `stop` removes it. `PATCH /v1/timers` without an id acts on the ringing timer, or else the newest one.
 
-**When a timer ends** it rings: the island opens on Home with Stop, Snooze 5 min and Restart (unless you've hidden the island for the app in front or for fullscreen apps), the chosen sound plays, and the activity turns critical, so it pops up over fullscreen apps too. A timer that ended more than an hour before Islet could ring it (the Mac was asleep or Islet wasn't running) is dropped instead.
+**When a timer ends** it rings: the island opens on Home with Stop, Snooze 5 min and Restart (unless you've hidden the island for the app in front or for fullscreen apps), the chosen sound plays, and the activity turns critical, so it pops up over fullscreen apps too. A timer that ended more than an hour before Casement could ring it (the Mac was asleep or Casement wasn't running) is dropped instead.
 
 **Pomodoro.** 25 minutes of focus, a 5-minute break, and a 15-minute break after every 4th round, moving on by itself. Change the lengths in Settings → Timers, or with the `pomodoro` key in the settings file.
 ### Approvals (long-poll)
 
-`POST /v1/hooks/{provider}?wait=N` is for blocking agent hooks (`provider` is `claude`, `codex` or `cursor`; `N` is 1 to 3600 seconds). It maps the agent's status like the plain hook endpoint. If the payload asks for a decision (Claude Code `PermissionRequest`, `PreToolUse` for `AskUserQuestion` or `ExitPlanMode`, Codex `PermissionRequest`, Cursor `beforeShellExecution` or `beforeMCPExecution`) and approvals are on, Islet shows a card and holds the request until:
+`POST /v1/hooks/{provider}?wait=N` is for blocking agent hooks (`provider` is `claude`, `codex` or `cursor`; `N` is 1 to 3600 seconds). It maps the agent's status like the plain hook endpoint. If the payload asks for a decision (Claude Code `PermissionRequest`, `PreToolUse` for `AskUserQuestion` or `ExitPlanMode`, Codex `PermissionRequest`, Cursor `beforeShellExecution` or `beforeMCPExecution`) and approvals are on, Casement shows a card and holds the request until:
 
 - you answer: `200` with exactly the JSON the hook must print, for example `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}` for Claude Code and Codex, or `{"permission":"allow"}` for Cursor;
 - there is no decision (N seconds or the wait in Settings pass, **Answer in the terminal** is chosen, a later event settles it, the island is hidden for a fullscreen app, or approvals are off): `204` with no body. For Cursor, **Answer in the terminal** is `200` with `{"permission":"ask"}`.
 
 The reply never contains the activity JSON, because hooks print whatever comes back. Events that don't ask for a decision return `204` at once. If the client disconnects, the card is withdrawn. At most 16 requests wait at once; more get `503`. `wait` outside 1 to 3600 is a `400`. The local-network bridge never shows cards.
 
-No endpoint accepts a decision. Answers come only from clicks on the card, so a script holding the token can show a card but can't approve anything. `isletctl hook <agent> --wait N` is the client for this; see [Approvals from the notch](INTEGRATIONS.md#approvals-from-the-notch).
+No endpoint accepts a decision. Answers come only from clicks on the card, so a script holding the token can show a card but can't approve anything. `casementctl hook <agent> --wait N` is the client for this; see [Approvals from the notch](INTEGRATIONS.md#approvals-from-the-notch).
 
 ### Local-network bridge (iPhone Shortcuts)
 
-Off by default. When enabled (Settings → Advanced → iPhone bridge), a second listener serves a small part of the API on the local network at port `47832`, advertised over Bonjour as `_islet._tcp` under the name "Islet". It is plain HTTP, so anyone on the same network can read requests, token included. It only takes what a Shortcut needs to put something in the island:
+Off by default. When enabled (Settings → Advanced → iPhone bridge), a second listener serves a small part of the API on the local network at port `47832`, advertised over Bonjour as `_casement._tcp` under the name "Casement". It is plain HTTP, so anyone on the same network can read requests, token included. It only takes what a Shortcut needs to put something in the island:
 
 | Route | Limits |
 |---|---|
@@ -305,113 +305,113 @@ Off by default. When enabled (Settings → Advanced → iPhone bridge), a second
 
 Everything else is `403`: the bridge can't read activities or state, remove anything, send agent hooks, or control media, the HUD, keep awake or the island.
 
-The bridge has its own token, shown in Settings → Advanced → iPhone bridge with **Copy** and **New token**, and kept in `~/Library/Application Support/Islet/lan.json` (mode `0600`); `isletctl token --lan` prints it. The local API's token is refused on the bridge, and the bridge's token is refused on the local API. A missing or wrong token gets `401` as soon as the headers arrive, before the body is read. Bodies are limited to 16 KB (`413`). 8 connections are served at once (`503`), at most 2 of them from one client (`429`), and a connection is closed if its headers haven't arrived within 2 seconds. Each client gets 30 requests per 10 seconds (`429`). For both per-client limits, an IPv6 /64 counts as one client. Browser origins are refused. See [iPhone recipes](INTEGRATIONS.md#iphone).
+The bridge has its own token, shown in Settings → Advanced → iPhone bridge with **Copy** and **New token**, and kept in `~/Library/Application Support/Casement/lan.json` (mode `0600`); `casementctl token --lan` prints it. The local API's token is refused on the bridge, and the bridge's token is refused on the local API. A missing or wrong token gets `401` as soon as the headers arrive, before the body is read. Bodies are limited to 16 KB (`413`). 8 connections are served at once (`503`), at most 2 of them from one client (`429`), and a connection is closed if its headers haven't arrived within 2 seconds. Each client gets 30 requests per 10 seconds (`429`). For both per-client limits, an IPv6 /64 counts as one client. Browser origins are refused. See [iPhone recipes](INTEGRATIONS.md#iphone).
 
 ---
 
-## `isletctl`
+## `casementctl`
 
-The CLI ships inside the app: `Islet.app/Contents/MacOS/isletctl`. Put it on your `PATH`:
+The CLI ships inside the app: `Casement.app/Contents/MacOS/casementctl`. Put it on your `PATH`:
 
 ```bash
-ln -sf /Applications/Islet.app/Contents/MacOS/isletctl /opt/homebrew/bin/isletctl
+ln -sf /Applications/Casement.app/Contents/MacOS/casementctl /opt/homebrew/bin/casementctl
 ```
 
 ```text
-isletctl notify <title> [--subtitle S] [--icon ICON] [--tint COLOR] [--ttl SECONDS]
-isletctl set <id> [--title T] [--subtitle S] [--progress P] [--state STATE] [--trailing TEXT]
+casementctl notify <title> [--subtitle S] [--icon ICON] [--tint COLOR] [--ttl SECONDS]
+casementctl set <id> [--title T] [--subtitle S] [--progress P] [--state STATE] [--trailing TEXT]
                   [--icon ICON] [--tint COLOR] [--priority P] [--ttl S] [--steps N --step K]
                   [--url URL] [--relevance 0-100] [--stale-in SECONDS] [--sneak true|false] [--source NAME]
                   [--ends-in SECONDS] [--started-ago SECONDS] [--action "Title=URL"]
                   [--template NAME] [--json FILE|-]   (a full activity from a file or stdin; flags win)
-isletctl rm <id>                      remove an activity
-isletctl clear --source NAME          remove all activities from a source
-isletctl ls                           list activities (JSON)
-isletctl timer <90s|5m|1h 30m|"tea 4m"|"at 18:30"> [--title T] [--id ID]   prints the id
-isletctl timer ls                     timers (JSON)
-isletctl timer pause|resume|stop|restart|snooze [ID]   no ID: the ringing or newest timer
-isletctl timer add [ID] <1m>
-isletctl pomodoro [start|stop|toggle] (toggle when left out)
-isletctl run [--title T] -- <command…>   mirror a command in the notch; exit code passes through
-isletctl hud <volume|brightness|keyboardBrightness|microphone> <0-1> [--muted]
-isletctl media <play|pause|playpause|next|previous|forward|rewind|shuffle|repeat>
-isletctl media seek <90s|2m|1:30|0>   jump to a place in the track (0: the start)
-isletctl awake [15m|1h|2h|on|off|status]   keep the Mac awake (default: until turned off; up to 24h)
-isletctl focus <name> [on|off]
-isletctl open | close                  (or press ⌃⌥I; change it in Settings → Keyboard shortcuts)
-isletctl hook <claude|codex|AGENT> [JSON]   forward an agent hook payload (stdin or last argument)
-isletctl hook <claude|codex|cursor> --wait N   wait up to N s for an answer in the notch, print it
-isletctl statusline [-- <command…>]    Claude Code status line: record plan usage, run your own line
-isletctl state | health | token
-isletctl token --lan                  the iPhone bridge's token (not the local API's)
-isletctl debug menubar [--watch]      what Islet sees in the menu bar (see LIVE-ACTIVITIES.md)
-isletctl mcp                          run as an MCP server on stdio (see MCP.md)
+casementctl rm <id>                      remove an activity
+casementctl clear --source NAME          remove all activities from a source
+casementctl ls                           list activities (JSON)
+casementctl timer <90s|5m|1h 30m|"tea 4m"|"at 18:30"> [--title T] [--id ID]   prints the id
+casementctl timer ls                     timers (JSON)
+casementctl timer pause|resume|stop|restart|snooze [ID]   no ID: the ringing or newest timer
+casementctl timer add [ID] <1m>
+casementctl pomodoro [start|stop|toggle] (toggle when left out)
+casementctl run [--title T] -- <command…>   mirror a command in the notch; exit code passes through
+casementctl hud <volume|brightness|keyboardBrightness|microphone> <0-1> [--muted]
+casementctl media <play|pause|playpause|next|previous|forward|rewind|shuffle|repeat>
+casementctl media seek <90s|2m|1:30|0>   jump to a place in the track (0: the start)
+casementctl awake [15m|1h|2h|on|off|status]   keep the Mac awake (default: until turned off; up to 24h)
+casementctl focus <name> [on|off]
+casementctl open | close                  (or press ⌃⌥I; change it in Settings → Keyboard shortcuts)
+casementctl hook <claude|codex|AGENT> [JSON]   forward an agent hook payload (stdin or last argument)
+casementctl hook <claude|codex|cursor> --wait N   wait up to N s for an answer in the notch, print it
+casementctl statusline [-- <command…>]    Claude Code status line: record plan usage, run your own line
+casementctl state | health | token
+casementctl token --lan                  the iPhone bridge's token (not the local API's)
+casementctl debug menubar [--watch]      what Casement sees in the menu bar (see LIVE-ACTIVITIES.md)
+casementctl mcp                          run as an MCP server on stdio (see MCP.md)
 ```
 
-`isletctl hook` never fails the calling agent: it exits 0 within ~1.5 s even when Islet isn't running.
+`casementctl hook` never fails the calling agent: it exits 0 within ~1.5 s even when Casement isn't running.
 
-With `--wait N`, events that ask for a decision wait up to N seconds for an answer in the notch, and the answer is printed on stdout for the agent. Every failure (Islet not running, API off, no answer) still exits 0 and prints nothing, so the agent asks in the terminal instead. Other events are sent and forgotten as before.
+With `--wait N`, events that ask for a decision wait up to N seconds for an answer in the notch, and the answer is printed on stdout for the agent. Every failure (Casement not running, API off, no answer) still exits 0 and prints nothing, so the agent asks in the terminal instead. Other events are sent and forgotten as before.
 
-`isletctl token --lan` prints the iPhone bridge's token from `lan.json`, even while Islet isn't running, and says so if the bridge has never been turned on.
+`casementctl token --lan` prints the iPhone bridge's token from `lan.json`, even while Casement isn't running, and says so if the bridge has never been turned on.
 
-`isletctl statusline` is a Claude Code status line command. It reads the JSON Claude passes on stdin and saves the plan limits, model and context use to `~/Library/Application Support/Islet/usage/claude.json` (mode 0600, written only when a figure changes). Then it runs `<command…>` with the same stdin and passes its output and exit code through; if Claude Code stops the status line early, the command is stopped too. A single argument runs with `/bin/sh -c`, which is how Claude stores a command line; several arguments run directly, without a shell. With no command it prints a short line such as `Opus 5.5 · 42% context · 5h 62%`. It never contacts the app or the network, and its own work takes a few milliseconds. See [Usage limits](INTEGRATIONS.md#usage-limits).
+`casementctl statusline` is a Claude Code status line command. It reads the JSON Claude passes on stdin and saves the plan limits, model and context use to `~/Library/Application Support/Casement/usage/claude.json` (mode 0600, written only when a figure changes). Then it runs `<command…>` with the same stdin and passes its output and exit code through; if Claude Code stops the status line early, the command is stopped too. A single argument runs with `/bin/sh -c`, which is how Claude stores a command line; several arguments run directly, without a shell. With no command it prints a short line such as `Opus 5.5 · 42% context · 5h 62%`. It never contacts the app or the network, and its own work takes a few milliseconds. See [Usage limits](INTEGRATIONS.md#usage-limits).
 
-`isletctl timer` reads the same phrases as the API's `in`, with one difference: a bare number is seconds (`isletctl timer 300`), as it always was. Quote phrases with spaces: `isletctl timer "in 20 minutes to check the oven"`.
+`casementctl timer` reads the same phrases as the API's `in`, with one difference: a bare number is seconds (`casementctl timer 300`), as it always was. Quote phrases with spaces: `casementctl timer "in 20 minutes to check the oven"`.
 
 ---
 
-## `islet://` URL scheme
+## `casement://` URL scheme
 
 ```text
-islet://notify?title=Build%20done&subtitle=main&icon=sf:hammer&tint=green&ttl=5
-islet://activity?id=deploy&title=Deploying&progress=0.4&state=running&priority=high
-islet://activity?id=pizza&title=Pizza&endsIn=1200&url=https://…&actionTitle=Track&actionURL=https://…&steps=4&step=2
-islet://dismiss?id=deploy
-islet://timer?minutes=25&title=Focus
-islet://timer?in=20m&title=Pizza          (in= reads "tea%204m", "1h%2030m", "at%2018:30"; a bare number is minutes)
-islet://timer?action=pause&id=timer-1     (pause, resume, add, stop, restart, snooze; no id: the ringing or newest timer)
-islet://timer?action=add&in=1m
-islet://pomodoro?action=start             (start, stop, toggle)
-islet://hud?kind=volume&value=0.5
-islet://hud?kind=microphone&value=0&muted=1   (muted: the microphone HUD's muted look)
-islet://media/playpause     (play, pause, next, previous, forward, rewind, shuffle, repeat)
-islet://awake?for=1h        (15m, 2h, 1h30m or a number of minutes; islet://awake alone = until turned off)
-islet://awake/off
-islet://focus?name=Work&state=on
-islet://ask?q=What%20is%20a%20monad&provider=claude
-islet://open   islet://close   islet://toggle   islet://settings
+casement://notify?title=Build%20done&subtitle=main&icon=sf:hammer&tint=green&ttl=5
+casement://activity?id=deploy&title=Deploying&progress=0.4&state=running&priority=high
+casement://activity?id=pizza&title=Pizza&endsIn=1200&url=https://…&actionTitle=Track&actionURL=https://…&steps=4&step=2
+casement://dismiss?id=deploy
+casement://timer?minutes=25&title=Focus
+casement://timer?in=20m&title=Pizza          (in= reads "tea%204m", "1h%2030m", "at%2018:30"; a bare number is minutes)
+casement://timer?action=pause&id=timer-1     (pause, resume, add, stop, restart, snooze; no id: the ringing or newest timer)
+casement://timer?action=add&in=1m
+casement://pomodoro?action=start             (start, stop, toggle)
+casement://hud?kind=volume&value=0.5
+casement://hud?kind=microphone&value=0&muted=1   (muted: the microphone HUD's muted look)
+casement://media/playpause     (play, pause, next, previous, forward, rewind, shuffle, repeat)
+casement://awake?for=1h        (15m, 2h, 1h30m or a number of minutes; casement://awake alone = until turned off)
+casement://awake/off
+casement://focus?name=Work&state=on
+casement://ask?q=What%20is%20a%20monad&provider=claude
+casement://open   casement://close   casement://toggle   casement://settings
 ```
 
 Any app or web page can open these URLs, and they carry no token, so they are limited:
 
-- Activities they create or dismiss get ids starting with `url-` (`id=deploy` becomes `url-deploy`, and `islet://focus` makes `url-focus`), so a link can't replace or remove an activity made by Islet, the API or the Live Activity mirror. `source=live-activity` is refused.
+- Activities they create or dismiss get ids starting with `url-` (`id=deploy` becomes `url-deploy`, and `casement://focus` makes `url-focus`), so a link can't replace or remove an activity made by Casement, the API or the Live Activity mirror. `source=live-activity` is refused.
 - `url` and `actionURL` must be `https`.
 - Icons are limited to `sf:`, `emoji:` and `app:`.
 - Text is cut to one line: a title at 120 characters, a subtitle at 160 and a trailing value at 40. The same caps apply over the API and the bridge. A `source` is a name rather than text to draw, so it is only put on one line and trimmed; one over 128 characters is refused.
 - `priority=critical` is treated as `high`.
 
-Use the local API or `isletctl` when you need more.
+Use the local API or `casementctl` when you need more.
 
 Siri can open these links through a shortcut: see [Siri and Shortcuts](SHORTCUTS.md).
 
-`islet://ask` fills in the Ask box and never sends; there is no HTTP or `isletctl` equivalent. See [AI.md](AI.md#islet-ask).
+`casement://ask` fills in the Ask box and never sends; there is no HTTP or `casementctl` equivalent. See [AI.md](AI.md#casement-ask).
 
 ---
 
 ## Script widgets
 
-Put executables in `~/.config/islet/plugins/`. The file name sets the refresh interval, xbar-style: `cpu.10s.sh`, `prs.5m.py`, `weather.1h.rb` (default 5 minutes; never more often than once a second). Output can be:
+Put executables in `~/.config/casement/plugins/`. The file name sets the refresh interval, xbar-style: `cpu.10s.sh`, `prs.5m.py`, `weather.1h.rb` (default 5 minutes; never more often than once a second). Output can be:
 
 1. **xbar/SwiftBar text**: existing plugins work unchanged. The first line is the header, then `---`, then items. Supported parameters: `href=`, `shell=`/`bash=` with `param1=`…, `color=`, `sfimage=`, `refresh=true`, `disabled=true`, and submenus (`--`).
-2. **An Islet activity as JSON**: `{"id":"cpu","title":"CPU 42%","progress":0.42}` becomes a live activity.
+2. **An Casement activity as JSON**: `{"id":"cpu","title":"CPU 42%","progress":0.42}` becomes a live activity.
 
-Scripts get `ISLET=1`, `SWIFTBAR=1`, `XBARDarkMode=true` and Homebrew on `PATH`, and are killed after 15 s.
+Scripts get `CASEMENT=1`, `SWIFTBAR=1`, `XBARDarkMode=true` and Homebrew on `PATH`, and are killed after 15 s.
 
 ---
 
 ## Settings file
 
-Everything in Settings lives in `~/.config/islet/config.json` (or `$XDG_CONFIG_HOME/islet/config.json`) and reloads live when edited, so it can live in your dotfiles. A symlink at that path is followed to the file it points at, so a save changes your repo's own file and leaves the link alone. Unknown keys are ignored and kept; a bad value falls back to its default without breaking the rest, and a file that doesn't parse is never written over (see the end of this section). Example:
+Everything in Settings lives in `~/.config/casement/config.json` (or `$XDG_CONFIG_HOME/casement/config.json`) and reloads live when edited, so it can live in your dotfiles. A symlink at that path is followed to the file it points at, so a save changes your repo's own file and leaves the link alone. Unknown keys are ignored and kept; a bad value falls back to its default without breaking the rest, and a file that doesn't parse is never written over (see the end of this section). Example:
 
 ```json
 {
@@ -457,7 +457,7 @@ Now Playing, closed island, HUD, gestures and battery keys:
 | `meetingRemindersNeedLink` | `true` | Only meetings with a call link remind you. All-day events, cancelled meetings and declined invitations never do. |
 | `pausedMusicTimeout` | `10` | Seconds the closed island keeps paused music before it hides (0–300; `0` = right away, `-1` = never). Replaces `showPausedMedia`, which is read once: `true` becomes `-1`. |
 | `visualiserStyle` | `"bars"` | The playing indicator: `"bars"`, `"slim"`, `"dots"`, `"wave"`, `"pulse"`, `"mirror"` (bars reflected round a centre line), `"vinyl"` (the artwork turns like a record), `"gif"` (a sticker, below) or `"off"`. |
-| `sticker` | `{"id": "cat"}` | The `"gif"` look's sticker. `id`: `"cat"`, `"jelly"`, `"notes"`, `"record"`, `"star"`, or `"custom-"` and the id of one added in Settings (kept as animated PNGs in `~/Library/Application Support/Islet/stickers`, at most 12). `offsetX` and `offsetY`: points from where it sits, -12 to 12 (positive is right and down; it never leaves the menu bar row). `scale`: 0.6 to 1.6. `whenIdle` (`false`): the sticker stays, still, beside the notch when nothing is playing. An unknown id is the cat. |
+| `sticker` | `{"id": "cat"}` | The `"gif"` look's sticker. `id`: `"cat"`, `"jelly"`, `"notes"`, `"record"`, `"star"`, or `"custom-"` and the id of one added in Settings (kept as animated PNGs in `~/Library/Application Support/Casement/stickers`, at most 12). `offsetX` and `offsetY`: points from where it sits, -12 to 12 (positive is right and down; it never leaves the menu bar row). `scale`: 0.6 to 1.6. `whenIdle` (`false`): the sticker stays, still, beside the notch when nothing is playing. An unknown id is the cat. |
 | `musicColour` | `"artwork"` | The playing indicator, the progress ring and the open island's progress bar: `"artwork"`, `"accent"` (the artwork's colour while `accentColor` is `"auto"`) or `"white"`. Replaces `visualiserColour`, which is read once. |
 | `artworkCornerRadius` | `5` | Artwork corners beside the notch, 0 (square) to 10 (round). The song peek and the open island scale it to their size. |
 | `hudEnabled`, `brightnessHUDEnabled` | `false` | The volume and display brightness HUDs. Off in a new setup, since macOS shows its own; a config from before this that leaves them out keeps them on. |
@@ -486,4 +486,4 @@ Now Playing, closed island, HUD, gestures and battery keys:
 
 The old `hapticFeedback: false` is read as `"hapticsMode": "off"`; use `hapticsMode` from now on.
 
-If `config.json` stops parsing (a missing comma while you edit it), Islet keeps the settings it had and writes nothing over the file until it parses again. If it is already broken when Islet starts, Islet uses the copy of the last version that parsed, which it keeps in `~/Library/Application Support/Islet/config-last-good.json` (outside the config folder, so your dotfiles never see it), or its defaults when there is no copy; Advanced says which. Settings → Advanced says which line has the error and offers **Replace…**, which keeps a copy as `config.json.broken` and writes the settings in use. Keys Islet doesn't know, from a newer version or your own notes, survive a save. Keys that were replaced by newer ones (`hapticFeedback`, `showPausedMedia`, `hideInFullscreen`, `showOnNonNotchDisplays`, `visualiserColour`, `fullscreenAllowList`, `hideForApps`, `launchAtLogin`) are read once and dropped on save.
+If `config.json` stops parsing (a missing comma while you edit it), Casement keeps the settings it had and writes nothing over the file until it parses again. If it is already broken when Casement starts, Casement uses the copy of the last version that parsed, which it keeps in `~/Library/Application Support/Casement/config-last-good.json` (outside the config folder, so your dotfiles never see it), or its defaults when there is no copy; Advanced says which. Settings → Advanced says which line has the error and offers **Replace…**, which keeps a copy as `config.json.broken` and writes the settings in use. Keys Casement doesn't know, from a newer version or your own notes, survive a save. Keys that were replaced by newer ones (`hapticFeedback`, `showPausedMedia`, `hideInFullscreen`, `showOnNonNotchDisplays`, `visualiserColour`, `fullscreenAllowList`, `hideForApps`, `launchAtLogin`) are read once and dropped on save.

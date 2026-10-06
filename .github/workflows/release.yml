@@ -15,14 +15,14 @@ jobs:
         with:
           fetch-depth: 0   # bundle.sh uses the commit count as the build number
 
-      # Islet builds with the macOS 26 SDK and later. A release built with the macOS 26 SDK leaves
+      # Casement builds with the macOS 26 SDK and later. A release built with the macOS 26 SDK leaves
       # out the macOS 27-only parts (the on-device model's newer error messages), so say so.
       - name: Select the newest Xcode
         run: |
           sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | grep -vi beta | sort -V | tail -1)"
           swift --version
           sdk="$(xcrun --show-sdk-version)"
-          [ "${sdk%%.*}" -ge 26 ] || { echo "::error::Islet needs the macOS 26 SDK or later; the newest Xcode here has $sdk."; exit 1; }
+          [ "${sdk%%.*}" -ge 26 ] || { echo "::error::Casement needs the macOS 26 SDK or later; the newest Xcode here has $sdk."; exit 1; }
           [ "${sdk%%.*}" -ge 27 ] || echo "::warning::Built with the macOS $sdk SDK: the macOS 27-only parts are left out."
 
       - name: Read the version from the tag
@@ -31,7 +31,7 @@ jobs:
       # Developer ID signing and notarisation need a paid Apple Developer account. When there is one,
       # add the repository secrets named below, uncomment this step, and give the next two steps
       # `env: { SIGN_IDENTITY: "${{ secrets.SIGN_IDENTITY }}" }`. scripts/release.sh then notarises
-      # with the islet-notary profile, staples, and stops unless spctl accepts the app.
+      # with the casement-notary profile, staples, and stops unless spctl accepts the app.
       #
       # - name: Import the Developer ID certificate and notary credentials
       #   env:
@@ -51,13 +51,13 @@ jobs:
       #     security import "$RUNNER_TEMP/id.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign
       #     rm -f "$RUNNER_TEMP/id.p12"
       #     security set-key-partition-list -S apple-tool:,apple: -s -k "$KC_PASS" "$KC" >/dev/null
-      #     xcrun notarytool store-credentials islet-notary \
+      #     xcrun notarytool store-credentials casement-notary \
       #       --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD"
 
-      - name: Build Islet.app (ad-hoc signed)
+      - name: Build Casement.app (ad-hoc signed)
         run: make app
 
-      # Zips build/Islet.app, extracts the zip with ditto and with unzip, and stops unless
+      # Zips build/Casement.app, extracts the zip with ditto and with unzip, and stops unless
       # codesign --verify --strict passes on both. Also writes the zip's SHA-256 and this version's
       # section of CHANGELOG.md (extracted with awk) to build/, and stops if that section's heading
       # still says "unreleased" or it holds a placeholder line.
@@ -73,5 +73,5 @@ jobs:
             exit 0
           fi
           gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
-            --title "Islet $VERSION" --notes-file "build/release-notes-$VERSION.md" \
-            "build/Islet-$VERSION.zip" "build/Islet-$VERSION.zip.sha256"
+            --title "Casement $VERSION" --notes-file "build/release-notes-$VERSION.md" \
+            "build/Casement-$VERSION.zip" "build/Casement-$VERSION.zip.sha256"

@@ -2,24 +2,24 @@
 import PackageDescription
 
 let package = Package(
-    name: "Islet",
+    name: "Casement",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "Islet", targets: ["Islet"]),
-        .executable(name: "isletctl", targets: ["isletctl"]),
-        .library(name: "IsletCore", targets: ["IsletCore"]),
+        .executable(name: "Casement", targets: ["Casement"]),
+        .executable(name: "casementctl", targets: ["casementctl"]),
+        .library(name: "CasementCore", targets: ["CasementCore"]),
     ],
     targets: [
         // Pure, platform-light logic: models, arbitration, parsing, geometry.
         // Everything here is unit-tested and must not touch AppKit or private APIs.
         .target(
-            name: "IsletCore",
+            name: "CasementCore",
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         // Adapters to macOS services (CoreAudio, IOKit, EventKit, media players, local API server).
         .target(
-            name: "IsletSystem",
-            dependencies: ["IsletCore"],
+            name: "CasementSystem",
+            dependencies: ["CasementCore"],
             swiftSettings: [.swiftLanguageMode(.v5)],
             linkerSettings: [
                 .linkedFramework("IOKit"),
@@ -34,24 +34,24 @@ let package = Package(
         ),
         // The menu-bar agent app: notch panel, SwiftUI views, settings.
         .executableTarget(
-            name: "Islet",
-            dependencies: ["IsletCore", "IsletSystem"],
+            name: "Casement",
+            dependencies: ["CasementCore", "CasementSystem"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         // Command-line client for the local API (scripts, hooks, CI, Raycast, etc.).
         .executableTarget(
-            name: "isletctl",
-            dependencies: ["IsletCore"],
+            name: "casementctl",
+            dependencies: ["CasementCore"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(
-            name: "IsletCoreTests",
-            dependencies: ["IsletCore"],
+            name: "CasementCoreTests",
+            dependencies: ["CasementCore"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(
-            name: "IsletSystemTests",
-            dependencies: ["IsletCore", "IsletSystem"],
+            name: "CasementSystemTests",
+            dependencies: ["CasementCore", "CasementSystem"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

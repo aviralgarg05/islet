@@ -1,4 +1,4 @@
-# Islet — builds with the Xcode Command Line Tools alone.
+# Casement — builds with the Xcode Command Line Tools alone.
 # swift-testing's macros need the plugin path spelled out when the Command Line Tools are the
 # selected toolchain; with Xcode selected they are found without it. Deriving the path from
 # `xcode-select -p` and adding it only when it is there means one command works either way, so
@@ -11,14 +11,14 @@ SWIFT_TEST_FLAGS = $(if $(wildcard $(TESTING_PLUGINS)),-Xswiftc -plugin-path -Xs
 build:            ## Debug build of the app and CLI
 	swift build
 
-app:              ## Release Islet.app in build/ (ad-hoc signed)
+app:              ## Release Casement.app in build/ (ad-hoc signed)
 	scripts/bundle.sh
 
-run: app          ## Build and launch Islet.app
-	open build/Islet.app
+run: app          ## Build and launch Casement.app
+	open build/Casement.app
 
 demo:             ## Launch with demo content (debug build)
-	swift build --product Islet && .build/debug/Islet --demo
+	swift build --product Casement && .build/debug/Casement --demo
 
 test:             ## Unit + system tests (swift-testing)
 	swift test $(SWIFT_TEST_FLAGS)
@@ -27,25 +27,25 @@ e2e: app          ## End-to-end tests against the real app (isolated config, own
 	python3 Tests/E2E/e2e.py
 
 e2e-media: app    ## …plus the MediaRemote bridge test (skips itself if something is playing)
-	ISLET_E2E_MEDIA=1 python3 Tests/E2E/e2e.py
+	CASEMENT_E2E_MEDIA=1 python3 Tests/E2E/e2e.py
 
 perf: app         ## CPU per island state against the performance budget
 	scripts/perf.sh
 
 snapshots:        ## Render every island state to build/snapshots/*.png
-	swift build --product Islet && .build/debug/Islet --snapshot build/snapshots
+	swift build --product Casement && .build/debug/Casement --snapshot build/snapshots
 
 motion-snapshots: ## Render each island transition as a contact sheet to build/motion-snapshots/*.png
-	swift build --product Islet && .build/debug/Islet --snapshot-motion build/motion-snapshots
+	swift build --product Casement && .build/debug/Casement --snapshot-motion build/motion-snapshots
 
 settings-snapshots: ## Render every Settings page, light and dark, to build/settings-snapshots/*.png
-	swift build --product Islet && .build/debug/Islet --settings-snapshot build/settings-snapshots
+	swift build --product Casement && .build/debug/Casement --settings-snapshot build/settings-snapshots
 
 check: test e2e perf  ## Everything
 
 install: app      ## Copy to /Applications and link the CLI (asks nothing; review first)
-	rm -rf /Applications/Islet.app && cp -R build/Islet.app /Applications/
-	@echo "CLI: ln -sf /Applications/Islet.app/Contents/MacOS/isletctl /opt/homebrew/bin/isletctl"
+	rm -rf /Applications/Casement.app && cp -R build/Casement.app /Applications/
+	@echo "CLI: ln -sf /Applications/Casement.app/Contents/MacOS/casementctl /opt/homebrew/bin/casementctl"
 
 release:          ## Zip, checksum and notes for the newest CHANGELOG version (PUBLISH=1 creates the GitHub release)
 	scripts/release.sh $(if $(PUBLISH),--publish,)

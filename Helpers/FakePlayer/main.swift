@@ -4,15 +4,15 @@
 import AppKit
 import MediaPlayer
 
-let title = CommandLine.arguments.dropFirst().first ?? "Islet Test Track"
+let title = CommandLine.arguments.dropFirst().first ?? "Casement Test Track"
 let center = MPNowPlayingInfoCenter.default()
 var playing = true
 
 func publish() {
     center.nowPlayingInfo = [
         MPMediaItemPropertyTitle: title,
-        MPMediaItemPropertyArtist: "Islet Test Artist",
-        MPMediaItemPropertyAlbumTitle: "Islet Test Album",
+        MPMediaItemPropertyArtist: "Casement Test Artist",
+        MPMediaItemPropertyAlbumTitle: "Casement Test Album",
         MPMediaItemPropertyPlaybackDuration: 180.0,
         MPNowPlayingInfoPropertyElapsedPlaybackTime: 42.0,
         MPNowPlayingInfoPropertyPlaybackRate: playing ? 1.0 : 0.0,

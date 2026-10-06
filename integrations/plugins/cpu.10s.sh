@@ -1,5 +1,5 @@
 #!/bin/bash
-# Islet JSON widget: CPU load as a low-priority live activity.
+# Casement JSON widget: CPU load as a low-priority live activity.
 ps -A -o %cpu | awk -v cores="$(sysctl -n hw.ncpu)" '
   { s += $1 }
   END {

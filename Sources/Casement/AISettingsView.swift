@@ -1,0 +1,285 @@
+import AppKit
+import CasementCore
+import CasementSystem
+import SwiftUI
+
+/// Settings → Ask & AI: the Ask box, keys for Claude and ChatGPT, the command-line tools and
+/// Apple Intelligence. Plain words only: the raw Apple Intelligence status is in Advanced's help.
+/// Keys, command-line tools and Apple Intelligence are checked when the page appears, when Casement
+/// becomes active again (say, after installing a tool in Terminal) and when the kept Settings
+/// window is reopened on this page; never polled.
+struct AISettingsView: View {
+    @Bindable var model: AppModel
+    @ViewState private var fetched: [AskProviderKind: [String]] = [:]
+    @ViewState private var fetchError: [AskProviderKind: String] = [:]
+    @ViewState private var keyStored: [AskProviderKind: Bool] = [:]
+    @ViewState private var cliFound: [AskProviderKind: Bool] = [:]
+    @ViewState private var appleReady = AIAssist.shared.isAvailable
+    @ViewState private var visible = false
+    @ViewState private var host = HostWindow.Box()
+
+    private var service: AskService { model.ask.service }
+
+    var body: some View {
+        Form {
+            Section { SettingsHero(page: .ai) }
+            Section("Ask") {
+                Picker("Answer with", selection: $model.settings.ask.provider) {
+                    ForEach(AskProviderKind.allCases) { Text($0.title).tag($0) }
+                }
+                .settingsAnchor("ai.provider")
+                Picker(selection: $model.settings.ask.effort) {
+                    ForEach(AskEffort.allCases, id: \.self) { Text($0.title).tag($0) }
+                } label: {
+                    Text("Effort")
+                    Text("For Claude and ChatGPT. Low answers fastest and costs least.")
+                }
+                .pickerStyle(.segmented)
+                // Only Claude and ChatGPT take an effort: the one answering now, which an
+                // casement://ask link can pick until the island closes.
+                .disabled(!model.ask.provider(in: model.settings.ask).takesEffort)
+                .settingsAnchor("ai.effort")
+                Toggle(isOn: $model.settings.ask.followUps) {
+                    Text("Keep follow-ups in memory")
+                    Text("Sends up to \(AskLimits.followUpTurns) earlier turns with the next question. Nothing is written to disk, and quitting Casement forgets them.")
+                }
+                .settingsAnchor("ai.followUps")
+                // The same recorder as on Keyboard shortcuts.
+                LabeledContent("Shortcut") {
+                    ShortcutField(name: "Open the Ask box", text: $model.settings.askHotkey, standard: CasementSettings().askHotkey,
+                                  other: (model.settings.hotkey, "open the island"))
+                }
+            }
+            Section("Claude") {
+                AIKeyRow(kind: .anthropic, service: service) { models in keyChanged(.anthropic, models: models) }
+                    .settingsAnchor("ai.anthropic")
+                modelPicker(.anthropic)
+            }
+            Section("ChatGPT") {
+                AIKeyRow(kind: .openai, service: service) { models in keyChanged(.openai, models: models) }
+                    .settingsAnchor("ai.openai")
+                modelPicker(.openai)
+            }
+            Section {
+                cliRow(.claudeCode)
+                    .settingsAnchor("ai.cli")
+                cliRow(.codex)
+            } header: {
+                Text("Command-line tools")
+            } footer: {
+                SettingsFooter("Uses the login you already have in Terminal, so answers count towards that plan. They run with no tools, in an empty folder.")
+            }
+            Section("Apple Intelligence") {
+                LabeledContent("On this Mac") {
+                    HStack(spacing: 5) {
+                        Circle().fill(appleReady ? Color.green : Color.secondary.opacity(0.5)).frame(width: 6, height: 6)
+                        Text(Self.appleStatus).foregroundStyle(.secondary)
+                    }
+                }
+                .settingsAnchor("ai.apple")
+                Toggle(isOn: $model.settings.aiAssist) {
+                    Text("Smart icons and short summaries")
+                    Text("Only ever on this Mac. Notification, calendar and clipboard text never goes to Claude or ChatGPT.")
+                }
+            }
+            Section {
+                Text("On-device answers never leave this Mac. Questions to Claude or ChatGPT go to Anthropic or OpenAI with your key, billed to your account; OpenAI is asked not to keep them. The command-line tools send questions to their maker. Casement keeps no history, and your keys stay in your login keychain.")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .settingsAnchor("ai.privacy")
+            } header: {
+                Text("What leaves this Mac")
+            }
+        }
+        .formStyle(.grouped)
+        .background(HostWindow(box: host))
+        .onAppear {
+            visible = true
+            refresh()
+        }
+        .onDisappear { visible = false }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshIfShown()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { note in
+            if let window = host.window, note.object as? NSWindow === window { refreshIfShown() }
+        }
+    }
+
+    /// Check again only while this is the page on show in a Settings window that is on screen.
+    private func refreshIfShown() {
+        if visible, host.window?.isVisible == true { refresh() }
+    }
+
+    /// Apple Intelligence's state in plain words, here and in Advanced → Diagnostics (whose help has the raw status).
+    static var appleStatus: String {
+        let raw = AIAssist.shared.statusText
+        if AIAssist.shared.isAvailable { return "Ready" }
+        if raw.contains("macOS 26") { return "Needs macOS 26 or later" }
+        if raw.contains("NotEnabled") { return "Turn on Apple Intelligence in System Settings" }
+        if raw.contains("NotEligible") { return "This Mac can't run it" }
+        if raw.contains("NotReady") { return "Still downloading" }
+        return "Not available"
+    }
+
+    private func refresh() {
+        appleReady = AIAssist.shared.isAvailable
+        for kind in [AskProviderKind.anthropic, .openai] {
+            keyStored[kind] = service.secrets.contains(kind.keyAccount ?? "")
+        }
+        for kind in [AskProviderKind.claudeCode, .codex] {
+            cliFound[kind] = service.cliBinary(for: kind) != nil
+        }
+    }
+
+    private func keyChanged(_ kind: AskProviderKind, models: [String]?) {
+        keyStored[kind] = models != nil
+        if let models, !models.isEmpty { fetched[kind] = models } else if models == nil { fetched[kind] = nil }
+        fetchError[kind] = nil
+        model.ask.refreshStatuses()
+    }
+
+    /// Picked in the model menu: look for models the key can use, rather than choose one.
+    private static let checkForModels = "\u{0}check"
+
+    private func modelPicker(_ kind: AskProviderKind) -> some View {
+        let current = model.settings.ask.model(for: kind) ?? ""
+        var options = fetched[kind] ?? kind.suggestedModels
+        if !current.isEmpty, !options.contains(current) { options.insert(current, at: 0) }
+        return VStack(alignment: .leading, spacing: 4) {
+            Picker("Model", selection: Binding(get: { current }, set: { choice in
+                if choice == Self.checkForModels {
+                    fetchModels(kind)
+                } else {
+                    model.settings.ask.setModel(choice == kind.defaultModel ? nil : choice, for: kind)
+                }
+            })) {
+                ForEach(options, id: \.self) { Text(AskModelName.title($0)).tag($0) }
+                // Fetching needs a key that works.
+                if keyStored[kind] == true {
+                    Divider()
+                    Text("Check for new models").tag(Self.checkForModels)
+                }
+            }
+            .help(current)
+            if let error = fetchError[kind] {
+                Text(error).font(.caption).foregroundStyle(.red)
+            }
+        }
+    }
+
+    private func fetchModels(_ kind: AskProviderKind) {
+        fetchError[kind] = nil
+        Task { @MainActor in
+            do {
+                let list = try await service.models(for: kind)
+                if !list.isEmpty { fetched[kind] = list }
+            } catch {
+                fetchError[kind] = error.localizedDescription
+            }
+        }
+    }
+
+    private func cliRow(_ kind: AskProviderKind) -> some View {
+        let found = cliFound[kind] ?? false
+        return LabeledContent {
+            HStack(spacing: 10) {
+                TextField("Model", text: Binding(get: { model.settings.ask.models[kind.rawValue] ?? "" },
+                                                 set: { model.settings.ask.setModel($0, for: kind) }),
+                          prompt: Text("Default model"))
+                    .labelsHidden()
+                    .textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.leading)
+                    .frame(width: 160)
+                    // Nothing to set for a tool that isn't there.
+                    .disabled(!found)
+            }
+        } label: {
+            Text(kind.title)
+            Text(found ? "Ready" : "Not installed")
+        }
+    }
+}
+
+/// Add, replace or remove one API key. The key is checked against the provider first and then
+/// stored in the Keychain; afterwards only its last four characters are shown.
+struct AIKeyRow: View {
+    let kind: AskProviderKind
+    let service: AskService
+    /// Called with the key's models after a save, or nil after removal.
+    var onChange: ([String]?) -> Void
+    @ViewState private var masked: String?
+    @ViewState private var draft = ""
+    @ViewState private var editing = false
+    @ViewState private var checking = false
+    @ViewState private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            LabeledContent("Key") {
+                if let masked, !editing {
+                    HStack(spacing: 8) {
+                        Text(AskKeys.savedLabel(masked)).foregroundStyle(.secondary)
+                        Button("Replace") { editing = true }
+                        Button("Remove", role: .destructive, action: remove)
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        SecureField("", text: $draft, prompt: Text("Paste your key"))
+                            .multilineTextAlignment(.leading)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 180)
+                            .onSubmit(save)
+                        Button(checking ? "Checking…" : "Save", action: save)
+                            .disabled(AskKeys.normalized(draft).isEmpty || checking)
+                        if editing {
+                            Button("Cancel") {
+                                editing = false
+                                draft = ""
+                                error = nil
+                            }
+                        }
+                    }
+                }
+            }
+            if let error {
+                Text(error).font(.caption).foregroundStyle(.red)
+            } else if masked == nil {
+                Text(kind == .anthropic ? "Create a key at platform.claude.com. It is checked once, then kept in your Keychain."
+                                        : "Create a key at platform.openai.com. It is checked once, then kept in your Keychain.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .onAppear { masked = service.maskedKey(for: kind) }
+    }
+
+    private func save() {
+        let key = AskKeys.normalized(draft)
+        guard !key.isEmpty, !checking else { return }
+        checking = true
+        error = nil
+        Task { @MainActor in
+            do {
+                let models = try await service.validateAndStore(key: key, for: kind)
+                masked = AskKeys.masked(key)
+                draft = ""
+                editing = false
+                onChange(models)
+            } catch {
+                self.error = error.localizedDescription
+            }
+            checking = false
+        }
+    }
+
+    private func remove() {
+        do {
+            try service.removeKey(for: kind)
+            masked = nil
+            editing = false
+            onChange(nil)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+}

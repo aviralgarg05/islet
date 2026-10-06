@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Draw Islet's built-in stickers and write them to Resources/Stickers/*.gif.
+"""Draw Casement's built-in stickers and write them to Resources/Stickers/*.gif.
 
 Every sticker is drawn here, in code, from circles, polygons and lines: no artwork comes from
-anywhere else, and the files are MIT like the rest of Islet. Each frame is drawn 8 times too
+anywhere else, and the files are MIT like the rest of Casement. Each frame is drawn 8 times too
 big and scaled down, so the edges are smooth, then matted onto black (the closed island is
 black, or the dark graphite) because a GIF pixel is either opaque or clear.
 

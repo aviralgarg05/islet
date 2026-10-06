@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Generate Sources/IsletCore/LiveActivityApps.swift from the Live Activity catalogue.
+"""Generate Sources/CasementCore/LiveActivityApps.swift from the Live Activity catalogue.
 
 The research catalogue (docs/research/07-live-activity-apps.json) lists the apps with
-evidence of a Live Activity. EXTRAS below adds names Islet already recognised before that
+evidence of a Live Activity. EXTRAS below adds names Casement already recognised before that
 catalogue existed (parcel carriers, regional apps, system activities under their own name).
 The research entries win: an extra may not reuse an app name from the JSON.
 
@@ -18,7 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "docs/research/07-live-activity-apps.json"
-OUTPUT = ROOT / "Sources/IsletCore/LiveActivityApps.swift"
+OUTPUT = ROOT / "Sources/CasementCore/LiveActivityApps.swift"
 
 TEMPLATES = {
     "eta": "eta", "stages": "stages", "flight": "flight", "route": "route", "score": "score",
@@ -79,7 +79,7 @@ def render(entries):
         "// Do not edit by hand: change the JSON or the script's extras, then run the script.",
         "",
         "extension LiveActivityCatalog {",
-        f"    /// {len(entries)} apps: the research catalogue first, then Islet's own additions.",
+        f"    /// {len(entries)} apps: the research catalogue first, then Casement's own additions.",
         "    static let apps: [Look] = [",
     ]
     for e in entries:

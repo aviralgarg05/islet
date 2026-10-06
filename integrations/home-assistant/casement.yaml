@@ -1,0 +1,22 @@
+# Home Assistant → Casement over the local-network bridge (enable it in Casement → Settings → Advanced → iPhone bridge).
+# Put the bridge token in secrets.yaml as casement_token: "Bearer <token>". Copy it from Casement → Settings →
+# Advanced → iPhone bridge, or print it with `casementctl token --lan`; the local API token from
+# plain `casementctl token` doesn't work here.
+rest_command:
+  casement_notify:
+    url: "http://my-mac.local:47832/v1/notify"
+    method: POST
+    headers:
+      Authorization: !secret casement_token
+      Content-Type: application/json
+    payload: '{"title": "{{ title }}", "subtitle": "{{ subtitle }}", "icon": "{{ icon | default(''sf:house.fill'') }}", "source": "home-assistant"}'
+
+automation:
+  - alias: "Doorbell → notch"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.front_door_ding
+        to: "on"
+    action:
+      - service: rest_command.casement_notify
+        data: { title: "Doorbell", subtitle: "Someone is at the front door", icon: "sf:bell.fill" }

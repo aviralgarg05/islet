@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""End-to-end tests against a real, running Islet.app.
+"""End-to-end tests against a real, running Casement.app.
 
-Launches build/Islet.app with isolated config/support directories and its own API port,
-then drives it through isletctl, raw HTTP and the URL scheme, and checks the result through
+Launches build/Casement.app with isolated config/support directories and its own API port,
+then drives it through casementctl, raw HTTP and the URL scheme, and checks the result through
 the API and the window server.
 
     python3 Tests/E2E/e2e.py                    # everything except media
-    ISLET_E2E_MEDIA=1 python3 Tests/E2E/e2e.py  # also the MediaRemote bridge (skipped if
+    CASEMENT_E2E_MEDIA=1 python3 Tests/E2E/e2e.py  # also the MediaRemote bridge (skipped if
                                                 # anything else is playing, so your music is safe)
 """
 import json
@@ -20,11 +20,11 @@ import urllib.error
 import urllib.request
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-# ISLET_E2E_APP tests an installed copy (for example /Applications/Islet.app): islet:// links go
+# CASEMENT_E2E_APP tests an installed copy (for example /Applications/Casement.app): casement:// links go
 # to the copy macOS has registered, so with two copies the URL checks need the registered one.
-APP = os.environ.get("ISLET_E2E_APP") or os.path.join(ROOT, "build", "Islet.app")
-EXE = os.path.join(APP, "Contents", "MacOS", "Islet")
-CTL = os.path.join(APP, "Contents", "MacOS", "isletctl")
+APP = os.environ.get("CASEMENT_E2E_APP") or os.path.join(ROOT, "build", "Casement.app")
+EXE = os.path.join(APP, "Contents", "MacOS", "Casement")
+CTL = os.path.join(APP, "Contents", "MacOS", "casementctl")
 PORT = 47931
 LAN_PORT = 47934
 
@@ -45,17 +45,17 @@ def skip(name, why):
 
 class Env:
     def __init__(self):
-        self.tmp = tempfile.mkdtemp(prefix="islet-e2e-")
+        self.tmp = tempfile.mkdtemp(prefix="casement-e2e-")
         self.support = os.path.join(self.tmp, "support")
         self.xdg = os.path.join(self.tmp, "config")
-        self.plugins = os.path.join(self.xdg, "islet", "plugins")
+        self.plugins = os.path.join(self.xdg, "casement", "plugins")
         os.makedirs(self.support)
         os.makedirs(self.plugins)
-        self.env = dict(os.environ, ISLET_SUPPORT_DIR=self.support, XDG_CONFIG_HOME=self.xdg)
+        self.env = dict(os.environ, CASEMENT_SUPPORT_DIR=self.support, XDG_CONFIG_HOME=self.xdg)
 
     @property
     def config_path(self):
-        return os.path.join(self.xdg, "islet", "config.json")
+        return os.path.join(self.xdg, "casement", "config.json")
 
     def discovery(self):
         with open(os.path.join(self.support, "api.json")) as f:
@@ -65,7 +65,7 @@ class Env:
 def ctl(e, *args, stdin=None, check_rc=True):
     p = subprocess.run([CTL, *args], env=e.env, input=stdin, capture_output=True, text=True, timeout=30)
     if check_rc and p.returncode != 0:
-        print("    isletctl failed:", args, p.stderr.strip())
+        print("    casementctl failed:", args, p.stderr.strip())
     return p
 
 
@@ -138,7 +138,7 @@ def rss_mb(pid):
 
 def main():
     if not os.path.exists(EXE):
-        sys.exit("build/Islet.app not found; run scripts/bundle.sh first")
+        sys.exit("build/Casement.app not found; run scripts/bundle.sh first")
     e = Env()
     # Config: dedicated port, plugins on, clipboard off.
     os.makedirs(os.path.dirname(e.config_path), exist_ok=True)
@@ -149,7 +149,7 @@ def main():
         json.dump({"apiPort": PORT, "pluginsEnabled": True, "hoverToOpen": True,
                    "lanBridgeEnabled": True, "lanPort": LAN_PORT, "callDetection": True,
                    "fullscreenBehaviour": "show"}, f)
-    # A plugin that emits Islet JSON, and an xbar-format one.
+    # A plugin that emits Casement JSON, and an xbar-format one.
     with open(os.path.join(e.plugins, "e2e.1m.sh"), "w") as f:
         f.write('#!/bin/sh\necho \'{"id":"plugin-e2e","title":"Plugin says hi","progress":0.5,"priority":"low"}\'\n')
     with open(os.path.join(e.plugins, "xbar.1m.sh"), "w") as f:
@@ -161,7 +161,7 @@ def main():
     subprocess.run(["swiftc", "-O", os.path.join(ROOT, "Tests", "E2E", "windows.swift"), "-o", windows_bin],
                    check=True, capture_output=True)
 
-    print("▸ launching Islet")
+    print("▸ launching Casement")
     app = subprocess.Popen([EXE], env=e.env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     try:
         run_suite(e, app, windows_bin)
@@ -201,7 +201,7 @@ def run_suite(e, app, windows_bin):
     status, body = http("POST", "/v1/activities", token, {"id": "bad", "title": "x", "progress": 900})
     check("422 with a readable validation error", status == 422 and "progress" in str(body), str(body))
 
-    print("▸ activities via isletctl")
+    print("▸ activities via casementctl")
     check("notify", ctl(e, "notify", "E2E hello", "--subtitle", "from the test", "--ttl", "30").returncode == 0)
     acts = activities(e)
     check("notification listed", any(a["title"] == "E2E hello" for a in acts.values()))
@@ -218,7 +218,7 @@ def run_suite(e, app, windows_bin):
     check("timer has a countdown", bool(t) and "endsAt" in t[0], str(t))
 
     print("▸ agent hooks")
-    base = {"session_id": "e2e-session-1", "cwd": "/Users/me/code/islet"}
+    base = {"session_id": "e2e-session-1", "cwd": "/Users/me/code/casement"}
     for ev, extra in [("UserPromptSubmit", {"prompt": "hi"}),
                       ("PreToolUse", {"tool_name": "Bash", "tool_input": {"command": "swift test"}})]:
         ctl(e, "hook", "claude", stdin=json.dumps({**base, "hook_event_name": ev, **extra}))
@@ -237,8 +237,8 @@ def run_suite(e, app, windows_bin):
     check("codex notify payload as argument", activities(e).get("codex-t9", {}).get("subtitle") == "Done!")
     t0 = time.time()
     p = subprocess.run([CTL, "hook", "claude"], input="{}", capture_output=True, text=True,
-                       env=dict(e.env, ISLET_SUPPORT_DIR=os.path.join(e.tmp, "nowhere")))
-    check("hook never fails the agent when Islet is down", p.returncode == 0 and time.time() - t0 < 3)
+                       env=dict(e.env, CASEMENT_SUPPORT_DIR=os.path.join(e.tmp, "nowhere")))
+    check("hook never fails the agent when Casement is down", p.returncode == 0 and time.time() - t0 < 3)
 
     print("▸ command wrapper")
     p = ctl(e, "run", "--title", "e2e ok", "--", "sh", "-c", "exit 0")
@@ -249,10 +249,10 @@ def run_suite(e, app, windows_bin):
     check("run failure keeps exit code", p.returncode == 3 and bad and bad[0]["state"] == "failure", str(bad))
 
     print("▸ shell integration (zsh hook)")
-    hook = os.path.join(ROOT, "integrations", "shell", "islet.zsh")
+    hook = os.path.join(ROOT, "integrations", "shell", "casement.zsh")
     ctl_dir = os.path.dirname(CTL)
-    script = f'export PATH="{ctl_dir}:$PATH"; source "{hook}"; ISLET_MIN_SECONDS=0; ' \
-             '_islet_preexec "make release"; sleep 1.2; (exit 2); _islet_precmd; sleep 0.5'
+    script = f'export PATH="{ctl_dir}:$PATH"; source "{hook}"; CASEMENT_MIN_SECONDS=0; ' \
+             '_casement_preexec "make release"; sleep 1.2; (exit 2); _casement_precmd; sleep 0.5'
     subprocess.run(["zsh", "-c", script], env=e.env, capture_output=True, timeout=30)
     sh = [a for a in activities(e).values() if a["source"] == "shell"]
     check("long-running failed command reported by the zsh hook", sh and sh[0]["state"] == "failure"
@@ -285,7 +285,7 @@ def run_suite(e, app, windows_bin):
             lan_token = json.load(f).get("token")
         check("lan.json is private (0600)", oct(os.stat(lan_file).st_mode & 0o777) == "0o600")
     check("LAN has its own token", lan_token and lan_token != token)
-    check("isletctl token --lan prints it", ctl(e, "token", "--lan").stdout.strip() == lan_token)
+    check("casementctl token --lan prints it", ctl(e, "token", "--lan").stdout.strip() == lan_token)
     status, body = http_to(LAN_PORT, "POST", "/v1/notify", lan_token, {"title": "From iPhone", "ttl": 30}, {"Host": "my-mac.local:%d" % LAN_PORT})
     check("iPhone-style request with .local host accepted", status == 201, f"{status} {body}")
     check("LAN still requires the token", http_to(LAN_PORT, "POST", "/v1/notify", None, {"title": "x"}, {"Host": "my-mac.local"})[0] == 401)
@@ -298,7 +298,7 @@ def run_suite(e, app, windows_bin):
     check("loopback API is not rate limited", all(http("GET", "/v1/health")[0] == 200 for _ in range(40)))
 
     print("▸ media seek")
-    # A seek used to abort isletctl (an unencodable body). Never seek the user's own player:
+    # A seek used to abort casementctl (an unencodable body). Never seek the user's own player:
     # with something on show, only the media suite's fake player is used.
     p = ctl(e, "media", "seek", "soon", check_rc=False)
     check("media seek refuses words that aren't a place in the track", p.returncode == 1 and "1:30" in p.stderr, p.stderr.strip())
@@ -341,18 +341,18 @@ def run_suite(e, app, windows_bin):
     lsreg = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
     if os.path.exists(lsreg):
         subprocess.run([lsreg, "-f", APP], capture_output=True)
-        subprocess.run(["open", "-g", "islet://notify?title=From%20URL&ttl=30"], capture_output=True)
+        subprocess.run(["open", "-g", "casement://notify?title=From%20URL&ttl=30"], capture_output=True)
         got = wait_for(lambda: any(a["title"] == "From URL" for a in activities(e).values()), timeout=6)
-        check("islet:// URL creates a notification", got)
-        subprocess.run(["open", "-g", "islet://focus?name=Sleep&state=on"], capture_output=True)
+        check("casement:// URL creates a notification", got)
+        subprocess.run(["open", "-g", "casement://focus?name=Sleep&state=on"], capture_output=True)
         got = wait_for(lambda: activities(e).get("url-focus", {}).get("title") == "Sleep", timeout=6)
-        check("islet://focus from a Shortcuts automation", got)
-        # Menu bar items can only be pressed by a click in Islet, never through a URL.
-        subprocess.run(["open", "-g", "islet://menubar-activity?key=id:x"], capture_output=True)
+        check("casement://focus from a Shortcuts automation", got)
+        # Menu bar items can only be pressed by a click in Casement, never through a URL.
+        subprocess.run(["open", "-g", "casement://menubar-activity?key=id:x"], capture_output=True)
         time.sleep(0.5)
-        check("islet://menubar-activity is not a command", ctl(e, "health").returncode == 0)
+        check("casement://menubar-activity is not a command", ctl(e, "health").returncode == 0)
     else:
-        skip("islet:// URL", "lsregister not found")
+        skip("casement:// URL", "lsregister not found")
 
     print("▸ MCP server")
     msgs = [
@@ -421,10 +421,10 @@ def run_suite(e, app, windows_bin):
     check("idle CPU under 1%", cpu_pct < 1.0, f"{cpu_pct:.2f}%")
     check("memory under 150 MB", mem < 150, f"{mem:.0f} MB")
 
-    if os.environ.get("ISLET_E2E_MEDIA") == "1":
+    if os.environ.get("CASEMENT_E2E_MEDIA") == "1":
         media_suite(e)
     else:
-        skip("MediaRemote bridge", "set ISLET_E2E_MEDIA=1")
+        skip("MediaRemote bridge", "set CASEMENT_E2E_MEDIA=1")
 
 
 def media_suite(e):
@@ -436,7 +436,7 @@ def media_suite(e):
     fake = os.path.join(ROOT, "build", "helpers", "FakePlayer")
     if not os.path.exists(fake):
         subprocess.run(["swiftc", "-O", os.path.join(ROOT, "Helpers", "FakePlayer", "main.swift"), "-o", fake], check=True)
-    title = "Islet E2E Track"
+    title = "Casement E2E Track"
     log = tempfile.NamedTemporaryFile(delete=False, suffix=".log")
     player = subprocess.Popen([fake, title], stdout=log, stderr=subprocess.STDOUT, env=dict(os.environ, FAKE_PLAYER_SECONDS="8"))
     try:
