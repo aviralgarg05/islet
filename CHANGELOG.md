@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Live Activities, honestly
+
+How much of a mirrored Live Activity shows depends on what its app exposes to Accessibility, and some expose almost nothing. Measured on macOS 27 on 6 October 2026: a cricket score showing two teams, a state and a running score exposed three strings, "Live Activity", "7:00 pm" and "Expanded", none of which names the app, the teams or the score. Casement drops the first and the last as generic labels, is left with a bare time, and declines to mirror rather than cover Apple's own correct pill with less than it already shows. That was always the intended behaviour and it was invisible.
+
+`swift scripts/live-activity-probe.swift` now prints everything Accessibility exposes for whatever Live Activity is in the menu bar, and says plainly whether there is enough to mirror. Run it while one is showing. For activities you control, an iPhone Shortcut posting to the local bridge sends the whole thing and does not depend on any of this.
+
+The readme no longer promises more than this can deliver.
+
 ### Renamed
 
 The app is now **Casement**. It was Islet, and that name was not usable: a 141 star project owns it on GitHub, the Mac App Store already lists "Islet: Stay Afloat" in the same Productivity category, and most App Store results for the word are medical, so it would never have won search for its own name.

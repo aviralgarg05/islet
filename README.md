@@ -1,14 +1,14 @@
 # Casement
 
-**A free, open-source Dynamic Island for the Mac notch.** Music, calls, timers, your iPhone's Live Activities, coding agents and anything a script can send show up around the notch, and stay out of the way when nothing's happening.
+**Approve your coding agent's permission requests from the MacBook notch, without leaving your editor.** Casement turns the notch into a Dynamic Island: Claude Code, Codex and Cursor ask there, music and timers live there, and anything a script can send shows up there. Free, open source, and nothing leaves your Mac.
 
 ![The island open on Home: a song playing, with a meeting, a build and a coding agent beside it](docs/images/expanded-home.png)
 
 ## What it does
 
-- **Your iPhone's Live Activities** — rides, deliveries, scores, flights — shown in the notch instead of hidden behind it. 137 apps have their own look. → [Live Activities](docs/LIVE-ACTIVITIES.md)
-- **Now Playing** from any app, browsers included, with synced lyrics, a scrubber that seeks and an output picker. Small app icons switch between every player macOS lists.
 - **Coding agents.** Watch Claude Code, Codex and Cursor work, answer their permission requests from the notch, and keep an eye on usage limits. → [Integrations](docs/INTEGRATIONS.md), [MCP](docs/MCP.md)
+- **Your iPhone's Live Activities** — rides, deliveries, scores, flights — in the notch instead of behind it, with 137 apps' own looks. How much shows depends on the app: Casement reads the pill macOS draws through Accessibility, and some apps expose almost nothing there, in which case Casement leaves Apple's own pill alone rather than covering it with less. `swift scripts/live-activity-probe.swift` says which you have. For activities you control, push them from an iPhone Shortcut over the local bridge and they arrive whole. → [Live Activities](docs/LIVE-ACTIVITIES.md)
+- **Now Playing** from any app, browsers included, with synced lyrics, a scrubber that seeks and an output picker. Small app icons switch between every player macOS lists.
 - **Meetings, timers and reminders.** A meeting counts down beside the notch and waits with a Join button until you join it.
 - **A shelf, clipboard history and download progress.** Drop files on the notch, AirDrop one in a click, find that link you copied an hour ago.
 - **Twelve tools, each off until you want it:** to-dos, a note, a converter, emoji, the weather, a camera mirror, a teleprompter, stocks, sales and more. → [Tools](docs/TOOLS.md)
