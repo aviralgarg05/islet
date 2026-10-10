@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (10 October 2026)
+
+**This build is not notarised by Apple, so macOS blocks the first launch.** Open it once from System Settings, Privacy and Security, Open Anyway; the readme has the four steps. On macOS 15 and later, Control-clicking the app no longer gets past this check.
+
+**The app is now called Casement.** Upgrading loses nothing: settings, the shelf, timers, to-dos, the note and the lyrics cache are moved across the first time it launches, and an API key saved under the old name is read from the keychain once and saved forward.
 
 ### Live Activities, honestly
 
