@@ -2,6 +2,8 @@
 
 **Approve your coding agent's permission requests from the MacBook notch, without leaving your editor.** Casement turns the notch into a Dynamic Island: Claude Code, Codex and Cursor ask there, music and timers live there, and anything a script can send shows up there. Free, open source, and nothing leaves your Mac.
 
+![Claude Code asks to run a command, the card opens in the notch, and one click on Allow lets it carry on](docs/images/casement-agent.gif)
+
 ![The island open on Home: a song playing, with a meeting, a build and a coding agent beside it](docs/images/expanded-home.png)
 
 ## What it does
